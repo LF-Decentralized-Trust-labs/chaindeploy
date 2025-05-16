@@ -2558,8 +2558,8 @@ func (d *FabricDeployer) MapBlock(blk *cb.Block) (*block.Block, error) {
 	return blockResponse, nil
 }
 
-// GetBlockTransactions retrieves all transactions from a specific block
-func (d *FabricDeployer) GetBlockTransactions(ctx context.Context, networkID int64, blockNum uint64) (*block.Block, error) {
+// GetBlock retrieves all transactions from a specific block
+func (d *FabricDeployer) GetBlock(ctx context.Context, networkID int64, blockNum uint64) (*block.Block, error) {
 	// Get network details
 	network, err := d.db.GetNetwork(ctx, networkID)
 	if err != nil {

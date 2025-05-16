@@ -77,7 +77,7 @@ export default function BulkCreateNodesPage() {
 			ordererCount: 0,
 		},
 	})
-	const { data: defaults, isLoading: isLoadingDefaults } = useQuery({
+	const { data: defaults } = useQuery({
 		...getNodesDefaultsFabricOptions({
 			query: {
 				ordererCount: form.watch('ordererCount'),
@@ -179,7 +179,7 @@ export default function BulkCreateNodesPage() {
 	const createNode = useMutation({
 		...postNodesMutation(),
 	})
-	const onSubmit = async (data: BulkCreateValues) => {
+	const onSubmit = async (_: BulkCreateValues) => {
 		if (currentStep !== 'review') {
 			if (currentStep === 'basic') {
 				setCurrentStep('configure')

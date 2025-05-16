@@ -1,15 +1,13 @@
 import { getNetworksFabricByIdBlocksByBlockNumOptions } from '@/api/client/@tanstack/react-query.gen'
+import { BlockTransaction } from '@/api/client/types.gen'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@radix-ui/react-dropdown-menu'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, EllipsisVertical } from 'lucide-react'
-import { useMemo } from 'react'
+import { Fragment, useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { decodeBlockToJson } from '@/utils/block'
-import { BlockTransaction } from '@/api/client/types.gen'
-import { Fragment } from 'react'
 
 export function BlockDetails() {
 	const { id, blockNumber } = useParams<{ id: string; blockNumber: string }>()
@@ -21,10 +19,6 @@ export function BlockDetails() {
 			path: { id: networkId, blockNum },
 		}),
 	})
-	const decodedBlock = useMemo(() => {
-		if (!blockResponse?.block?.dataHash) return null
-		return decodeBlockToJson(blockResponse.block.dataHash)
-	}, [blockResponse?.block?.dataHash])
 
 	const transactions = useMemo(() => blockResponse?.block?.transactions || [], [blockResponse?.block?.transactions])
 	if (isLoading) {

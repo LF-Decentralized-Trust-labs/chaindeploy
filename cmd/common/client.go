@@ -27,9 +27,9 @@ func NewClientFromEnv() (*Client, error) {
 		apiURL = defaultAPIURL
 	}
 
-	username := os.Getenv("CHAINLAUNCH_USERNAME")
+	username := os.Getenv("CHAINLAUNCH_USER")
 	if username == "" {
-		return nil, fmt.Errorf("CHAINLAUNCH_USERNAME environment variable is not set")
+		return nil, fmt.Errorf("CHAINLAUNCH_USER environment variable is not set")
 	}
 
 	password := os.Getenv("CHAINLAUNCH_PASSWORD")

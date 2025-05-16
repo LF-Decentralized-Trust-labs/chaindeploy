@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom'
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '../ui/breadcrumb'
 import { Separator } from '../ui/separator'
 import { SidebarTrigger } from '../ui/sidebar'
+import { Button } from '../ui/button'
+import { MessageSquare, ExternalLink } from 'lucide-react'
 
 export function Header() {
 	const { breadcrumbs } = useBreadcrumbs()
@@ -34,6 +36,13 @@ export function Header() {
 					</Breadcrumb>
 				</div>
 				<div className="ml-auto flex items-center space-x-4">
+					<Button variant="ghost" asChild>
+						<a href="https://docs.google.com/forms/d/e/1FAIpQLScuyWa3iVJNm49scRK7Y21h7ecZQdLOf8ppGHn37AIIUqbVDw/viewform?usp=sharing" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2">
+							<MessageSquare className="h-4 w-4" />
+							<span>Give Feedback</span>
+							<ExternalLink className="h-3 w-3" />
+						</a>
+					</Button>
 					<ThemeToggle />
 				</div>
 			</div>

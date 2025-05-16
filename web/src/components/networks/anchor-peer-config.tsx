@@ -42,7 +42,7 @@ export function AnchorPeerConfig({ organization, peers, currentAnchorPeers, onUp
 		if (peer.node?.nodeType !== 'FABRIC_PEER' || peer.status !== 'joined') {
 			return false
 		}
-		const endpoint = peer.node.deploymentConfig?.externalEndpoint
+		const endpoint = peer.node?.fabricPeer?.externalEndpoint
 		return endpoint ? parseEndpoint(endpoint) !== null : false
 	})
 
@@ -50,7 +50,7 @@ export function AnchorPeerConfig({ organization, peers, currentAnchorPeers, onUp
 		try {
 			const selectedPeers = availablePeers.filter((p) => selectedPeerIds.has(p.node!.id!.toString()))
 			const newEndpoints = selectedPeers
-				.map((peer) => parseEndpoint(peer.node!.deploymentConfig!.externalEndpoint!))
+				.map((peer) => parseEndpoint(peer.node!.fabricPeer!.externalEndpoint!))
 				.filter((endpoint): endpoint is { host: string; port: number } => endpoint !== null)
 
 			const newAnchorPeers = [...currentAnchorPeers, ...newEndpoints]
@@ -66,20 +66,11 @@ export function AnchorPeerConfig({ organization, peers, currentAnchorPeers, onUp
 
 	const handleRemoveAnchorPeer = async (host: string, port: number) => {
 		const newAnchorPeers = currentAnchorPeers.filter((peer) => !(peer.host === host && peer.port === port))
-		// const peerToRemove = availablePeers.find((p) => {
-		// 	const endpoint = parseEndpoint(p.node!.deploymentConfig!.externalEndpoint!)
-		// 	return endpoint?.host === host && endpoint?.port === port
-		// })
-
-		// if (!peerToRemove) {
-		// 	throw new Error('Peer not found')
-		// }
-
 		await onUpdateAnchorPeers(newAnchorPeers)
 	}
 
 	const availableToAdd = availablePeers.filter((peer) => {
-		const endpoint = parseEndpoint(peer.node!.deploymentConfig!.externalEndpoint!)
+		const endpoint = parseEndpoint(peer.node!.fabricPeer!.externalEndpoint!)
 		return !currentAnchorPeers.some((ap) => ap.host === endpoint?.host && ap.port === endpoint?.port)
 	})
 
@@ -113,7 +104,7 @@ export function AnchorPeerConfig({ organization, peers, currentAnchorPeers, onUp
 							<div className="space-y-6">
 								<div className="flex flex-col gap-4">
 									{availableToAdd.map((peer) => {
-										const endpoint = parseEndpoint(peer.node!.deploymentConfig!.externalEndpoint!)
+										const endpoint = parseEndpoint(peer.node!.fabricPeer!.externalEndpoint!)
 										const peerId = peer.node!.id!.toString()
 										return (
 											<div key={peer.node!.id} className="flex items-center space-x-3">
@@ -161,7 +152,7 @@ export function AnchorPeerConfig({ organization, peers, currentAnchorPeers, onUp
 				) : (
 					currentAnchorPeers.map(({ host, port }, idx) => {
 						const peer = availablePeers.find((p) => {
-							const endpoint = parseEndpoint(p.node!.deploymentConfig!.externalEndpoint!)
+							const endpoint = parseEndpoint(p.node!.fabricPeer!.externalEndpoint!)
 							return endpoint?.host === host && endpoint?.port === port
 						})
 

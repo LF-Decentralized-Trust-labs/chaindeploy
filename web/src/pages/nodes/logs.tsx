@@ -1,13 +1,12 @@
 import { getNodesOptions } from '@/api/client/@tanstack/react-query.gen'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
-import { useQuery } from '@tanstack/react-query'
-import { useEffect, useRef, useState } from 'react'
 import { BesuIcon } from '@/components/icons/besu-icon'
 import { FabricIcon } from '@/components/icons/fabric-icon'
 import { LogViewer } from '@/components/nodes/LogViewer'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useQuery } from '@tanstack/react-query'
+import { useEffect, useRef, useState } from 'react'
 
 interface NodeLogs {
 	nodeId: number
@@ -29,7 +28,7 @@ export default function NodesLogsPage() {
 		}),
 	})
 
-	const scrollToBottom = (nodeId: number | string) => {
+	const scrollToBottom = (_: number | string) => {
 		setTimeout(() => {
 			const ref = logsRef.current
 			if (ref) {
@@ -167,7 +166,7 @@ export default function NodesLogsPage() {
 									<CardDescription>Real-time node logs</CardDescription>
 								</CardHeader>
 								<CardContent>
-									<LogViewer 
+									<LogViewer
 										logs={nodeLogs.find((nl) => nl.nodeId === node.id)?.logs || ''}
 										onScroll={(isScrolledToBottom) => {
 											if (isScrolledToBottom) {
@@ -191,7 +190,7 @@ export default function NodesLogsPage() {
 							<CardDescription>Real-time node logs</CardDescription>
 						</CardHeader>
 						<CardContent>
-							<LogViewer 
+							<LogViewer
 								logs={nodeLogs.find((nl) => nl.nodeId.toString() === selectedNode)?.logs || ''}
 								onScroll={(isScrolledToBottom) => {
 									if (isScrolledToBottom) {

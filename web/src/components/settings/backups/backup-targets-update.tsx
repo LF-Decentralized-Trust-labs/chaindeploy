@@ -39,7 +39,20 @@ export function BackupTargetsUpdate({ target, onSuccess }: BackupTargetsUpdatePr
 	const updateMutation = useMutation({
 		mutationFn: async (values: TargetFormValues) => {
 			try {
-				await putBackupsTargetsById({ path: { id: target.id! }, body: values })
+				await putBackupsTargetsById({
+					path: { id: target.id! },
+					body: {
+						name: values.name || 'S3',
+						endpoint: values.endpoint,
+						accessKeyId: values.accessKeyId,
+						secretKey: values.secretKey,
+						bucketName: values.bucketName,
+						bucketPath: values.bucketPath,
+						region: values.region,
+						forcePathStyle: values.forcePathStyle,
+						type: 'S3',
+					},
+				})
 			} catch (error: any) {
 				if (error.status === 500) {
 					throw new Error('Internal server error. Please try again later.')

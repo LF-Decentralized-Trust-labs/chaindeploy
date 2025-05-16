@@ -400,7 +400,7 @@ WHERE id = ? LIMIT 1;
 -- name: ListNodeEvents :many
 SELECT * FROM node_events
 WHERE node_id = ?
-ORDER BY created_at DESC
+ORDER BY id DESC
 LIMIT ? OFFSET ?;
 
 -- name: CountNodeEvents :one
@@ -1022,3 +1022,79 @@ WHERE session_id = ?;
 -- name: GetSessionByToken :one
 SELECT * FROM sessions
 WHERE token = ?;
+
+-- name: GetPrometheusConfig :one
+SELECT * FROM prometheus_config
+WHERE id = 1;
+
+-- name: UpdatePrometheusConfig :one
+UPDATE prometheus_config
+SET prometheus_port = ?,
+    data_dir = ?,
+    config_dir = ?,
+    container_name = ?,
+    scrape_interval = ?,
+    evaluation_interval = ?,
+    deployment_mode = ?,
+    docker_image = ?,
+    docker_network = ?,
+    docker_restart_policy = ?,
+    docker_extra_args = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 1
+RETURNING *;
+
+-- name: ResetPrometheusConfig :one
+UPDATE prometheus_config
+SET prometheus_port = 9090,
+    data_dir = '/var/lib/prometheus',
+    config_dir = '/etc/prometheus',
+    container_name = 'chainlaunch-prometheus',
+    scrape_interval = 15,
+    evaluation_interval = 15,
+    deployment_mode = 'docker',
+    docker_image = 'prom/prometheus:latest',
+    docker_network = 'chainlaunch-network',
+    docker_restart_policy = 'unless-stopped',
+    docker_extra_args = '--web.enable-lifecycle --web.enable-admin-api',
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 1
+RETURNING *;
+
+-- name: CreateAuditLog :one
+INSERT INTO audit_logs (
+    timestamp,
+    event_source,
+    user_identity,
+    source_ip,
+    event_type,
+    event_outcome,
+    affected_resource,
+    request_id,
+    severity,
+    details,
+    session_id
+) VALUES (
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+)
+RETURNING *;
+
+-- name: GetAuditLog :one
+SELECT * FROM audit_logs
+WHERE id = ? LIMIT 1;
+
+-- name: ListAuditLogs :many
+SELECT * FROM audit_logs
+WHERE (? IS NULL OR timestamp >= ?)
+  AND (? IS NULL OR timestamp <= ?)
+  AND (? = '' OR event_type = ?)
+  AND (? = 0 OR user_identity = ?)
+ORDER BY timestamp DESC
+LIMIT ? OFFSET ?;
+
+-- name: CountAuditLogs :one
+SELECT COUNT(*) FROM audit_logs
+WHERE (? IS NULL OR timestamp >= ?)
+  AND (? IS NULL OR timestamp <= ?)
+  AND (? = '' OR event_type = ?)
+  AND (? = '' OR user_identity = ?);

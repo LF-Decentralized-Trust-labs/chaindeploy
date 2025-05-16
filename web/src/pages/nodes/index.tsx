@@ -44,7 +44,10 @@ function getNodeActions(status: string) {
 			]
 		case 'starting':
 		case 'stopping':
-			return [] // No actions while transitioning
+			return [
+				{ label: 'Stop', action: 'stop' },
+				{ label: 'Delete', action: 'delete' },
+			] // No actions while transitioning
 		default:
 			return [
 				{ label: 'Start', action: 'start' },
@@ -66,8 +69,6 @@ export default function NodesPage() {
 			},
 		}),
 	})
-
-	const totalPages = Math.ceil((nodes?.total || 0) / pageSize)
 
 	const [nodeToDelete, setNodeToDelete] = useState<HttpNodeResponse | null>(null)
 	const [selectedNodes, setSelectedNodes] = useState<HttpNodeResponse[]>([])
@@ -364,9 +365,9 @@ export default function NodesPage() {
 					))}
 				</div>
 
-				{totalPages > 1 && (
+				{(nodes?.total || 0) > pageSize && (
 					<div className="mt-4 flex justify-center">
-						<Pagination currentPage={page} pageSize={pageSize} totalPages={totalPages} onPageChange={setPage} />
+						<Pagination currentPage={page} pageSize={pageSize} totalItems={nodes?.total || 0} onPageChange={setPage} />
 					</div>
 				)}
 			</div>

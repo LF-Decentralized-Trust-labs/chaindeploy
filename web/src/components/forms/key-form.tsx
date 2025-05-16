@@ -153,7 +153,7 @@ export function KeyForm({ onSubmit, isSubmitting }: KeyFormProps) {
 								</FormControl>
 								<SelectContent>
 									{providers?.map((provider) => (
-										<SelectItem key={provider.id} value={provider.id?.toString()}>
+										<SelectItem key={provider.id} value={provider.id?.toString()!}>
 											{provider.name}
 										</SelectItem>
 									))}

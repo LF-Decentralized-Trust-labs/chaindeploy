@@ -4,13 +4,15 @@ import { cn } from '@/lib/utils'
 
 interface PaginationProps {
 	currentPage: number
+	totalItems: number
 	pageSize: number
-	totalPages: number
 	onPageChange: (page: number) => void
 	siblingsCount?: number
 }
 
-export function Pagination({ currentPage, pageSize, totalPages, onPageChange, siblingsCount = 1 }: PaginationProps) {
+export function Pagination({ currentPage, totalItems, pageSize, onPageChange, siblingsCount = 1 }: PaginationProps) {
+	const totalPages = Math.max(1, Math.ceil(totalItems / pageSize))
+
 	const generatePagesArray = (from: number, to: number) => {
 		return Array.from({ length: to - from + 1 }, (_, index) => from + index)
 	}

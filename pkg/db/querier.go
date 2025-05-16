@@ -12,6 +12,7 @@ import (
 type Querier interface {
 	AddRevokedCertificate(ctx context.Context, arg *AddRevokedCertificateParams) error
 	CheckNetworkNodeExists(ctx context.Context, arg *CheckNetworkNodeExistsParams) (int64, error)
+	CountAuditLogs(ctx context.Context, arg *CountAuditLogsParams) (int64, error)
 	CountBackupsBySchedule(ctx context.Context, scheduleID sql.NullInt64) (int64, error)
 	CountBackupsByTarget(ctx context.Context, targetID int64) (int64, error)
 	CountNetworks(ctx context.Context) (int64, error)
@@ -19,6 +20,7 @@ type Querier interface {
 	CountNodes(ctx context.Context) (int64, error)
 	CountNodesByPlatform(ctx context.Context, platform string) (int64, error)
 	CountUsers(ctx context.Context) (int64, error)
+	CreateAuditLog(ctx context.Context, arg *CreateAuditLogParams) (*AuditLog, error)
 	CreateBackup(ctx context.Context, arg *CreateBackupParams) (*Backup, error)
 	CreateBackupSchedule(ctx context.Context, arg *CreateBackupScheduleParams) (*BackupSchedule, error)
 	CreateBackupTarget(ctx context.Context, arg *CreateBackupTargetParams) (*BackupTarget, error)
@@ -60,6 +62,7 @@ type Querier interface {
 	EnableBackupSchedule(ctx context.Context, id int64) (*BackupSchedule, error)
 	GetAllKeys(ctx context.Context, arg *GetAllKeysParams) ([]*GetAllKeysRow, error)
 	GetAllNodes(ctx context.Context) ([]*Node, error)
+	GetAuditLog(ctx context.Context, id int64) (*AuditLog, error)
 	GetBackup(ctx context.Context, id int64) (*Backup, error)
 	GetBackupSchedule(ctx context.Context, id int64) (*BackupSchedule, error)
 	GetBackupTarget(ctx context.Context, id int64) (*BackupTarget, error)
@@ -100,6 +103,7 @@ type Querier interface {
 	GetOrganizationCRLInfo(ctx context.Context, id int64) (*GetOrganizationCRLInfoRow, error)
 	GetPeerPorts(ctx context.Context) ([]*GetPeerPortsRow, error)
 	GetPlugin(ctx context.Context, name string) (*Plugin, error)
+	GetPrometheusConfig(ctx context.Context) (*PrometheusConfig, error)
 	GetProvidersByNotificationType(ctx context.Context, arg *GetProvidersByNotificationTypeParams) ([]*NotificationProvider, error)
 	GetRecentCompletedBackups(ctx context.Context) ([]*Backup, error)
 	GetRevokedCertificate(ctx context.Context, arg *GetRevokedCertificateParams) (*FabricRevokedCertificate, error)
@@ -111,6 +115,7 @@ type Querier interface {
 	GetSetting(ctx context.Context, id int64) (*Setting, error)
 	GetUser(ctx context.Context, id int64) (*User, error)
 	GetUserByUsername(ctx context.Context, username string) (*User, error)
+	ListAuditLogs(ctx context.Context, arg *ListAuditLogsParams) ([]*AuditLog, error)
 	ListBackupSchedules(ctx context.Context) ([]*BackupSchedule, error)
 	ListBackupTargets(ctx context.Context) ([]*BackupTarget, error)
 	ListBackups(ctx context.Context, arg *ListBackupsParams) ([]*Backup, error)
@@ -133,6 +138,7 @@ type Querier interface {
 	ListSettings(ctx context.Context) ([]*Setting, error)
 	ListUsers(ctx context.Context) ([]*User, error)
 	MarkBackupNotified(ctx context.Context, id int64) error
+	ResetPrometheusConfig(ctx context.Context) (*PrometheusConfig, error)
 	UnsetDefaultNotificationProvider(ctx context.Context, type_ string) error
 	UnsetDefaultProvider(ctx context.Context) error
 	UpdateBackupCompleted(ctx context.Context, arg *UpdateBackupCompletedParams) (*Backup, error)
@@ -162,6 +168,7 @@ type Querier interface {
 	UpdateNotificationProvider(ctx context.Context, arg *UpdateNotificationProviderParams) (*NotificationProvider, error)
 	UpdateOrganizationCRL(ctx context.Context, arg *UpdateOrganizationCRLParams) error
 	UpdatePlugin(ctx context.Context, arg *UpdatePluginParams) (*Plugin, error)
+	UpdatePrometheusConfig(ctx context.Context, arg *UpdatePrometheusConfigParams) (*PrometheusConfig, error)
 	UpdateProviderTestResults(ctx context.Context, arg *UpdateProviderTestResultsParams) (*NotificationProvider, error)
 	UpdateSetting(ctx context.Context, arg *UpdateSettingParams) (*Setting, error)
 	UpdateUser(ctx context.Context, arg *UpdateUserParams) (*User, error)

@@ -187,7 +187,7 @@ export default function KeyManagementPage() {
 								<Pagination 
 									currentPage={currentPage} 
 									pageSize={pageSize} 
-									totalPages={Math.ceil(keys.totalItems / pageSize)} 
+									totalItems={keys.totalItems} 
 									onPageChange={handlePageChange} 
 								/>
 							</div>

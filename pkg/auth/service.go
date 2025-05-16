@@ -228,6 +228,7 @@ func (s *AuthService) GetUserByUsername(username string) (*User, error) {
 		Role:        Role(dbUser.Role.String),
 		CreatedAt:   dbUser.CreatedAt,
 		LastLoginAt: dbUser.LastLoginAt.Time,
+		Password:    dbUser.Password,
 	}, nil
 }
 

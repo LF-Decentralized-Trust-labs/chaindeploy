@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -25,6 +26,8 @@ import (
 	"github.com/chainlaunch/chainlaunch/pkg/logger"
 	"github.com/chainlaunch/chainlaunch/pkg/nodes/types"
 	settingsservice "github.com/chainlaunch/chainlaunch/pkg/settings/service"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/client"
 	"github.com/hyperledger/fabric-admin-sdk/pkg/channel"
 	"github.com/hyperledger/fabric-admin-sdk/pkg/identity"
 	"github.com/hyperledger/fabric-admin-sdk/pkg/network"
@@ -229,72 +232,111 @@ func (o *LocalOrderer) getLogPath() string {
 // TailLogs tails the logs of the orderer service
 func (o *LocalOrderer) TailLogs(ctx context.Context, tail int, follow bool) (<-chan string, error) {
 	logChan := make(chan string, 100)
-	logPath := o.GetStdOutPath()
 
-	// Check if log file exists
+	if o.mode == "docker" {
+		containerName := strings.ReplaceAll(strings.ToLower(o.opts.ID), " ", "-")
+		// You may want to use a helper to get the container name if you have one
+		go func() {
+			defer close(logChan)
+			cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+			if err != nil {
+				o.logger.Error("Failed to create docker client", "error", err)
+				return
+			}
+			defer cli.Close()
+
+			options := container.LogsOptions{
+				ShowStdout: true,
+				ShowStderr: true,
+				Follow:     follow,
+				Details:    true,
+				Tail:       fmt.Sprintf("%d", tail),
+			}
+			reader, err := cli.ContainerLogs(ctx, containerName, options)
+			if err != nil {
+				o.logger.Error("Failed to get docker logs", "error", err)
+				return
+			}
+			defer reader.Close()
+
+			header := make([]byte, 8)
+			for {
+				_, err := io.ReadFull(reader, header)
+				if err != nil {
+					if err != io.EOF {
+						o.logger.Error("Failed to read docker log header", "error", err)
+					}
+					return
+				}
+				length := int(uint32(header[4])<<24 | uint32(header[5])<<16 | uint32(header[6])<<8 | uint32(header[7]))
+				if length == 0 {
+					continue
+				}
+				payload := make([]byte, length)
+				_, err = io.ReadFull(reader, payload)
+				if err != nil {
+					if err != io.EOF {
+						o.logger.Error("Failed to read docker log payload", "error", err)
+					}
+					return
+				}
+				cleanLine := strings.TrimRight(string(payload), "\r\n")
+				select {
+				case <-ctx.Done():
+					return
+				case logChan <- cleanLine:
+				}
+			}
+		}()
+		return logChan, nil
+	}
+
+	logPath := o.GetStdOutPath()
 	if _, err := os.Stat(logPath); os.IsNotExist(err) {
 		close(logChan)
 		return logChan, fmt.Errorf("log file does not exist: %s", logPath)
 	}
-
-	// Start goroutine to tail logs
 	go func() {
 		defer close(logChan)
-
 		var cmd *exec.Cmd
 		if runtime.GOOS == "windows" {
-			// For Windows, use PowerShell Get-Content
 			if follow {
 				cmd = exec.Command("powershell", "Get-Content", "-Path", logPath, "-Tail", fmt.Sprintf("%d", tail), "-Wait")
 			} else {
 				cmd = exec.Command("powershell", "Get-Content", "-Path", logPath, "-Tail", fmt.Sprintf("%d", tail))
 			}
 		} else {
-			// For Unix-like systems, use tail command
 			if follow {
 				cmd = exec.Command("tail", "-n", fmt.Sprintf("%d", tail), "-f", logPath)
 			} else {
 				cmd = exec.Command("tail", "-n", fmt.Sprintf("%d", tail), logPath)
 			}
 		}
-
-		// Create pipe for reading command output
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
 			o.logger.Error("Failed to create stdout pipe", "error", err)
 			return
 		}
-
-		// Start the command
 		if err := cmd.Start(); err != nil {
 			o.logger.Error("Failed to start tail command", "error", err)
 			return
 		}
-
-		// Create scanner to read output line by line
 		scanner := bufio.NewScanner(stdout)
 		scanner.Split(bufio.ScanLines)
-
-		// Read lines and send to channel
 		for scanner.Scan() {
 			select {
 			case <-ctx.Done():
-				// Context cancelled, stop tailing
 				cmd.Process.Kill()
 				return
-			case logChan <- scanner.Text():
-				// Line sent successfully
+			case logChan <- scanner.Text() + "\n":
 			}
 		}
-
-		// Wait for command to complete
 		if err := cmd.Wait(); err != nil {
-			if ctx.Err() == nil { // Only log error if context wasn't cancelled
+			if ctx.Err() == nil {
 				o.logger.Error("Tail command failed", "error", err)
 			}
 		}
 	}()
-
 	return logChan, nil
 }
 

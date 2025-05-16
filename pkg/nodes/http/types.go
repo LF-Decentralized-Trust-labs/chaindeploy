@@ -99,17 +99,19 @@ type NodeConfigResponse struct {
 
 // BesuNodeRequest represents the HTTP request for creating a Besu node
 type BesuNodeRequest struct {
-	NetworkID   uint              `json:"networkId" validate:"required"`
-	P2PPort     uint              `json:"p2pPort" validate:"required"`
-	RPCPort     uint              `json:"rpcPort" validate:"required"`
-	WSPort      uint              `json:"wsPort" validate:"required"`
-	NodePrivKey string            `json:"nodePrivKey,omitempty"`
-	Bootnodes   []string          `json:"bootnodes,omitempty"`
-	ExternalIP  string            `json:"externalIp,omitempty"`
-	IsBootnode  bool              `json:"isBootnode"`
-	IsValidator bool              `json:"isValidator"`
-	StaticNodes []string          `json:"staticNodes,omitempty"`
-	Env         map[string]string `json:"env,omitempty"`
+	NetworkID      uint              `json:"networkId" validate:"required"`
+	P2PPort        uint              `json:"p2pPort" validate:"required"`
+	RPCPort        uint              `json:"rpcPort" validate:"required"`
+	WSPort         uint              `json:"wsPort" validate:"required"`
+	NodePrivKey    string            `json:"nodePrivKey,omitempty"`
+	Bootnodes      []string          `json:"bootnodes,omitempty"`
+	ExternalIP     string            `json:"externalIp,omitempty"`
+	IsBootnode     bool              `json:"isBootnode"`
+	IsValidator    bool              `json:"isValidator"`
+	StaticNodes    []string          `json:"staticNodes,omitempty"`
+	Env            map[string]string `json:"env,omitempty"`
+	MetricsEnabled bool              `json:"metricsEnabled"`
+	MetricsPort    int64             `json:"metricsPort"`
 }
 
 // FabricPeerRequest represents the HTTP request for creating a Fabric peer node
@@ -215,15 +217,17 @@ type UpdateFabricOrdererRequest struct {
 
 // UpdateBesuNodeRequest represents the configuration for updating a Besu node
 type UpdateBesuNodeRequest struct {
-	NetworkID  uint              `json:"networkId" validate:"required"`
-	P2PHost    string            `json:"p2pHost" validate:"required"`
-	P2PPort    uint              `json:"p2pPort" validate:"required"`
-	RPCHost    string            `json:"rpcHost" validate:"required"`
-	RPCPort    uint              `json:"rpcPort" validate:"required"`
-	Bootnodes  []string          `json:"bootnodes,omitempty"`
-	ExternalIP string            `json:"externalIp,omitempty"`
-	InternalIP string            `json:"internalIp,omitempty"`
-	Env        map[string]string `json:"env,omitempty"`
+	NetworkID      uint              `json:"networkId" validate:"required"`
+	P2PHost        string            `json:"p2pHost" validate:"required"`
+	P2PPort        uint              `json:"p2pPort" validate:"required"`
+	RPCHost        string            `json:"rpcHost" validate:"required"`
+	RPCPort        uint              `json:"rpcPort" validate:"required"`
+	Bootnodes      []string          `json:"bootnodes,omitempty"`
+	ExternalIP     string            `json:"externalIp,omitempty"`
+	InternalIP     string            `json:"internalIp,omitempty"`
+	Env            map[string]string `json:"env,omitempty"`
+	MetricsEnabled bool              `json:"metricsEnabled"`
+	MetricsPort    int64             `json:"metricsPort"`
 }
 
 type BesuNodeDefaultsResponse struct {

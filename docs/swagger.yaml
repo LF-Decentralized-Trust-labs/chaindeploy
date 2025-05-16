@@ -1,5 +1,68 @@
 basePath: /api/v1
 definitions:
+  audit.Event:
+    properties:
+      affectedResource:
+        type: string
+      details:
+        additionalProperties: true
+        type: object
+      eventOutcome:
+        $ref: '#/definitions/audit.EventOutcome'
+      eventSource:
+        type: string
+      eventType:
+        type: string
+      id:
+        type: integer
+      requestId:
+        type: string
+      sessionId:
+        type: string
+      severity:
+        $ref: '#/definitions/audit.Severity'
+      sourceIp:
+        type: string
+      timestamp:
+        type: string
+      userIdentity:
+        type: integer
+    type: object
+  audit.EventOutcome:
+    enum:
+    - SUCCESS
+    - FAILURE
+    - PENDING
+    type: string
+    x-enum-varnames:
+    - EventOutcomeSuccess
+    - EventOutcomeFailure
+    - EventOutcomePending
+  audit.ListLogsResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/audit.Event'
+        type: array
+      page:
+        type: integer
+      page_size:
+        type: integer
+      total_count:
+        type: integer
+    type: object
+  audit.Severity:
+    enum:
+    - DEBUG
+    - INFO
+    - WARNING
+    - CRITICAL
+    type: string
+    x-enum-varnames:
+    - SeverityDebug
+    - SeverityInfo
+    - SeverityWarning
+    - SeverityCritical
   auth.ChangePasswordRequest:
     properties:
       current_password:
@@ -177,6 +240,35 @@ definitions:
     - ORDERER_TRANSACTION
     - DELIVER_SEEK_INFO
     - CHAINCODE_PACKAGE
+  common.QueryResult:
+    properties:
+      data:
+        properties:
+          result:
+            items:
+              properties:
+                metric:
+                  additionalProperties:
+                    type: string
+                  type: object
+                value:
+                  description: For instant queries
+                  items: {}
+                  type: array
+                values:
+                  description: For range queries (matrix)
+                  items:
+                    items: {}
+                    type: array
+                  type: array
+              type: object
+            type: array
+          resultType:
+            type: string
+        type: object
+      status:
+        type: string
+    type: object
   github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse:
     properties:
       code:
@@ -1284,6 +1376,10 @@ definitions:
         type: string
       internalIp:
         type: string
+      metricsEnabled:
+        type: boolean
+      metricsPort:
+        type: integer
       networkId:
         type: integer
       p2pHost:
@@ -1481,6 +1577,35 @@ definitions:
     - config
     - name
     - type
+    type: object
+  metrics.CustomQueryRequest:
+    properties:
+      end:
+        type: string
+      query:
+        type: string
+      start:
+        type: string
+      step:
+        type: string
+    required:
+    - query
+    type: object
+  metrics.DeployPrometheusRequest:
+    properties:
+      deployment_mode:
+        type: string
+      prometheus_port:
+        type: integer
+      prometheus_version:
+        type: string
+      scrape_interval:
+        type: integer
+    required:
+    - deployment_mode
+    - prometheus_port
+    - prometheus_version
+    - scrape_interval
     type: object
   models.CertificateRequest:
     properties:
@@ -1800,21 +1925,14 @@ definitions:
     type: object
   response.ErrorResponse:
     properties:
-      details:
-        additionalProperties: true
-        type: object
-      message:
-        type: string
-      type:
+      error:
         type: string
     type: object
   response.Response:
     properties:
       data: {}
-      error:
-        $ref: '#/definitions/response.ErrorResponse'
-      success:
-        type: boolean
+      message:
+        type: string
     type: object
   service.BesuNodeDefaults:
     properties:
@@ -1825,6 +1943,15 @@ definitions:
       externalIp:
         type: string
       internalIp:
+        type: string
+      metricsEnabled:
+        description: Metrics configuration
+        type: boolean
+      metricsHost:
+        type: string
+      metricsPort:
+        type: integer
+      metricsProtocol:
         type: string
       mode:
         $ref: '#/definitions/service.Mode'
@@ -1851,6 +1978,15 @@ definitions:
         type: string
       keyId:
         type: integer
+      metricsEnabled:
+        description: Metrics configuration
+        type: boolean
+      metricsHost:
+        type: string
+      metricsPort:
+        type: integer
+      metricsProtocol:
+        type: string
       mode:
         type: string
       networkId:
@@ -1969,43 +2105,13 @@ definitions:
       networkId:
         type: integer
       node:
-        $ref: '#/definitions/service.Node'
+        $ref: '#/definitions/service.NodeResponse'
       nodeId:
         type: integer
       role:
         type: string
       status:
         type: string
-      updatedAt:
-        type: string
-    type: object
-  service.Node:
-    properties:
-      createdAt:
-        type: string
-      deploymentConfig:
-        description: 'Node deployment configuration interface that can be one of:
-          FabricPeerDeploymentConfig, FabricOrdererDeploymentConfig, or BesuNodeDeploymentConfig'
-      endpoint:
-        type: string
-      errorMessage:
-        type: string
-      id:
-        type: integer
-      mspId:
-        type: string
-      name:
-        type: string
-      nodeConfig:
-        description: Base interface for all node configurations
-      nodeType:
-        $ref: '#/definitions/types.NodeType'
-      platform:
-        $ref: '#/definitions/types.BlockchainPlatform'
-      publicEndpoint:
-        type: string
-      status:
-        $ref: '#/definitions/types.NodeStatus'
       updatedAt:
         type: string
     type: object
@@ -2032,6 +2138,35 @@ definitions:
       operationsListenAddress:
         type: string
       serviceName:
+        type: string
+    type: object
+  service.NodeResponse:
+    properties:
+      besuNode:
+        $ref: '#/definitions/service.BesuNodeProperties'
+      createdAt:
+        type: string
+      endpoint:
+        type: string
+      errorMessage:
+        type: string
+      fabricOrderer:
+        $ref: '#/definitions/service.FabricOrdererProperties'
+      fabricPeer:
+        allOf:
+        - $ref: '#/definitions/service.FabricPeerProperties'
+        description: Type-specific fields
+      id:
+        type: integer
+      name:
+        type: string
+      nodeType:
+        $ref: '#/definitions/types.NodeType'
+      platform:
+        type: string
+      status:
+        type: string
+      updatedAt:
         type: string
     type: object
   service.NodesDefaultsResult:
@@ -2094,6 +2229,12 @@ definitions:
         type: string
       keyId:
         type: integer
+      metricsEnabled:
+        type: boolean
+      metricsPort:
+        type: integer
+      metricsProtocol:
+        type: string
       mode:
         description: '@Description The deployment mode (service or docker)'
         example: service
@@ -2282,24 +2423,6 @@ definitions:
       version:
         type: string
     type: object
-  types.NodeStatus:
-    enum:
-    - PENDING
-    - RUNNING
-    - STOPPED
-    - STOPPING
-    - STARTING
-    - UPDATING
-    - ERROR
-    type: string
-    x-enum-varnames:
-    - NodeStatusPending
-    - NodeStatusRunning
-    - NodeStatusStopped
-    - NodeStatusStopping
-    - NodeStatusStarting
-    - NodeStatusUpdating
-    - NodeStatusError
   types.NodeType:
     enum:
     - FABRIC_PEER
@@ -2468,6 +2591,347 @@ info:
   title: ChainLaunch API
   version: "1.0"
 paths:
+  /api/v1/metrics/deploy:
+    post:
+      consumes:
+      - application/json
+      description: Deploys a new Prometheus instance with the specified configuration
+      parameters:
+      - description: Prometheus deployment configuration
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/metrics.DeployPrometheusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Deploy a new Prometheus instance
+      tags:
+      - metrics
+  /api/v1/metrics/node/{id}:
+    get:
+      description: Retrieves metrics for a specific node by ID and optional PromQL
+        query
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: PromQL query to filter metrics
+        in: query
+        name: query
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get metrics for a specific node
+      tags:
+      - metrics
+  /api/v1/metrics/node/{id}/label/{label}/values:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves all values for a specific label, optionally filtered
+        by metric matches and node ID
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Label name
+        in: path
+        name: label
+        required: true
+        type: string
+      - description: Metric matches (e.g. {__name__=\
+        in: query
+        name: match
+        type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Label values
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get label values for a specific label
+      tags:
+      - metrics
+  /api/v1/metrics/node/{id}/query:
+    post:
+      consumes:
+      - application/json
+      description: Execute a custom Prometheus query with optional time range
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Query parameters
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/metrics.CustomQueryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/common.QueryResult'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Execute custom Prometheus query
+      tags:
+      - metrics
+  /api/v1/metrics/node/{id}/range:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves metrics for a specific node within a specified time range
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: PromQL query
+        in: query
+        name: query
+        required: true
+        type: string
+      - description: Start time (RFC3339 format)
+        in: query
+        name: start
+        required: true
+        type: string
+      - description: End time (RFC3339 format)
+        in: query
+        name: end
+        required: true
+        type: string
+      - description: Step duration (e.g. 1m, 5m, 1h)
+        in: query
+        name: step
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Metrics data
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get metrics for a specific node with time range
+      tags:
+      - metrics
+  /api/v1/metrics/reload:
+    post:
+      description: Triggers a reload of the Prometheus configuration to pick up any
+        changes
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Reload Prometheus configuration
+      tags:
+      - metrics
+  /audit/logs:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves a paginated list of audit logs with optional filters
+      parameters:
+      - description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - description: 'Page size (default: 10)'
+        in: query
+        name: page_size
+        type: integer
+      - description: Start time (RFC3339 format)
+        in: query
+        name: start
+        type: string
+      - description: End time (RFC3339 format)
+        in: query
+        name: end
+        type: string
+      - description: Filter by event type
+        in: query
+        name: event_type
+        type: string
+      - description: Filter by user ID
+        in: query
+        name: user_id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/audit.ListLogsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List audit logs
+      tags:
+      - audit
+  /audit/logs/{id}:
+    get:
+      description: Retrieves a specific audit log by ID
+      parameters:
+      - description: Log ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/audit.Event'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get audit log
+      tags:
+      - audit
   /auth/change-password:
     post:
       consumes:

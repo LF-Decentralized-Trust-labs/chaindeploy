@@ -1,10 +1,10 @@
 import { Button } from '@/components/ui/button'
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { useFormContext } from 'react-hook-form'
 import { X } from 'lucide-react'
+import { useEffect } from 'react'
+import { useFormContext } from 'react-hook-form'
 import { z } from 'zod'
-import React, { useEffect } from 'react'
 
 // Schema for the UpdateBatchSizePayload
 export const updateBatchSizeSchema = z.object({

@@ -44,7 +44,10 @@ func (b *LocalBesu) createVolume(ctx context.Context, cli *client.Client, name s
 // startDocker starts the besu node in a docker container
 func (b *LocalBesu) startDocker(env map[string]string, dataDir, configDir string) (*StartDockerResponse, error) {
 	ctx := context.Background()
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := client.NewClientWithOpts(
+		client.FromEnv,
+		client.WithAPIVersionNegotiation(),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
 	}
@@ -143,7 +146,10 @@ func (b *LocalBesu) startDocker(env map[string]string, dataDir, configDir string
 // stopDocker stops the besu docker container
 func (b *LocalBesu) stopDocker() error {
 	ctx := context.Background()
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := client.NewClientWithOpts(
+		client.FromEnv,
+		client.WithAPIVersionNegotiation(),
+	)
 	if err != nil {
 		return fmt.Errorf("failed to create docker client: %w", err)
 	}

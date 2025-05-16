@@ -1,20 +1,19 @@
 import {
-	getPluginsByNameOptions,
-	postPluginsByNameDeployMutation,
-	getPluginsByNameStatusOptions,
-	postPluginsByNameStopMutation,
 	getPluginsByNameDeploymentStatusOptions,
+	getPluginsByNameOptions,
 	getPluginsByNameServicesOptions,
+	postPluginsByNameDeployMutation,
+	postPluginsByNameStopMutation,
 } from '@/api/client/@tanstack/react-query.gen'
+import { YamlViewer } from '@/components/plugins/YamlViewer'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Play, Square } from 'lucide-react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
 import { useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { toast } from 'sonner'
 import DeploymentModal from './components/DeploymentModal'
-import { YamlViewer } from '@/components/plugins/YamlViewer'
 
 const PluginDetailPage = () => {
 	const { name } = useParams()
@@ -89,7 +88,6 @@ const PluginDetailPage = () => {
 			<div className="flex justify-between items-center mb-6">
 				<div>
 					<h1 className="text-2xl font-bold">{plugin.metadata?.name}</h1>
-					<p className="text-muted-foreground">{plugin.metadata?.description}</p>
 				</div>
 				<div className="flex gap-2">
 					<Button variant="outline" onClick={() => navigate('/plugins')}>
@@ -178,8 +176,8 @@ const PluginDetailPage = () => {
 										<div className="mt-2 text-sm">
 											<span className="font-semibold">Environment Variables:</span>
 											<ul className="list-disc pl-5 mt-1">
-												{service.environment.map((env: any, envIndex: number) => (
-													<li key={envIndex}>{typeof env === 'string' ? env : `${env.name}: ${env.value}`}</li>
+												{Object.entries(service.environment).map(([key, value]) => (
+													<li key={key}>{`${key}: ${value}`}</li>
 												))}
 											</ul>
 										</div>

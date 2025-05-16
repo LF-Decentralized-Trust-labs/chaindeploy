@@ -8,12 +8,18 @@ import (
 
 // isPortAvailable checks if a port is available by attempting to listen on it
 func isPortAvailable(port int) bool {
-	addr := fmt.Sprintf("0.0.0.0:%d", port)
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		return false
+	addrs := []string{
+		"0.0.0.0",
+		"127.0.0.1",
 	}
-	ln.Close()
+	for _, addr := range addrs {
+		fullAddr := fmt.Sprintf("%s:%d", addr, port)
+		ln, err := net.Listen("tcp", fullAddr)
+		if err != nil {
+			return false
+		}
+		ln.Close()
+	}
 	return true
 }
 

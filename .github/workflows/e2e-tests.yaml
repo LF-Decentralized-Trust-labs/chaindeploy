@@ -1,0 +1,201 @@
+name: E2E Tests
+
+on:
+    push:
+        branches:
+            - main
+    pull_request:
+        branches:
+            - main
+        paths-ignore:
+            - '**/*.md'
+            - 'docs/**'
+
+jobs:
+    build:
+        name: Build Application and UI
+        runs-on: ubuntu-latest
+
+        services:
+            mailhog:
+                image: mailhog/mailhog
+                ports:
+                    - 1025:1025
+                    - 8025:8025
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Set up Go
+              uses: actions/setup-go@v5
+              with:
+                  go-version: '1.23.4'
+                  cache: true
+
+            - name: Setup Bun
+              uses: oven-sh/setup-bun@v2
+
+            - name: Build UI
+              run: |
+                  cd web
+                  bun install
+                  export API_URL="/api"
+                  bun run build
+
+            - name: Install dependencies
+              run: |
+                  go mod download
+                  sudo apt-get update
+                  sudo apt-get install -y build-essential
+
+            - name: Build the application
+              run: |
+                  go build -v -o chainlaunch ./main.go
+                  chmod +x chainlaunch
+
+            - name: Upload build artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: build-artifacts
+                  path: |
+                      chainlaunch
+                      web/dist
+
+    api-e2e:
+        name: Run API E2E Tests
+        runs-on: ubuntu-latest
+        needs: build
+
+        services:
+            mailhog:
+                image: mailhog/mailhog
+                ports:
+                    - 1025:1025
+                    - 8025:8025
+
+        env:
+            API_BASE_URL: http://localhost:8100/api/v1
+            CHAINLAUNCH_USER: admin
+            CHAINLAUNCH_PASSWORD: admin123
+            API_USERNAME: admin
+            API_PASSWORD: admin123
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Download build artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  name: build-artifacts
+
+            - name: Start the application and run API tests
+              run: |
+                  export CHAINLAUNCH_USER=admin
+                  export CHAINLAUNCH_PASSWORD=admin123
+                  export CHAINLAUNCH_DATA=${{ github.workspace }}/test-data
+                  echo "CHAINLAUNCH_DATA: $CHAINLAUNCH_DATA"
+                  chmod +x chainlaunch
+                  ./chainlaunch serve --data=$CHAINLAUNCH_DATA --port=8100 --db data.db &
+                  # Wait for port 8100 to be available (60 seconds timeout)
+                  timeout=60
+                  while ! curl -s http://localhost:8100 > /dev/null; do
+                    if [ $timeout -le 0 ]; then
+                      echo "Timeout waiting for API to become available"
+                      exit 1
+                    fi
+                    echo "Waiting for API to become available... ($timeout seconds remaining)"
+                    sleep 1
+                    timeout=$((timeout - 1))
+                  done
+
+                  export API_USERNAME=${CHAINLAUNCH_USER}
+                  export API_PASSWORD=${CHAINLAUNCH_PASSWORD}
+                  export API_BASE_URL=http://localhost:8100/api/v1
+                  go test -v -tags=e2e ./e2e/...
+
+            - name: Upload API test results
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: api-test-results
+                  path: test-results.xml
+
+    ui-e2e:
+        name: Run UI E2E Tests
+        runs-on: ubuntu-latest
+        needs: build
+
+        services:
+            mailhog:
+                image: mailhog/mailhog
+                ports:
+                    - 1025:1025
+                    - 8025:8025
+
+        env:
+            CYPRESS_BASE_URL: http://localhost:8100
+            CYPRESS_API_URL: http://localhost:8100/api/v1
+            PLAYWRIGHT_USER: admin
+            PLAYWRIGHT_PASSWORD: admin123
+            CHAINLAUNCH_USER: admin
+            CHAINLAUNCH_PASSWORD: admin123
+            PLAYWRIGHT_BASE_URL: http://localhost:8100
+
+        steps:
+
+            - name: Checkout code
+              uses: actions/checkout@v4
+            - name: Download build artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  name: build-artifacts
+            - name: Cache Playwright Browsers
+              uses: actions/cache@v4
+              with:
+                  path: ~/.cache/ms-playwright
+                  key: playwright-browsers-${{ runner.os }}-${{ hashFiles('web/package.json', 'web/bun.lockb') }}
+                  restore-keys: |
+                      playwright-browsers-${{ runner.os }}-
+
+            - name: Setup Bun
+              uses: oven-sh/setup-bun@v2
+            - name: Build UI
+              run: |
+                  cd web
+                  bun install
+
+            - name: Install Playwright Browsers
+              run: |
+                  cd web
+                  bunx playwright install --with-deps
+
+            - name: Start server and run UI tests
+              run: |
+                  export CHAINLAUNCH_DATA=${{ github.workspace }}/test-data
+                  chmod +x chainlaunch
+                  ./chainlaunch serve --data=$CHAINLAUNCH_DATA --port=8100 --db data.db &
+
+                  # Wait for port 8100 to be available (60 seconds timeout)
+                  timeout=60
+                  while ! curl -s http://localhost:8100 > /dev/null; do
+                    if [ $timeout -le 0 ]; then
+                      echo "Timeout waiting for API to become available"
+                      exit 1
+                    fi
+                    echo "Waiting for API to become available... ($timeout seconds remaining)"
+                    sleep 1
+                    timeout=$((timeout - 1))
+                  done
+
+                  cd web
+                  bun run test:e2e
+
+            - name: Upload UI test results
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: ui-test-results
+                  path: |
+                      web/test-results

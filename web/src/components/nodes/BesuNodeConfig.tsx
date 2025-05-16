@@ -46,6 +46,28 @@ export function BesuNodeConfig({ config }: BesuNodeConfigProps) {
         <Separator />
 
         <div className="space-y-2">
+          <p className="text-sm font-medium text-muted-foreground">Metrics Configuration</p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Status</p>
+              <p className="text-sm">{config.metricsEnabled ? 'Enabled' : 'Disabled'}</p>
+            </div>
+            {config.metricsEnabled && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Endpoint</p>
+                <p className="text-sm">Host: {config.metricsHost}</p>
+                <p className="text-sm">Port: {config.metricsPort}</p>
+                {config.metricsProtocol && (
+                  <p className="text-sm">Protocol: {config.metricsProtocol}</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <Separator />
+
+        <div className="space-y-2">
           <p className="text-sm font-medium text-muted-foreground">IP Configuration</p>
           <div className="grid grid-cols-2 gap-4">
             <div>

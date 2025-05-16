@@ -1,41 +1,11 @@
-import {
-	getNetworksFabricByIdChannelConfigOptions,
-	getNetworksFabricByIdCurrentChannelConfigOptions,
-	getNetworksFabricByIdNodesOptions,
-	getNetworksFabricByIdOptions,
-	getNodesOptions,
-	getOrganizationsOptions,
-	postNetworksFabricByIdAnchorPeersMutation,
-	postNetworksFabricByIdOrderersByOrdererIdJoinMutation,
-	postNetworksFabricByIdOrderersByOrdererIdUnjoinMutation,
-	postNetworksFabricByIdPeersByPeerIdJoinMutation,
-	postNetworksFabricByIdPeersByPeerIdUnjoinMutation,
-} from '@/api/client/@tanstack/react-query.gen'
-import { BesuIcon } from '@/components/icons/besu-icon'
-import { FabricIcon } from '@/components/icons/fabric-icon'
-import { AddNodeDialog } from '@/components/networks/add-node-dialog'
-import { ChannelConfigCard } from '@/components/networks/channel-config-card'
-import { NodeCard } from '@/components/networks/node-card'
-import { Badge } from '@/components/ui/badge'
+import { getNetworksFabricByIdOptions } from '@/api/client/@tanstack/react-query.gen'
+import FabricNetworkDetails from '@/components/networks/FabricNetworkDetails'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { TimeAgo } from '@/components/ui/time-ago'
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { Activity, ArrowLeft, Network, Plus, Anchor, Settings, AlertTriangle } from 'lucide-react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { toast } from 'sonner'
-import { AnchorPeerConfig } from '@/components/networks/anchor-peer-config'
-import { NetworkTabs } from '@/components/networks/network-tabs'
-import { ConsenterConfig } from '@/components/networks/consenter-config'
-import { OrgAnchorWarning } from '@/components/networks/org-anchor-warning'
-import { AlertDescription, Alert } from '@/components/ui/alert'
-import { useMemo } from 'react'
-import FabricNetworkDetails from '@/components/networks/FabricNetworkDetails'
-import { BesuNetworkDetails } from '@/components/networks/BesuNetworkDetails'
-
-// Add this type for tab values
-type TabValue = 'details' | 'anchor-peers' | 'consenters'
+import { useQuery } from '@tanstack/react-query'
+import { ArrowLeft, Network } from 'lucide-react'
+import { Link, useParams } from 'react-router-dom'
 
 export default function NetworkDetailPage() {
 	const { id } = useParams()

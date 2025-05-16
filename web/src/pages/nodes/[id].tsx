@@ -28,6 +28,9 @@ import { AlertCircle, CheckCircle2, ChevronDown, Clock, KeyRound, Pencil, Play, 
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
+import BesuMetricsPage from '../metrics/besu/[nodeId]'
+import OrdererMetricsPage from '../metrics/orderer/[nodeId]'
+import PeerMetricsPage from '../metrics/peer/[nodeId]'
 
 interface DeploymentConfig {
 	type?: string
@@ -138,6 +141,7 @@ export default function NodeDetailPage() {
 	const logsRef = useRef<HTMLTextAreaElement>(null)
 	const abortControllerRef = useRef<AbortController | null>(null)
 	const [showRenewCertDialog, setShowRenewCertDialog] = useState(false)
+	const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
 	// Get the active tab from URL or default to 'logs'
 	const activeTab = searchParams.get('tab') || 'logs'
@@ -238,7 +242,7 @@ export default function NodeDetailPage() {
 					refetchEvents()
 					break
 				case 'delete':
-					await deleteNode.mutateAsync({ path: { id: node.id! } })
+					setShowDeleteDialog(true)
 					break
 				case 'renew-certificates':
 					setShowRenewCertDialog(true)
@@ -430,6 +434,7 @@ export default function NodeDetailPage() {
 			<Tabs defaultValue={activeTab} className="space-y-4" onValueChange={handleTabChange}>
 				<TabsList>
 					<TabsTrigger value="logs">Logs</TabsTrigger>
+					<TabsTrigger value="metrics">Metrics</TabsTrigger>
 					<TabsTrigger value="crypto">Crypto Material</TabsTrigger>
 					<TabsTrigger value="events">Events</TabsTrigger>
 					{isFabricNode(node) && <TabsTrigger value="channels">Channels</TabsTrigger>}
@@ -445,6 +450,12 @@ export default function NodeDetailPage() {
 							<LogViewer logs={logs} onScroll={() => {}} />
 						</CardContent>
 					</Card>
+				</TabsContent>
+
+				<TabsContent value="metrics" className="space-y-4">
+					{node.besuNode && <BesuMetricsPage node={node} />}
+					{node.fabricOrderer && <OrdererMetricsPage node={node} />}
+					{node.fabricPeer && <PeerMetricsPage node={node} />}
 				</TabsContent>
 
 				<TabsContent value="crypto" className="space-y-4">
@@ -485,34 +496,44 @@ export default function NodeDetailPage() {
 							<CardDescription>Recent node operations and their status</CardDescription>
 						</CardHeader>
 						<CardContent>
-							<div className="space-y-8">
-								{events?.items?.map((event) => {
-									const EventIcon = getEventIcon(event.type!)
-									const StatusIcon = getEventStatusIcon(event.type!)
-									return (
-										<div key={event.id} className="flex gap-4">
-											<div className="mt-1">
-												<EventIcon className="h-5 w-5 text-muted-foreground" />
-											</div>
-											<div className="flex-1 space-y-1">
-												<div className="flex items-center justify-between">
-													<div className="flex items-center gap-2">
-														<span className="font-medium">{event.type}</span>
-														<StatusIcon className={cn('h-4 w-4', getEventStatusColor(event.type!))} />
-														<span className="text-sm text-muted-foreground">{event.type}</span>
-													</div>
-													<time className="text-sm text-muted-foreground">{format(new Date(event.created_at!), 'PPp')}</time>
+							{!events?.items?.length ? (
+								<div className="flex flex-col items-center justify-center py-8 text-center">
+									<Clock className="h-12 w-12 text-muted-foreground mb-4" />
+									<h3 className="text-lg font-medium mb-2">No Events Found</h3>
+									<p className="text-sm text-muted-foreground max-w-md">
+										There are no events recorded for this node yet. Events will appear here when you perform operations like start, stop, or restart.
+									</p>
+								</div>
+							) : (
+								<div className="space-y-8">
+									{events.items.map((event) => {
+										const EventIcon = getEventIcon(event.type!)
+										const StatusIcon = getEventStatusIcon(event.type!)
+										return (
+											<div key={event.id} className="flex gap-4">
+												<div className="mt-1">
+													<EventIcon className="h-5 w-5 text-muted-foreground" />
 												</div>
-												{event.data && typeof event.data === 'object' ? (
-													<div className="rounded-md bg-muted p-2 text-sm">
-														<pre className="whitespace-pre-wrap font-mono text-xs">{JSON.stringify(event.data, null, 2)}</pre>
+												<div className="flex-1 space-y-1">
+													<div className="flex items-center justify-between">
+														<div className="flex items-center gap-2">
+															<span className="font-medium">{event.type}</span>
+															<StatusIcon className={cn('h-4 w-4', getEventStatusColor(event.type!))} />
+															<span className="text-sm text-muted-foreground">{event.type}</span>
+														</div>
+														<time className="text-sm text-muted-foreground">{format(new Date(event.created_at!), 'PPp')}</time>
 													</div>
-												) : null}
+													{event.data && typeof event.data === 'object' ? (
+														<div className="rounded-md bg-muted p-2 text-sm">
+															<pre className="whitespace-pre-wrap font-mono text-xs">{JSON.stringify(event.data, null, 2)}</pre>
+														</div>
+													) : null}
+												</div>
 											</div>
-										</div>
-									)
-								})}
-							</div>
+										)
+									})}
+								</div>
+							)}
 						</CardContent>
 					</Card>
 				</TabsContent>
@@ -530,6 +551,30 @@ export default function NodeDetailPage() {
 						<AlertDialogCancel>Cancel</AlertDialogCancel>
 						<AlertDialogAction onClick={handleRenewCertificates} disabled={renewCertificates.isPending}>
 							Renew Certificates
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+
+			<AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>Delete Node</AlertDialogTitle>
+						<AlertDialogDescription>Are you sure you want to delete this node? This action cannot be undone.</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogAction
+							onClick={async () => {
+								if (node) {
+									await deleteNode.mutateAsync({ path: { id: node.id! } })
+									setShowDeleteDialog(false)
+								}
+							}}
+							disabled={deleteNode.isPending}
+							className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+						>
+							Delete
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>

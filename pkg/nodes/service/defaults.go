@@ -33,6 +33,11 @@ type BesuNodeDefaults struct {
 	InternalIP string            `json:"internalIp"`
 	Mode       Mode              `json:"mode"`
 	Env        map[string]string `json:"environmentVariables"`
+	// Metrics configuration
+	MetricsEnabled  bool   `json:"metricsEnabled"`
+	MetricsHost     string `json:"metricsHost"`
+	MetricsPort     uint   `json:"metricsPort"`
+	MetricsProtocol string `json:"metricsProtocol"`
 }
 
 // NodesDefaultsParams represents parameters for getting multiple nodes defaults

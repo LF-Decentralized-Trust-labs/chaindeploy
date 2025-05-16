@@ -1,4 +1,4 @@
-import { HttpChannelResponse, HttpNodeResponse } from '@/api/client'
+import { HttpChannelResponse } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { Form } from '@/components/ui/form'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -11,20 +11,18 @@ import { toast } from 'sonner'
 import { z } from 'zod'
 
 // Import operation components
+import { postNetworksFabricByIdUpdateConfigMutation } from '@/api/client/@tanstack/react-query.gen'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AlertCircle } from 'lucide-react'
-import { AddOrgOperation, addOrgSchema } from './operations/AddOrgOperation'
-import { RemoveOrgOperation, removeOrgSchema } from './operations/RemoveOrgOperation'
-import { UpdateOrgMSPOperation, updateOrgMSPSchema } from './operations/UpdateOrgMSPOperation'
-import { SetAnchorPeersOperation, setAnchorPeersSchema } from './operations/SetAnchorPeersOperation'
-import { AddConsenterOperation, addConsenterSchema } from './operations/AddConsenterOperation'
-import { RemoveConsenterOperation, removeConsenterSchema } from './operations/RemoveConsenterOperation'
-import { UpdateConsenterOperation, updateConsenterSchema } from './operations/UpdateConsenterOperation'
-import { UpdateEtcdRaftOptionsOperation, updateEtcdRaftOptionsSchema } from './operations/UpdateEtcdRaftOptionsOperation'
-import { UpdateBatchSizeOperation, updateBatchSizeSchema } from './operations/UpdateBatchSizeOperation'
-import { UpdateBatchTimeoutOperation, updateBatchTimeoutSchema } from './operations/UpdateBatchTimeoutOperation'
-import { useNavigate } from 'react-router-dom'
-import { postNetworksFabricByIdUpdateConfigMutation } from '@/api/client/@tanstack/react-query.gen'
+import { AddConsenterOperation } from './operations/AddConsenterOperation'
+import { AddOrgOperation } from './operations/AddOrgOperation'
+import { RemoveConsenterOperation } from './operations/RemoveConsenterOperation'
+import { RemoveOrgOperation } from './operations/RemoveOrgOperation'
+import { UpdateBatchSizeOperation } from './operations/UpdateBatchSizeOperation'
+import { UpdateBatchTimeoutOperation } from './operations/UpdateBatchTimeoutOperation'
+import { UpdateConsenterOperation } from './operations/UpdateConsenterOperation'
+import { UpdateEtcdRaftOptionsOperation } from './operations/UpdateEtcdRaftOptionsOperation'
+import { UpdateOrgMSPOperation } from './operations/UpdateOrgMSPOperation'
 
 // Operation type mapping
 const operationTypes = {
@@ -42,18 +40,6 @@ const operationTypes = {
 type OperationType = keyof typeof operationTypes
 
 // Define the schema for each operation type
-const operationSchemaMap = {
-	add_org: addOrgSchema,
-	remove_org: removeOrgSchema,
-	update_org_msp: updateOrgMSPSchema,
-	set_anchor_peers: setAnchorPeersSchema,
-	add_consenter: addConsenterSchema,
-	remove_consenter: removeConsenterSchema,
-	update_consenter: updateConsenterSchema,
-	update_etcd_raft_options: updateEtcdRaftOptionsSchema,
-	update_batch_size: updateBatchSizeSchema,
-	update_batch_timeout: updateBatchTimeoutSchema,
-}
 
 // Define default values for each operation type
 const getDefaultPayloadForType = (type: OperationType) => {
@@ -64,8 +50,6 @@ const getDefaultPayloadForType = (type: OperationType) => {
 			return { msp_id: '' }
 		case 'update_org_msp':
 			return { msp_id: '', root_certs: [], tls_root_certs: [] }
-		case 'set_anchor_peers':
-			return { msp_id: '', anchor_peers: [] }
 		case 'add_consenter':
 			return { host: '', port: 7050, client_tls_cert: '', server_tls_cert: '' }
 		case 'remove_consenter':
@@ -129,11 +113,9 @@ export function ChannelUpdateForm({ network, onSuccess, channelConfig }: Channel
 		name: 'operations',
 	})
 
-	const navigate = useNavigate()
-
 	const prepareUpdate = useMutation({
 		...postNetworksFabricByIdUpdateConfigMutation(),
-		onSuccess: (data) => {
+		onSuccess: () => {
 			toast.success('Channel updated')
 			if (onSuccess) onSuccess()
 		},
@@ -165,7 +147,7 @@ export function ChannelUpdateForm({ network, onSuccess, channelConfig }: Channel
 		})
 
 		prepareUpdate.mutate({
-			path: { id: Number(network.id) },
+			path: { id: Number((network as any).id) },
 			body: { operations },
 		})
 	}
@@ -178,8 +160,6 @@ export function ChannelUpdateForm({ network, onSuccess, channelConfig }: Channel
 				return <RemoveOrgOperation key={index} index={index} onRemove={() => remove(index)} />
 			case 'update_org_msp':
 				return <UpdateOrgMSPOperation key={index} index={index} onRemove={() => remove(index)} />
-			case 'set_anchor_peers':
-				return <SetAnchorPeersOperation key={index} index={index} onRemove={() => remove(index)} channelConfig={channelConfig} />
 			case 'add_consenter':
 				return <AddConsenterOperation key={index} index={index} onRemove={() => remove(index)} />
 			case 'remove_consenter':

@@ -56,6 +56,41 @@ func (q *Queries) CheckNetworkNodeExists(ctx context.Context, arg *CheckNetworkN
 	return column_1, err
 }
 
+const CountAuditLogs = `-- name: CountAuditLogs :one
+SELECT COUNT(*) FROM audit_logs
+WHERE (? IS NULL OR timestamp >= ?)
+  AND (? IS NULL OR timestamp <= ?)
+  AND (? = '' OR event_type = ?)
+  AND (? = '' OR user_identity = ?)
+`
+
+type CountAuditLogsParams struct {
+	Column1      interface{} `json:"column1"`
+	Timestamp    time.Time   `json:"timestamp"`
+	Column3      interface{} `json:"column3"`
+	Timestamp_2  time.Time   `json:"timestamp2"`
+	Column5      interface{} `json:"column5"`
+	EventType    string      `json:"eventType"`
+	Column7      interface{} `json:"column7"`
+	UserIdentity int64       `json:"userIdentity"`
+}
+
+func (q *Queries) CountAuditLogs(ctx context.Context, arg *CountAuditLogsParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, CountAuditLogs,
+		arg.Column1,
+		arg.Timestamp,
+		arg.Column3,
+		arg.Timestamp_2,
+		arg.Column5,
+		arg.EventType,
+		arg.Column7,
+		arg.UserIdentity,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const CountBackupsBySchedule = `-- name: CountBackupsBySchedule :one
 SELECT COUNT(*) FROM backups
 WHERE schedule_id = ?
@@ -135,6 +170,73 @@ func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const CreateAuditLog = `-- name: CreateAuditLog :one
+INSERT INTO audit_logs (
+    timestamp,
+    event_source,
+    user_identity,
+    source_ip,
+    event_type,
+    event_outcome,
+    affected_resource,
+    request_id,
+    severity,
+    details,
+    session_id
+) VALUES (
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+)
+RETURNING id, timestamp, event_source, user_identity, source_ip, event_type, event_outcome, affected_resource, request_id, severity, details, created_at, updated_at, session_id
+`
+
+type CreateAuditLogParams struct {
+	Timestamp        time.Time      `json:"timestamp"`
+	EventSource      string         `json:"eventSource"`
+	UserIdentity     int64          `json:"userIdentity"`
+	SourceIp         sql.NullString `json:"sourceIp"`
+	EventType        string         `json:"eventType"`
+	EventOutcome     string         `json:"eventOutcome"`
+	AffectedResource sql.NullString `json:"affectedResource"`
+	RequestID        sql.NullString `json:"requestId"`
+	Severity         sql.NullString `json:"severity"`
+	Details          sql.NullString `json:"details"`
+	SessionID        sql.NullString `json:"sessionId"`
+}
+
+func (q *Queries) CreateAuditLog(ctx context.Context, arg *CreateAuditLogParams) (*AuditLog, error) {
+	row := q.db.QueryRowContext(ctx, CreateAuditLog,
+		arg.Timestamp,
+		arg.EventSource,
+		arg.UserIdentity,
+		arg.SourceIp,
+		arg.EventType,
+		arg.EventOutcome,
+		arg.AffectedResource,
+		arg.RequestID,
+		arg.Severity,
+		arg.Details,
+		arg.SessionID,
+	)
+	var i AuditLog
+	err := row.Scan(
+		&i.ID,
+		&i.Timestamp,
+		&i.EventSource,
+		&i.UserIdentity,
+		&i.SourceIp,
+		&i.EventType,
+		&i.EventOutcome,
+		&i.AffectedResource,
+		&i.RequestID,
+		&i.Severity,
+		&i.Details,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SessionID,
+	)
+	return &i, err
 }
 
 const CreateBackup = `-- name: CreateBackup :one
@@ -1391,6 +1493,33 @@ func (q *Queries) GetAllNodes(ctx context.Context) ([]*Node, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const GetAuditLog = `-- name: GetAuditLog :one
+SELECT id, timestamp, event_source, user_identity, source_ip, event_type, event_outcome, affected_resource, request_id, severity, details, created_at, updated_at, session_id FROM audit_logs
+WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetAuditLog(ctx context.Context, id int64) (*AuditLog, error) {
+	row := q.db.QueryRowContext(ctx, GetAuditLog, id)
+	var i AuditLog
+	err := row.Scan(
+		&i.ID,
+		&i.Timestamp,
+		&i.EventSource,
+		&i.UserIdentity,
+		&i.SourceIp,
+		&i.EventType,
+		&i.EventOutcome,
+		&i.AffectedResource,
+		&i.RequestID,
+		&i.Severity,
+		&i.Details,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SessionID,
+	)
+	return &i, err
 }
 
 const GetBackup = `-- name: GetBackup :one
@@ -2767,6 +2896,33 @@ func (q *Queries) GetPlugin(ctx context.Context, name string) (*Plugin, error) {
 	return &i, err
 }
 
+const GetPrometheusConfig = `-- name: GetPrometheusConfig :one
+SELECT id, prometheus_port, data_dir, config_dir, container_name, scrape_interval, evaluation_interval, deployment_mode, docker_image, docker_network, docker_restart_policy, docker_extra_args, created_at, updated_at FROM prometheus_config
+WHERE id = 1
+`
+
+func (q *Queries) GetPrometheusConfig(ctx context.Context) (*PrometheusConfig, error) {
+	row := q.db.QueryRowContext(ctx, GetPrometheusConfig)
+	var i PrometheusConfig
+	err := row.Scan(
+		&i.ID,
+		&i.PrometheusPort,
+		&i.DataDir,
+		&i.ConfigDir,
+		&i.ContainerName,
+		&i.ScrapeInterval,
+		&i.EvaluationInterval,
+		&i.DeploymentMode,
+		&i.DockerImage,
+		&i.DockerNetwork,
+		&i.DockerRestartPolicy,
+		&i.DockerExtraArgs,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
 const GetProvidersByNotificationType = `-- name: GetProvidersByNotificationType :many
 SELECT id, name, type, config, is_default, is_enabled, created_at, updated_at, notify_node_downtime, notify_backup_success, notify_backup_failure, notify_s3_connection_issue, last_test_at, last_test_status, last_test_message FROM notification_providers
 WHERE (
@@ -3080,6 +3236,78 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (*User
 		&i.UpdatedAt,
 	)
 	return &i, err
+}
+
+const ListAuditLogs = `-- name: ListAuditLogs :many
+SELECT id, timestamp, event_source, user_identity, source_ip, event_type, event_outcome, affected_resource, request_id, severity, details, created_at, updated_at, session_id FROM audit_logs
+WHERE (? IS NULL OR timestamp >= ?)
+  AND (? IS NULL OR timestamp <= ?)
+  AND (? = '' OR event_type = ?)
+  AND (? = 0 OR user_identity = ?)
+ORDER BY timestamp DESC
+LIMIT ? OFFSET ?
+`
+
+type ListAuditLogsParams struct {
+	Column1      interface{} `json:"column1"`
+	Timestamp    time.Time   `json:"timestamp"`
+	Column3      interface{} `json:"column3"`
+	Timestamp_2  time.Time   `json:"timestamp2"`
+	Column5      interface{} `json:"column5"`
+	EventType    string      `json:"eventType"`
+	Column7      interface{} `json:"column7"`
+	UserIdentity int64       `json:"userIdentity"`
+	Limit        int64       `json:"limit"`
+	Offset       int64       `json:"offset"`
+}
+
+func (q *Queries) ListAuditLogs(ctx context.Context, arg *ListAuditLogsParams) ([]*AuditLog, error) {
+	rows, err := q.db.QueryContext(ctx, ListAuditLogs,
+		arg.Column1,
+		arg.Timestamp,
+		arg.Column3,
+		arg.Timestamp_2,
+		arg.Column5,
+		arg.EventType,
+		arg.Column7,
+		arg.UserIdentity,
+		arg.Limit,
+		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*AuditLog{}
+	for rows.Next() {
+		var i AuditLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.Timestamp,
+			&i.EventSource,
+			&i.UserIdentity,
+			&i.SourceIp,
+			&i.EventType,
+			&i.EventOutcome,
+			&i.AffectedResource,
+			&i.RequestID,
+			&i.Severity,
+			&i.Details,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.SessionID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const ListBackupSchedules = `-- name: ListBackupSchedules :many
@@ -3664,7 +3892,7 @@ func (q *Queries) ListNetworks(ctx context.Context) ([]*Network, error) {
 const ListNodeEvents = `-- name: ListNodeEvents :many
 SELECT id, node_id, event_type, description, data, status, created_at FROM node_events
 WHERE node_id = ?
-ORDER BY created_at DESC
+ORDER BY id DESC
 LIMIT ? OFFSET ?
 `
 
@@ -4088,6 +4316,46 @@ WHERE id = ?
 func (q *Queries) MarkBackupNotified(ctx context.Context, id int64) error {
 	_, err := q.db.ExecContext(ctx, MarkBackupNotified, id)
 	return err
+}
+
+const ResetPrometheusConfig = `-- name: ResetPrometheusConfig :one
+UPDATE prometheus_config
+SET prometheus_port = 9090,
+    data_dir = '/var/lib/prometheus',
+    config_dir = '/etc/prometheus',
+    container_name = 'chainlaunch-prometheus',
+    scrape_interval = 15,
+    evaluation_interval = 15,
+    deployment_mode = 'docker',
+    docker_image = 'prom/prometheus:latest',
+    docker_network = 'chainlaunch-network',
+    docker_restart_policy = 'unless-stopped',
+    docker_extra_args = '--web.enable-lifecycle --web.enable-admin-api',
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 1
+RETURNING id, prometheus_port, data_dir, config_dir, container_name, scrape_interval, evaluation_interval, deployment_mode, docker_image, docker_network, docker_restart_policy, docker_extra_args, created_at, updated_at
+`
+
+func (q *Queries) ResetPrometheusConfig(ctx context.Context) (*PrometheusConfig, error) {
+	row := q.db.QueryRowContext(ctx, ResetPrometheusConfig)
+	var i PrometheusConfig
+	err := row.Scan(
+		&i.ID,
+		&i.PrometheusPort,
+		&i.DataDir,
+		&i.ConfigDir,
+		&i.ContainerName,
+		&i.ScrapeInterval,
+		&i.EvaluationInterval,
+		&i.DeploymentMode,
+		&i.DockerImage,
+		&i.DockerNetwork,
+		&i.DockerRestartPolicy,
+		&i.DockerExtraArgs,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
 }
 
 const UnsetDefaultNotificationProvider = `-- name: UnsetDefaultNotificationProvider :exec
@@ -5126,6 +5394,72 @@ func (q *Queries) UpdatePlugin(ctx context.Context, arg *UpdatePluginParams) (*P
 		&i.UpdatedAt,
 		&i.DeploymentMetadata,
 		&i.DeploymentStatus,
+	)
+	return &i, err
+}
+
+const UpdatePrometheusConfig = `-- name: UpdatePrometheusConfig :one
+UPDATE prometheus_config
+SET prometheus_port = ?,
+    data_dir = ?,
+    config_dir = ?,
+    container_name = ?,
+    scrape_interval = ?,
+    evaluation_interval = ?,
+    deployment_mode = ?,
+    docker_image = ?,
+    docker_network = ?,
+    docker_restart_policy = ?,
+    docker_extra_args = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 1
+RETURNING id, prometheus_port, data_dir, config_dir, container_name, scrape_interval, evaluation_interval, deployment_mode, docker_image, docker_network, docker_restart_policy, docker_extra_args, created_at, updated_at
+`
+
+type UpdatePrometheusConfigParams struct {
+	PrometheusPort      int64          `json:"prometheusPort"`
+	DataDir             string         `json:"dataDir"`
+	ConfigDir           string         `json:"configDir"`
+	ContainerName       string         `json:"containerName"`
+	ScrapeInterval      int64          `json:"scrapeInterval"`
+	EvaluationInterval  int64          `json:"evaluationInterval"`
+	DeploymentMode      string         `json:"deploymentMode"`
+	DockerImage         string         `json:"dockerImage"`
+	DockerNetwork       sql.NullString `json:"dockerNetwork"`
+	DockerRestartPolicy string         `json:"dockerRestartPolicy"`
+	DockerExtraArgs     sql.NullString `json:"dockerExtraArgs"`
+}
+
+func (q *Queries) UpdatePrometheusConfig(ctx context.Context, arg *UpdatePrometheusConfigParams) (*PrometheusConfig, error) {
+	row := q.db.QueryRowContext(ctx, UpdatePrometheusConfig,
+		arg.PrometheusPort,
+		arg.DataDir,
+		arg.ConfigDir,
+		arg.ContainerName,
+		arg.ScrapeInterval,
+		arg.EvaluationInterval,
+		arg.DeploymentMode,
+		arg.DockerImage,
+		arg.DockerNetwork,
+		arg.DockerRestartPolicy,
+		arg.DockerExtraArgs,
+	)
+	var i PrometheusConfig
+	err := row.Scan(
+		&i.ID,
+		&i.PrometheusPort,
+		&i.DataDir,
+		&i.ConfigDir,
+		&i.ContainerName,
+		&i.ScrapeInterval,
+		&i.EvaluationInterval,
+		&i.DeploymentMode,
+		&i.DockerImage,
+		&i.DockerNetwork,
+		&i.DockerRestartPolicy,
+		&i.DockerExtraArgs,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return &i, err
 }

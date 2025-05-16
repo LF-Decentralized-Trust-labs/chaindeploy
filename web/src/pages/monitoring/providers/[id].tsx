@@ -1,8 +1,9 @@
 import { HttpUpdateProviderRequest } from '@/api/client'
 import { getNotificationsProvidersByIdOptions, putNotificationsProvidersByIdMutation } from '@/api/client/@tanstack/react-query.gen'
-import { ProviderForm, ProviderFormValues } from '@/components/settings/notifications/provider-form'
+import { ProviderForm } from '@/components/settings/notifications/provider-form'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -25,11 +26,20 @@ export default function UpdateProviderPage() {
 			navigate('/monitoring')
 		},
 		onError: (error) => {
-			toast.error('Failed to update provider', {
-				description: error.message,
-			})
+			if (error instanceof Error) {
+				toast.error('Failed to update provider', {
+					description: error.message,
+				})
+			} else if (error.error) {
+				toast.error('Failed to update provider', {
+					description: (error.error as any).message,
+				})
+			}
 		},
 	})
+	const providerConfig = useMemo(() => {
+		return provider.config as any
+	}, [provider])
 	if (isLoading) {
 		return <Skeleton className="h-48" />
 	}
@@ -55,24 +65,24 @@ export default function UpdateProviderPage() {
 					name: provider?.name ?? '',
 					type: provider?.type ?? 'SMTP',
 					config: {
-						host: provider?.config?.host ?? '',
-						port: provider?.config?.port ?? 587,
-						username: provider?.config?.username ?? '',
-						password: provider?.config?.password ?? '',
-						from: provider?.config?.from ?? '',
-						tls: provider?.config?.tls ?? true,
+						host: providerConfig?.host ?? '',
+						port: providerConfig?.port ?? 587,
+						username: providerConfig?.username ?? '',
+						password: providerConfig?.password ?? '',
+						from: providerConfig?.from ?? '',
+						tls: providerConfig?.tls ?? true,
 					},
 					notifyNodeDowntime: provider?.notifyNodeDowntime ?? true,
 					notifyBackupSuccess: provider?.notifyBackupSuccess ?? false,
 					notifyBackupFailure: provider?.notifyBackupFailure ?? true,
 					notifyS3ConnIssue: provider?.notifyS3ConnIssue ?? true,
 				}}
-				onSubmit={async (values) =>
+				onSubmit={async (values) => {
 					mutation.mutateAsync({
 						path: { id: Number(id) },
 						body: values as HttpUpdateProviderRequest,
 					})
-				}
+				}}
 				submitText="Update Provider"
 				onCancel={() => navigate(-1)}
 				isLoading={mutation.isPending}

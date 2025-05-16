@@ -20,10 +20,6 @@ function isFabricNode(node: HttpNodeResponse): node is HttpNodeResponse & { plat
 	return node.platform === 'FABRIC'
 }
 
-function isBesuNode(node: HttpNodeResponse): node is HttpNodeResponse & { platform: 'BESU' } {
-	return node.platform === 'BESU'
-}
-
 function getStatusColor(status: string) {
 	switch (status?.toLowerCase()) {
 		case 'running':

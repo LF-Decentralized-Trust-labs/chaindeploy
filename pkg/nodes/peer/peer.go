@@ -30,6 +30,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 
+	"io"
+
 	"github.com/chainlaunch/chainlaunch/internal/protoutil"
 	"github.com/chainlaunch/chainlaunch/pkg/binaries"
 	"github.com/chainlaunch/chainlaunch/pkg/config"
@@ -38,8 +40,13 @@ import (
 	kmodels "github.com/chainlaunch/chainlaunch/pkg/keymanagement/models"
 	keymanagement "github.com/chainlaunch/chainlaunch/pkg/keymanagement/service"
 	"github.com/chainlaunch/chainlaunch/pkg/logger"
-	"github.com/chainlaunch/chainlaunch/pkg/nodes/types"
+	nodetypes "github.com/chainlaunch/chainlaunch/pkg/nodes/types"
 	settingsservice "github.com/chainlaunch/chainlaunch/pkg/settings/service"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/mount"
+	dockerclient "github.com/docker/docker/client"
+	"github.com/docker/go-connections/nat"
 )
 
 type AddressOverridePath struct {
@@ -886,7 +893,7 @@ func (p *LocalPeer) findPeerBinary() (string, error) {
 }
 
 // Init initializes the peer configuration
-func (p *LocalPeer) Init() (types.NodeDeploymentConfig, error) {
+func (p *LocalPeer) Init() (nodetypes.NodeDeploymentConfig, error) {
 	ctx := context.Background()
 	// Get node from database
 	node, err := p.db.GetNode(ctx, p.nodeID)
@@ -1046,8 +1053,8 @@ func (p *LocalPeer) Init() (types.NodeDeploymentConfig, error) {
 		return nil, fmt.Errorf("failed to write config files: %w", err)
 	}
 
-	return &types.FabricPeerDeploymentConfig{
-		BaseDeploymentConfig: types.BaseDeploymentConfig{
+	return &nodetypes.FabricPeerDeploymentConfig{
+		BaseDeploymentConfig: nodetypes.BaseDeploymentConfig{
 			Type: "fabric-peer",
 			Mode: p.mode,
 		},
@@ -1137,6 +1144,7 @@ func (p *LocalPeer) buildPeerEnvironment(mspConfigPath string) map[string]string
 	}
 
 	// Add required environment variables
+	// Default: use host paths
 	env["CORE_PEER_MSPCONFIGPATH"] = mspConfigPath
 	env["FABRIC_CFG_PATH"] = mspConfigPath
 	env["CORE_PEER_TLS_ROOTCERT_FILE"] = filepath.Join(mspConfigPath, "tlscacerts/cacert.pem")
@@ -1178,54 +1186,119 @@ func (p *LocalPeer) buildPeerEnvironment(mspConfigPath string) map[string]string
 	env["CORE_LOGGING_GRPC"] = "info"
 	env["CORE_LOGGING_PEER"] = "info"
 
+	// If running in docker mode, override file paths to container paths
+	if p.mode == "docker" {
+		env["CORE_PEER_MSPCONFIGPATH"] = "/etc/hyperledger/fabric/msp"
+		env["FABRIC_CFG_PATH"] = "/etc/hyperledger/fabric/msp"
+		env["CORE_PEER_TLS_ROOTCERT_FILE"] = "/etc/hyperledger/fabric/msp/tlscacerts/cacert.pem"
+		env["CORE_PEER_TLS_KEY_FILE"] = "/etc/hyperledger/fabric/msp/tls.key"
+		env["CORE_PEER_TLS_CLIENTCERT_FILE"] = "/etc/hyperledger/fabric/msp/tls.crt"
+		env["CORE_PEER_TLS_CLIENTKEY_FILE"] = "/etc/hyperledger/fabric/msp/tls.key"
+		env["CORE_PEER_TLS_CERT_FILE"] = "/etc/hyperledger/fabric/msp/tls.crt"
+		env["CORE_PEER_TLS_CLIENTROOTCAS_FILES"] = "/etc/hyperledger/fabric/msp/tlscacerts/cacert.pem"
+	}
+
 	return env
 }
 
 // startDocker starts the peer in a docker container
 func (p *LocalPeer) startDocker(env map[string]string, mspConfigPath, dataConfigPath string) (*StartDockerResponse, error) {
-	// Convert env map to array of "-e KEY=VALUE" arguments
-	var envArgs []string
-	for k, v := range env {
-		envArgs = append(envArgs, "-e", fmt.Sprintf("%s=%s", k, v))
+	cli, err := dockerclient.NewClientWithOpts(
+		dockerclient.FromEnv,
+		dockerclient.WithAPIVersionNegotiation(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create docker client: %w", err)
 	}
+	defer cli.Close()
+
+	// Pull the image first
+	imageName := fmt.Sprintf("hyperledger/fabric-peer:%s", p.opts.Version)
+	reader, err := cli.ImagePull(context.Background(), imageName, image.PullOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to pull image %s: %w", imageName, err)
+	}
+	defer reader.Close()
+	io.Copy(io.Discard, reader) // Wait for pull to complete
 
 	containerName, err := p.getContainerName()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get container name: %w", err)
 	}
 
-	// Prepare docker run command arguments
-	args := []string{
-		"run",
-		"-d",
-		"--name", containerName,
+	// Helper to extract port from address (host:port or just :port)
+	extractPort := func(addr string) string {
+		parts := strings.Split(addr, ":")
+		if len(parts) > 1 {
+			return parts[len(parts)-1]
+		}
+		return addr
 	}
-	args = append(args, envArgs...)
-	args = append(args,
-		"-v", fmt.Sprintf("%s:/etc/hyperledger/fabric/msp", mspConfigPath),
-		"-v", fmt.Sprintf("%s:/var/hyperledger/production", dataConfigPath),
-		"-p", fmt.Sprintf("%s:7051", strings.Split(p.opts.ListenAddress, ":")[1]),
-		"-p", fmt.Sprintf("%s:7052", strings.Split(p.opts.ChaincodeAddress, ":")[1]),
-		"-p", fmt.Sprintf("%s:7053", strings.Split(p.opts.EventsAddress, ":")[1]),
-		"-p", fmt.Sprintf("%s:9443", strings.Split(p.opts.OperationsListenAddress, ":")[1]),
-		"hyperledger/fabric-peer:2.5.9",
-		"peer",
-		"node",
-		"start",
+
+	peerPort := extractPort(p.opts.ListenAddress)
+	chaincodePort := extractPort(p.opts.ChaincodeAddress)
+	eventsPort := extractPort(p.opts.EventsAddress)
+	operationsPort := extractPort(p.opts.OperationsListenAddress)
+
+	// Configure port bindings
+	portBindings := map[nat.Port][]nat.PortBinding{
+		nat.Port(peerPort):       {{HostIP: "0.0.0.0", HostPort: peerPort}},
+		nat.Port(chaincodePort):  {{HostIP: "0.0.0.0", HostPort: chaincodePort}},
+		nat.Port(eventsPort):     {{HostIP: "0.0.0.0", HostPort: eventsPort}},
+		nat.Port(operationsPort): {{HostIP: "0.0.0.0", HostPort: operationsPort}},
+	}
+
+	// Configure volume bindings
+	mounts := []mount.Mount{
+		{
+			Type:   mount.TypeBind,
+			Source: mspConfigPath,
+			Target: "/etc/hyperledger/fabric/msp",
+		},
+		{
+			Type:   mount.TypeBind,
+			Source: dataConfigPath,
+			Target: "/var/hyperledger/production",
+		},
+	}
+
+	// Create container
+	resp, err := cli.ContainerCreate(context.Background(),
+		&container.Config{
+			Image: imageName,
+			Cmd:   []string{"peer", "node", "start"},
+			Env:   mapToEnvSlice(env),
+		},
+		&container.HostConfig{
+			PortBindings: portBindings,
+			Mounts:       mounts,
+		},
+		nil,
+		nil,
+		containerName,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create container: %w", err)
+	}
 
-	cmd := exec.Command("docker", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("failed to start docker container: %w", err)
+	// Start container
+	if err := cli.ContainerStart(context.Background(), resp.ID, container.StartOptions{}); err != nil {
+		return nil, fmt.Errorf("failed to start container: %w", err)
 	}
 
 	return &StartDockerResponse{
 		Mode:          "docker",
 		ContainerName: containerName,
 	}, nil
+}
+
+// Helper function to convert map to env slice
+func mapToEnvSlice(m map[string]string) []string {
+	var env []string
+	for k, v := range m {
+		env = append(env, fmt.Sprintf("%s=%s", k, v))
+	}
+	return env
 }
 
 // Stop stops the peer node
@@ -1269,17 +1342,23 @@ func (p *LocalPeer) stopDocker() error {
 		return fmt.Errorf("failed to get container name: %w", err)
 	}
 
-	// Stop the container
-	stopCmd := exec.Command("docker", "stop", containerName)
-	if err := stopCmd.Run(); err != nil {
-		return fmt.Errorf("failed to stop docker container: %w", err)
+	cli, err := dockerclient.NewClientWithOpts(
+		dockerclient.FromEnv,
+		dockerclient.WithAPIVersionNegotiation(),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create docker client: %w", err)
 	}
+	defer cli.Close()
 
-	// Remove the container
-	rmCmd := exec.Command("docker", "rm", "-f", containerName)
-	if err := rmCmd.Run(); err != nil {
+	ctx := context.Background()
+
+	// Stop and remove container
+	if err := cli.ContainerRemove(ctx, containerName, container.RemoveOptions{
+		Force: true,
+	}); err != nil {
 		p.logger.Warn("Failed to remove docker container", "error", err)
-		// Don't return error as the container might not exist
+		// Don't return error as container might not exist
 	}
 
 	return nil
@@ -1360,7 +1439,7 @@ func (p *LocalPeer) execSystemctl(command string, args ...string) error {
 }
 
 // RenewCertificates renews the peer's TLS and signing certificates
-func (p *LocalPeer) RenewCertificates(peerDeploymentConfig *types.FabricPeerDeploymentConfig) error {
+func (p *LocalPeer) RenewCertificates(peerDeploymentConfig *nodetypes.FabricPeerDeploymentConfig) error {
 
 	ctx := context.Background()
 	p.logger.Info("Starting certificate renewal for peer", "peerID", p.opts.ID)
@@ -1972,18 +2051,82 @@ func (p *LocalPeer) getLogPath() string {
 // TailLogs tails the logs of the peer service
 func (p *LocalPeer) TailLogs(ctx context.Context, tail int, follow bool) (<-chan string, error) {
 	logChan := make(chan string, 100)
-	logPath := p.GetStdOutPath()
 
+	if p.mode == "docker" {
+		containerName, err := p.getContainerName()
+		if err != nil {
+			close(logChan)
+			return logChan, err
+		}
+		go func() {
+			defer close(logChan)
+			cli, err := dockerclient.NewClientWithOpts(dockerclient.FromEnv, dockerclient.WithAPIVersionNegotiation())
+			if err != nil {
+				p.logger.Error("Failed to create docker client", "error", err)
+				return
+			}
+			defer cli.Close()
+
+			options := container.LogsOptions{
+				ShowStdout: true,
+				ShowStderr: true,
+				Follow:     follow,
+				Details:    true,
+				Tail:       fmt.Sprintf("%d", tail),
+			}
+			reader, err := cli.ContainerLogs(ctx, containerName, options)
+			if err != nil {
+				p.logger.Error("Failed to get docker logs", "error", err)
+				return
+			}
+			defer reader.Close()
+
+			header := make([]byte, 8)
+			for {
+				// Read the 8-byte header
+				_, err := io.ReadFull(reader, header)
+				if err != nil {
+					if err != io.EOF {
+						p.logger.Error("Failed to read docker log header", "error", err)
+					}
+					return
+				}
+				// Get the payload length
+				length := int(uint32(header[4])<<24 | uint32(header[5])<<16 | uint32(header[6])<<8 | uint32(header[7]))
+				if length == 0 {
+					continue
+				}
+				// Read the payload
+				payload := make([]byte, length)
+				_, err = io.ReadFull(reader, payload)
+				if err != nil {
+					if err != io.EOF {
+						p.logger.Error("Failed to read docker log payload", "error", err)
+					}
+					return
+				}
+
+				// Strip trailing newlines to avoid double line breaks
+				// cleanLine := strings.TrimRight(string(payload), "\r\n")
+				select {
+				case <-ctx.Done():
+					return
+				case logChan <- string(payload):
+				}
+			}
+		}()
+		return logChan, nil
+	}
+
+	// Service mode: use file tailing
+	logPath := p.GetStdOutPath()
 	// Check if log file exists
 	if _, err := os.Stat(logPath); os.IsNotExist(err) {
 		close(logChan)
 		return logChan, fmt.Errorf("log file does not exist: %s", logPath)
 	}
-
-	// Start goroutine to tail logs
 	go func() {
 		defer close(logChan)
-
 		var cmd *exec.Cmd
 		if runtime.GOOS == "windows" {
 			// For Windows, use PowerShell Get-Content
@@ -2000,44 +2143,31 @@ func (p *LocalPeer) TailLogs(ctx context.Context, tail int, follow bool) (<-chan
 				cmd = exec.Command("tail", "-n", fmt.Sprintf("%d", tail), logPath)
 			}
 		}
-
-		// Create pipe for reading command output
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
 			p.logger.Error("Failed to create stdout pipe", "error", err)
 			return
 		}
-
-		// Start the command
 		if err := cmd.Start(); err != nil {
 			p.logger.Error("Failed to start tail command", "error", err)
 			return
 		}
-
-		// Create scanner to read output line by line
 		scanner := bufio.NewScanner(stdout)
 		scanner.Split(bufio.ScanLines)
-
-		// Read lines and send to channel
 		for scanner.Scan() {
 			select {
 			case <-ctx.Done():
-				// Context cancelled, stop tailing
 				cmd.Process.Kill()
 				return
-			case logChan <- scanner.Text():
-				// Line sent successfully
+			case logChan <- scanner.Text() + "\n":
 			}
 		}
-
-		// Wait for command to complete
 		if err := cmd.Wait(); err != nil {
-			if ctx.Err() == nil { // Only log error if context wasn't cancelled
+			if ctx.Err() == nil {
 				p.logger.Error("Tail command failed", "error", err)
 			}
 		}
 	}()
-
 	return logChan, nil
 }
 
@@ -2329,7 +2459,6 @@ func SignConfigTx(channelID string, envConfigUpdate *cb.Envelope, signer identit
 
 	return protoutil.CreateSignedEnvelope(cb.HeaderType_CONFIG_UPDATE, channelID, signer, configUpdateEnv, msgVersion, epoch)
 }
-
 func Concatenate[T any](slices ...[]T) []T {
 	size := 0
 	for _, slice := range slices {
@@ -2727,8 +2856,6 @@ func (p *LocalPeer) GetBlockTransactions(ctx context.Context, channelID string, 
 	return nil, fmt.Errorf("block not found")
 }
 
-
-
 // GetBlocksInRange retrieves blocks from startBlock to endBlock (inclusive)
 func (p *LocalPeer) GetBlocksInRange(ctx context.Context, channelID string, startBlock, endBlock uint64) ([]*cb.Block, error) {
 	peerUrl := p.GetPeerAddress()
@@ -2896,7 +3023,7 @@ func (p *LocalPeer) GetChannelInfoOnPeer(ctx context.Context, channelID string) 
 }
 
 // SynchronizeConfig synchronizes the peer's configuration files and service
-func (p *LocalPeer) SynchronizeConfig(deployConfig *types.FabricPeerDeploymentConfig) error {
+func (p *LocalPeer) SynchronizeConfig(deployConfig *nodetypes.FabricPeerDeploymentConfig) error {
 	slugifiedID := strings.ReplaceAll(strings.ToLower(p.opts.ID), " ", "-")
 	dirPath := filepath.Join(p.configService.GetDataPath(), "peers", slugifiedID)
 	mspConfigPath := filepath.Join(dirPath, "config")
@@ -2962,7 +3089,7 @@ func (p *LocalPeer) SynchronizeConfig(deployConfig *types.FabricPeerDeploymentCo
 }
 
 // Add this new function
-func (p *LocalPeer) convertAddressOverrides(mspConfigPath string, overrides []types.AddressOverride) ([]AddressOverridePath, error) {
+func (p *LocalPeer) convertAddressOverrides(mspConfigPath string, overrides []nodetypes.AddressOverride) ([]AddressOverridePath, error) {
 	// Create temporary directory for override certificates
 	tmpDir := filepath.Join(mspConfigPath, "orderer-overrides")
 	if err := os.MkdirAll(tmpDir, 0755); err != nil {

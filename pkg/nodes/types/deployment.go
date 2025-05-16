@@ -226,6 +226,12 @@ type BesuNodeDeploymentConfig struct {
 	NetworkID int64 `json:"networkId" validate:"required" example:"1337"`
 	// @Description Enode URL for node discovery
 	EnodeURL string `json:"enodeUrl" example:"enode://pubkey@172.16.1.10:30303"`
+	// @Description Metrics port for Prometheus metrics
+	MetricsPort int64 `json:"metricsPort" validate:"required" example:"9545"`
+	// @Description Whether metrics are enabled
+	MetricsEnabled bool `json:"metricsEnabled" example:"true"`
+	// @Description Metrics protocol (e.g. PROMETHEUS)
+	MetricsProtocol string `json:"metricsProtocol" validate:"required" example:"PROMETHEUS"`
 }
 
 func (c *BesuNodeDeploymentConfig) GetMode() string { return c.Mode }
@@ -324,16 +330,19 @@ type FabricOrdererConfig struct {
 // BesuNodeConfig represents the parameters needed to create a Besu node
 type BesuNodeConfig struct {
 	BaseNodeConfig
-	NetworkID  int64             `json:"networkId" validate:"required"`
-	KeyID      int64             `json:"keyId" validate:"required"`
-	P2PPort    uint              `json:"p2pPort" validate:"required"`
-	RPCPort    uint              `json:"rpcPort" validate:"required"`
-	P2PHost    string            `json:"p2pHost" validate:"required"`
-	RPCHost    string            `json:"rpcHost" validate:"required"`
-	ExternalIP string            `json:"externalIp" validate:"required"`
-	InternalIP string            `json:"internalIp" validate:"required"`
-	Env        map[string]string `json:"env,omitempty"`
-	BootNodes  []string          `json:"bootNodes,omitempty"`
+	NetworkID       int64             `json:"networkId" validate:"required"`
+	KeyID           int64             `json:"keyId" validate:"required"`
+	P2PPort         uint              `json:"p2pPort" validate:"required"`
+	RPCPort         uint              `json:"rpcPort" validate:"required"`
+	P2PHost         string            `json:"p2pHost" validate:"required"`
+	RPCHost         string            `json:"rpcHost" validate:"required"`
+	ExternalIP      string            `json:"externalIp" validate:"required"`
+	InternalIP      string            `json:"internalIp" validate:"required"`
+	Env             map[string]string `json:"env,omitempty"`
+	BootNodes       []string          `json:"bootNodes,omitempty"`
+	MetricsEnabled  bool              `json:"metricsEnabled"`
+	MetricsPort     int64             `json:"metricsPort"`
+	MetricsProtocol string            `json:"metricsProtocol"`
 }
 
 // Add this new type for storage

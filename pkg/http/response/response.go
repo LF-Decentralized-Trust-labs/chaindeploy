@@ -7,16 +7,29 @@ import (
 	"github.com/chainlaunch/chainlaunch/pkg/errors"
 )
 
+// Response represents a standard API response
 type Response struct {
-	Success bool           `json:"success"`
-	Data    interface{}    `json:"data,omitempty"`
-	Error   *ErrorResponse `json:"error,omitempty"`
+	Message string      `json:"message,omitempty"`
+	Data    interface{} `json:"data,omitempty"`
 }
 
+// ErrorResponse represents an error response
 type ErrorResponse struct {
-	Type    string                 `json:"type"`
-	Message string                 `json:"message"`
-	Details map[string]interface{} `json:"details,omitempty"`
+	Error string `json:"error"`
+}
+
+// JSON sends a JSON response
+func JSON(w http.ResponseWriter, status int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(data)
+}
+
+// Error sends an error response
+func Error(w http.ResponseWriter, status int, message string) {
+	JSON(w, status, ErrorResponse{
+		Error: message,
+	})
 }
 
 // Handler is a custom type for http handlers that can return errors
@@ -48,12 +61,7 @@ func WriteError(w http.ResponseWriter, err error) {
 	switch e := err.(type) {
 	case *errors.AppError:
 		response = Response{
-			Success: false,
-			Error: &ErrorResponse{
-				Type:    string(e.Type),
-				Message: e.Message,
-				Details: e.Details,
-			},
+			Message: e.Message,
 		}
 
 		// Map error types to HTTP status codes
@@ -75,11 +83,7 @@ func WriteError(w http.ResponseWriter, err error) {
 		}
 	default:
 		response = Response{
-			Success: false,
-			Error: &ErrorResponse{
-				Type:    string(errors.InternalError),
-				Message: "An unexpected error occurred",
-			},
+			Message: "An unexpected error occurred",
 		}
 		statusCode = http.StatusInternalServerError
 	}

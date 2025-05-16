@@ -12,6 +12,7 @@ import (
 
 	"encoding/base64"
 
+	httpchainlaunch "github.com/chainlaunch/chainlaunch/pkg/http"
 	"github.com/chainlaunch/chainlaunch/pkg/networks/service"
 	"github.com/chainlaunch/chainlaunch/pkg/networks/service/fabric"
 	"github.com/chainlaunch/chainlaunch/pkg/networks/service/types"
@@ -37,7 +38,11 @@ func NewHandler(networkService *service.NetworkService, nodeService *nodeservice
 
 // RegisterRoutes registers the network routes
 func (h *Handler) RegisterRoutes(r chi.Router) {
+	// Fabric network routes with resource middleware
 	r.Route("/networks/fabric", func(r chi.Router) {
+		// Add resource middleware for all Fabric network routes
+		r.Use(httpchainlaunch.ResourceMiddleware("fabric_network"))
+
 		r.Get("/", h.FabricNetworkList)
 		r.Post("/", h.FabricNetworkCreate)
 		r.Delete("/{id}", h.FabricNetworkDelete)
@@ -66,15 +71,17 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Post("/{id}/organization-crl", h.UpdateOrganizationCRL)
 	})
 
-	// New Besu routes
+	// Besu network routes with resource middleware
 	r.Route("/networks/besu", func(r chi.Router) {
+		// Add resource middleware for all Besu network routes
+		r.Use(httpchainlaunch.ResourceMiddleware("besu_network"))
+
 		r.Get("/", h.BesuNetworkList)
 		r.Post("/", h.BesuNetworkCreate)
 		r.Post("/import", h.ImportBesuNetwork)
 		r.Get("/{id}", h.BesuNetworkGet)
 		r.Delete("/{id}", h.BesuNetworkDelete)
 	})
-
 }
 
 // @Summary List Fabric networks
@@ -394,7 +401,7 @@ func (h *Handler) FabricNetworkGetChannelConfig(w http.ResponseWriter, r *http.R
 		writeError(w, http.StatusInternalServerError, "get_network_failed", err.Error())
 		return
 	}
-	config, err := h.networkService.GetChannelConfig(networkID)
+	config, err := h.networkService.GetFabricChannelConfig(networkID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "get_config_failed", err.Error())
 		return
@@ -427,7 +434,7 @@ func (h *Handler) FabricNetworkGetCurrentChannelConfig(w http.ResponseWriter, r 
 		writeError(w, http.StatusInternalServerError, "get_network_failed", err.Error())
 		return
 	}
-	config, err := h.networkService.GetCurrentChannelConfig(networkID)
+	config, err := h.networkService.GetFabricCurrentChannelConfig(networkID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "get_current_config_failed", err.Error())
 		return
@@ -1047,7 +1054,7 @@ func (h *Handler) ReloadNetworkBlock(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Call service method to reload block
-	err = h.networkService.ReloadNetworkBlock(r.Context(), networkIDInt)
+	err = h.networkService.ReloadFabricNetworkBlock(r.Context(), networkIDInt)
 	if err != nil {
 		// Handle different types of errors
 		if err.Error() == "network not found" {
@@ -1143,7 +1150,7 @@ func (h *Handler) ImportFabricNetworkWithOrg(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	result, err := h.networkService.ImportNetworkWithOrg(r.Context(), service.ImportNetworkWithOrgParams{
+	result, err := h.networkService.ImportFabricNetworkWithOrg(r.Context(), service.ImportNetworkWithOrgParams{
 		ChannelID:      req.ChannelID,
 		OrganizationID: req.OrganizationID,
 		OrdererURL:     req.OrdererURL,
@@ -1681,7 +1688,7 @@ func (h *Handler) FabricGetBlocks(w http.ResponseWriter, r *http.Request) {
 		reverse = reverseBool
 	}
 
-	blocks, total, err := h.networkService.GetBlocks(r.Context(), networkID, limit, offset, reverse)
+	blocks, total, err := h.networkService.GetFabricBlocks(r.Context(), networkID, limit, offset, reverse)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "get_blocks_failed", err.Error())
 		return
@@ -1718,7 +1725,7 @@ func (h *Handler) FabricGetBlock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	blck, err := h.networkService.GetBlockTransactions(r.Context(), networkID, blockNum)
+	blck, err := h.networkService.GetFabricBlock(r.Context(), networkID, blockNum)
 	if err != nil {
 		if err.Error() == "block not found" {
 			writeError(w, http.StatusNotFound, "block_not_found", "Block not found")
@@ -1758,7 +1765,7 @@ func (h *Handler) FabricGetTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	blck, err := h.networkService.GetBlockByTransaction(r.Context(), networkID, txID)
+	blck, err := h.networkService.GetFabricBlockByTransaction(r.Context(), networkID, txID)
 	if err != nil {
 		if err.Error() == "transaction not found" {
 			writeError(w, http.StatusNotFound, "transaction_not_found", "Transaction not found")
@@ -1855,7 +1862,7 @@ func (h *Handler) GetChainInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get chain info from service layer
-	chainInfo, err := h.networkService.GetChainInfo(r.Context(), networkID)
+	chainInfo, err := h.networkService.GetFabricChainInfo(r.Context(), networkID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "get_chain_info_failed", err.Error())
 		return

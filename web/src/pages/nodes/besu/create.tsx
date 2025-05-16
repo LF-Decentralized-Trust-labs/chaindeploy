@@ -31,6 +31,7 @@ const formSchema = z.object({
 	type: z.literal('besu'),
 	bootNodes: z.string().optional(),
 	requestTimeout: z.number().positive(),
+	metricsPort: z.number().min(1024).max(65535),
 	environmentVariables: z
 		.array(
 			z.object({
@@ -92,7 +93,19 @@ export default function CreateBesuNodePage() {
 					name: data.name,
 					blockchainPlatform: 'BESU',
 					besuNode: {
-						...data,
+						externalIp: data.externalIp,
+						internalIp: data.internalIp,
+						keyId: data.keyId,
+						networkId: data.networkId,
+						mode: data.mode,
+						p2pHost: data.p2pHost,
+						p2pPort: data.p2pPort,
+						rpcHost: data.rpcHost,
+						rpcPort: data.rpcPort,
+						metricsPort: data.metricsPort,
+						type: 'BESU',
+						metricsEnabled: true,
+						metricsProtocol: 'PROMETHEUS',
 						bootNodes: data.bootNodes
 							?.split('\n')
 							.map((node) => node.trim())

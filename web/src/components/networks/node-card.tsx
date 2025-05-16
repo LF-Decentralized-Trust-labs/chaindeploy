@@ -1,19 +1,19 @@
 import { ServiceNetworkNode } from '@/api/client'
-import { 
-	postNetworksFabricByIdOrderersByOrdererIdJoinMutation, 
-	postNetworksFabricByIdPeersByPeerIdJoinMutation,
+import {
+	postNetworksFabricByIdOrderersByOrdererIdJoinMutation,
 	postNetworksFabricByIdOrderersByOrdererIdUnjoinMutation,
-	postNetworksFabricByIdPeersByPeerIdUnjoinMutation
+	postNetworksFabricByIdPeersByPeerIdJoinMutation,
+	postNetworksFabricByIdPeersByPeerIdUnjoinMutation,
 } from '@/api/client/@tanstack/react-query.gen'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useMutation } from '@tanstack/react-query'
-import { Activity, Network, Plus, EllipsisVertical } from 'lucide-react'
+import { Activity, EllipsisVertical, Network } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { FabricIcon } from '../icons/fabric-icon'
 import { Badge } from '../ui/badge'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 
 interface NodeCardProps {
 	networkNode: ServiceNetworkNode

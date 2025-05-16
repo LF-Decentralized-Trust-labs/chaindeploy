@@ -110,4 +110,9 @@ type BesuNodeProperties struct {
 	Mode      string   `json:"mode"`
 	Version   string   `json:"version"`
 	BootNodes []string `json:"bootNodes"`
+	// Metrics configuration
+	MetricsEnabled  bool   `json:"metricsEnabled"`
+	MetricsHost     string `json:"metricsHost"`
+	MetricsPort     uint   `json:"metricsPort"`
+	MetricsProtocol string `json:"metricsProtocol"`
 }

@@ -7,9 +7,6 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Network } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 
-// Add this type for tab values
-type TabValue = 'details' | 'anchor-peers' | 'consenters'
-
 export default function NetworkDetailPage() {
 	const { id } = useParams()
 	const { data: network, isLoading } = useQuery({
@@ -63,5 +60,5 @@ export default function NetworkDetailPage() {
 		)
 	}
 
-	return <BesuNetworkDetails network={network} />
+	return <BesuNetworkDetails network={network as any} />
 }

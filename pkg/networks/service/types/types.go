@@ -102,6 +102,11 @@ type BesuNetworkConfig struct {
 	MixHash                string                    `json:"mixHash"`
 	Coinbase               string                    `json:"coinbase"`
 	Alloc                  map[string]AccountBalance `json:"alloc,omitempty"`
+	// Metrics configuration
+	MetricsEnabled  bool   `json:"metricsEnabled"`
+	MetricsHost     string `json:"metricsHost"`
+	MetricsPort     int    `json:"metricsPort"`
+	MetricsProtocol string `json:"metricsProtocol"`
 }
 
 // UnmarshalNetworkConfig unmarshals network configuration based on its type

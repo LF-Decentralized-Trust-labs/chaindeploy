@@ -1,13 +1,12 @@
-import { HttpBesuNetworkResponse, HttpNetworkResponse } from '@/api/client'
-import { Activity, ArrowLeft, Network, Code, Copy } from 'lucide-react'
+import { HttpBesuNetworkResponse } from '@/api/client'
+import { ValidatorList } from '@/components/networks/validator-list'
+import { Activity, ArrowLeft, Code, Copy, Network } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { BesuIcon } from '../icons/besu-icon'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
-import { TimeAgo } from '../ui/time-ago'
 import { Card } from '../ui/card'
-import { Link } from 'react-router-dom'
-import { useSearchParams } from 'react-router-dom'
-import { BesuIcon } from '../icons/besu-icon'
-import { ValidatorList } from '@/components/networks/validator-list'
+import { TimeAgo } from '../ui/time-ago'
 import { BesuNetworkTabs, BesuTabValue } from './besu-network-tabs'
 
 // Add these interfaces to properly type the config and genesis config
@@ -69,7 +68,7 @@ export function BesuNetworkDetails({ network }: BesuNetworkDetailsProps) {
 	}
 
 	const handleCopyGenesis = () => {
-		navigator.clipboard.writeText(JSON.stringify(JSON.parse(genesisConfig), null, 2))
+		navigator.clipboard.writeText(JSON.stringify(JSON.parse(genesisConfig as any), null, 2))
 	}
 
 	// Update the genesisConfig and initialConfig typing
@@ -157,7 +156,7 @@ export function BesuNetworkDetails({ network }: BesuNetworkDetailsProps) {
 								{initialConfig?.initialValidators && (
 									<div>
 										<h3 className="text-sm font-medium mb-2">Validators</h3>
-										<ValidatorList validatorIds={initialConfig.initialValidators} allocations={genesisConfig.alloc} />
+										<ValidatorList validatorIds={initialConfig.initialValidators} />
 									</div>
 								)}
 							</div>
@@ -182,7 +181,7 @@ export function BesuNetworkDetails({ network }: BesuNetworkDetailsProps) {
 										</Button>
 									</div>
 									<pre className="text-sm overflow-auto">
-										<code>{JSON.stringify(JSON.parse(genesisConfig), null, 2)}</code>
+										<code>{JSON.stringify(JSON.parse(genesisConfig as any), null, 2)}</code>
 									</pre>
 								</Card>
 							</div>

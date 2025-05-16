@@ -45,7 +45,7 @@ function AddressOverrideModal({ open, onOpenChange, override }: AddressOverrideM
 					<Separator />
 					<div className="space-y-2">
 						<p className="text-sm font-medium text-muted-foreground">TLS CA Certificate</p>
-						<CertificateViewer certificate={override.tlsCACert} />
+						<CertificateViewer label="TLS CA Certificate" certificate={override.tlsCACert} />
 					</div>
 				</div>
 			</DialogContent>
@@ -155,12 +155,20 @@ export function FabricPeerConfig({ config }: FabricPeerConfigProps) {
 								{config.addressOverrides.map((override, index) => (
 									<div key={index} className="flex items-center justify-between rounded-lg border p-3">
 										<div className="space-y-1">
-											<p className="text-sm font-medium">{override.from} → {override.to}</p>
+											<p className="text-sm font-medium">
+												{override.from} → {override.to}
+											</p>
 										</div>
 										<Button
 											variant="ghost"
 											size="icon"
-											onClick={() => setSelectedOverride(override)}
+											onClick={() =>
+												setSelectedOverride({
+													from: override.from,
+													to: override.to,
+													tlsCACert: override.tlsCACert,
+												})
+											}
 										>
 											<Eye className="h-4 w-4" />
 										</Button>
@@ -172,13 +180,7 @@ export function FabricPeerConfig({ config }: FabricPeerConfigProps) {
 				)}
 			</CardContent>
 
-			{selectedOverride && (
-				<AddressOverrideModal
-					open={!!selectedOverride}
-					onOpenChange={(open) => !open && setSelectedOverride(null)}
-					override={selectedOverride}
-				/>
-			)}
+			{selectedOverride && <AddressOverrideModal open={!!selectedOverride} onOpenChange={(open) => !open && setSelectedOverride(null)} override={selectedOverride} />}
 		</Card>
 	)
 }

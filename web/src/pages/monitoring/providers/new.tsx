@@ -15,9 +15,15 @@ export default function CreateProviderPage() {
 			navigate('/monitoring')
 		},
 		onError: (error) => {
-			toast.error('Failed to create provider', {
-				description: error.message,
-			})
+			if (error.error) {
+				toast.error('Failed to create provider', {
+					description: (error.error as any).message,
+				})
+			} else {
+				toast.error('Failed to create provider', {
+					description: error.toString(),
+				})
+			}
 		},
 	})
 

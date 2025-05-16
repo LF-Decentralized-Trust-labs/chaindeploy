@@ -53,7 +53,7 @@ export function KeyItem({ keyResponse, onDelete, createdAt }: KeyItemProps) {
 						</div>
 					</div>
 					<div className="flex items-center gap-2">
-						<div className="text-xs px-2 py-1 rounded-md bg-primary/10 text-primary pointer-events-none">{keyResponse.provider.name}</div>
+						<div className="text-xs px-2 py-1 rounded-md bg-primary/10 text-primary pointer-events-none">{keyResponse.provider?.name}</div>
 						<DropdownMenu>
 							<DropdownMenuTrigger asChild>
 								<Button variant="ghost" size="icon" className="pointer-events-auto" onClick={(e) => e.preventDefault()}>

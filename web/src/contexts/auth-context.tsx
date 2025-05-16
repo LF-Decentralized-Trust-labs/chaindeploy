@@ -16,7 +16,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsAuthenticated(!!authStatus)
   }, [])
 
-  const login = (token: string) => {
+  const login = (_: string) => {
     localStorage.setItem('isAuthenticated', 'true')
     setIsAuthenticated(true)
   }

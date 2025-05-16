@@ -55,7 +55,13 @@ export function BackupsList() {
 	const createMutation = useMutation({
 		mutationFn: async (values: BackupFormValues) => {
 			try {
-				await postBackups({ body: values })
+				await postBackups({
+					body: {
+						targetId: values.targetId,
+						scheduleId: values.scheduleId,
+						metadata: values.metadata,
+					},
+				})
 			} catch (error: any) {
 				if (error.status === 500) {
 					throw new Error('Internal server error. Please try again later.')

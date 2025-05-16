@@ -17,6 +17,10 @@ type StartBesuOpts struct {
 	BootNodes      []string          `json:"bootNodes"`
 	Env            map[string]string `json:"env"`
 	Version        string            `json:"version"`
+	// Metrics configuration
+	MetricsEnabled  bool   `json:"metricsEnabled"`
+	MetricsPort     int64  `json:"metricsPort"`
+	MetricsProtocol string `json:"metricsProtocol"`
 }
 
 // BesuConfig represents the configuration for a Besu node

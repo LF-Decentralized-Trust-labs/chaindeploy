@@ -1,11 +1,16 @@
+import { postBackupsSchedules, putBackupsSchedulesByIdDisable, putBackupsSchedulesByIdEnable } from '@/api/client'
+import { deleteBackupsSchedulesByIdMutation, getBackupsSchedulesOptions, getBackupsTargetsOptions } from '@/api/client/@tanstack/react-query.gen'
 import {
-	deleteBackupsSchedulesById,
-	postBackupsSchedules,
-	putBackupsSchedulesByIdDisable,
-	putBackupsSchedulesByIdEnable,
-	type HttpBackupScheduleResponse,
-	type HttpBackupTargetResponse,
-} from '@/api/client'
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+	AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,16 +22,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { type ColumnDef } from '@tanstack/react-table'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { EllipsisVertical, Plus, Power } from 'lucide-react'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
-import { getBackupsSchedules, getBackupsTargets } from '@/api/client'
-import { deleteBackupsSchedulesByIdMutation, getBackupsSchedulesOptions, getBackupsTargetsOptions } from '@/api/client/@tanstack/react-query.gen'
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 
 const scheduleFormSchema = z.object({
 	name: z.string().min(1),
@@ -40,11 +41,19 @@ const scheduleFormSchema = z.object({
 type ScheduleFormValues = z.infer<typeof scheduleFormSchema>
 
 export function BackupSchedules() {
-	const { data: schedules, isLoading: isLoadingSchedules, refetch } = useQuery({
+	const {
+		data: schedules,
+		isLoading: isLoadingSchedules,
+		refetch,
+	} = useQuery({
 		...getBackupsSchedulesOptions(),
 	})
 
-	const { data: targets, isLoading: isLoadingTargets, refetch: refetchTargets } = useQuery({
+	const {
+		data: targets,
+		isLoading: isLoadingTargets,
+		refetch: refetchTargets,
+	} = useQuery({
 		...getBackupsTargetsOptions(),
 	})
 
@@ -61,7 +70,16 @@ export function BackupSchedules() {
 	const createMutation = useMutation({
 		mutationFn: async (values: ScheduleFormValues) => {
 			try {
-				await postBackupsSchedules({ body: values })
+				await postBackupsSchedules({
+					body: {
+						targetId: values.targetId,
+						cronExpression: values.cronExpression,
+						name: values.name,
+						description: values.description,
+						enabled: values.enabled,
+						retentionDays: values.retentionDays,
+					},
+				})
 			} catch (error: any) {
 				if (error.status === 500) {
 					throw new Error('Internal server error. Please try again later.')
@@ -74,6 +92,7 @@ export function BackupSchedules() {
 			setOpen(false)
 			form.reset()
 			refetch()
+			refetchTargets()
 		},
 		onError: (error) => {
 			toast.error('Failed to create backup schedule', {
@@ -225,7 +244,7 @@ export function BackupSchedules() {
 				</Dialog>
 			</CardHeader>
 			<CardContent>
-				{isLoadingSchedules ? (
+				{isLoadingSchedules || isLoadingTargets ? (
 					<div className="space-y-2">
 						<Skeleton className="h-12 w-full" />
 						<Skeleton className="h-12 w-full" />
@@ -380,24 +399,19 @@ export function BackupSchedules() {
 													</DropdownMenuItem>
 													<AlertDialog>
 														<AlertDialogTrigger asChild>
-															<DropdownMenuItem
-																className="text-destructive"
-																onSelect={(e) => e.preventDefault()}
-															>
+															<DropdownMenuItem className="text-destructive" onSelect={(e) => e.preventDefault()}>
 																Delete
 															</DropdownMenuItem>
 														</AlertDialogTrigger>
 														<AlertDialogContent>
 															<AlertDialogHeader>
 																<AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-																<AlertDialogDescription>
-																	This will permanently delete the backup schedule. This action cannot be undone.
-																</AlertDialogDescription>
+																<AlertDialogDescription>This will permanently delete the backup schedule. This action cannot be undone.</AlertDialogDescription>
 															</AlertDialogHeader>
 															<AlertDialogFooter>
 																<AlertDialogCancel>Cancel</AlertDialogCancel>
 																<AlertDialogAction
-																	variant="destructive"
+																	destructive
 																	onClick={() => {
 																		if (schedule.id) {
 																			deleteMutation.mutate({ path: { id: schedule.id } })

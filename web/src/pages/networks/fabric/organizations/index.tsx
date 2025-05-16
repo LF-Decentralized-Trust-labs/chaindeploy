@@ -1,5 +1,5 @@
-import { HandlerOrganizationResponse, HttpProviderResponse } from '@/api/client'
-import { postOrganizationsMutation, deleteOrganizationsByIdMutation, getOrganizationsOptions, getKeyProvidersOptions } from '@/api/client/@tanstack/react-query.gen'
+import { HandlerOrganizationResponse } from '@/api/client'
+import { deleteOrganizationsByIdMutation, getKeyProvidersOptions, getOrganizationsOptions, postOrganizationsMutation } from '@/api/client/@tanstack/react-query.gen'
 // createFabricOrganizationMutation, deleteOrganizationMutation, getOrganizationsOptions, listProvidersOptions
 import { OrganizationFormValues } from '@/components/forms/organization-form'
 import { CreateOrganizationDialog } from '@/components/organizations/create-organization-dialog'

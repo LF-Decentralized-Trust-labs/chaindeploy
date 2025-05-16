@@ -22,6 +22,8 @@ const besuNodeFormSchema = z.object({
 	p2pPort: z.number().min(1024).max(65535),
 	rpcHost: z.string(),
 	rpcPort: z.number().min(1024).max(65535),
+	metricsHost: z.string().default('127.0.0.1'),
+	metricsPort: z.number().min(1024).max(65535).optional(),
 	type: z.literal('besu'),
 	bootNodes: z.string().optional(),
 	requestTimeout: z.number().positive(),
@@ -43,12 +45,11 @@ interface BesuNodeFormProps {
 	hideSubmit?: boolean
 	defaultValues?: BesuNodeFormValues
 	onChange?: (values: BesuNodeFormValues) => void
-	submitText?: string
 	networkId?: number
 	submitButtonText?: string
 }
 
-export function BesuNodeForm({ onSubmit, isSubmitting, hideSubmit, defaultValues, onChange, submitText = 'Create Node', networkId, submitButtonText = 'Create Node' }: BesuNodeFormProps) {
+export function BesuNodeForm({ onSubmit, isSubmitting, hideSubmit, defaultValues, onChange, networkId, submitButtonText = 'Create Node' }: BesuNodeFormProps) {
 	const form = useForm<BesuNodeFormValues>({
 		resolver: zodResolver(besuNodeFormSchema),
 		defaultValues: {
@@ -58,6 +59,8 @@ export function BesuNodeForm({ onSubmit, isSubmitting, hideSubmit, defaultValues
 			rpcHost: '127.0.0.1',
 			rpcPort: 8545,
 			p2pPort: 30303,
+			metricsHost: '127.0.0.1',
+			metricsPort: 9545,
 			requestTimeout: 30,
 			environmentVariables: [],
 			networkId: networkId,
@@ -274,6 +277,38 @@ export function BesuNodeForm({ onSubmit, isSubmitting, hideSubmit, defaultValues
 								<FormControl>
 									<Input type="number" {...field} onChange={(e) => field.onChange(Number(e.target.value))} />
 								</FormControl>
+								<FormMessage />
+							</FormItem>
+						)}
+					/>
+				</div>
+
+				<div className="grid grid-cols-2 gap-4">
+					<FormField
+						control={form.control}
+						name="metricsHost"
+						render={({ field }) => (
+							<FormItem>
+								<FormLabel>Metrics Host</FormLabel>
+								<FormControl>
+									<Input {...field} placeholder="127.0.0.1" />
+								</FormControl>
+								<FormDescription>Host for Prometheus metrics endpoint</FormDescription>
+								<FormMessage />
+							</FormItem>
+						)}
+					/>
+
+					<FormField
+						control={form.control}
+						name="metricsPort"
+						render={({ field }) => (
+							<FormItem>
+								<FormLabel>Metrics Port</FormLabel>
+								<FormControl>
+									<Input type="number" {...field} onChange={(e) => field.onChange(Number(e.target.value))} />
+								</FormControl>
+								<FormDescription>Port for Prometheus metrics endpoint</FormDescription>
 								<FormMessage />
 							</FormItem>
 						)}

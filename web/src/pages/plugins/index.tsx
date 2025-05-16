@@ -1,12 +1,12 @@
 import { deletePluginsByNameMutation, getPluginsOptions } from '@/api/client/@tanstack/react-query.gen'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
+import { Button } from '@/components/ui/button'
+import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Trash2 } from 'lucide-react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
-import { useState } from 'react'
 
 const PluginsPage = () => {
 	const [pluginToDelete, setPluginToDelete] = useState<string | null>(null)
@@ -95,9 +95,6 @@ const PluginsPage = () => {
 									<Trash2 className="h-4 w-4" />
 								</Button>
 							</CardHeader>
-							<CardContent>
-								<p className="text-muted-foreground">{plugin.metadata?.description}</p>
-							</CardContent>
 						</Card>
 					))
 				)}

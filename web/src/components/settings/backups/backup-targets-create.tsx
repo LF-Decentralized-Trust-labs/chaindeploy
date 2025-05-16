@@ -27,7 +27,19 @@ export function BackupTargetsCreate({ onSuccess }: { onSuccess: () => void }) {
 	const createMutation = useMutation({
 		mutationFn: async (values: TargetFormValues) => {
 			try {
-				await postBackupsTargets({ body: values })
+				await postBackupsTargets({
+					body: {
+						name: values.name || 'S3',
+						type: values.type,
+						endpoint: values.endpoint,
+						accessKeyId: values.accessKeyId,
+						secretKey: values.secretKey,
+						bucketName: values.bucketName,
+						bucketPath: values.bucketPath,
+						region: values.region,
+						forcePathStyle: values.forcePathStyle,
+					},
+				})
 			} catch (error: any) {
 				if (error.status === 500) {
 					throw new Error('Internal server error. Please try again later.')
@@ -84,9 +96,7 @@ export function BackupTargetsCreate({ onSuccess }: { onSuccess: () => void }) {
 									<FormControl>
 										<Input {...field} placeholder="https://s3.amazonaws.com" />
 									</FormControl>
-									<FormDescription>
-										S3 endpoint URL (e.g., https://s3.amazonaws.com for AWS S3)
-									</FormDescription>
+									<FormDescription>S3 endpoint URL (e.g., https://s3.amazonaws.com for AWS S3)</FormDescription>
 									<FormMessage />
 								</FormItem>
 							)}
@@ -162,16 +172,11 @@ export function BackupTargetsCreate({ onSuccess }: { onSuccess: () => void }) {
 							render={({ field }) => (
 								<FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
 									<FormControl>
-										<Checkbox
-											checked={field.value}
-											onCheckedChange={field.onChange}
-										/>
+										<Checkbox checked={field.value} onCheckedChange={field.onChange} />
 									</FormControl>
 									<div className="space-y-1 leading-none">
 										<FormLabel>Force Path Style</FormLabel>
-										<FormDescription>
-											Use path-style addressing instead of virtual hosted-style
-										</FormDescription>
+										<FormDescription>Use path-style addressing instead of virtual hosted-style</FormDescription>
 									</div>
 								</FormItem>
 							)}

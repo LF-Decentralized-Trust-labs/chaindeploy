@@ -1,5 +1,5 @@
-import { AuthCreateUserRequest, AuthUpdateUserRequest } from '@/api/client/types.gen'
-import { getUsersOptions, postUsersMutation, putUsersByIdMutation, deleteUsersByIdMutation } from '@/api/client/@tanstack/react-query.gen'
+import { deleteUsersByIdMutation, getUsersOptions, postUsersMutation, putUsersByIdMutation } from '@/api/client/@tanstack/react-query.gen'
+import { AuthUpdateUserRequest } from '@/api/client/types.gen'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -7,11 +7,11 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { CreateUserDialog } from '@/components/users/create-user-dialog'
 import { EditUserDialog } from '@/components/users/edit-user-dialog'
+import { useAuth } from '@/contexts/AuthContext'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { EllipsisVertical, UserPlus } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { useAuth } from '@/contexts/AuthContext'
 
 const UsersPage = () => {
 	const [userToDelete, setUserToDelete] = useState<number | null>(null)

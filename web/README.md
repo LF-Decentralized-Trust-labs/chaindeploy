@@ -27,3 +27,17 @@ Preview the production build locally:
 ```bash
 pnpm preview
 ```
+
+# Playwright E2E Tests
+
+Run Playwright tests:
+
+```sh
+bun run test:e2e
+```
+
+Open Playwright UI:
+
+```sh
+bun run test:e2e:dev
+```

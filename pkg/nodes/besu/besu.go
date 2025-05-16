@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,8 @@ import (
 	"github.com/chainlaunch/chainlaunch/pkg/logger"
 	"github.com/chainlaunch/chainlaunch/pkg/networks/service/types"
 	settingsservice "github.com/chainlaunch/chainlaunch/pkg/settings/service"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/client"
 	"golang.org/x/text/encoding/unicode"
 	"golang.org/x/text/transform"
 )
@@ -134,9 +137,20 @@ func (b *LocalBesu) checkPrerequisites() error {
 		}
 
 	case "docker":
-		// Check Docker installation
-		if err := exec.Command("docker", "--version").Run(); err != nil {
-			return fmt.Errorf("Docker is not installed: %w", err)
+		// Check Docker installation using Docker API client
+		cli, err := client.NewClientWithOpts(
+			client.FromEnv,
+			client.WithAPIVersionNegotiation(),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create Docker client: %w", err)
+		}
+		defer cli.Close()
+
+		// Ping Docker daemon to verify connectivity
+		ctx := context.Background()
+		if _, err := cli.Ping(ctx); err != nil {
+			return fmt.Errorf("Docker daemon is not running or not accessible: %w", err)
 		}
 	}
 
@@ -171,6 +185,10 @@ func (b *LocalBesu) buildCommand(dataDir string, genesisPath string, configDir s
 		fmt.Sprintf("--network-id=%d", b.opts.ChainID),
 		"--host-allowlist=*",
 		fmt.Sprintf("--node-private-key-file=%s", keyPath),
+		fmt.Sprintf("--metrics-enabled=%t", b.opts.MetricsEnabled),
+		"--metrics-host=0.0.0.0",
+		fmt.Sprintf("--metrics-port=%d", b.opts.MetricsPort),
+		fmt.Sprintf("--metrics-protocol=%s", b.opts.MetricsProtocol),
 
 		"--p2p-enabled=true",
 		fmt.Sprintf("--p2p-host=%s", b.opts.P2PHost),
@@ -407,23 +425,78 @@ func (b *LocalBesu) getLogPath() string {
 func (b *LocalBesu) TailLogs(ctx context.Context, tail int, follow bool) (<-chan string, error) {
 	logChan := make(chan string, 100)
 
+	if b.mode == "docker" {
+		slugifiedID := strings.ReplaceAll(strings.ToLower(b.opts.ID), " ", "-")
+		containerName := slugifiedID // Adjust if you have a helper for container name
+		go func() {
+			defer close(logChan)
+			cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+			if err != nil {
+				b.logger.Error("Failed to create docker client", "error", err)
+				return
+			}
+			defer cli.Close()
+
+			options := container.LogsOptions{
+				ShowStdout: true,
+				ShowStderr: true,
+				Follow:     follow,
+				Details:    true,
+				Tail:       fmt.Sprintf("%d", tail),
+			}
+			reader, err := cli.ContainerLogs(ctx, containerName, options)
+			if err != nil {
+				b.logger.Error("Failed to get docker logs", "error", err)
+				return
+			}
+			defer reader.Close()
+
+			header := make([]byte, 8)
+			for {
+				_, err := io.ReadFull(reader, header)
+				if err != nil {
+					if err != io.EOF {
+						b.logger.Error("Failed to read docker log header", "error", err)
+					}
+					return
+				}
+				length := int(uint32(header[4])<<24 | uint32(header[5])<<16 | uint32(header[6])<<8 | uint32(header[7]))
+				if length == 0 {
+					continue
+				}
+				payload := make([]byte, length)
+				_, err = io.ReadFull(reader, payload)
+				if err != nil {
+					if err != io.EOF {
+						b.logger.Error("Failed to read docker log payload", "error", err)
+					}
+					return
+				}
+				cleanLine := strings.TrimRight(string(payload), "\r\n")
+				select {
+				case <-ctx.Done():
+					return
+				case logChan <- cleanLine:
+				}
+			}
+		}()
+		return logChan, nil
+	}
+
 	// Get log file path based on ID
 	slugifiedID := strings.ReplaceAll(strings.ToLower(b.opts.ID), " ", "-")
 	logPath := filepath.Join(b.configService.GetDataPath(), "besu", slugifiedID, b.getServiceName()+".log")
 
-	// Check if log file exists
 	if _, err := os.Stat(logPath); os.IsNotExist(err) {
 		close(logChan)
 		return logChan, fmt.Errorf("log file does not exist: %s", logPath)
 	}
 
-	// Start goroutine to tail logs
 	go func() {
 		defer close(logChan)
 
 		var cmd *exec.Cmd
 		if runtime.GOOS == "windows" {
-			// For Windows, use PowerShell Get-Content with UTF-8 encoding
 			if follow {
 				cmd = exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command",
 					"Get-Content", "-Encoding", "UTF8", "-Path", logPath, "-Tail", fmt.Sprintf("%d", tail), "-Wait")
@@ -432,7 +505,6 @@ func (b *LocalBesu) TailLogs(ctx context.Context, tail int, follow bool) (<-chan
 					"Get-Content", "-Encoding", "UTF8", "-Path", logPath, "-Tail", fmt.Sprintf("%d", tail))
 			}
 		} else {
-			// For Unix-like systems, use tail command with LC_ALL=en_US.UTF-8
 			env := os.Environ()
 			env = append(env, "LC_ALL=en_US.UTF-8")
 			if follow {
@@ -440,41 +512,35 @@ func (b *LocalBesu) TailLogs(ctx context.Context, tail int, follow bool) (<-chan
 			} else {
 				cmd = exec.Command("tail", "-n", fmt.Sprintf("%d", tail), logPath)
 			}
+			cmd.Env = env
 		}
 
-		// Create pipe for reading command output
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
 			b.logger.Error("Failed to create stdout pipe", "error", err)
 			return
 		}
 
-		// Start the command
 		if err := cmd.Start(); err != nil {
 			b.logger.Error("Failed to start tail command", "error", err)
 			return
 		}
 
-		// Create UTF-8 aware scanner to read output line by line
 		scanner := bufio.NewScanner(transform.NewReader(stdout, unicode.UTF8.NewDecoder()))
 		scanner.Split(bufio.ScanLines)
-		scanner.Buffer(make([]byte, 64*1024), 1024*1024) // Increase buffer size for long lines
+		scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 
-		// Read lines and send to channel
 		for scanner.Scan() {
 			select {
 			case <-ctx.Done():
-				// Context cancelled, stop tailing
 				cmd.Process.Kill()
 				return
-			case logChan <- scanner.Text():
-				// Line sent successfully
+			case logChan <- scanner.Text() + "\n":
 			}
 		}
 
-		// Wait for command to complete
 		if err := cmd.Wait(); err != nil {
-			if ctx.Err() == nil { // Only log error if context wasn't cancelled
+			if ctx.Err() == nil {
 				b.logger.Error("Tail command failed", "error", err)
 			}
 		}

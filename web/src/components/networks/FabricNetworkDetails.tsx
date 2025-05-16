@@ -1,15 +1,18 @@
 import { HttpNetworkResponse } from '@/api/client'
 import {
+	deleteOrganizationsByIdCrlRevokeSerialMutation,
 	getNetworksFabricByIdChannelConfigOptions,
 	getNetworksFabricByIdCurrentChannelConfigOptions,
 	getNetworksFabricByIdNodesOptions,
 	getNodesOptions,
+	getOrganizationsByIdRevokedCertificatesOptions,
 	getOrganizationsOptions,
 	postNetworksFabricByIdAnchorPeersMutation,
 	postNetworksFabricByIdOrderersByOrdererIdJoinMutation,
 	postNetworksFabricByIdOrganizationCrlMutation,
 	postNetworksFabricByIdPeersByPeerIdJoinMutation,
-	postNetworksFabricByIdUpdateConfigMutation,
+	postOrganizationsByIdCrlRevokePemMutation,
+	postOrganizationsByIdCrlRevokeSerialMutation,
 } from '@/api/client/@tanstack/react-query.gen'
 import { BesuIcon } from '@/components/icons/besu-icon'
 import { FabricIcon } from '@/components/icons/fabric-icon'
@@ -21,40 +24,34 @@ import { NetworkTabs, TabValue } from '@/components/networks/network-tabs'
 import { NodeCard } from '@/components/networks/node-card'
 import { OrgAnchorWarning } from '@/components/networks/org-anchor-warning'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Textarea } from '@/components/ui/textarea'
 import { TimeAgo } from '@/components/ui/time-ago'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Activity, AlertTriangle, Anchor, ArrowLeft, Check, Code, Copy, Network, Plus, Settings, Blocks, ShieldAlert, ArrowUpToLine, Loader2 } from 'lucide-react'
-import { useMemo, useState, useEffect } from 'react'
+import { Activity, AlertTriangle, Anchor, ArrowLeft, ArrowUpToLine, Blocks, Check, Code, Copy, Loader2, Network, Plus, Settings, ShieldAlert, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { useForm } from 'react-hook-form'
 import ReactMarkdown from 'react-markdown'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import SyntaxHighlighter from 'react-syntax-highlighter'
+import SyntaxHighlighter, { SyntaxHighlighterProps } from 'react-syntax-highlighter'
 import { docco } from 'react-syntax-highlighter/dist/esm/styles/hljs'
 import rehypeRaw from 'rehype-raw'
 import { toast } from 'sonner'
-import { AddMultipleNodesDialog } from './add-multiple-nodes-dialog'
-import { ChannelUpdateForm } from '../nodes/ChannelUpdateForm'
-import { BlockExplorer } from './block-explorer'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
-import {
-	getOrganizationsByIdRevokedCertificatesOptions,
-	postOrganizationsByIdCrlRevokeSerialMutation,
-	postOrganizationsByIdCrlRevokePemMutation,
-	deleteOrganizationsByIdCrlRevokeSerialMutation,
-} from '@/api/client/@tanstack/react-query.gen'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
-import { Textarea } from '@/components/ui/textarea'
-import { Input } from '@/components/ui/input'
-import { Trash2 } from 'lucide-react'
+import { ChannelUpdateForm } from '../nodes/ChannelUpdateForm'
+import { AddMultipleNodesDialog } from './add-multiple-nodes-dialog'
+import { BlockExplorer } from './block-explorer'
 
+const SyntaxHighlighterComp = SyntaxHighlighter as unknown as React.ComponentType<SyntaxHighlighterProps>
 interface FabricNetworkDetailsProps {
 	network: HttpNetworkResponse
 }
@@ -119,14 +116,14 @@ First, set up environment variables and pull the network configuration:
 export CHANNEL_NAME=${channelName}
 export MSP_ID=${mspId}
 export URL="${apiUrl}"
-export CHAINLAUNCH_USERNAME=admin
+export CHAINLAUNCH_USER=admin
 export CHAINLAUNCH_PASSWORD="<chainlaunch_password>"
 
 chainlaunch fabric network-config pull \\
     --network=$CHANNEL_NAME \\
     --msp-id=$MSP_ID \\
     --url=$URL \\
-    --username="$CHAINLAUNCH_USERNAME" \\
+    --username="$CHAINLAUNCH_USER" \\
     --password="$CHAINLAUNCH_PASSWORD" \\
     --output=network-config.yaml
 \`\`\`
@@ -551,7 +548,7 @@ export default function FabricNetworkDetails({ network }: FabricNetworkDetailsPr
 		retry: 0,
 	})
 
-	const channelConfig = useMemo(() => currentChannelConfig || genesisChannelConfig, [currentChannelConfig, genesisChannelConfig])
+	const channelConfig = useMemo(() => (currentChannelConfig || genesisChannelConfig) as Record<string, any>, [currentChannelConfig, genesisChannelConfig])
 
 	const { data: nodes, isLoading: nodesLoading } = useQuery({
 		...getNodesOptions({}),
@@ -652,21 +649,12 @@ export default function FabricNetworkDetails({ network }: FabricNetworkDetailsPr
 
 	useEffect(() => {
 		if (fabricOrgs && fabricOrgs.length > 0 && !selectedOrg) {
-			// First try to find an org with at least one peer
-			const orgWithPeer = fabricOrgs.find(org => 
-				org.id && org.mspId && // Ensure both id and mspId exist
-				networkNodes?.nodes?.some(node => 
-					node.node?.nodeType === 'FABRIC_PEER' && 
-					node.node?.mspId === org.mspId
-				)
-			)
-			
 			// If found, use that org, otherwise use the first org that has both id and mspId
-			const defaultOrg = fabricOrgs.find(org => org.id && org.mspId)
+			const defaultOrg = fabricOrgs.find((org) => org.id && org.mspId)
 			if (defaultOrg) {
 				setSelectedOrg({
 					id: defaultOrg.id!,
-					mspId: defaultOrg.mspId!
+					mspId: defaultOrg.mspId!,
 				})
 			}
 		}
@@ -766,7 +754,7 @@ export default function FabricNetworkDetails({ network }: FabricNetworkDetailsPr
 						{Object.entries(channelConfig.config.data.data[0].payload.data.config.channel_group.groups.Application.groups)
 							// Only show warnings for orgs that belong to us
 							.filter(([mspId]) => fabricOrgs?.some((org) => org.mspId === mspId))
-							.map(([mspId, orgConfig]) => {
+							.map(([mspId, orgConfig]: [string, any]) => {
 								const anchorPeers = orgConfig.values?.AnchorPeers?.value?.anchor_peers || []
 
 								if (anchorPeers.length === 0) {
@@ -826,7 +814,7 @@ export default function FabricNetworkDetails({ network }: FabricNetworkDetailsPr
 										{Object.entries(channelConfig.config.data.data[0].payload.data.config.channel_group.groups.Application.groups)
 											// Only show warnings for orgs that belong to us
 											.filter(([mspId]) => fabricOrgs?.some((org) => org.mspId === mspId))
-											.map(([mspId, orgConfig]) => {
+											.map(([mspId, orgConfig]: [string, any]) => {
 												const anchorPeers = orgConfig.values?.AnchorPeers?.value?.anchor_peers || []
 
 												if (anchorPeers.length === 0) {
@@ -867,7 +855,7 @@ export default function FabricNetworkDetails({ network }: FabricNetworkDetailsPr
 											)
 										}
 
-										return filteredOrgs.map(([mspId, orgConfig]) => {
+										return filteredOrgs.map(([mspId, orgConfig]: [string, any]) => {
 											const orgID = fabricOrgs?.find((org) => org.mspId === mspId)?.id!
 											const organization = {
 												id: orgID,
@@ -943,9 +931,12 @@ export default function FabricNetworkDetails({ network }: FabricNetworkDetailsPr
 										<Select
 											value={selectedOrg?.mspId}
 											onValueChange={(mspId) => {
-												const org = fabricOrgs?.find(org => org.mspId === mspId)
+												const org = fabricOrgs?.find((org) => org.mspId === mspId)
 												if (org) {
-													setSelectedOrg(org)
+													setSelectedOrg({
+														id: org.id!,
+														mspId: org.mspId!,
+													})
 												}
 											}}
 										>
@@ -975,9 +966,9 @@ export default function FabricNetworkDetails({ network }: FabricNetworkDetailsPr
 													return match ? (
 														<div className="relative group">
 															<CopyButton text={content.replace(/\n$/, '')} />
-															<SyntaxHighlighter style={docco} language="javascript">
+															<SyntaxHighlighterComp style={docco} language="javascript">
 																{content}
-															</SyntaxHighlighter>
+															</SyntaxHighlighterComp>
 														</div>
 													) : (
 														<code {...props} className={`${className} !bg-muted !text-primary px-1.5 py-0.5 rounded`}>

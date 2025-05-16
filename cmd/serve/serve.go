@@ -28,9 +28,12 @@ import (
 	"github.com/chainlaunch/chainlaunch/pkg/keymanagement/handler"
 	"github.com/chainlaunch/chainlaunch/pkg/keymanagement/service"
 	"github.com/chainlaunch/chainlaunch/pkg/logger"
+	metricscommon "github.com/chainlaunch/chainlaunch/pkg/metrics/common"
 	"github.com/chainlaunch/chainlaunch/pkg/monitoring"
 	nodeTypes "github.com/chainlaunch/chainlaunch/pkg/nodes/types"
 
+	"github.com/chainlaunch/chainlaunch/pkg/audit"
+	"github.com/chainlaunch/chainlaunch/pkg/metrics"
 	networkshttp "github.com/chainlaunch/chainlaunch/pkg/networks/http"
 	networksservice "github.com/chainlaunch/chainlaunch/pkg/networks/service"
 	nodeshttp "github.com/chainlaunch/chainlaunch/pkg/nodes/http"
@@ -282,6 +285,8 @@ func setupServer(queries *db.Queries, authService *auth.AuthService, views embed
 	organizationService := fabricservice.NewOrganizationService(queries, keyManagementService, configService)
 	logger := logger.NewDefault()
 
+	auditService := audit.NewService(queries, 10)
+
 	nodeEventService := nodesservice.NewNodeEventService(queries, logger)
 	settingsService := settingsservice.NewSettingsService(queries, logger)
 	_, err = settingsService.InitializeDefaultSettings(context.Background())
@@ -290,7 +295,16 @@ func setupServer(queries *db.Queries, authService *auth.AuthService, views embed
 	}
 	settingsHandler := settingshttp.NewHandler(settingsService, logger)
 
+	// Initialize metrics service
+	metricsConfig := metricscommon.DefaultConfig()
 	nodesService := nodesservice.NewNodeService(queries, logger, keyManagementService, organizationService, nodeEventService, configService, settingsService)
+	metricsService, err := metrics.NewService(metricsConfig, queries, nodesService)
+	if err != nil {
+		log.Fatal("Failed to initialize metrics service:", err)
+	}
+	nodesService.SetMetricsService(metricsService)
+	metricsHandler := metrics.NewHandler(metricsService, logger)
+
 	networksService := networksservice.NewNetworkService(queries, nodesService, keyManagementService, logger, organizationService)
 	notificationService := notificationservice.NewNotificationService(queries, logger)
 	backupService := backupservice.NewBackupService(queries, logger, notificationService, dbPath, configService)
@@ -401,7 +415,7 @@ func setupServer(queries *db.Queries, authService *auth.AuthService, views embed
 				continue
 			}
 
-			logger.Infof("Added node %s (%s) to monitoring", node.Name, node.ID)
+			logger.Infof("Added node %s (%d) to monitoring", node.Name, node.ID)
 		}
 	}()
 
@@ -424,6 +438,7 @@ func setupServer(queries *db.Queries, authService *auth.AuthService, views embed
 	backupHandler := backuphttp.NewHandler(backupService)
 	notificationHandler := notificationhttp.NewNotificationHandler(notificationService)
 	authHandler := auth.NewHandler(authService)
+	auditHandler := audit.NewHandler(auditService, logger)
 	// Setup router
 	r := chi.NewRouter()
 
@@ -451,6 +466,7 @@ func setupServer(queries *db.Queries, authService *auth.AuthService, views embed
 		// Protected routes
 		r.Group(func(r chi.Router) {
 			r.Use(auth.AuthMiddleware(authService))
+			r.Use(audit.HTTPMiddleware(auditService)) // Add audit middleware
 
 			// Mount auth routes
 			authHandler.RegisterRoutes(r)
@@ -471,6 +487,11 @@ func setupServer(queries *db.Queries, authService *auth.AuthService, views embed
 			settingsHandler.RegisterRoutes(r)
 			// Mount plugin routes
 			pluginHandler.RegisterRoutes(r)
+			// Mount metrics routes
+			metricsHandler.RegisterRoutes(r)
+
+			// Mount audit routes
+			auditHandler.RegisterRoutes(r)
 		})
 	})
 	r.Get("/api/swagger/*", httpSwagger.Handler(

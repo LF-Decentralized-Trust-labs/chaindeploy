@@ -57,6 +57,41 @@ func parseBasicAuth(r *http.Request) (username, password string, ok bool) {
 	return pair[0], pair[1], true
 }
 
+// GetSessionID extracts and validates the session ID from the request
+// Returns the session ID if valid, empty string otherwise
+func GetSessionID(r *http.Request) string {
+	// Try Bearer token auth first
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "" {
+		parts := strings.Split(authHeader, " ")
+		if len(parts) == 2 && parts[0] == "Bearer" {
+			return parts[1]
+		}
+	}
+
+	// Try cookie auth
+	cookie, err := r.Cookie(SessionCookieName)
+	if err != nil {
+		return ""
+	}
+
+	// Split cookie value into session ID and signature
+	parts := strings.Split(cookie.Value, ".")
+	if len(parts) != 2 {
+		return ""
+	}
+
+	sessionID := parts[0]
+	signature := parts[1]
+
+	// Verify signature
+	if !verifySessionID(sessionID, signature) {
+		return ""
+	}
+
+	return sessionID
+}
+
 // AuthMiddleware validates the session token and adds the user to the context
 func AuthMiddleware(authService *AuthService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

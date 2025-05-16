@@ -1,15 +1,15 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
+import { parse } from 'yaml'
 import * as z from 'zod'
-import { parse, stringify } from 'yaml'
 
-import { Button } from '@/components/ui/button'
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { postPlugins } from '@/api/client/sdk.gen'
-import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Textarea } from '@/components/ui/textarea'
+import { toast } from 'sonner'
 
 const defaultYaml = `apiVersion: dev.chainlaunch/v1
 kind: Plugin
@@ -42,8 +42,9 @@ spec:
     required: []`
 
 const formSchema = z.object({
-	yaml: z.string()
-		.min(1, "YAML is required")
+	yaml: z
+		.string()
+		.min(1, 'YAML is required')
 		.refine((yaml) => {
 			try {
 				const parsed = parse(yaml)
@@ -55,7 +56,7 @@ const formSchema = z.object({
 			} catch (e) {
 				return false
 			}
-		}, "Invalid YAML format or missing required fields")
+		}, 'Invalid YAML format or missing required fields'),
 })
 
 type FormValues = z.infer<typeof formSchema>
@@ -66,14 +67,14 @@ export default function NewPluginPage() {
 	const form = useForm<FormValues>({
 		resolver: zodResolver(formSchema),
 		defaultValues: {
-			yaml: defaultYaml
+			yaml: defaultYaml,
 		},
 	})
 
 	async function onSubmit(data: FormValues) {
 		try {
 			const pluginData = parse(data.yaml)
-			const response = await postPlugins({
+			await postPlugins({
 				body: pluginData,
 			})
 
@@ -89,9 +90,7 @@ export default function NewPluginPage() {
 			<Card>
 				<CardHeader>
 					<CardTitle>Create New Plugin</CardTitle>
-					<CardDescription>
-						Create a new plugin by providing the plugin configuration in YAML format
-					</CardDescription>
+					<CardDescription>Create a new plugin by providing the plugin configuration in YAML format</CardDescription>
 				</CardHeader>
 				<CardContent>
 					<Form {...form}>
@@ -103,11 +102,7 @@ export default function NewPluginPage() {
 									<FormItem>
 										<FormLabel>Plugin Configuration (YAML)</FormLabel>
 										<FormControl>
-											<Textarea
-												{...field}
-												className="font-mono min-h-[500px]"
-												placeholder="Enter your plugin YAML configuration..."
-											/>
+											<Textarea {...field} className="font-mono min-h-[500px]" placeholder="Enter your plugin YAML configuration..." />
 										</FormControl>
 										<FormMessage />
 									</FormItem>
@@ -115,11 +110,7 @@ export default function NewPluginPage() {
 							/>
 
 							<div className="flex justify-end space-x-4">
-								<Button 
-									type="button" 
-									variant="outline" 
-									onClick={() => navigate('/plugins')}
-								>
+								<Button type="button" variant="outline" onClick={() => navigate('/plugins')}>
 									Cancel
 								</Button>
 								<Button type="submit">Create Plugin</Button>

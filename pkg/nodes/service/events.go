@@ -15,11 +15,13 @@ import (
 type NodeEventType string
 
 const (
-	NodeEventStarting NodeEventType = "STARTING"
-	NodeEventStarted  NodeEventType = "STARTED"
-	NodeEventStopping NodeEventType = "STOPPING"
-	NodeEventStopped  NodeEventType = "STOPPED"
-	NodeEventError    NodeEventType = "ERROR"
+	NodeEventStarting             NodeEventType = "STARTING"
+	NodeEventStarted              NodeEventType = "STARTED"
+	NodeEventStopping             NodeEventType = "STOPPING"
+	NodeEventStopped              NodeEventType = "STOPPED"
+	NodeEventError                NodeEventType = "ERROR"
+	NodeEventRenewingCertificates NodeEventType = "RENEWING_CERTIFICATES"
+	NodeEventRenewedCertificates  NodeEventType = "RENEWED_CERTIFICATES"
 )
 
 // NodeEvent represents a node event in the service layer

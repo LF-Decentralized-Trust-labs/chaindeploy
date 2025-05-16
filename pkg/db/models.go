@@ -9,6 +9,23 @@ import (
 	"time"
 )
 
+type AuditLog struct {
+	ID               int64          `json:"id"`
+	Timestamp        time.Time      `json:"timestamp"`
+	EventSource      string         `json:"eventSource"`
+	UserIdentity     int64          `json:"userIdentity"`
+	SourceIp         sql.NullString `json:"sourceIp"`
+	EventType        string         `json:"eventType"`
+	EventOutcome     string         `json:"eventOutcome"`
+	AffectedResource sql.NullString `json:"affectedResource"`
+	RequestID        sql.NullString `json:"requestId"`
+	Severity         sql.NullString `json:"severity"`
+	Details          sql.NullString `json:"details"`
+	CreatedAt        time.Time      `json:"createdAt"`
+	UpdatedAt        time.Time      `json:"updatedAt"`
+	SessionID        sql.NullString `json:"sessionId"`
+}
+
 type Backup struct {
 	ID               int64          `json:"id"`
 	ScheduleID       sql.NullInt64  `json:"scheduleId"`
@@ -125,6 +142,7 @@ type KeyProviderType struct {
 	Name string `json:"name"`
 }
 
+// Network represents a network in the database
 type Network struct {
 	ID                    int64          `json:"id"`
 	Name                  string         `json:"name"`
@@ -143,6 +161,7 @@ type Network struct {
 	CurrentConfigBlockB64 sql.NullString `json:"currentConfigBlockB64"`
 }
 
+// NetworkNode represents a node in a network
 type NetworkNode struct {
 	ID        int64          `json:"id"`
 	NetworkID int64          `json:"networkId"`
@@ -235,6 +254,23 @@ type Plugin struct {
 	UpdatedAt          time.Time      `json:"updatedAt"`
 	DeploymentMetadata interface{}    `json:"deploymentMetadata"`
 	DeploymentStatus   sql.NullString `json:"deploymentStatus"`
+}
+
+type PrometheusConfig struct {
+	ID                  int64          `json:"id"`
+	PrometheusPort      int64          `json:"prometheusPort"`
+	DataDir             string         `json:"dataDir"`
+	ConfigDir           string         `json:"configDir"`
+	ContainerName       string         `json:"containerName"`
+	ScrapeInterval      int64          `json:"scrapeInterval"`
+	EvaluationInterval  int64          `json:"evaluationInterval"`
+	DeploymentMode      string         `json:"deploymentMode"`
+	DockerImage         string         `json:"dockerImage"`
+	DockerNetwork       sql.NullString `json:"dockerNetwork"`
+	DockerRestartPolicy string         `json:"dockerRestartPolicy"`
+	DockerExtraArgs     sql.NullString `json:"dockerExtraArgs"`
+	CreatedAt           time.Time      `json:"createdAt"`
+	UpdatedAt           time.Time      `json:"updatedAt"`
 }
 
 type Session struct {

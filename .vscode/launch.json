@@ -18,7 +18,7 @@
 			"env": {
 				"CHAINLAUNCH_USER": "admin",
 				"CHAINLAUNCH_PASSWORD": "admin123",
-				"JAVA_HOME": "/opt/homebrew/opt/openjdk@21"
+				"JAVA_HOME": "/opt/homebrew/Cellar/openjdk/23.0.2"
 			}
 		},
 		{

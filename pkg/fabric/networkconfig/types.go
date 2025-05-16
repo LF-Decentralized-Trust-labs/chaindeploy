@@ -34,12 +34,14 @@ type User struct {
 
 // UserCert represents a user's certificate
 type UserCert struct {
-	PEM string `yaml:"pem"`
+	PEM  string `yaml:"pem,omitempty"`
+	Path string `yaml:"path,omitempty"`
 }
 
 // UserKey represents a user's private key
 type UserKey struct {
-	PEM string `yaml:"pem"`
+	PEM  string `yaml:"pem,omitempty"`
+	Path string `yaml:"path,omitempty"`
 }
 
 // Orderer represents an orderer node
@@ -65,15 +67,16 @@ type GRPCOptions struct {
 
 // TLSCACerts represents TLS CA certificates
 type TLSCACerts struct {
-	PEM string `yaml:"pem"`
+	PEM  string `yaml:"pem,omitempty"`
+	Path string `yaml:"path,omitempty"`
 }
 
 // CertificateAuthority represents a CA server
 type CertificateAuthority struct {
-	URL        string       `yaml:"url"`
-	Registrar  Registrar    `yaml:"registrar"`
-	CAName     string       `yaml:"caName"`
-	TLSCACerts []TLSCACerts `yaml:"tlsCACerts"`
+	URL        string     `yaml:"url"`
+	Registrar  Registrar  `yaml:"registrar"`
+	CAName     string     `yaml:"caName"`
+	TLSCACerts TLSCACerts `yaml:"tlsCACerts"`
 }
 
 // Registrar represents CA registrar information
