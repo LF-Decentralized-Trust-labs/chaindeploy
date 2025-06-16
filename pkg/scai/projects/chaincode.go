@@ -112,7 +112,7 @@ func (s *ChaincodeService) InvokeTransaction(ctx context.Context, req Transactio
 	}
 
 	// Get gateway and channel
-	gatewayClient, peerConn, err := peer.GetGatewayClient(ctx)
+	gatewayClient, peerConn, err := peer.GetGatewayClient(ctx, req.KeyID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get gateway: %w", err)
 	}
@@ -122,7 +122,7 @@ func (s *ChaincodeService) InvokeTransaction(ctx context.Context, req Transactio
 	contract := nw.GetContract(project.Name)
 	result, commit, err := contract.SubmitAsync(req.Function, client.WithArguments(req.Args...))
 	// Prepare and submit transaction
-	if err != nil && err != nil {
+	if err != nil {
 		endorseError, ok := err.(*client.EndorseError)
 		if ok {
 			detailsStr := []string{}
@@ -196,7 +196,7 @@ func (s *ChaincodeService) QueryTransaction(ctx context.Context, req Transaction
 	}
 
 	// Get gateway and channel
-	gatewayClient, peerConn, err := peer.GetGatewayClient(ctx)
+	gatewayClient, peerConn, err := peer.GetGatewayClient(ctx, req.KeyID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get gateway: %w", err)
 	}

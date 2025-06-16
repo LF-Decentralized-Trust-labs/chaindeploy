@@ -1097,7 +1097,7 @@ func (s *NodeService) GetFabricPeerGateway(ctx context.Context, peerID int64) (*
 }
 
 // GetPeerGateway returns a chaincode.Gateway for a peer
-func (s *NodeService) GetFabricPeerClientGateway(ctx context.Context, peerID int64) (*client.Gateway, *grpc.ClientConn, error) {
+func (s *NodeService) GetFabricPeerClientGateway(ctx context.Context, peerID int64, keyID int64) (*client.Gateway, *grpc.ClientConn, error) {
 	// Get the peer node from database
 	node, err := s.db.GetNode(ctx, peerID)
 	if err != nil {
@@ -1122,7 +1122,7 @@ func (s *NodeService) GetFabricPeerClientGateway(ctx context.Context, peerID int
 		return nil, nil, fmt.Errorf("failed to get peer: %w", err)
 	}
 
-	gateway, peerConn, err := localPeer.GetGatewayClient(ctx)
+	gateway, peerConn, err := localPeer.GetGatewayClient(ctx, keyID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get gateway: %w", err)
 	}

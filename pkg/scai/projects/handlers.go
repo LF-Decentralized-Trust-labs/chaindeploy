@@ -534,7 +534,7 @@ func (h *ProjectsHandler) GetProjectFileDiff(w http.ResponseWriter, r *http.Requ
 		return errors.NewInternalError("failed to get project", err, nil)
 	}
 
-	projectDir := h.Service.ProjectsDir + "/" + proj.Name
+	projectDir := filepath.Join(h.Service.ProjectsDir, proj.Slug)
 	diff, err := versionmanagement.GetFileDiffBetweenCommits(r.Context(), projectDir, file, from, to)
 	if err != nil {
 		return errors.NewInternalError("failed to get diff", err, nil)
@@ -583,7 +583,7 @@ func (h *ProjectsHandler) GetProjectFileAtCommit(w http.ResponseWriter, r *http.
 		return errors.NewInternalError("failed to get project", err, nil)
 	}
 
-	projectDir := h.Service.ProjectsDir + "/" + proj.Name
+	projectDir := filepath.Join(h.Service.ProjectsDir, proj.Slug)
 	content, err := versionmanagement.GetFileAtCommit(r.Context(), projectDir, file, commit)
 	if err != nil {
 		return errors.NewInternalError("failed to get file at commit", err, nil)

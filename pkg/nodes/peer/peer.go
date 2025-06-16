@@ -2542,6 +2542,41 @@ func (p *LocalPeer) GetAdminIdentity(ctx context.Context) (identity.SigningIdent
 	}
 	return signingIdentity, signer, nil
 }
+func (p *LocalPeer) GetIdentity(ctx context.Context, keyID int64) (identity.SigningIdentity, gwidentity.Sign, error) {
+	adminSignKeyDB, err := p.keyService.GetKey(ctx, int(keyID))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get TLS CA key: %w", err)
+	}
+	if adminSignKeyDB.Certificate == nil {
+		return nil, nil, fmt.Errorf("TLS CA key is not set")
+	}
+	certificate := *adminSignKeyDB.Certificate
+	privateKey, err := p.keyService.GetDecryptedPrivateKey(int(p.org.AdminSignKeyID.Int64))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get decrypted private key: %w", err)
+	}
+
+	cert, err := gwidentity.CertificateFromPEM([]byte(certificate))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read certificate: %w", err)
+	}
+
+	priv, err := gwidentity.PrivateKeyFromPEM([]byte(privateKey))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read private key: %w", err)
+	}
+
+	signingIdentity, err := identity.NewPrivateKeySigningIdentity(p.mspID, cert, priv)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create signing identity: %w", err)
+	}
+
+	signer, err := gwidentity.NewPrivateKeySign(priv)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create signer: %w", err)
+	}
+	return signingIdentity, signer, nil
+}
 
 // Add this struct near the top with other type definitions
 type GetChannelConfigResponse struct {
@@ -3202,14 +3237,14 @@ func (p *LocalPeer) GetPeerClient(ctx context.Context) (*chaincode.Peer, *grpc.C
 	return peer, peerConn, nil
 }
 
-func (p *LocalPeer) GetGatewayClient(ctx context.Context) (*client.Gateway, *grpc.ClientConn, error) {
+func (p *LocalPeer) GetGatewayClient(ctx context.Context, keyID int64) (*client.Gateway, *grpc.ClientConn, error) {
 	peerUrl := p.GetPeerAddress()
 	tlsCACert, err := p.GetTLSRootCACert(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get TLS CA cert: %w", err)
 	}
 
-	adminIdentity, signer, err := p.GetAdminIdentity(ctx)
+	adminIdentity, signer, err := p.GetIdentity(ctx, keyID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get admin identity: %w", err)
 	}

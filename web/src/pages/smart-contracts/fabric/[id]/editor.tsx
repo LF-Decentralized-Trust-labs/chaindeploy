@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Code2, Loader2, PlayCircle, StopCircle } from 'lucide-react'
-import { useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -21,19 +21,22 @@ export default function ChaincodeProjectEditorPage() {
 	const startMutation = useMutation(postChaincodeProjectsByIdStartMutation())
 	const stopMutation = useMutation(postChaincodeProjectsByIdStopMutation())
 
-	const initialMode = (searchParams.get('mode') === 'playground' ? 'playground' : 'editor') as 'editor' | 'playground'
+	const initialMode = useMemo(() => (searchParams.get('mode') === 'playground' ? 'playground' : 'editor') as 'editor' | 'playground', [searchParams])
 	const [mode, setModeState] = useState<'editor' | 'playground'>(initialMode)
 
-	const setMode = (newMode: 'editor' | 'playground') => {
-		setModeState(newMode)
-		setSearchParams((prev) => {
-			const params = new URLSearchParams(prev)
-			params.set('mode', newMode)
-			return params
-		})
-	}
+	const setMode = useCallback(
+		(newMode: 'editor' | 'playground') => {
+			setModeState(newMode)
+			setSearchParams((prev) => {
+				const params = new URLSearchParams(prev)
+				params.set('mode', newMode)
+				return params
+			})
+		},
+		[setSearchParams]
+	)
 
-	const handleStart = async () => {
+	const handleStart = useCallback(async () => {
 		try {
 			const toastId = toast.loading('Starting project...')
 			await startMutation.mutateAsync({ path: { id: projectId } })
@@ -42,9 +45,9 @@ export default function ChaincodeProjectEditorPage() {
 		} catch (err: any) {
 			toast.error('Failed to start project', { description: err?.message })
 		}
-	}
+	}, [projectId, startMutation, refetch])
 
-	const handleStop = async () => {
+	const handleStop = useCallback(async () => {
 		try {
 			const toastId = toast.loading('Stopping project...')
 			await stopMutation.mutateAsync({ path: { id: projectId } })
@@ -53,7 +56,7 @@ export default function ChaincodeProjectEditorPage() {
 		} catch (err: any) {
 			toast.error('Failed to stop project', { description: err?.message })
 		}
-	}
+	}, [projectId, stopMutation, refetch])
 
 	if (isLoading) {
 		return (
@@ -102,26 +105,26 @@ export default function ChaincodeProjectEditorPage() {
 						{project?.status}
 					</Badge>
 					{project?.status === 'running' ? (
-						<Button onClick={handleStop} disabled={stopMutation.isPending} variant="destructive" size="icon">
+						<Button onClick={handleStop} disabled={stopMutation.isPending} variant="destructive" className='size-8' size="icon">
 							{stopMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <StopCircle className="h-4 w-4" />}
 						</Button>
 					) : (
-						<Button onClick={handleStart} disabled={startMutation.isPending} size="icon">
+						<Button onClick={handleStart} disabled={startMutation.isPending} className='size-8' size="icon">
 							{startMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
 						</Button>
 					)}
 				</div>
 				<div className="ml-auto flex gap-2 items-center">
-					<Button variant={mode === 'editor' ? 'default' : 'outline'} size="icon" onClick={() => setMode('editor')} title="Editor mode">
-						<Code2 className="h-5 w-5" />
+					<Button size="icon" className='size-10' variant={mode === 'editor' ? 'default' : 'outline'} onClick={() => setMode('editor')} title="Editor mode">
+						<Code2  />
 					</Button>
-					<Button variant={mode === 'playground' ? 'default' : 'outline'} size="icon" onClick={() => setMode('playground')} title="Playground mode">
-						<PlayCircle className="h-5 w-5" />
+					<Button size="icon" className='size-10' variant={mode === 'playground' ? 'default' : 'outline'} onClick={() => setMode('playground')} title="Playground mode">
+						<PlayCircle  />
 					</Button>
 				</div>
 			</div>
 			<div className="flex-1 p-4">
-				<CodeEditor mode={mode} projectId={projectId} key={mode} chaincodeProject={project} />
+				<CodeEditor mode={mode} projectId={projectId} chaincodeProject={project} />
 			</div>
 		</div>
 	)

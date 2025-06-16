@@ -7,6 +7,7 @@ import {
 	getProjectsByProjectIdFilesEntries,
 	getProjectsByProjectIdFilesRead,
 	postProjectsByProjectIdFilesWrite,
+	ProjectsCommitWithFileChangesApi,
 	ProjectsProject,
 } from '@/api/client'
 import { Button } from '@/components/ui/button'
@@ -14,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Check, Code, Copy, GitCommit, GripVertical, History } from 'lucide-react'
+import { ArrowLeft, Check, Code, Copy, GitCommit, History } from 'lucide-react'
 import type { editor } from 'monaco-editor'
 import * as monaco from 'monaco-editor'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -29,7 +30,7 @@ import { EditorTabs } from './EditorTabs'
 import { FileTree } from './FileTree'
 import { LogsPanel } from './LogsPanel'
 import { Playground } from './Playground'
-import type { File, FilesDirectoryTreeNode } from './types'
+import type { File } from './types'
 import { getMonacoLanguage } from './types'
 const SyntaxHighlighterComp = SyntaxHighlighter as unknown as React.ComponentType<SyntaxHighlighterProps>
 interface MessagePart {
@@ -296,7 +297,6 @@ function MarkdownRenderer({ content }: { content: string }) {
 			</em>
 		),
 
-		
 		// Links
 		a: ({ children, ...props }) => (
 			<a className="text-blue-500 hover:text-blue-600 underline" {...props}>
@@ -519,13 +519,6 @@ const ToolEventRenderer = React.memo(({ event }: ToolEventProps) => {
 					</Dialog>
 				)
 			} else if (event.name === 'read_file') {
-				let path = ''
-				if (typeof event.arguments === 'string') {
-					try {
-						const args = JSON.parse(event.arguments)
-						path = args.path || ''
-					} catch {}
-				}
 				details = <></>
 			} else if (event.result) {
 				details = (
@@ -885,23 +878,7 @@ function ChatPanel({ projectId = 1, chatState }: { projectId: number; chatState:
 									<div className="space-y-4">
 										{commits?.data?.commits?.map((commit) => (
 											<div key={commit.hash} className="p-3 rounded-lg border border-border hover:bg-accent/50 transition-colors cursor-pointer">
-												<Dialog>
-													<DialogTrigger asChild>
-														<div>
-															<div className="text-sm font-medium">{commit.message}</div>
-															<div className="text-xs text-muted-foreground mt-1">{new Date(commit.timestamp || '').toLocaleString()}</div>
-															<div className="text-xs text-muted-foreground mt-1">{commit.author}</div>
-															{(commit.added?.length || commit.modified?.length || commit.removed?.length) && (
-																<div className="flex gap-4 text-xs text-muted-foreground mt-2">
-																	{commit.added?.length ? <div className="text-green-500">Added: {commit.added.length}</div> : null}
-																	{commit.modified?.length ? <div className="text-yellow-500">Modified: {commit.modified.length}</div> : null}
-																	{commit.removed?.length ? <div className="text-red-500">Removed: {commit.removed.length}</div> : null}
-																</div>
-															)}
-														</div>
-													</DialogTrigger>
-													{commit && <CommitDetails projectId={projectId} commitHash={commit.hash || ''} onClose={() => setHistoryDialogOpen(false)} />}
-												</Dialog>
+												<CommitDetails projectId={projectId} commit={commit} commitHash={commit.hash || ''} />
 											</div>
 										))}
 									</div>
@@ -935,9 +912,11 @@ interface CommitDetailsProps {
 	projectId: number
 	commitHash: string
 	onClose?: () => void
+	commit: ProjectsCommitWithFileChangesApi
 }
 
-const CommitDetails = ({ projectId, commitHash, onClose }: CommitDetailsProps) => {
+const CommitDetails = ({ projectId, commit, commitHash }: CommitDetailsProps) => {
+	const [open, setOpen] = useState(false)
 	const { data: commitDetails } = useQuery({
 		queryKey: ['commit-details', projectId, commitHash],
 		queryFn: () =>
@@ -1012,6 +991,31 @@ const CommitDetails = ({ projectId, commitHash, onClose }: CommitDetailsProps) =
 			renderOverviewRuler: true,
 			scrollBeyondLastLine: false,
 			automaticLayout: true,
+			// Enable diff navigation
+			enableSplitViewResizing: true,
+			ignoreTrimWhitespace: false,
+			renderIndicators: true,
+			// Add keyboard shortcuts for navigation
+			// actions: [
+			// 	{
+			// 		id: 'nextDiff',
+			// 		label: 'Next Difference',
+			// 		keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.F5],
+			// 		run: () => {
+			// 			diffEditor.getAction('editor.action.diffReview.next').run()
+			// 			return null
+			// 		}
+			// 	},
+			// 	{
+			// 		id: 'prevDiff',
+			// 		label: 'Previous Difference',
+			// 		keybindings: [monaco.KeyMod.Alt | monaco.KeyMod.Shift | monaco.KeyCode.F5],
+			// 		run: () => {
+			// 			diffEditor.getAction('editor.action.diffReview.prev').run()
+			// 			return null
+			// 		}
+			// 	}
+			// ]
 		})
 
 		let originalContent = ''
@@ -1037,81 +1041,107 @@ const CommitDetails = ({ projectId, commitHash, onClose }: CommitDetailsProps) =
 			newModifiedModel.dispose()
 		}
 	}, [commitDetails, currentFileContent, selectedFile, parentFileContent])
+	useEffect(() => {
+		if (!open) {
+			setSelectedFile(null)
+		} else {
+			const firstChangedFile = commitDetails?.data?.added?.[0] || 
+				commitDetails?.data?.modified?.[0] || 
+				commitDetails?.data?.removed?.[0] || 
+				null
+			setSelectedFile(firstChangedFile)
+		}
+	}, [open, commitDetails?.data?.added])
 	return (
-		<DialogContent className="max-w-4xl h-[80vh] p-0">
-			<div className="flex flex-col h-full">
-				<DialogHeader className="px-6 pt-6 pb-2">
-					<div className="flex items-center gap-2">
-						{onClose && (
-							<button onClick={onClose} className="mr-2 p-1 rounded hover:bg-accent">
+		<Dialog open={open} onOpenChange={setOpen}>
+			<DialogTrigger asChild>
+				<div>
+					<div className="text-sm font-medium">{commit.message}</div>
+					<div className="text-xs text-muted-foreground mt-1">{new Date(commit.timestamp || '').toLocaleString()}</div>
+					<div className="text-xs text-muted-foreground mt-1">{commit.author}</div>
+					{(commit.added?.length || commit.modified?.length || commit.removed?.length) && (
+						<div className="flex gap-4 text-xs text-muted-foreground mt-2">
+							{commit.added?.length ? <div className="text-green-500">Added: {commit.added.length}</div> : null}
+							{commit.modified?.length ? <div className="text-yellow-500">Modified: {commit.modified.length}</div> : null}
+							{commit.removed?.length ? <div className="text-red-500">Removed: {commit.removed.length}</div> : null}
+						</div>
+					)}
+				</div>
+			</DialogTrigger>
+
+			<DialogContent className="max-w-4xl h-[80vh] p-0">
+				<div className="flex flex-col h-full">
+					<DialogHeader className="px-6 pt-6 pb-2">
+						<div className="flex items-center gap-2">
+							<button onClick={() => setOpen(false)} className="mr-2 p-1 rounded hover:bg-accent">
 								<ArrowLeft className="h-5 w-5" />
 							</button>
-						)}
-						<GitCommit className="h-5 w-5" />
-						<DialogTitle className="flex-1">Commit Details</DialogTitle>
-					</div>
-				</DialogHeader>
-				<div className="px-6 pb-4">
-					<div className="space-y-2">
-						<div className="text-sm font-medium">{commitDetails?.data?.message}</div>
-						<div className="text-xs text-muted-foreground">{new Date(commitDetails?.data?.timestamp || '').toLocaleString()}</div>
-						<div className="text-xs text-muted-foreground">Author: {commitDetails?.data?.author}</div>
-						{(commitDetails?.data?.added?.length || commitDetails?.data?.modified?.length || commitDetails?.data?.removed?.length) && (
-							<div className="flex gap-4 text-xs text-muted-foreground">
-								{commitDetails?.data?.added?.length ? <div className="text-green-500">Added: {commitDetails.data.added.length}</div> : null}
-								{commitDetails?.data?.modified?.length ? <div className="text-yellow-500">Modified: {commitDetails.data.modified.length}</div> : null}
-								{commitDetails?.data?.removed?.length ? <div className="text-red-500">Removed: {commitDetails.data.removed.length}</div> : null}
-							</div>
-						)}
-					</div>
-				</div>
-				<div className="flex-1 min-h-0 flex gap-4 px-6 pb-6">
-					{/* File list */}
-					<ScrollArea className="flex-shrink-0 w-56 h-full border rounded-lg bg-muted/30">
-						<div className="p-2 space-y-1">
-							{commitDetails?.data?.added?.map((file) => (
-								<div
-									key={file}
-									className={`text-sm cursor-pointer p-1 rounded ${selectedFile === file ? 'bg-accent font-bold' : 'text-green-500 hover:bg-accent'}`}
-									onClick={() => setSelectedFile(file)}
-								>
-									+ {file}
-								</div>
-							))}
-							{commitDetails?.data?.modified?.map((file) => (
-								<div
-									key={file}
-									className={`text-sm cursor-pointer p-1 rounded ${selectedFile === file ? 'bg-accent font-bold' : 'text-yellow-500 hover:bg-accent'}`}
-									onClick={() => setSelectedFile(file)}
-								>
-									~ {file}
-								</div>
-							))}
-							{commitDetails?.data?.removed?.map((file) => (
-								<div
-									key={file}
-									className={`text-sm cursor-pointer p-1 rounded ${selectedFile === file ? 'bg-accent font-bold' : 'text-red-500 hover:bg-accent'}`}
-									onClick={() => setSelectedFile(file)}
-								>
-									- {file}
-								</div>
-							))}
+							<GitCommit className="h-5 w-5" />
+							<DialogTitle className="flex-1">Commit Details</DialogTitle>
 						</div>
-					</ScrollArea>
-					{/* Diff area */}
-					<div className="flex-1 min-h-0 flex flex-col">
-						{selectedFile ? (
-							<>
-								<div className="text-sm font-medium mb-2">{selectedFile}</div>
-								<div ref={diffContainerRef} className="flex-1 border rounded-lg bg-background" />
-							</>
-						) : (
-							<div className="flex items-center justify-center h-full text-muted-foreground">Select a file to view its diff</div>
-						)}
+					</DialogHeader>
+					<div className="px-6 pb-4">
+						<div className="space-y-2">
+							<div className="text-sm font-medium">{commitDetails?.data?.message}</div>
+							<div className="text-xs text-muted-foreground">{new Date(commitDetails?.data?.timestamp || '').toLocaleString()}</div>
+							<div className="text-xs text-muted-foreground">Author: {commitDetails?.data?.author}</div>
+							{(commitDetails?.data?.added?.length || commitDetails?.data?.modified?.length || commitDetails?.data?.removed?.length) && (
+								<div className="flex gap-4 text-xs text-muted-foreground">
+									{commitDetails?.data?.added?.length ? <div className="text-green-500">Added: {commitDetails.data.added.length}</div> : null}
+									{commitDetails?.data?.modified?.length ? <div className="text-yellow-500">Modified: {commitDetails.data.modified.length}</div> : null}
+									{commitDetails?.data?.removed?.length ? <div className="text-red-500">Removed: {commitDetails.data.removed.length}</div> : null}
+								</div>
+							)}
+						</div>
+					</div>
+					<div className="flex-1 min-h-0 flex gap-4 px-6 pb-6">
+						{/* File list */}
+						<ScrollArea className="flex-shrink-0 w-56 h-full border rounded-lg bg-muted/30">
+							<div className="p-2 space-y-1">
+								{commitDetails?.data?.added?.map((file) => (
+									<div
+										key={file}
+										className={`text-sm cursor-pointer p-1 rounded ${selectedFile === file ? 'bg-accent font-bold' : 'text-green-500 hover:bg-accent'}`}
+										onClick={() => setSelectedFile(file)}
+									>
+										+ {file}
+									</div>
+								))}
+								{commitDetails?.data?.modified?.map((file) => (
+									<div
+										key={file}
+										className={`text-sm cursor-pointer p-1 rounded ${selectedFile === file ? 'bg-accent font-bold' : 'text-yellow-500 hover:bg-accent'}`}
+										onClick={() => setSelectedFile(file)}
+									>
+										~ {file}
+									</div>
+								))}
+								{commitDetails?.data?.removed?.map((file) => (
+									<div
+										key={file}
+										className={`text-sm cursor-pointer p-1 rounded ${selectedFile === file ? 'bg-accent font-bold' : 'text-red-500 hover:bg-accent'}`}
+										onClick={() => setSelectedFile(file)}
+									>
+										- {file}
+									</div>
+								))}
+							</div>
+						</ScrollArea>
+						{/* Diff area */}
+						<div className="flex-1 min-h-0 flex flex-col">
+							{selectedFile ? (
+								<>
+									<div className="text-sm font-medium mb-2">{selectedFile}</div>
+									<div ref={diffContainerRef} className="flex-1 border rounded-lg bg-background" />
+								</>
+							) : (
+								<div className="flex items-center justify-center h-full text-muted-foreground">Select a file to view its diff</div>
+							)}
+						</div>
 					</div>
 				</div>
-			</div>
-		</DialogContent>
+			</DialogContent>
+		</Dialog>
 	)
 }
 
@@ -1276,21 +1306,15 @@ export function CodeEditor({ mode = 'editor', projectId, chaincodeProject }: Cod
 		return () => window.removeEventListener('keydown', handleKeyDown)
 	}, [selectedFile])
 
-	const sortNodes = (nodes: FilesDirectoryTreeNode[] = []) =>
-		nodes.slice().sort((a, b) => {
-			if (a.isDir && !b.isDir) return -1
-			if (!a.isDir && b.isDir) return 1
-			return (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase())
-		})
 
 	return (
 		<div className="h-full max-h-[90vh] flex flex-col">
 			<ResizablePanelGroup direction="horizontal">
-				<ResizablePanel defaultSize={20} minSize={10} maxSize={20}>
-						<ChatPanel projectId={projectId} chatState={chatState} />
+				<ResizablePanel defaultSize={20} minSize={10} maxSize={40}>
+					<ChatPanel projectId={projectId} chatState={chatState} />
 				</ResizablePanel>
 				<ResizableHandle />
-				<ResizablePanel defaultSize={80} minSize={40} maxSize={80}>
+				<ResizablePanel defaultSize={80} minSize={40} maxSize={90}>
 					{mode === 'editor' ? (
 						<ResizablePanelGroup direction="vertical">
 							<ResizablePanel defaultSize={80} minSize={40}>
@@ -1336,7 +1360,7 @@ export function CodeEditor({ mode = 'editor', projectId, chaincodeProject }: Cod
 					) : (
 						<ResizablePanelGroup direction="vertical">
 							<ResizablePanel defaultSize={75} minSize={40}>
-								<div className="m-4">
+								<div className="h-full flex flex-col">
 									<Playground projectId={projectId} networkId={chaincodeProject.networkId} />
 								</div>
 							</ResizablePanel>

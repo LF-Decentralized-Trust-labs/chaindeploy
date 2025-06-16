@@ -69,29 +69,27 @@ export function LogsPanel({ projectId, reloadKey }: LogsPanelProps & { reloadKey
 	}, [logs])
 
 	return (
-		<ResizablePanel defaultSize={20} minSize={10} maxSize={50}>
-			<div className="h-full flex flex-col bg-popover border-t border-border">
-				<div className="flex items-center justify-between px-4 py-2 bg-muted border-b border-border">
-					<h3 className="text-sm font-medium text-muted-foreground">Logs</h3>
-				</div>
-				<div className="flex flex-col md:flex-row gap-8 h-full w-full max-h-[70vh] overflow-y-auto flex-1 overflow-auto p-2 space-y-2">
-					{/* Playground form (left) */}
-					<ScrollArea className="flex-1  border rounded bg-background shadow-sm my-4">
-						<div className="p-4 font-mono text-sm">
-							{logs.length === 0 ? (
-								<div className="text-muted-foreground">Waiting for logs...</div>
-							) : (
-								logs.map((log, index) => (
-									<div key={index} className="text-popover-foreground whitespace-pre-wrap">
-										{log}
-									</div>
-								))
-							)}
-							<div ref={logsEndRef} />
-						</div>
-					</ScrollArea>
+		<div className="h-full flex flex-col bg-popover border-t border-border">
+			<div className="flex items-center justify-between px-4 py-2 bg-muted border-b border-border">
+				<h3 className="text-sm font-medium text-muted-foreground">Logs</h3>
+			</div>
+			<div className="flex flex-col md:flex-row gap-8 h-full w-full max-h-[70vh] overflow-y-auto flex-1 overflow-auto p-2 space-y-2">
+				{/* Playground form (left) */}
+				<div className="flex-1  border rounded bg-background shadow-sm my-4">
+					<div className="p-4 font-mono text-sm">
+						{logs.length === 0 ? (
+							<div className="text-muted-foreground">Waiting for logs...</div>
+						) : (
+							logs.map((log, index) => (
+								<div key={index} className="text-popover-foreground whitespace-pre-wrap">
+									{log}
+								</div>
+							))
+						)}
+						<div ref={logsEndRef} />
+					</div>
 				</div>
 			</div>
-		</ResizablePanel>
+		</div>
 	)
 }
