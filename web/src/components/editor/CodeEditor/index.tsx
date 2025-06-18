@@ -1,38 +1,18 @@
-import {
-	getAiByProjectIdConversations,
-	getAiByProjectIdConversationsByConversationId,
-	getChaincodeProjectsByIdCommits,
-	getChaincodeProjectsByIdCommitsByCommitHash,
-	getChaincodeProjectsByIdFileAtCommit,
-	getProjectsByProjectIdFilesEntries,
-	getProjectsByProjectIdFilesRead,
-	postProjectsByProjectIdFilesWrite,
-	ProjectsCommitWithFileChangesApi,
-	ProjectsProject,
-} from '@/api/client'
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { getChaincodeProjectsByIdCommits, getProjectsByProjectIdFilesEntries, getProjectsByProjectIdFilesRead, postProjectsByProjectIdFilesWrite, ProjectsProject } from '@/api/client'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Check, Code, Copy, GitCommit, History } from 'lucide-react'
 import type { editor } from 'monaco-editor'
-import * as monaco from 'monaco-editor'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Components } from 'react-markdown'
-import ReactMarkdown from 'react-markdown'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import type { SyntaxHighlighterProps } from 'react-syntax-highlighter'
 import SyntaxHighlighter from 'react-syntax-highlighter'
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { toast } from 'sonner'
+import { ChatPanel, useStreamingChat } from './ChatPanel'
 import { EditorContent } from './EditorContent'
 import { EditorTabs } from './EditorTabs'
 import { FileTree } from './FileTree'
 import { LogsPanel } from './LogsPanel'
 import { Playground } from './Playground'
 import type { File } from './types'
-import { getMonacoLanguage } from './types'
-import { ChatPanel, useStreamingChat } from './ChatPanel'
 const SyntaxHighlighterComp = SyntaxHighlighter as unknown as React.ComponentType<SyntaxHighlighterProps>
 
 interface CodeEditorProps {

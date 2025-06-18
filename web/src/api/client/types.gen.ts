@@ -30,6 +30,10 @@ export type AiConversationResponse = {
     startedAt?: string;
 };
 
+export type AiCreateConversationRequest = {
+    title?: string;
+};
+
 export type AiGenerateRequest = {
     projectId?: number;
     prompt?: string;
@@ -2386,6 +2390,47 @@ export type GetAiByProjectIdConversationsResponses = {
 };
 
 export type GetAiByProjectIdConversationsResponse = GetAiByProjectIdConversationsResponses[keyof GetAiByProjectIdConversationsResponses];
+
+export type PostAiByProjectIdConversationsData = {
+    /**
+     * Optional conversation title
+     */
+    body?: AiCreateConversationRequest;
+    path: {
+        /**
+         * Project ID
+         */
+        projectId: number;
+    };
+    query?: never;
+    url: '/ai/{projectId}/conversations';
+};
+
+export type PostAiByProjectIdConversationsErrors = {
+    /**
+     * Bad Request
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type PostAiByProjectIdConversationsError = PostAiByProjectIdConversationsErrors[keyof PostAiByProjectIdConversationsErrors];
+
+export type PostAiByProjectIdConversationsResponses = {
+    /**
+     * Created
+     */
+    201: AiConversationResponse;
+};
+
+export type PostAiByProjectIdConversationsResponse = PostAiByProjectIdConversationsResponses[keyof PostAiByProjectIdConversationsResponses];
 
 export type GetAiByProjectIdConversationsByConversationIdData = {
     body?: never;

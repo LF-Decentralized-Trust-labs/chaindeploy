@@ -69,6 +69,7 @@ func (h *AIHandler) RegisterRoutes(r chi.Router) {
 		r.Post("/generate", response.Middleware(h.Generate))
 		r.Post("/{projectId}/chat", response.Middleware(h.Chat))
 		r.Get("/{projectId}/conversations", response.Middleware(h.GetConversations))
+		r.Post("/{projectId}/conversations", response.Middleware(h.CreateConversation))
 		r.Get("/{projectId}/conversations/{conversationId}", response.Middleware(h.GetConversationMessages))
 		r.Get("/{projectId}/conversations/{conversationId}/export", response.Middleware(h.GetConversationDetail))
 	})
@@ -467,6 +468,67 @@ func (o *sseAgentStepObserver) OnMaxStepsReached() {
 	data, _ := json.Marshal(evt)
 	fmt.Fprintf(o.w, "data: %s\n\n", data)
 	o.flusher.Flush()
+}
+
+// CreateConversationRequest represents a request to create a new conversation
+type CreateConversationRequest struct {
+	Title string `json:"title,omitempty"`
+}
+
+// CreateConversation godoc
+// @Summary      Create a new conversation for a project
+// @Description  Creates a new empty conversation for the specified project
+// @Tags         ai
+// @Accept       json
+// @Produce      json
+// @Param        projectId path int true "Project ID"
+// @Param        request body CreateConversationRequest false "Optional conversation title"
+// @Success      201 {object} ConversationResponse
+// @Failure      400 {object} response.ErrorResponse
+// @Failure      404 {object} response.ErrorResponse
+// @Failure      500 {object} response.ErrorResponse
+// @Router       /ai/{projectId}/conversations [post]
+func (h *AIHandler) CreateConversation(w http.ResponseWriter, r *http.Request) error {
+	projectID, err := strconv.ParseInt(chi.URLParam(r, "projectId"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid project ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	// Verify project exists
+	_, err = h.Projects.Queries.GetProject(r.Context(), projectID)
+	if err != nil {
+		if err.Error() == "sql: no rows in result set" {
+			return errors.NewNotFoundError("project not found", nil)
+		}
+		return errors.NewInternalError("failed to get project", err, nil)
+	}
+
+	// Parse optional request body
+	var req CreateConversationRequest
+	if r.Body != nil && r.ContentLength > 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			return errors.NewValidationError("invalid request body", map[string]interface{}{
+				"error": err.Error(),
+			})
+		}
+	}
+
+	// Create the conversation
+	conversation, err := h.ChatService.CreateConversation(r.Context(), projectID, req.Title)
+	if err != nil {
+		return errors.NewInternalError("failed to create conversation", err, nil)
+	}
+
+	// Return the created conversation
+	resp := ConversationResponse{
+		ID:        conversation.ID,
+		ProjectID: conversation.ProjectID,
+		StartedAt: conversation.StartedAt.Format(time.RFC3339),
+	}
+
+	return response.WriteJSON(w, http.StatusCreated, resp)
 }
 
 // Chat godoc

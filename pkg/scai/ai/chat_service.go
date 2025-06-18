@@ -22,6 +22,19 @@ func NewChatService(queries *db.Queries) *ChatService {
 	return &ChatService{Queries: queries}
 }
 
+// CreateConversation creates a new conversation with the given title for a project.
+func (s *ChatService) CreateConversation(ctx context.Context, projectID int64, title string) (Conversation, error) {
+	row, err := s.Queries.CreateConversation(ctx, projectID)
+	if err != nil {
+		return Conversation{}, err
+	}
+	return Conversation{
+		ID:        row.ID,
+		ProjectID: row.ProjectID,
+		StartedAt: row.StartedAt,
+	}, nil
+}
+
 // EnsureConversationForProject returns the default conversation for a project, creating it if needed.
 func (s *ChatService) EnsureConversationForProject(ctx context.Context, projectID int64) (Conversation, error) {
 	conv, err := s.Queries.GetDefaultConversationForProject(ctx, projectID)

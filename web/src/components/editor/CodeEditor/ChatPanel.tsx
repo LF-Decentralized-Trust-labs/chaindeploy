@@ -1,16 +1,25 @@
 import {
-	getAiByProjectIdConversations,
 	getAiByProjectIdConversationsByConversationId,
 	getChaincodeProjectsByIdCommits,
 	getChaincodeProjectsByIdCommitsByCommitHash,
 	getChaincodeProjectsByIdFileAtCommit,
 	ProjectsCommitWithFileChangesApi,
 } from '@/api/client'
+import {
+	getAiByProjectIdConversationsByConversationIdOptions,
+	getAiByProjectIdConversationsOptions,
+	getChaincodeProjectsByIdCommitsByCommitHashOptions,
+	getChaincodeProjectsByIdCommitsOptions,
+	getChaincodeProjectsByIdFileAtCommitOptions,
+	postAiByProjectIdConversationsMutation,
+} from '@/api/client/@tanstack/react-query.gen'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Check, Code, Copy, GitCommit, History } from 'lucide-react'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { jsonrepair } from 'jsonrepair'
+import { ArrowLeft, Check, ChevronDown, Code, Copy, GitCommit, History, Plus } from 'lucide-react'
 import * as monaco from 'monaco-editor'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Components } from 'react-markdown'
@@ -18,7 +27,6 @@ import ReactMarkdown from 'react-markdown'
 import type { SyntaxHighlighterProps } from 'react-syntax-highlighter'
 import SyntaxHighlighter from 'react-syntax-highlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { jsonrepair } from 'jsonrepair'
 import { toast } from 'sonner'
 import { getMonacoLanguage } from './types'
 const SyntaxHighlighterComp = SyntaxHighlighter as unknown as React.ComponentType<SyntaxHighlighterProps>
@@ -192,7 +200,7 @@ export function useStreamingChat(projectId: number, onToolResult?: (toolName: st
 															console.log('Tool name:', event.name)
 															console.log('New delta arguments (raw):', event.arguments)
 															console.log('Existing merged arguments (raw):', mergedArguments)
-															
+
 															// Always accumulate raw strings - this is the source of truth
 															let accumulatedRaw = ''
 															if (mergedArguments === '{}' || mergedArguments === '') {
@@ -204,14 +212,14 @@ export function useStreamingChat(projectId: number, onToolResult?: (toolName: st
 																accumulatedRaw = mergedArguments + event.arguments
 																console.log('Accumulated as raw strings:', accumulatedRaw)
 															}
-															
+
 															// Try to parse the accumulated raw string for display/processing
 															try {
 																const repaired = jsonrepair(accumulatedRaw)
 																console.log('Repaired accumulated string:', repaired)
 																const parsed = JSON.parse(repaired)
 																console.log('Parsed accumulated object:', parsed)
-																
+
 																// Store the raw accumulated string, not the parsed result
 																mergedArguments = accumulatedRaw
 																console.log('Final merged arguments (raw accumulated):', mergedArguments)
@@ -302,42 +310,29 @@ export function ChatPanel({ projectId = 1, chatState }: { projectId: number; cha
 	const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
 	const messagesEndRef = useRef<HTMLDivElement>(null)
 	const { textareaRef, adjustHeight } = useAutoResizeTextarea()
-	const { data: conversations } = useQuery({
-		queryKey: ['conversations', projectId],
-		queryFn: () => getAiByProjectIdConversations({ path: { projectId } }),
+	const { data: conversations, refetch: refetchConversations } = useQuery({
+		...getAiByProjectIdConversationsOptions({ path: { projectId } }),
 	})
 	const { data: conversationDetails } = useQuery({
-		queryKey: ['conversation-details', conversations?.data?.map((c) => c.id)],
-		queryFn: async () => {
-			if (!conversations?.data) return []
-			const details = await Promise.all(
-				conversations.data.map((conv) =>
-					getAiByProjectIdConversationsByConversationId({
-						path: {
-							projectId,
-							conversationId: conv.id!,
-						},
-					})
-				)
-			)
-			return details.map((d) => d.data)
-		},
-		enabled: !!conversations?.data,
+		...getAiByProjectIdConversationsByConversationIdOptions({
+			path: {
+				projectId,
+				conversationId: parseInt(firstConversationId!, 10),
+			},
+		}),
+		enabled: !!conversations?.length,
 	})
 	const { data: conversationMessages } = useQuery({
-		queryKey: ['conversation', firstConversationId],
-		queryFn: () =>
-			getAiByProjectIdConversationsByConversationId({
-				path: {
-					projectId,
-					conversationId: parseInt(firstConversationId!, 10),
-				},
-			}),
+		...getAiByProjectIdConversationsByConversationIdOptions({
+			path: {
+				projectId,
+				conversationId: parseInt(firstConversationId!, 10),
+			},
+		}),
 		enabled: !!firstConversationId,
 	})
 	const { data: commits } = useQuery({
-		queryKey: ['commits', projectId],
-		queryFn: () => getChaincodeProjectsByIdCommits({ path: { id: projectId } }),
+		...getChaincodeProjectsByIdCommitsOptions({ path: { id: projectId } }),
 	})
 	const { messages, input, setInput, isLoading, activeTool, handleSubmit, partialArgsRef, setMessages } = chatState
 	const scrollToBottom = useCallback(() => {
@@ -383,7 +378,7 @@ export function ChatPanel({ projectId = 1, chatState }: { projectId: number; cha
 	}, [])
 
 	const formatMessages = useCallback(
-		(data: typeof conversationMessages.data) => {
+		(data: typeof conversationMessages) => {
 			if (!data) return
 			const formattedMessages = data
 				.filter((msg) => msg.content || (msg.toolCalls && msg.toolCalls.length > 0))
@@ -444,15 +439,15 @@ export function ChatPanel({ projectId = 1, chatState }: { projectId: number; cha
 
 	// Effect to set first conversation ID
 	useEffect(() => {
-		if (conversations?.data && conversations.data.length > 0 && !firstConversationId) {
-			setFirstConversation(conversations.data[0].id?.toString() || '')
+		if (conversations?.length > 0 && !firstConversationId) {
+			setFirstConversation(conversations[0].id?.toString() || '')
 		}
-	}, [conversations?.data, firstConversationId, setFirstConversation])
+	}, [conversations?.length, firstConversationId, setFirstConversation])
 
 	// Effect to set messages from conversation
 	useEffect(() => {
-		formatMessages(conversationMessages?.data)
-	}, [conversationMessages?.data, formatMessages])
+		formatMessages(conversationMessages)
+	}, [conversationMessages, formatMessages])
 
 	// Effect to parse partial arguments every 500ms
 	useEffect(() => {
@@ -477,16 +472,62 @@ export function ChatPanel({ projectId = 1, chatState }: { projectId: number; cha
 		),
 		[messages, isLoading, activeTool, partialArgs]
 	)
+	const createConversationMutation = useMutation({
+		...postAiByProjectIdConversationsMutation({}),
+		onSuccess: (data) => {
+			setFirstConversationId(data.id.toString())
+			// Clear messages when creating new conversation
+			setMessages([])
+			// Invalidate conversations query to refresh the list
+			refetchConversations()
+		},
+		onError: (error) => {
+			console.error('Failed to create conversation:', error)
+			toast.error('Failed to create new conversation')
+		},
+	})
+	const createNewConversation = useCallback(async () => {
+		createConversationMutation.mutate({
+			path: { projectId },
+			body: {
+				title: `New Conversation @${new Date().toISOString()}`,
+			},
+		})
+	}, [createConversationMutation])
 
 	return (
 		<div className="flex flex-col h-full bg-background border-r border-border text-foreground">
 			<div className="p-2 border-b border-border font-semibold text-sm flex items-center justify-between">
-				<span>Chat</span>
+				<div className="flex items-center gap-2">
+					<DropdownMenu>
+						<DropdownMenuTrigger asChild>
+							<Button variant="ghost" size="sm" className="h-8 gap-1 font-normal">
+								{conversations?.find((c) => c.id?.toString() === firstConversationId)?.id ? `Chat #${firstConversationId}` : 'Select Chat'}
+								<ChevronDown className="h-4 w-4" />
+							</Button>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent align="start" className="w-[200px]">
+							<DropdownMenuItem className="gap-2" onClick={createNewConversation}>
+								<Plus className="h-4 w-4" />
+								New Conversation
+							</DropdownMenuItem>
+							{conversations?.map((conversation) => (
+								<DropdownMenuItem key={conversation.id} className="gap-2" onClick={() => setFirstConversationId(conversation.id?.toString() || '')}>
+									{conversation.id?.toString() === firstConversationId && <Check className="h-4 w-4" />}
+									<span className={conversation.id?.toString() === firstConversationId ? 'font-medium' : ''}>Chat #{conversation.id}</span>
+								</DropdownMenuItem>
+							))}
+						</DropdownMenuContent>
+					</DropdownMenu>
+					<Button variant="ghost" size="sm" onClick={createNewConversation} className="h-8">
+						<Plus className="h-4 w-4" />
+					</Button>
+				</div>
 				<Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
 					<DialogTrigger asChild>
-						<button className="p-1 hover:bg-accent rounded-sm">
+						<Button variant="ghost" size="sm" className="h-8">
 							<History className="h-4 w-4" />
-						</button>
+						</Button>
 					</DialogTrigger>
 					<DialogContent className="max-w-2xl">
 						<DialogHeader>
@@ -497,7 +538,7 @@ export function ChatPanel({ projectId = 1, chatState }: { projectId: number; cha
 								<h3 className="text-sm font-medium mb-2">Conversations</h3>
 								<ScrollArea className="h-[60vh]">
 									<div className="space-y-4">
-										{conversations?.data?.map((conversation, index) => (
+										{conversations?.map((conversation, index) => (
 											<div
 												key={conversation.id}
 												className={`p-3 rounded-lg cursor-pointer hover:bg-accent ${conversation.id?.toString() === firstConversationId ? 'bg-accent' : ''}`}
@@ -517,7 +558,7 @@ export function ChatPanel({ projectId = 1, chatState }: { projectId: number; cha
 								<h3 className="text-sm font-medium mb-2">Commits</h3>
 								<ScrollArea className="h-[60vh]">
 									<div className="space-y-4">
-										{commits?.data?.commits?.map((commit) => (
+										{commits?.commits?.map((commit) => (
 											<div key={commit.hash} className="p-3 rounded-lg border border-border hover:bg-accent/50 transition-colors cursor-pointer">
 												<CommitDetails projectId={projectId} commit={commit} commitHash={commit.hash || ''} />
 											</div>
@@ -1027,7 +1068,7 @@ const ToolEventRenderer = React.memo(({ event }: ToolEventProps) => {
 										background: 'rgb(20, 20, 20)',
 										fontSize: '11px',
 										width: '100%',
-										minHeight: '100%'
+										minHeight: '100%',
 									}}
 								>
 									{content}
@@ -1180,17 +1221,12 @@ interface CommitDetailsProps {
 const CommitDetails = ({ projectId, commit, commitHash }: CommitDetailsProps) => {
 	const [open, setOpen] = useState(false)
 	const { data: commitDetails } = useQuery({
-		queryKey: ['commit-details', projectId, commitHash],
-		queryFn: () =>
-			getChaincodeProjectsByIdCommitsByCommitHash({
-				path: { id: projectId, commitHash },
-			}),
+		...getChaincodeProjectsByIdCommitsByCommitHashOptions({ path: { id: projectId, commitHash } }),
 	})
 
 	// Fetch all commits to find the parent commit
 	const { data: commitsData } = useQuery({
-		queryKey: ['commits', projectId],
-		queryFn: () => getChaincodeProjectsByIdCommits({ path: { id: projectId } }),
+		...getChaincodeProjectsByIdCommitsOptions({ path: { id: projectId } }),
 	})
 
 	const [selectedFile, setSelectedFile] = useState<string | null>(null)
@@ -1198,30 +1234,20 @@ const CommitDetails = ({ projectId, commit, commitHash }: CommitDetailsProps) =>
 
 	// Find the parent commit hash for the current commit
 	useEffect(() => {
-		if (!selectedFile || !commitsData?.data?.commits) return
-		const commits = commitsData.data.commits
+		if (!selectedFile || !commitsData?.commits) return
+		const commits = commitsData.commits
 		const commit = commits.find((c) => c.hash === commitHash)
 		const parentHash = commit?.parent
 		setParentCommitHash(parentHash)
-	}, [selectedFile, commitHash, commitsData?.data?.commits])
+	}, [selectedFile, commitHash, commitsData?.commits])
 
 	const { data: currentFileContent } = useQuery({
-		queryKey: ['file-at-commit', projectId, commitHash, selectedFile],
-		queryFn: () =>
-			getChaincodeProjectsByIdFileAtCommit({
-				path: { id: projectId },
-				query: { commit: commitHash || '', file: selectedFile || '' },
-			}),
+		...getChaincodeProjectsByIdFileAtCommitOptions({ path: { id: projectId }, query: { commit: commitHash || '', file: selectedFile || '' } }),
 		enabled: !!selectedFile,
 	})
 
 	const { data: parentFileContent } = useQuery({
-		queryKey: ['file-at-commit', projectId, parentCommitHash, selectedFile],
-		queryFn: () =>
-			getChaincodeProjectsByIdFileAtCommit({
-				path: { id: projectId },
-				query: { commit: parentCommitHash || '', file: selectedFile || '' },
-			}),
+		...getChaincodeProjectsByIdFileAtCommitOptions({ path: { id: projectId }, query: { commit: parentCommitHash || '', file: selectedFile || '' } }),
 		enabled: !!selectedFile && !!parentCommitHash,
 	})
 
@@ -1260,14 +1286,14 @@ const CommitDetails = ({ projectId, commit, commitHash }: CommitDetailsProps) =>
 		})
 
 		let originalContent = ''
-		if (commitDetails?.data?.added?.includes(selectedFile)) {
+		if (commitDetails?.added?.includes(selectedFile)) {
 			originalContent = ''
 		} else {
-			originalContent = parentFileContent?.data || ''
+			originalContent = parentFileContent || ''
 		}
 
 		const newOriginalModel = monaco.editor.createModel(originalContent, language, originalUri)
-		const newModifiedModel = monaco.editor.createModel(currentFileContent?.data || '', language, modifiedUri)
+		const newModifiedModel = monaco.editor.createModel(currentFileContent || '', language, modifiedUri)
 
 		diffEditor.setModel({
 			original: newOriginalModel,
@@ -1286,10 +1312,10 @@ const CommitDetails = ({ projectId, commit, commitHash }: CommitDetailsProps) =>
 		if (!open) {
 			setSelectedFile(null)
 		} else {
-			const firstChangedFile = commitDetails?.data?.added?.[0] || commitDetails?.data?.modified?.[0] || commitDetails?.data?.removed?.[0] || null
+			const firstChangedFile = commitDetails?.added?.[0] || commitDetails?.modified?.[0] || commitDetails?.removed?.[0] || null
 			setSelectedFile(firstChangedFile)
 		}
-	}, [open, commitDetails?.data?.added])
+	}, [open, commitDetails?.added])
 	return (
 		<Dialog open={open} onOpenChange={setOpen}>
 			<DialogTrigger asChild>
@@ -1320,14 +1346,14 @@ const CommitDetails = ({ projectId, commit, commitHash }: CommitDetailsProps) =>
 					</DialogHeader>
 					<div className="px-6 pb-4">
 						<div className="space-y-2">
-							<div className="text-sm font-medium">{commitDetails?.data?.message}</div>
-							<div className="text-xs text-muted-foreground">{new Date(commitDetails?.data?.timestamp || '').toLocaleString()}</div>
-							<div className="text-xs text-muted-foreground">Author: {commitDetails?.data?.author}</div>
-							{(commitDetails?.data?.added?.length || commitDetails?.data?.modified?.length || commitDetails?.data?.removed?.length) && (
+							<div className="text-sm font-medium">{commitDetails?.message}</div>
+							<div className="text-xs text-muted-foreground">{new Date(commitDetails?.timestamp || '').toLocaleString()}</div>
+							<div className="text-xs text-muted-foreground">Author: {commitDetails?.author}</div>
+							{(commitDetails?.added?.length || commitDetails?.modified?.length || commitDetails?.removed?.length) && (
 								<div className="flex gap-4 text-xs text-muted-foreground">
-									{commitDetails?.data?.added?.length ? <div className="text-green-500">Added: {commitDetails.data.added.length}</div> : null}
-									{commitDetails?.data?.modified?.length ? <div className="text-yellow-500">Modified: {commitDetails.data.modified.length}</div> : null}
-									{commitDetails?.data?.removed?.length ? <div className="text-red-500">Removed: {commitDetails.data.removed.length}</div> : null}
+									{commitDetails?.added?.length ? <div className="text-green-500">Added: {commitDetails.added.length}</div> : null}
+									{commitDetails?.modified?.length ? <div className="text-yellow-500">Modified: {commitDetails.modified.length}</div> : null}
+									{commitDetails?.removed?.length ? <div className="text-red-500">Removed: {commitDetails.removed.length}</div> : null}
 								</div>
 							)}
 						</div>
@@ -1336,7 +1362,7 @@ const CommitDetails = ({ projectId, commit, commitHash }: CommitDetailsProps) =>
 						{/* File list */}
 						<ScrollArea className="flex-shrink-0 w-56 h-full border rounded-lg bg-muted/30">
 							<div className="p-2 space-y-1">
-								{commitDetails?.data?.added?.map((file) => (
+								{commitDetails?.added?.map((file) => (
 									<div
 										key={file}
 										className={`text-sm cursor-pointer p-1 rounded ${selectedFile === file ? 'bg-accent font-bold' : 'text-green-500 hover:bg-accent'}`}
@@ -1345,7 +1371,7 @@ const CommitDetails = ({ projectId, commit, commitHash }: CommitDetailsProps) =>
 										+ {file}
 									</div>
 								))}
-								{commitDetails?.data?.modified?.map((file) => (
+								{commitDetails?.modified?.map((file) => (
 									<div
 										key={file}
 										className={`text-sm cursor-pointer p-1 rounded ${selectedFile === file ? 'bg-accent font-bold' : 'text-yellow-500 hover:bg-accent'}`}
@@ -1354,7 +1380,7 @@ const CommitDetails = ({ projectId, commit, commitHash }: CommitDetailsProps) =>
 										~ {file}
 									</div>
 								))}
-								{commitDetails?.data?.removed?.map((file) => (
+								{commitDetails?.removed?.map((file) => (
 									<div
 										key={file}
 										className={`text-sm cursor-pointer p-1 rounded ${selectedFile === file ? 'bg-accent font-bold' : 'text-red-500 hover:bg-accent'}`}
