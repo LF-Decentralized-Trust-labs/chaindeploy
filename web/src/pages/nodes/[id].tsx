@@ -267,7 +267,7 @@ export default function NodeDetailPage() {
 
 	useEffect(() => {
 		const eventSource = new EventSource(`/api/v1/nodes/${id}/logs?follow=true`, {
-			withCredentials: true
+			withCredentials: true,
 		})
 
 		let fullText = ''
@@ -275,7 +275,7 @@ export default function NodeDetailPage() {
 		eventSource.onmessage = (event) => {
 			fullText += event.data + '\n'
 			setLogs(fullText)
-			
+
 			// Scroll to bottom after new logs arrive
 			if (logsRef.current) {
 				setTimeout(() => {

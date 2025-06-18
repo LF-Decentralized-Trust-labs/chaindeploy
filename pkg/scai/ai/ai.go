@@ -766,12 +766,6 @@ func (s *OpenAIChatService) ChatWithPersistence(
 		return fmt.Errorf("ChatService is not configured")
 	}
 
-	// Enhance the user's prompt before processing
-	// enhancedMessage, err := s.enhancePrompt(ctx, userMessage)
-	// if err != nil {
-	// 	s.Logger.Warnf("Failed to enhance prompt, using original: %v", err)
-	// 	enhancedMessage = userMessage
-	// }
 	enhancedMessage := ""
 
 	// 1. Ensure conversation exists
