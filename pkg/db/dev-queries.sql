@@ -61,3 +61,6 @@ WHERE id = ?;
 
 -- name: UpdateMessageEnhancedContent :one
 UPDATE messages SET enhanced_content = ? WHERE id = ? RETURNING *;
+
+-- name: GetConversation :one
+SELECT * FROM conversations WHERE id = ?;

@@ -35,6 +35,18 @@ func (s *ChatService) CreateConversation(ctx context.Context, projectID int64, t
 	}, nil
 }
 
+func (s *ChatService) GetConversation(ctx context.Context, conversationID int64) (Conversation, error) {
+	row, err := s.Queries.GetConversation(ctx, conversationID)
+	if err != nil {
+		return Conversation{}, err
+	}
+	return Conversation{
+		ID:        row.ID,
+		ProjectID: row.ProjectID,
+		StartedAt: row.StartedAt,
+	}, nil
+}
+
 // EnsureConversationForProject returns the default conversation for a project, creating it if needed.
 func (s *ChatService) EnsureConversationForProject(ctx context.Context, projectID int64) (Conversation, error) {
 	conv, err := s.Queries.GetDefaultConversationForProject(ctx, projectID)
@@ -124,7 +136,7 @@ func (s *ChatService) GetConversationMessages(ctx context.Context, projectID, co
 	}
 
 	// Convert messages to response format
-	var result []Message
+	result := []Message{}
 	for _, msg := range messages {
 		result = append(result, Message{
 			ID:             msg.ID,

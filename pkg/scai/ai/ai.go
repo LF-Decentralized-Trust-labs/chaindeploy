@@ -755,6 +755,7 @@ func (s *OpenAIChatService) ChatWithPersistence(
 	userMessage string,
 	observer AgentStepObserver,
 	maxSteps int,
+	conversationID int64,
 	sessionTracker *sessionchanges.Tracker,
 ) error {
 	project, err := s.Queries.GetProject(ctx, projectID)
@@ -774,7 +775,7 @@ func (s *OpenAIChatService) ChatWithPersistence(
 	enhancedMessage := ""
 
 	// 1. Ensure conversation exists
-	conv, err := s.ChatService.EnsureConversationForProject(ctx, projectID)
+	conv, err := s.ChatService.GetConversation(ctx, conversationID)
 	if err != nil {
 		return err
 	}

@@ -19,6 +19,8 @@ definitions:
     type: object
   ai.ChatRequest:
     properties:
+      conversationId:
+        type: integer
       id:
         type: string
       messages:

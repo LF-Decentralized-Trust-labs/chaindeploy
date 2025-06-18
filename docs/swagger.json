@@ -9191,6 +9191,9 @@
         "ai.ChatRequest": {
             "type": "object",
             "properties": {
+                "conversationId": {
+                    "type": "integer"
+                },
                 "id": {
                     "type": "string"
                 },

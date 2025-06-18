@@ -103,8 +103,6 @@ export function CodeEditor({ mode = 'editor', projectId, chaincodeProject }: Cod
 		await refetchCommits()
 	}, [refetchTree, reloadCurrentFile, refetchCommits])
 
-	const chatState = useStreamingChat(projectId, handleToolResult, handleChatComplete)
-
 	const handleEditorChange = useCallback(
 		(value: string | undefined) => {
 			if (selectedFile && value !== undefined) {
@@ -180,7 +178,7 @@ export function CodeEditor({ mode = 'editor', projectId, chaincodeProject }: Cod
 		<div className="h-full max-h-[90vh] flex flex-col">
 			<ResizablePanelGroup direction="horizontal">
 				<ResizablePanel defaultSize={20} minSize={10} maxSize={40}>
-					<ChatPanel projectId={projectId} chatState={chatState} />
+					<ChatPanel projectId={projectId} handleToolResult={handleToolResult} handleChatComplete={handleChatComplete} />
 				</ResizablePanel>
 				<ResizableHandle />
 				<ResizablePanel defaultSize={80} minSize={40} maxSize={90}>

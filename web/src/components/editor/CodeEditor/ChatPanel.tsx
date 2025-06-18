@@ -29,6 +29,7 @@ import SyntaxHighlighter from 'react-syntax-highlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { toast } from 'sonner'
 import { getMonacoLanguage } from './types'
+import { useSearchParams } from 'react-router-dom'
 const SyntaxHighlighterComp = SyntaxHighlighter as unknown as React.ComponentType<SyntaxHighlighterProps>
 
 function useAutoResizeTextarea() {
@@ -90,7 +91,7 @@ export interface UseStreamingChatResult {
 	onComplete?: () => void
 }
 
-export function useStreamingChat(projectId: number, onToolResult?: (toolName: string, result: unknown) => void, onComplete?: () => void): UseStreamingChatResult {
+export function useStreamingChat(projectId: number, conversationId: number, onToolResult?: (toolName: string, result: unknown) => void, onComplete?: () => void): UseStreamingChatResult {
 	const [messages, setMessages] = useState<Message[]>([])
 	const [input, setInput] = useState('')
 	const [isLoading, setIsLoading] = useState(false)
@@ -112,6 +113,7 @@ export function useStreamingChat(projectId: number, onToolResult?: (toolName: st
 				const res = await fetch(`/api/v1/ai/${projectId}/chat`, {
 					method: 'POST',
 					body: JSON.stringify({
+						conversationId,
 						projectId: projectId.toString(),
 						messages: [
 							{
@@ -303,8 +305,12 @@ export function useStreamingChat(projectId: number, onToolResult?: (toolName: st
 
 	return { messages, input, setInput, isLoading, activeTool, handleSubmit, partialArgsRef, setMessages }
 }
-
-export function ChatPanel({ projectId = 1, chatState }: { projectId: number; chatState: UseStreamingChatResult }) {
+type ChatPanelProps = {
+	projectId: number
+	handleToolResult: (toolName: string, result: unknown) => void
+	handleChatComplete: () => void
+}
+export function ChatPanel({ projectId = 1, handleToolResult, handleChatComplete }: ChatPanelProps) {
 	const [partialArgs, setPartialArgs] = useState<Record<string, unknown> | null>(null)
 	const [firstConversationId, setFirstConversationId] = useState<string | null>(null)
 	const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
@@ -313,11 +319,19 @@ export function ChatPanel({ projectId = 1, chatState }: { projectId: number; cha
 	const { data: conversations, refetch: refetchConversations } = useQuery({
 		...getAiByProjectIdConversationsOptions({ path: { projectId } }),
 	})
+	const [searchParams] = useSearchParams()
+	useEffect(() => {
+		const conversationId = searchParams.get('conversation')
+		if (conversationId) {
+			setFirstConversationId(conversationId)
+		}
+	}, [searchParams])
+	const chatState = useStreamingChat(projectId, firstConversationId ? parseInt(firstConversationId, 10) : undefined, handleToolResult, handleChatComplete)
 	const { data: conversationDetails } = useQuery({
 		...getAiByProjectIdConversationsByConversationIdOptions({
 			path: {
 				projectId,
-				conversationId: parseInt(firstConversationId!, 10),
+				conversationId: firstConversationId ? parseInt(firstConversationId, 10) : undefined,
 			},
 		}),
 		enabled: !!conversations?.length,
@@ -440,7 +454,7 @@ export function ChatPanel({ projectId = 1, chatState }: { projectId: number; cha
 	// Effect to set first conversation ID
 	useEffect(() => {
 		if (conversations?.length > 0 && !firstConversationId) {
-			setFirstConversation(conversations[0].id?.toString() || '')
+			setFirstConversation(conversations[conversations.length - 1].id?.toString() || '')
 		}
 	}, [conversations?.length, firstConversationId, setFirstConversation])
 
@@ -512,7 +526,7 @@ export function ChatPanel({ projectId = 1, chatState }: { projectId: number; cha
 								New Conversation
 							</DropdownMenuItem>
 							{conversations?.map((conversation) => (
-								<DropdownMenuItem key={conversation.id} className="gap-2" onClick={() => setFirstConversationId(conversation.id?.toString() || '')}>
+								<DropdownMenuItem key={conversation.id} className="gap-2" onClick={() => setFirstConversation(conversation.id?.toString() || '')}>
 									{conversation.id?.toString() === firstConversationId && <Check className="h-4 w-4" />}
 									<span className={conversation.id?.toString() === firstConversationId ? 'font-medium' : ''}>Chat #{conversation.id}</span>
 								</DropdownMenuItem>
@@ -829,6 +843,7 @@ const ToolEventRenderer = React.memo(({ event }: ToolEventProps) => {
 	const handleViewDetails = useCallback(() => {}, [])
 	const [copiedCode, setCopiedCode] = useState<string | null>(null)
 	const contentRef = useRef<HTMLDivElement>(null)
+	const [previousDelta, setPreviousDelta] = useState<any>(null)
 
 	// Add auto-scroll effect
 	useEffect(() => {
@@ -837,21 +852,38 @@ const ToolEventRenderer = React.memo(({ event }: ToolEventProps) => {
 		}
 	}, [event.arguments]) // Scroll when arguments update
 
+	// Reset previous delta when tool event changes (new tool call starts)
+	useEffect(() => {
+		if (event.type === 'start') {
+			setPreviousDelta(null)
+		}
+	}, [event.toolCallID, event.type])
+
 	// Function to parse delta JSON
-	const parseDelta = useCallback((deltaString: string) => {
+	const parseDelta = useCallback((deltaString: string, previousDelta?: any) => {
 		try {
-			return JSON.parse(deltaString)
+			const parsed = JSON.parse(deltaString)
+			// Store successfully parsed delta for future fallback
+			setPreviousDelta(parsed)
+			return parsed
 		} catch (e) {
 			console.error('Failed to parse JSON:', e, deltaString)
 			// Try to repair partial JSON using jsonrepair library
 			try {
 				const repaired = jsonrepair(deltaString)
 				console.log('repaired', repaired)
-				return JSON.parse(repaired)
+				const parsed = JSON.parse(repaired)
+				// Store successfully parsed delta for future fallback
+				setPreviousDelta(parsed)
+				return parsed
 			} catch (e) {
 				console.error('Failed to repair JSON:', e, deltaString)
-				// If repair fails, return as raw string
-				return { raw: deltaString }
+				// If repair fails, return the previous delta if available, otherwise return empty object
+				if (previousDelta) {
+					console.log('Using previous delta as fallback')
+					return previousDelta
+				}
+				return {}
 			}
 		}
 	}, [])
@@ -975,7 +1007,7 @@ const ToolEventRenderer = React.memo(({ event }: ToolEventProps) => {
 			let updateContent = null
 			let accumulatedArgs: any = {}
 			if (event.arguments) {
-				accumulatedArgs = parseDelta(event.arguments)
+				accumulatedArgs = parseDelta(event.arguments, previousDelta)
 			}
 
 			if (event.name === 'write_file' && accumulatedArgs) {

@@ -345,9 +345,10 @@ type ChatMessage struct {
 }
 
 type ChatRequest struct {
-	ID        string        `json:"id"`
-	Messages  []ChatMessage `json:"messages"`
-	ProjectID string        `json:"projectId"`
+	ID             string        `json:"id"`
+	Messages       []ChatMessage `json:"messages"`
+	ProjectID      string        `json:"projectId"`
+	ConversationID int64         `json:"conversationId"`
 }
 
 // ChatResponse is not used for streaming, but kept for reference.
@@ -552,6 +553,9 @@ func (h *AIHandler) Chat(w http.ResponseWriter, r *http.Request) error {
 	if projectIdStr == "" {
 		return fmt.Errorf("projectId is required")
 	}
+	if req.ConversationID == 0 {
+		return fmt.Errorf("conversationId is required")
+	}
 
 	// Use projectId from path or from body (prefer path param)
 	projectID, err := strconv.ParseInt(projectIdStr, 10, 64)
@@ -588,7 +592,7 @@ func (h *AIHandler) Chat(w http.ResponseWriter, r *http.Request) error {
 
 	// Create a new session changes tracker for this chat session
 	sessionTracker := sessionchanges.NewTracker()
-	err = h.OpenAIChatService.ChatWithPersistence(r.Context(), projectID, userMessage, observer, 0, sessionTracker)
+	err = h.OpenAIChatService.ChatWithPersistence(r.Context(), projectID, userMessage, observer, 0, req.ConversationID, sessionTracker)
 	if err != nil && err != io.EOF {
 		return fmt.Errorf("chat error: %w", err)
 	}
