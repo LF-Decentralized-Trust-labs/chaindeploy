@@ -8,9 +8,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/chainlaunch/chainlaunch/pkg/db"
 	"github.com/chainlaunch/chainlaunch/pkg/logger"
+	"github.com/chainlaunch/chainlaunch/pkg/scai/projectrunner"
 	"github.com/chainlaunch/chainlaunch/pkg/scai/sessionchanges"
 	"github.com/sashabaranov/go-openai"
 )
@@ -97,7 +99,7 @@ func NewOpenAIChatService(apiKey string, logger *logger.Logger, chatService *Cha
 }
 
 const systemPrompt = `
-You are an AI coding assistant, powered by Claude Sonnet 4. You operate in ChainLaunch.
+You are an AI coding assistant, powered by ChatGPT 4.1 Mini. You operate in ChainLaunch.
 
 You are pair programming with a USER to solve their coding task. Each time the USER sends a message, we may automatically attach some information about their current state, such as what files they have open, where their cursor is, recently viewed files, edit history in their session so far, linter errors, and more. This information may or may not be relevant to the coding task, it is up for you to decide.
 
@@ -157,10 +159,11 @@ It is *EXTREMELY* important that your generated code can be run immediately by t
 5. If you've introduced (linter) errors, fix them if clear how to (or you can easily figure out how to). Do not make uneducated guesses. And DO NOT loop more than 3 times on fixing linter errors on the same file. On the third time, you should stop and ask the user what to do next.
 6. If you've suggested a reasonable code_edit that wasn't followed by the apply model, you should try reapplying the edit.
 7. You have both the edit_file and search_replace tools at your disposal. Use the search_replace tool for files larger than 2500 lines, otherwise prefer the edit_file tool.
+8. **ALWAYS read the current content of a file before making changes to it, unless you are creating a new file.** This ensures your modifications are accurate and contextually appropriate.
 
 </making_code_changes>
 
-Answer the user's request using the relevant tool(s), if they are available. Check that all the required parameters for each tool call are provided or can reasonably be inferred from context. IF there are no relevant tools or there are missing values for required parameters, ask the user to supply these values; otherwise proceed with the tool calls. If the user provides a specific value for a parameter (for example provided in quotes), make sure to use that value EXACTLY. DO NOT make up values for or ask about optional parameters. Carefully analyze descriptive terms in the request as they may indicate required parameter values that should be included even if not explicitly quoted.
+Answer the user's request using the relevant tool(s), if they are available. Check that all the required parameters for each tool call are provided or can reasonably be inferred from context. IF there are no relevant tools or there are missing values for required parameters, ask the user to supply these values; otherwise proceed with the tool calls. If you provide a specific value for a parameter (for example provided in quotes), make sure to use that value EXACTLY. DO NOT make up values for or ask about optional parameters. Carefully analyze descriptive terms in the request as they may indicate required parameter values that should be included even if not explicitly quoted.
 
 Do what has been asked; nothing more, nothing less.
 NEVER create files unless they're absolutely necessary for achieving your goal.
@@ -172,6 +175,28 @@ If you see a section called "<most_important_user_query>", you should treat that
 </summarization>
 
 
+<tool_calling>
+You have tools at your disposal to solve the coding task. Follow these rules regarding tool calls:
+1. ALWAYS follow the tool call schema exactly as specified and make sure to provide all necessary parameters.
+2. The conversation may reference tools that are no longer available. NEVER call tools that are not explicitly provided.
+3. **NEVER refer to tool names when speaking to the user.** For example, instead of saying 'I need to use the edit_file tool to edit your file', just say 'I will edit your file'.
+4. Only calls tools when they are necessary. If the user's task is general or you already know the answer, just respond without calling tools.
+5. Before calling each tool, first explain to the user why you are calling it.
+</tool_calling>
+
+<making_code_changes>
+When making code edits, NEVER output code to the user, unless requested. Instead use one of the code edit tools to implement the change.
+It is *EXTREMELY* important that your generated code can be run immediately by the user, ERROR-FREE. To ensure this, follow these instructions carefully:
+1. Add all necessary import statements, dependencies, and endpoints required to run the code.
+2. NEVER generate an extremely long hash, binary, ico, or any non-textual code. These are not helpful to the user and are very expensive.
+3. **ALWAYS read the current content of a file before making changes to it, unless you are creating a new file.** This ensures your modifications are accurate and contextually appropriate.
+3. Unless you are appending some small easy to apply edit to a file, or creating a new file, you MUST read the contents or section of what you're editing before editing it.
+4. If you are copying the UI of a website, you should scrape the website to get the screenshot, styling, and assets. Aim for pixel-perfect cloning. Pay close attention to the every detail of the design: backgrounds, gradients, colors, spacing, etc.
+5. If you see linter or runtime errors, fix them if clear how to (or you can easily figure out how to). DO NOT loop more than 3 times on fixing errors on the same file. On the third time, you should stop and ask the user what to do next. You don't have to fix warnings. If the server has a 502 bad gateway error, you can fix this by simply restarting the dev server.
+6. If you've suggested a reasonable code_edit that wasn't followed by the apply model, you should use the intelligent_apply argument to reapply the edit.
+7. If the runtime errors are preventing the app from running, fix the errors immediately.
+</making_code_changes>
+
 
 This is the ONLY acceptable format for code citations. The format is startLine:endLine:filepath where startLine and endLine are line numbers.
 
@@ -180,7 +205,7 @@ Answer the user's request using the relevant tool(s), if they are available. Che
 `
 
 // getProjectStructurePrompt generates a system prompt with the project structure and file contents.
-func getProjectStructurePrompt(projectRoot string, toolSchemas []ToolSchema) string {
+func getProjectStructurePrompt(projectRoot string, toolSchemas []ToolSchema, project *db.ChaincodeProject) string {
 	ignored := map[string]bool{
 		"node_modules": true,
 		".git":         true,
@@ -188,14 +213,22 @@ func getProjectStructurePrompt(projectRoot string, toolSchemas []ToolSchema) str
 	}
 	var sb strings.Builder
 	sb.WriteString(systemPrompt)
+
+	// Add boilerplate-specific prompt if available
+	if project.Boilerplate.Valid && project.Boilerplate.String != "" {
+		boilerplatePrompt := projectrunner.GetBoilerplatePrompt(project.Boilerplate.String)
+		if boilerplatePrompt != "" {
+			sb.WriteString("\n\n")
+			sb.WriteString(boilerplatePrompt)
+			sb.WriteString("\n")
+		}
+	}
+
 	sb.WriteString(`
 
-All projects use Bun (TypeScript) as the runtime and build system.
-Here is the current project structure and contents.
-
-Your goal is to modify the project to achieve the user's request.
-
 Read and write files as needed to achieve the user's request. Avoid giving answers without using tools unless you need more information from the user.
+
+When replying the user, use the tool "write_file" instead of telling them to edit the file.
 `)
 	filepath.Walk(projectRoot, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -302,7 +335,7 @@ func (s *OpenAIChatService) StreamChat(
 			return result, err
 		}
 	}
-	systemPrompt := getProjectStructurePrompt(projectRoot, toolSchemas)
+	systemPrompt := getProjectStructurePrompt(projectRoot, toolSchemas, project)
 	s.Logger.Debugf("[StreamChat] projectID: %s", projectID)
 	s.Logger.Debugf("[StreamChat] projectRoot: %s", projectRoot)
 	s.Logger.Debugf("[StreamChat] systemPrompt: %s", systemPrompt)
@@ -348,7 +381,7 @@ func (s *OpenAIChatService) StreamChat(
 			ctx,
 			s.Client,
 			chatMsgs,
-			"gpt-4o",
+			"gpt-4.1-mini",
 			tools,
 			toolSchemasMap,
 			observer,
@@ -381,7 +414,7 @@ func (s *OpenAIChatService) StreamChat(
 			s.Logger.Debugf("[StreamChat] Tool result for: %s, %v", toolCall.Function.Name, resultStr)
 
 			// Add tool result message to DB and get its ID, set parentID to lastParentMsgID
-			toolMsg, err := s.ChatService.AddMessage(ctx, conversationID, lastParentMsgID, "tool", resultStr)
+			toolMsg, err := s.ChatService.AddMessage(ctx, conversationID, lastParentMsgID, "tool", resultStr, "")
 			if err != nil {
 				s.Logger.Debugf("[StreamChat] Failed to persist tool message: %v", err)
 				continue
@@ -482,6 +515,27 @@ func StreamAgentStep(
 	toolCallsMap := map[string]*openai.ToolCall{} // toolCallID -> ToolCall
 	var lastToolCallID string                     // Track the last tool call ID for argument accumulation
 
+	// Delta grouping and delay mechanism
+	type pendingUpdate struct {
+		toolCallID string
+		name       string
+		delta      string
+	}
+	pendingUpdates := make(map[string]*pendingUpdate) // toolCallID -> pendingUpdate
+	updateTimer := time.NewTimer(100 * time.Millisecond)
+	updateTimer.Stop() // Start stopped
+
+	// Function to send accumulated updates
+	sendPendingUpdates := func() {
+		if observer == nil {
+			return
+		}
+		for _, update := range pendingUpdates {
+			observer.OnToolCallUpdate(update.toolCallID, update.name, update.delta)
+		}
+		pendingUpdates = make(map[string]*pendingUpdate)
+	}
+
 	stream, err := client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{
 		Model:    model,
 		Messages: messages,
@@ -494,6 +548,13 @@ func StreamAgentStep(
 	defer stream.Close()
 
 	for {
+		select {
+		case <-updateTimer.C:
+			sendPendingUpdates()
+		default:
+			// Continue with normal processing
+		}
+
 		response, err := stream.Recv()
 		if err != nil {
 			if err == io.EOF {
@@ -529,17 +590,27 @@ func StreamAgentStep(
 				// Use lastToolCallID for argument accumulation
 				if lastToolCallID != "" {
 					toolCall := toolCallsMap[lastToolCallID]
-					updated := false
 					if tc.Function.Name != "" && toolCall.Function.Name != tc.Function.Name {
 						toolCall.Function.Name = tc.Function.Name
-						updated = true
 					}
 					if tc.Function.Arguments != "" {
 						toolCall.Function.Arguments += tc.Function.Arguments
-						updated = true
-					}
-					if observer != nil && updated {
-						observer.OnToolCallUpdate(lastToolCallID, toolCall.Function.Name, toolCall.Function.Arguments)
+						// Group deltas and schedule update with delay
+						if observer != nil {
+							if pending, exists := pendingUpdates[lastToolCallID]; exists {
+								// Accumulate delta
+								pending.delta += tc.Function.Arguments
+							} else {
+								// Create new pending update
+								pendingUpdates[lastToolCallID] = &pendingUpdate{
+									toolCallID: lastToolCallID,
+									name:       toolCall.Function.Name,
+									delta:      tc.Function.Arguments,
+								}
+								// Start/reset timer for this group
+								updateTimer.Reset(100 * time.Millisecond)
+							}
+						}
 					}
 				}
 			}
@@ -551,6 +622,9 @@ func StreamAgentStep(
 			}
 		}
 	}
+
+	// Send any remaining pending updates
+	sendPendingUpdates()
 
 	// After stream, reconstruct tool calls
 	var toolCalls []openai.ToolCall
@@ -613,6 +687,67 @@ func (o *streamingObserver) OnLLMContent(content string) {
 	}
 }
 
+// enhancePrompt uses AI to improve the user's prompt for better results
+func (s *OpenAIChatService) enhancePrompt(ctx context.Context, userMessage string) (string, error) {
+	enhancementPrompt := fmt.Sprintf(`You are a professional prompt engineer specializing in crafting precise, effective prompts.
+Your task is to enhance prompts by making them more specific, actionable, and effective.
+
+I want you to improve the user prompt that is wrapped in <original_prompt> tags.
+
+For valid prompts:
+- Make instructions explicit and unambiguous
+- Add relevant context and constraints
+- Remove redundant information
+- Maintain the core intent
+- Ensure the prompt is self-contained
+- Use professional language
+
+For invalid or unclear prompts:
+- Respond with clear, professional guidance
+- Keep responses concise and actionable
+- Maintain a helpful, constructive tone
+- Focus on what the user should provide
+- Use a standard template for consistency
+
+IMPORTANT: Your response must ONLY contain the enhanced prompt text.
+Do not include any explanations, metadata, or wrapper tags.
+
+<original_prompt>
+%s
+</original_prompt>`, userMessage)
+
+	// Use a simpler model for prompt enhancement to save costs
+	resp, err := s.Client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+		Model: "gpt-4.1-mini",
+
+		Messages: []openai.ChatCompletionMessage{
+			{
+				Role:    openai.ChatMessageRoleSystem,
+				Content: `You are a senior software principal architect, you should help the user analyse the user query and enrich it with the necessary context and constraints to make it more specific, actionable, and effective. You should also ensure that the prompt is self-contained and uses professional language. Your response should ONLY contain the enhanced prompt text. Do not include any explanations, metadata, or wrapper tags.`,
+			},
+			{
+				Role:    openai.ChatMessageRoleUser,
+				Content: enhancementPrompt,
+			},
+		},
+		MaxTokens:   1000,
+		Temperature: 0.3, // Lower temperature for more consistent results
+	})
+	if err != nil {
+		s.Logger.Warnf("Failed to enhance prompt: %v, using original", err)
+		return userMessage, nil // Fallback to original message
+	}
+
+	if len(resp.Choices) == 0 || resp.Choices[0].Message.Content == "" {
+		s.Logger.Warnf("Empty response from prompt enhancement, using original")
+		return userMessage, nil
+	}
+
+	enhancedPrompt := strings.TrimSpace(resp.Choices[0].Message.Content)
+	s.Logger.Debugf("Enhanced prompt: %s", enhancedPrompt)
+	return enhancedPrompt, nil
+}
+
 // ChatWithPersistence handles chat with DB persistence for a project.
 func (s *OpenAIChatService) ChatWithPersistence(
 	ctx context.Context,
@@ -629,32 +764,58 @@ func (s *OpenAIChatService) ChatWithPersistence(
 	if s.ChatService == nil {
 		return fmt.Errorf("ChatService is not configured")
 	}
+
+	// Enhance the user's prompt before processing
+	// enhancedMessage, err := s.enhancePrompt(ctx, userMessage)
+	// if err != nil {
+	// 	s.Logger.Warnf("Failed to enhance prompt, using original: %v", err)
+	// 	enhancedMessage = userMessage
+	// }
+	enhancedMessage := ""
+
 	// 1. Ensure conversation exists
 	conv, err := s.ChatService.EnsureConversationForProject(ctx, projectID)
 	if err != nil {
 		return err
 	}
 
-	// 2. Add the new user message to the DB
-	_, err = s.ChatService.AddMessage(ctx, conv.ID, nil, "user", userMessage)
+	// 2. Add the user message to the DB with enhanced content if available
+	_, err = s.ChatService.AddMessage(ctx, conv.ID, nil, "user", userMessage, enhancedMessage)
 	if err != nil {
 		return err
 	}
 
-	// 3. Fetch all messages again (now includes the new user message)
+	// 3. Fetch all messages again (now includes the message with enhanced content)
 	dbMessages, err := s.ChatService.GetMessages(ctx, conv.ID)
 	if err != nil {
 		return err
 	}
+
+	// 4. Create messages for AI interaction, using enhanced content when available
 	var messages []Message
-	for _, m := range dbMessages {
+	for i, m := range dbMessages {
+		if m.Sender == "tool" {
+			continue
+		}
+		content := m.Content
+		// If enhanced content is available, use it for AI interaction
+		if m.EnhancedContent.Valid && m.EnhancedContent.String != "" {
+			content = m.EnhancedContent.String
+			s.Logger.Debugf("Using enhanced prompt for AI interaction: %s", content)
+		}
+
+		// Wrap the most recent user message in special tags
+		if i == len(dbMessages)-1 && m.Sender == "user" {
+			content = "<most_important_user_query>" + content + "</most_important_user_query>"
+		}
+
 		messages = append(messages, Message{
 			Sender:  m.Sender,
-			Content: m.Content,
+			Content: content,
 		})
 	}
 
-	// 4. Call the streaming chat logic (this will stream and also generate the assistant reply)
+	// 5. Call the streaming chat logic (this will stream and also generate the assistant reply)
 	var assistantReply strings.Builder
 	streamObserver := &streamingObserver{
 		AgentStepObserver: observer,
@@ -667,7 +828,7 @@ func (s *OpenAIChatService) ChatWithPersistence(
 		return err
 	}
 
-	// 5. Store the assistant's reply in the DB
-	_, err = s.ChatService.AddMessage(ctx, conv.ID, nil, "assistant", assistantReply.String())
+	// 6. Store the assistant's reply in the DB
+	_, err = s.ChatService.AddMessage(ctx, conv.ID, nil, "assistant", assistantReply.String(), "")
 	return err
 }

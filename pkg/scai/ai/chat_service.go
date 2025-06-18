@@ -46,17 +46,24 @@ func (s *ChatService) EnsureConversationForProject(ctx context.Context, projectI
 	}, nil
 }
 
-// AddMessage stores a message in the conversation. Accepts optional parentID.
-func (s *ChatService) AddMessage(ctx context.Context, conversationID int64, parentID *int64, sender, content string) (*db.Message, error) {
+// AddMessage stores a message in the conversation. Accepts optional parentID and enhanced content.
+func (s *ChatService) AddMessage(ctx context.Context, conversationID int64, parentID *int64, sender, content string, enhancedContent string) (*db.Message, error) {
 	var parentNull sql.NullInt64
 	if parentID != nil {
 		parentNull = sql.NullInt64{Int64: *parentID, Valid: true}
 	}
+
+	var enhancedContentNull sql.NullString
+	if len(enhancedContent) > 0 && enhancedContent != "" {
+		enhancedContentNull = sql.NullString{String: enhancedContent, Valid: true}
+	}
+
 	row, err := s.Queries.InsertMessage(ctx, &db.InsertMessageParams{
-		ConversationID: conversationID,
-		ParentID:       parentNull,
-		Sender:         sender,
-		Content:        content,
+		ConversationID:  conversationID,
+		ParentID:        parentNull,
+		Sender:          sender,
+		Content:         content,
+		EnhancedContent: enhancedContentNull,
 	})
 	if err != nil {
 		return nil, err

@@ -27,7 +27,7 @@ INSERT INTO conversations (project_id) VALUES (?) RETURNING *;
 SELECT * FROM conversations WHERE project_id = ? ORDER BY started_at ASC LIMIT 1;
 
 -- name: InsertMessage :one
-INSERT INTO messages (conversation_id, parent_id, sender, content) VALUES (?, ?, ?, ?) RETURNING *;
+INSERT INTO messages (conversation_id, parent_id, sender, content, enhanced_content) VALUES (?, ?, ?, ?, ?) RETURNING *;
 
 -- name: ListMessagesForConversation :many
 SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC;
@@ -58,3 +58,6 @@ SET
   last_stopped_at = ?,
   container_port = ?
 WHERE id = ?;
+
+-- name: UpdateMessageEnhancedContent :one
+UPDATE messages SET enhanced_content = ? WHERE id = ? RETURNING *;
