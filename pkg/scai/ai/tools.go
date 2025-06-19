@@ -21,18 +21,68 @@ func GetExtendedToolSchemas(projectRoot string) []ToolSchema {
 			Parameters: map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
-					"path": map[string]interface{}{"type": "string", "description": "Path to the file (relative to project root)"},
+					"target_file": map[string]interface{}{
+						"type":        "string",
+						"description": "The path of the file to read (relative to project root).",
+					},
+					"should_read_entire_file": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Whether to read the entire file or just a portion",
+					},
+					"start_line_one_indexed": map[string]interface{}{
+						"type":        "number",
+						"description": "The line number to start reading from (1-indexed)",
+					},
+					"end_line_one_indexed_inclusive": map[string]interface{}{
+						"type":        "number",
+						"description": "The line number to end reading at (inclusive, 1-indexed)",
+					},
 				},
-				"required": []string{"path"},
+				"required": []string{"target_file"},
 			},
-			Handler: func(funcName string, args map[string]interface{}) (interface{}, error) {
-				path, _ := args["path"].(string)
-				absPath := filepath.Join(projectRoot, path)
+			Handler: func(projectRoot string, args map[string]interface{}) (interface{}, error) {
+				targetFile, _ := args["target_file"].(string)
+				shouldReadEntireFile, _ := args["should_read_entire_file"].(bool)
+				startLine, _ := args["start_line_one_indexed"].(float64)
+				endLine, _ := args["end_line_one_indexed_inclusive"].(float64)
+
+				absPath := filepath.Join(projectRoot, targetFile)
+
 				data, err := os.ReadFile(absPath)
 				if err != nil {
 					return nil, err
 				}
-				return map[string]interface{}{"content": string(data)}, nil
+
+				lines := strings.Split(string(data), "\n")
+				totalLines := len(lines)
+
+				if shouldReadEntireFile {
+					return map[string]interface{}{
+						"content":     string(data),
+						"total_lines": totalLines,
+						"file_path":   targetFile,
+					}, nil
+				}
+
+				start := int(startLine) - 1
+				end := int(endLine)
+				if start < 0 {
+					start = 0
+				}
+				if end > totalLines {
+					end = totalLines
+				}
+
+				selectedLines := lines[start:end]
+				content := strings.Join(selectedLines, "\n")
+
+				return map[string]interface{}{
+					"content":     content,
+					"start_line":  int(startLine),
+					"end_line":    int(endLine),
+					"total_lines": totalLines,
+					"file_path":   targetFile,
+				}, nil
 			},
 		},
 		{
@@ -93,85 +143,6 @@ func GetExtendedToolSchemas(projectRoot string) []ToolSchema {
 						},
 					},
 					"query": query,
-				}, nil
-			},
-		},
-		{
-			Name:        "read_file_enhanced",
-			Description: "Read the contents of a file with line range support.",
-			Parameters: map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"target_file": map[string]interface{}{
-						"type":        "string",
-						"description": "The path of the file to read.",
-					},
-					"should_read_entire_file": map[string]interface{}{
-						"type":        "boolean",
-						"description": "Whether to read the entire file.",
-					},
-					"start_line_one_indexed": map[string]interface{}{
-						"type":        "integer",
-						"description": "The one-indexed line number to start reading from.",
-					},
-					"end_line_one_indexed_inclusive": map[string]interface{}{
-						"type":        "integer",
-						"description": "The one-indexed line number to end reading at.",
-					},
-					"explanation": map[string]interface{}{
-						"type":        "string",
-						"description": "One sentence explanation as to why this tool is being used.",
-					},
-				},
-				"required": []string{"target_file", "should_read_entire_file", "start_line_one_indexed", "end_line_one_indexed_inclusive"},
-			},
-			Handler: func(projectRoot string, args map[string]interface{}) (interface{}, error) {
-				targetFile, _ := args["target_file"].(string)
-				shouldReadEntireFile, _ := args["should_read_entire_file"].(bool)
-				startLine, _ := args["start_line_one_indexed"].(float64)
-				endLine, _ := args["end_line_one_indexed_inclusive"].(float64)
-
-				var absPath string
-				if filepath.IsAbs(targetFile) {
-					absPath = targetFile
-				} else {
-					absPath = filepath.Join(projectRoot, targetFile)
-				}
-
-				data, err := os.ReadFile(absPath)
-				if err != nil {
-					return nil, err
-				}
-
-				lines := strings.Split(string(data), "\n")
-				totalLines := len(lines)
-
-				if shouldReadEntireFile {
-					return map[string]interface{}{
-						"content":     string(data),
-						"total_lines": totalLines,
-						"file_path":   targetFile,
-					}, nil
-				}
-
-				start := int(startLine) - 1
-				end := int(endLine)
-				if start < 0 {
-					start = 0
-				}
-				if end > totalLines {
-					end = totalLines
-				}
-
-				selectedLines := lines[start:end]
-				content := strings.Join(selectedLines, "\n")
-
-				return map[string]interface{}{
-					"content":     content,
-					"start_line":  int(startLine),
-					"end_line":    int(endLine),
-					"total_lines": totalLines,
-					"file_path":   targetFile,
 				}, nil
 			},
 		},
@@ -370,7 +341,7 @@ func GetExtendedToolSchemas(projectRoot string) []ToolSchema {
 				"properties": map[string]interface{}{
 					"target_file": map[string]interface{}{
 						"type":        "string",
-						"description": "The target file to modify.",
+						"description": "The target file to modify (relative to project root).",
 					},
 					"instructions": map[string]interface{}{
 						"type":        "string",
@@ -388,12 +359,7 @@ func GetExtendedToolSchemas(projectRoot string) []ToolSchema {
 				instructions, _ := args["instructions"].(string)
 				codeEdit, _ := args["code_edit"].(string)
 
-				var absPath string
-				if filepath.IsAbs(targetFile) {
-					absPath = targetFile
-				} else {
-					absPath = filepath.Join(projectRoot, targetFile)
-				}
+				absPath := filepath.Join(projectRoot, targetFile)
 
 				_, err := os.Stat(absPath)
 				fileExists := err == nil
@@ -452,12 +418,7 @@ func GetExtendedToolSchemas(projectRoot string) []ToolSchema {
 				oldString, _ := args["old_string"].(string)
 				newString, _ := args["new_string"].(string)
 
-				var absPath string
-				if filepath.IsAbs(filePath) {
-					absPath = filePath
-				} else {
-					absPath = filepath.Join(projectRoot, filePath)
-				}
+				absPath := filepath.Join(projectRoot, filePath)
 
 				data, err := os.ReadFile(absPath)
 				if err != nil {
