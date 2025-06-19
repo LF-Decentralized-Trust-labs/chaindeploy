@@ -25,60 +25,6 @@ type ToolSchema struct {
 	Handler     func(projectRoot string, args map[string]interface{}) (interface{}, error)
 }
 
-// GetDefaultToolSchemas returns all registered tools with their schemas and handlers, scoped to a project root.
-func GetDefaultToolSchemas(projectRoot string) []ToolSchema {
-	return []ToolSchema{
-		{
-			Name:        "read_file",
-			Description: "Read the contents of a file.",
-			Parameters: map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"path": map[string]interface{}{"type": "string", "description": "Path to the file (relative to project root)"},
-				},
-				"required": []string{"path"},
-			},
-			Handler: func(funcName string, args map[string]interface{}) (interface{}, error) {
-				path, _ := args["path"].(string)
-				absPath := filepath.Join(projectRoot, path)
-				data, err := os.ReadFile(absPath)
-				if err != nil {
-					return nil, err
-				}
-				return map[string]interface{}{"content": string(data)}, nil
-			},
-		},
-		{
-			Name:        "write_file",
-			Description: "Write content to a file.",
-			Parameters: map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"path":    map[string]interface{}{"type": "string", "description": "Path to the file (relative to project root)"},
-					"content": map[string]interface{}{"type": "string", "description": "Content to write"},
-				},
-				"required": []string{"path", "content"},
-			},
-			Handler: func(funcName string, args map[string]interface{}) (interface{}, error) {
-				path, _ := args["path"].(string)
-				content, _ := args["content"].(string)
-				absPath := filepath.Join(projectRoot, path)
-				if err := os.WriteFile(absPath, []byte(content), 0644); err != nil {
-					return nil, err
-				}
-				// Register the change with the global tracker for backward compatibility
-				sessionchanges.RegisterChange(absPath)
-				return map[string]interface{}{"result": "file written successfully"}, nil
-			},
-		},
-	}
-}
-
-// getToolSchemas returns all registered tools with their schemas and handlers.
-func getToolSchemas(projectRoot string) []ToolSchema {
-	return GetDefaultToolSchemas(projectRoot)
-}
-
 // OpenAIChatService implements ChatServiceInterface using OpenAI's API and function-calling tools.
 type OpenAIChatService struct {
 	Client      *openai.Client
@@ -278,7 +224,7 @@ const maxAgentSteps = 10
 
 // handleToolCall executes a tool call and returns the result as a string.
 func (s *OpenAIChatService) handleToolCall(toolCall openai.ToolCall, projectRoot string) string {
-	toolSchemas := getToolSchemas(projectRoot)
+	toolSchemas := GetExtendedToolSchemas(projectRoot)
 	var tool ToolSchema
 	ok := false
 	for _, t := range toolSchemas {
@@ -319,7 +265,7 @@ func (s *OpenAIChatService) StreamChat(
 	projectRoot := filepath.Join(s.ProjectsDir, projectSlug)
 
 	// Update the tool schemas to use the session tracker
-	toolSchemas := getToolSchemas(projectRoot)
+	toolSchemas := GetExtendedToolSchemas(projectRoot)
 	for i := range toolSchemas {
 		originalHandler := toolSchemas[i].Handler
 		toolSchemas[i].Handler = func(name string, args map[string]interface{}) (interface{}, error) {
@@ -473,7 +419,26 @@ func (s *OpenAIChatService) executeAndSerializeToolCall(toolCall openai.ToolCall
 			errStr             *string
 		}{"", toolCall.Function.Arguments, &errMsg}, err
 	}
-	result, err := getToolSchemas(projectRoot)[0].Handler(projectRoot, args) // Find the correct handler
+
+	// Find the correct tool schema by name
+	toolSchemas := GetExtendedToolSchemas(projectRoot)
+	var targetSchema *ToolSchema
+	for _, schema := range toolSchemas {
+		if schema.Name == toolCall.Function.Name {
+			targetSchema = &schema
+			break
+		}
+	}
+
+	if targetSchema == nil {
+		errMsg := fmt.Sprintf("Tool schema not found for function: %s", toolCall.Function.Name)
+		return struct {
+			resultStr, argsStr string
+			errStr             *string
+		}{"", toolCall.Function.Arguments, &errMsg}, fmt.Errorf(errMsg)
+	}
+
+	result, err := targetSchema.Handler(projectRoot, args)
 	var resultStr string
 	if result != nil {
 		b, _ := json.Marshal(result)
