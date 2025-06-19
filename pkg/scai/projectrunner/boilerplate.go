@@ -69,6 +69,99 @@ Transaction Isolation:
 - Use transactions to maintain data consistency
 `,
 	},
+	"chaincode-fabric-go": {
+		Args:  []string{"go", "run", "main.go"},
+		Image: "chaincode-go:1.0",
+		Prompt: `This is a Hyperledger Fabric Go chaincode project.
+
+Key Technologies and Patterns:
+- Go for high-performance chaincode development
+- Hyperledger Fabric SDK for Go
+- Chaincode lifecycle management
+- Asset-based data modeling with Go structs
+- Smart contract patterns for blockchain
+
+Go Development Guidelines:
+- Use Go interfaces for contract definitions
+- Implement proper error handling with Go error types
+- Follow Go naming conventions and idioms
+- Use the fabric-contract-api-go for contract development
+- Structure code with clear separation of concerns
+- Implement proper validation using Go's reflect package
+- Use Go's strong typing for asset definitions
+- Follow Go module conventions and dependency management
+
+Security Best Practices in Go:
+- Always validate and sanitize all inputs
+- Use Go's crypto packages for cryptographic operations
+- Implement proper access control with Go's context package
+- Avoid using unsafe packages unless absolutely necessary
+- Use Go's built-in race detection for concurrent operations
+- Implement proper logging with structured logging libraries
+- Use Go's vet tool for static analysis
+- Follow Go security guidelines for memory management
+
+Common Patterns:
+- Asset CRUD operations using Go structs
+- Query operations with rich filtering using Go slices and maps
+- Cross-asset transactions with proper error propagation
+- Event emission using Fabric's event system
+- Access control and authorization using Go's context
+- JSON marshaling/unmarshaling for data serialization
+- Composite key management for complex relationships
+
+Important Contract Design Principles:
+- Contracts must be completely stateless - never use package-level variables
+- All data must be persisted to the ledger using PutState/GetState operations
+- Avoid any in-memory caching or temporary storage
+- Each transaction should be independent and not rely on previous transaction state
+- Use the ledger as the single source of truth for all data
+- Implement proper state management through Fabric's key-value store
+- Ensure all operations read from and write to the ledger directly
+- Use Go's defer statements for cleanup operations
+
+State Management Best Practices:
+- Always use ctx.GetStub().PutState() to persist data
+- Always use ctx.GetStub().GetState() to retrieve data
+- Never use package-level variables to store transaction data
+- Implement proper key management using Go strings and byte slices
+- Use composite keys for complex data relationships
+- Validate state existence before operations
+- Handle state deletion with ctx.GetStub().DelState()
+- Use Go's encoding/json for data serialization
+- Implement proper error handling with Go's error interface
+
+Transaction Isolation:
+- Each transaction should be self-contained
+- Don't rely on data from previous transactions in memory
+- Always query the ledger for current state
+- Implement proper error handling for missing states
+- Use transactions to maintain data consistency
+- Use Go's context for transaction context management
+
+Go-Specific Best Practices:
+- Use Go modules for dependency management
+- Implement proper logging with structured logging
+- Use Go's testing framework for unit tests
+- Follow Go's error handling patterns
+- Use Go's interfaces for abstraction
+- Implement proper resource cleanup with defer
+- Use Go's channels for concurrent operations when needed
+- Follow Go's code formatting with gofmt
+- Use Go's linters (golint, govet) for code quality
+- Implement proper documentation with Go doc comments
+
+Performance Considerations:
+- Optimize JSON marshaling/unmarshaling for ledger operations
+- Minimize memory allocations during transaction processing
+- Use efficient Go data structures for temporary computations
+- Implement proper error handling to avoid unnecessary ledger reads
+- Use batch operations when possible for multiple state changes
+- Optimize key generation and management for state storage
+- Use Go's efficient string and byte slice operations
+- Implement proper cleanup with defer statements
+`,
+	},
 }
 
 // GetBoilerplateRunner returns the command, args, and image for a given boilerplate type

@@ -151,7 +151,7 @@ Answer the user's request using the relevant tool(s), if they are available. Che
 `
 
 // getProjectStructurePrompt generates a system prompt with the project structure and file contents.
-func getProjectStructurePrompt(projectRoot string, toolSchemas []ToolSchema, project *db.ChaincodeProject) string {
+func getProjectStructurePrompt(projectRoot string, toolSchemas []ToolSchema, project *db.GetProjectRow) string {
 	ignored := map[string]bool{
 		"node_modules": true,
 		".git":         true,
@@ -252,7 +252,7 @@ func (s *OpenAIChatService) handleToolCall(toolCall openai.ToolCall, projectRoot
 // StreamChat uses a multi-step tool execution loop with OpenAI function-calling.
 func (s *OpenAIChatService) StreamChat(
 	ctx context.Context,
-	project *db.ChaincodeProject,
+	project *db.GetProjectRow,
 	conversationID int64,
 	messages []Message,
 	observer AgentStepObserver,

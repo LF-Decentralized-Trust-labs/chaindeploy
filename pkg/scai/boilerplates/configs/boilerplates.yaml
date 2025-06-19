@@ -8,3 +8,12 @@ boilerplates:
         image: docker.io/kfsoftware/chainlaunch-fabric-ts:0.0.1
         repoOwner: chainlaunch
         repoName: chaincode-fabric-ts-tmpl
+    chaincode-fabric-go:
+        name: Chaincode Fabric Go
+        description: A Go-based Hyperledger Fabric chaincode project
+        platform: fabric
+        command: air
+        image: docker.io/kfsoftware/chainlaunch-fabric-go:0.0.1
+        repoOwner: chainlaunch
+        repoName: chaincode-fabric-go-tmpl
+

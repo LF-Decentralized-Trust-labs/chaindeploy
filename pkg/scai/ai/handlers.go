@@ -66,7 +66,6 @@ func (h *AIHandler) RegisterRoutes(r chi.Router) {
 	r.Route("/ai", func(r chi.Router) {
 		r.Get("/boilerplates", response.Middleware(h.GetBoilerplates))
 		r.Get("/models", response.Middleware(h.GetModels))
-		r.Post("/generate", response.Middleware(h.Generate))
 		r.Post("/{projectId}/chat", response.Middleware(h.Chat))
 		r.Get("/{projectId}/conversations", response.Middleware(h.GetConversations))
 		r.Post("/{projectId}/conversations", response.Middleware(h.CreateConversation))
@@ -133,45 +132,6 @@ func (h *AIHandler) GetModels(w http.ResponseWriter, r *http.Request) error {
 		},
 	}
 	return response.WriteJSON(w, http.StatusOK, models)
-}
-
-// Generate godoc
-// @Summary      Generate code
-// @Description  Generates code based on the provided prompt and project context
-// @Tags         ai
-// @Accept       json
-// @Produce      json
-// @Param        request body GenerateRequest true "Generation request"
-// @Success      200 {object} GenerateResponse
-// @Failure      400 {object} response.ErrorResponse
-// @Failure      404 {object} response.ErrorResponse
-// @Failure      500 {object} response.ErrorResponse
-// @Router       /ai/generate [post]
-func (h *AIHandler) Generate(w http.ResponseWriter, r *http.Request) error {
-	var req GenerateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return errors.NewValidationError("invalid request body", map[string]interface{}{
-			"error": err.Error(),
-		})
-	}
-
-	// Get project directly from the database
-	project, err := h.Projects.Queries.GetProject(r.Context(), req.ProjectID)
-	if err != nil {
-		if err.Error() == "sql: no rows in result set" {
-			return errors.NewNotFoundError("project not found", nil)
-		}
-		return errors.NewInternalError("failed to get project", err, nil)
-	}
-
-	code, err := h.ChatService.GenerateCode(r.Context(), req.Prompt, project)
-	if err != nil {
-		return errors.NewInternalError("failed to generate code", err, nil)
-	}
-
-	return response.WriteJSON(w, http.StatusOK, GenerateResponse{
-		Code: code,
-	})
 }
 
 // GetConversations godoc

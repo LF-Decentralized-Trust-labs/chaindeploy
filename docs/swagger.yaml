@@ -1,3 +1,4 @@
+basePath: /api/v1
 definitions:
   ai.ChatMessage:
     properties:
@@ -55,18 +56,6 @@ definitions:
   ai.CreateConversationRequest:
     properties:
       title:
-        type: string
-    type: object
-  ai.GenerateRequest:
-    properties:
-      projectId:
-        type: integer
-      prompt:
-        type: string
-    type: object
-  ai.GenerateResponse:
-    properties:
-      code:
         type: string
     type: object
   ai.Message:
@@ -452,6 +441,15 @@ definitions:
       version:
         type: string
     type: object
+  chainlaunchdeploy.ChaincodeDefinitionDetailResponse:
+    properties:
+      definition:
+        $ref: '#/definitions/chainlaunchdeploy.ChaincodeDefinitionResponse'
+      events:
+        items:
+          $ref: '#/definitions/chainlaunchdeploy.ChaincodeDefinitionEvent'
+        type: array
+    type: object
   chainlaunchdeploy.ChaincodeDefinitionEvent:
     properties:
       created_at:
@@ -678,39 +676,6 @@ definitions:
         type: array
       docker_info:
         $ref: '#/definitions/chainlaunchdeploy.DockerContainerInfo'
-    type: object
-  chainlaunchdeploy.FabricChaincodeDockerDeployRequest:
-    properties:
-      container_port:
-        description: optional, defaults to 7052
-        type: integer
-      docker_image:
-        type: string
-      host_port:
-        description: optional, if 0 a free port is chosen
-        type: integer
-      name:
-        type: string
-      package_id:
-        type: string
-      slug:
-        description: optional, for updates
-        type: string
-    required:
-    - docker_image
-    - name
-    - package_id
-    type: object
-  chainlaunchdeploy.FabricChaincodeDockerDeployResponse:
-    properties:
-      message:
-        type: string
-      result:
-        $ref: '#/definitions/chainlaunchdeploy.DeploymentResult'
-      slug:
-        type: string
-      status:
-        type: string
     type: object
   chainlaunchdeploy.FabricChaincodeInstallParams:
     properties:
@@ -2869,6 +2834,10 @@ definitions:
         type: string
       networkId:
         type: integer
+      networkName:
+        type: string
+      networkPlatform:
+        type: string
       slug:
         example: myproject-abc12
         type: string
@@ -3713,8 +3682,20 @@ definitions:
     - KeyUsageCRLSign
     - KeyUsageEncipherOnly
     - KeyUsageDecipherOnly
+host: localhost:8100
 info:
-  contact: {}
+  contact:
+    email: support@chainlaunch.dev
+    name: API Support
+    url: http://chainlaunch.dev/support
+  description: ChainLaunch API provides services for managing blockchain networks
+    and cryptographic keys
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: ChainLaunch API
+  version: "1.0"
 paths:
   /ai/{projectId}/chat:
     post:
@@ -3925,40 +3906,6 @@ paths:
           schema:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Get available boilerplates
-      tags:
-      - ai
-  /ai/generate:
-    post:
-      consumes:
-      - application/json
-      description: Generates code based on the provided prompt and project context
-      parameters:
-      - description: Generation request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/ai.GenerateRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/ai.GenerateResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-      summary: Generate code
       tags:
       - ai
   /ai/models:
@@ -4700,7 +4647,7 @@ paths:
             $ref: '#/definitions/response.ErrorResponse'
       summary: List all projects
       tags:
-      - projects
+      - Chaincode Projects
     post:
       consumes:
       - application/json
@@ -4750,8 +4697,40 @@ paths:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Create a project
       tags:
-      - projects
+      - Chaincode Projects
   /chaincode-projects/{id}:
+    delete:
+      description: Delete a project and its associated files from the system
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Delete a project
+      tags:
+      - Chaincode Projects
     get:
       description: Get details of a project by its ID
       parameters:
@@ -4781,7 +4760,7 @@ paths:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Get a project by ID
       tags:
-      - projects
+      - Chaincode Projects
   /chaincode-projects/{id}/commits:
     get:
       description: Get a paginated list of commits for a project, including added/removed/modified
@@ -4821,7 +4800,7 @@ paths:
             $ref: '#/definitions/response.ErrorResponse'
       summary: List project commits with file changes
       tags:
-      - projects
+      - Chaincode Projects
   /chaincode-projects/{id}/commits/{commitHash}:
     get:
       description: Get details for a single commit, including file changes
@@ -4857,7 +4836,7 @@ paths:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Get commit details
       tags:
-      - projects
+      - Chaincode Projects
   /chaincode-projects/{id}/diff:
     get:
       description: Get the diff of a file between two commits
@@ -4903,7 +4882,7 @@ paths:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Get file diff between two commits
       tags:
-      - projects
+      - Chaincode Projects
   /chaincode-projects/{id}/endorsement-policy:
     put:
       consumes:
@@ -4942,7 +4921,7 @@ paths:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Update a project's endorsement policy
       tags:
-      - projects
+      - Chaincode Projects
   /chaincode-projects/{id}/file_at_commit:
     get:
       description: Get the contents of a file at a specific commit hash
@@ -4983,7 +4962,7 @@ paths:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Get file contents at a specific commit
       tags:
-      - projects
+      - Chaincode Projects
   /chaincode-projects/{id}/invoke:
     post:
       consumes:
@@ -5055,7 +5034,7 @@ paths:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Get logs for a project server
       tags:
-      - projects
+      - Chaincode Projects
   /chaincode-projects/{id}/logs/stream:
     get:
       description: Stream logs for the project's running container using SSE
@@ -5086,7 +5065,7 @@ paths:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Stream real-time logs for a project server
       tags:
-      - projects
+      - Chaincode Projects
   /chaincode-projects/{id}/query:
     post:
       consumes:
@@ -5160,7 +5139,7 @@ paths:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Start the server for a project
       tags:
-      - projects
+      - Chaincode Projects
   /chaincode-projects/{id}/stop:
     post:
       description: Stop the server process for a given project
@@ -5193,7 +5172,7 @@ paths:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Stop the server for a project
       tags:
-      - projects
+      - Chaincode Projects
   /dummy:
     post:
       consumes:
@@ -9059,6 +9038,45 @@ paths:
       summary: Create a chaincode definition
       tags:
       - Chaincode
+  /sc/fabric/chaincodes/{chaincodeId}/definitions/{definitionId}:
+    get:
+      consumes:
+      - application/json
+      description: Get detailed information about a specific chaincode definition
+        including its events
+      parameters:
+      - description: Chaincode ID
+        in: path
+        name: chaincodeId
+        required: true
+        type: integer
+      - description: Chaincode Definition ID
+        in: path
+        name: definitionId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/chainlaunchdeploy.ChaincodeDefinitionDetailResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: Get chaincode definition details by ID
+      tags:
+      - Chaincode
   /sc/fabric/chaincodes/{id}:
     get:
       consumes:
@@ -9366,39 +9384,6 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       summary: Deploy Fabric chaincode
-      tags:
-      - SmartContracts
-  /sc/fabric/docker-deploy:
-    post:
-      consumes:
-      - application/json
-      description: Deploy a chaincode to a Fabric network using a Docker image, package
-        ID, and port mapping. If host_port is empty, a free port is chosen. If container_port
-        is empty, defaults to 7052.
-      parameters:
-      - description: 'Fabric chaincode Docker deployment parameters (host_port: optional,
-          container_port: optional, defaults to 7052)'
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/chainlaunchdeploy.FabricChaincodeDockerDeployRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/chainlaunchdeploy.FabricChaincodeDockerDeployResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/response.Response'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/response.Response'
-      summary: Deploy Fabric chaincode with Docker image
       tags:
       - SmartContracts
   /sc/fabric/peer/{peerId}/chaincode/approve:
@@ -9797,4 +9782,51 @@ paths:
       summary: Update user role
       tags:
       - Users
+schemes:
+- http
+- https
+securityDefinitions:
+  BasicAuth:
+    type: basic
+  CookieAuth:
+    in: cookie
+    name: session_id
+    type: apiKey
 swagger: "2.0"
+tags:
+- description: Audit management operations
+  name: Audit
+- description: Chaincode project management operations
+  name: Chaincode Projects
+- description: User authentication and authorization operations
+  name: Authentication
+- description: Backup schedule configuration and management
+  name: Backup Schedules
+- description: Backup target location configuration and management
+  name: Backup Targets
+- description: Backup management operations
+  name: Backups
+- description: Hyperledger Besu network management operations
+  name: Besu Networks
+- description: Hyperledger Fabric network management operations
+  name: Fabric Networks
+- description: Cryptographic key management operations
+  name: Keys
+- description: Metrics management operations
+  name: Metrics
+- description: Network node management operations
+  name: Nodes
+- description: System notification configuration and management
+  name: Notifications
+- description: Organization management operations
+  name: Organizations
+- description: Plugin management operations
+  name: Plugins
+- description: Key provider management operations
+  name: Providers
+- description: Settings management operations
+  name: Settings
+- description: Smart contract management operations
+  name: SmartContracts
+- description: User account management operations
+  name: Users

@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/chainlaunch/chainlaunch/pkg/common/ports"
 	"github.com/chainlaunch/chainlaunch/pkg/db"
@@ -22,6 +23,9 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/hyperledger/fabric-admin-sdk/pkg/chaincode"
+	fabricclient "github.com/hyperledger/fabric-gateway/pkg/client"
+	"github.com/hyperledger/fabric-protos-go-apiv2/gateway"
+	"google.golang.org/grpc/status"
 )
 
 // --- Service-layer structs ---
@@ -55,19 +59,25 @@ type PeerStatus struct {
 	LastUpdated  string `json:"last_updated"` // ISO8601
 }
 
+// ChaincodeService handles chaincode operations
 type ChaincodeService struct {
-	db           *db.Queries
-	nodesService *service.NodeService
-	logger       *logger.Logger
+	queries     *db.Queries
+	logger      *logger.Logger
+	nodeService *service.NodeService
 }
 
-func NewChaincodeService(dbq *db.Queries, logger *logger.Logger, nodesService *service.NodeService) *ChaincodeService {
-	return &ChaincodeService{db: dbq, logger: logger, nodesService: nodesService}
+// NewChaincodeService creates a new chaincode service
+func NewChaincodeService(queries *db.Queries, logger *logger.Logger, nodeService *service.NodeService) *ChaincodeService {
+	return &ChaincodeService{
+		queries:     queries,
+		logger:      logger,
+		nodeService: nodeService,
+	}
 }
 
 // --- Chaincode CRUD ---
 func (s *ChaincodeService) CreateChaincode(ctx context.Context, name string, networkID int64) (*Chaincode, error) {
-	cc, err := s.db.CreateChaincode(ctx, &db.CreateChaincodeParams{
+	cc, err := s.queries.CreateChaincode(ctx, &db.CreateChaincodeParams{
 		Name:      name,
 		NetworkID: networkID,
 	})
@@ -75,7 +85,7 @@ func (s *ChaincodeService) CreateChaincode(ctx context.Context, name string, net
 		return nil, err
 	}
 	// Fetch network info for the new chaincode
-	net, err := s.db.GetNetwork(ctx, networkID)
+	net, err := s.queries.GetNetwork(ctx, networkID)
 	if err != nil {
 		return nil, err
 	}
@@ -90,14 +100,14 @@ func (s *ChaincodeService) CreateChaincode(ctx context.Context, name string, net
 }
 
 func (s *ChaincodeService) ListChaincodes(ctx context.Context) ([]*Chaincode, error) {
-	dbChaincodes, err := s.db.ListChaincodes(ctx)
+	dbChaincodes, err := s.queries.ListChaincodes(ctx)
 	if err != nil {
 		return nil, err
 	}
 	var result []*Chaincode
 	for _, cc := range dbChaincodes {
 		// Fetch network info for each chaincode
-		net, err := s.db.GetNetwork(ctx, cc.NetworkID)
+		net, err := s.queries.GetNetwork(ctx, cc.NetworkID)
 		if err != nil {
 			return nil, err
 		}
@@ -114,7 +124,7 @@ func (s *ChaincodeService) ListChaincodes(ctx context.Context) ([]*Chaincode, er
 }
 
 func (s *ChaincodeService) GetChaincode(ctx context.Context, id int64) (*Chaincode, error) {
-	cc, err := s.db.GetChaincode(ctx, id)
+	cc, err := s.queries.GetChaincode(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +139,7 @@ func (s *ChaincodeService) GetChaincode(ctx context.Context, id int64) (*Chainco
 }
 
 func (s *ChaincodeService) UpdateChaincode(ctx context.Context, id int64, name string, networkID int64) (*Chaincode, error) {
-	cc, err := s.db.UpdateChaincode(ctx, &db.UpdateChaincodeParams{
+	cc, err := s.queries.UpdateChaincode(ctx, &db.UpdateChaincodeParams{
 		ID:        id,
 		Name:      name,
 		NetworkID: networkID,
@@ -146,12 +156,12 @@ func (s *ChaincodeService) UpdateChaincode(ctx context.Context, id int64, name s
 }
 
 func (s *ChaincodeService) DeleteChaincode(ctx context.Context, id int64) error {
-	return s.db.DeleteChaincode(ctx, id)
+	return s.queries.DeleteChaincode(ctx, id)
 }
 
 // --- ChaincodeDefinition CRUD ---
 func (s *ChaincodeService) CreateChaincodeDefinition(ctx context.Context, chaincodeID int64, version string, sequence int64, dockerImage, endorsementPolicy, chaincodeAddress string) (*ChaincodeDefinition, error) {
-	def, err := s.db.CreateChaincodeDefinition(ctx, &db.CreateChaincodeDefinitionParams{
+	def, err := s.queries.CreateChaincodeDefinition(ctx, &db.CreateChaincodeDefinitionParams{
 		ChaincodeID:       chaincodeID,
 		Version:           version,
 		Sequence:          sequence,
@@ -175,7 +185,7 @@ func (s *ChaincodeService) CreateChaincodeDefinition(ctx context.Context, chainc
 }
 
 func (s *ChaincodeService) ListChaincodeDefinitions(ctx context.Context, chaincodeID int64) ([]*ChaincodeDefinition, error) {
-	defs, err := s.db.ListChaincodeDefinitions(ctx, chaincodeID)
+	defs, err := s.queries.ListChaincodeDefinitions(ctx, chaincodeID)
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +206,7 @@ func (s *ChaincodeService) ListChaincodeDefinitions(ctx context.Context, chainco
 }
 
 func (s *ChaincodeService) GetChaincodeDefinition(ctx context.Context, id int64) (*ChaincodeDefinition, error) {
-	def, err := s.db.GetChaincodeDefinition(ctx, id)
+	def, err := s.queries.GetChaincodeDefinition(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +223,7 @@ func (s *ChaincodeService) GetChaincodeDefinition(ctx context.Context, id int64)
 }
 
 func (s *ChaincodeService) UpdateChaincodeDefinition(ctx context.Context, id int64, version string, sequence int64, dockerImage, endorsementPolicy, chaincodeAddress string) (*ChaincodeDefinition, error) {
-	def, err := s.db.UpdateChaincodeDefinition(ctx, &db.UpdateChaincodeDefinitionParams{
+	def, err := s.queries.UpdateChaincodeDefinition(ctx, &db.UpdateChaincodeDefinitionParams{
 		ID:                id,
 		Version:           version,
 		Sequence:          sequence,
@@ -237,12 +247,12 @@ func (s *ChaincodeService) UpdateChaincodeDefinition(ctx context.Context, id int
 }
 
 func (s *ChaincodeService) DeleteChaincodeDefinition(ctx context.Context, id int64) error {
-	return s.db.DeleteChaincodeDefinition(ctx, id)
+	return s.queries.DeleteChaincodeDefinition(ctx, id)
 }
 
 // --- PeerStatus operations ---
 func (s *ChaincodeService) SetPeerStatus(ctx context.Context, definitionID, peerID int64, status string) (*PeerStatus, error) {
-	ps, err := s.db.SetPeerStatus(ctx, &db.SetPeerStatusParams{
+	ps, err := s.queries.SetPeerStatus(ctx, &db.SetPeerStatusParams{
 		DefinitionID: definitionID,
 		PeerID:       peerID,
 		Status:       status,
@@ -260,7 +270,7 @@ func (s *ChaincodeService) SetPeerStatus(ctx context.Context, definitionID, peer
 }
 
 func (s *ChaincodeService) ListPeerStatuses(ctx context.Context, definitionID int64) ([]*PeerStatus, error) {
-	pss, err := s.db.ListPeerStatuses(ctx, definitionID)
+	pss, err := s.queries.ListPeerStatuses(ctx, definitionID)
 	if err != nil {
 		return nil, err
 	}
@@ -436,7 +446,7 @@ func (s *ChaincodeService) InstallChaincodeByDefinition(ctx context.Context, def
 	}
 	var lastErr error
 	for _, peerID := range peerIDs {
-		peerService, peerConn, err := s.nodesService.GetFabricPeerService(ctx, peerID)
+		peerService, peerConn, err := s.nodeService.GetFabricPeerService(ctx, peerID)
 		if err != nil {
 			lastErr = err
 			continue
@@ -644,7 +654,7 @@ func (s *ChaincodeService) getChaincodePackage(label string, codeTarGz []byte) (
 
 // ApproveChaincodeByDefinition approves a chaincode definition using the given peer
 func (s *ChaincodeService) ApproveChaincodeByDefinition(ctx context.Context, definitionID int64, peerID int64) error {
-	peerGateway, peerConn, err := s.nodesService.GetFabricPeerGateway(ctx, peerID)
+	peerGateway, peerConn, err := s.nodeService.GetFabricPeerGateway(ctx, peerID)
 	if err != nil {
 		eventData := ApproveChaincodeEventData{PeerID: peerID, Result: "failure", ErrorMessage: err.Error()}
 		_ = s.AddChaincodeDefinitionEvent(ctx, definitionID, "approve", eventData)
@@ -665,6 +675,21 @@ func (s *ChaincodeService) ApproveChaincodeByDefinition(ctx context.Context, def
 	}
 	err = peerGateway.Approve(ctx, chaincodeDef)
 	if err != nil {
+		endorseError, ok := err.(*fabricclient.EndorseError)
+		if ok {
+			detailsStr := []string{}
+			for _, detail := range status.Convert(err).Details() {
+				switch detail := detail.(type) {
+				case *gateway.ErrorDetail:
+					detailsStr = append(detailsStr, fmt.Sprintf("- address: %s; mspId: %s; message: %s\n", detail.GetAddress(), detail.GetMspId(), detail.GetMessage()))
+				}
+			}
+			err = fmt.Errorf("failed to approve chaincode: %s (gRPC status: %s)",
+				endorseError.TransactionError.Error(),
+				strings.Join(detailsStr, "\n"))
+		} else {
+			err = fmt.Errorf("failed to approve chaincode: %w", err)
+		}
 		eventData := ApproveChaincodeEventData{PeerID: peerID, Result: "failure", ErrorMessage: err.Error()}
 		_ = s.AddChaincodeDefinitionEvent(ctx, definitionID, "approve", eventData)
 		return err
@@ -676,7 +701,7 @@ func (s *ChaincodeService) ApproveChaincodeByDefinition(ctx context.Context, def
 
 // CommitChaincodeByDefinition commits a chaincode definition using the given peer
 func (s *ChaincodeService) CommitChaincodeByDefinition(ctx context.Context, definitionID int64, peerID int64) error {
-	peerGateway, peerConn, err := s.nodesService.GetFabricPeerGateway(ctx, peerID)
+	peerGateway, peerConn, err := s.nodeService.GetFabricPeerGateway(ctx, peerID)
 	if err != nil {
 		eventData := CommitChaincodeEventData{PeerID: peerID, Result: "failure", ErrorMessage: err.Error()}
 		_ = s.AddChaincodeDefinitionEvent(ctx, definitionID, "commit", eventData)
@@ -697,8 +722,23 @@ func (s *ChaincodeService) CommitChaincodeByDefinition(ctx context.Context, defi
 	}
 	err = peerGateway.Commit(ctx, chaincodeDef)
 	if err != nil {
-		eventData := CommitChaincodeEventData{PeerID: peerID, Result: "failure", ErrorMessage: err.Error()}
-		_ = s.AddChaincodeDefinitionEvent(ctx, definitionID, "commit", eventData)
+		endorseError, ok := err.(*fabricclient.EndorseError)
+		if ok {
+			detailsStr := []string{}
+			for _, detail := range status.Convert(err).Details() {
+				switch detail := detail.(type) {
+				case *gateway.ErrorDetail:
+					detailsStr = append(detailsStr, fmt.Sprintf("- address: %s; mspId: %s; message: %s\n", detail.GetAddress(), detail.GetMspId(), detail.GetMessage()))
+				}
+			}
+			err = fmt.Errorf("failed to approve chaincode: %s (gRPC status: %s)",
+				endorseError.TransactionError.Error(),
+				strings.Join(detailsStr, "\n"))
+		} else {
+			err = fmt.Errorf("failed to approve chaincode: %w", err)
+		}
+		eventData := ApproveChaincodeEventData{PeerID: peerID, Result: "failure", ErrorMessage: err.Error()}
+		_ = s.AddChaincodeDefinitionEvent(ctx, definitionID, "approve", eventData)
 		return err
 	}
 	eventData := CommitChaincodeEventData{PeerID: peerID, Result: "success"}
@@ -712,7 +752,7 @@ func (s *ChaincodeService) buildChaincodeDefinition(ctx context.Context, definit
 	if err != nil {
 		return nil, err
 	}
-	networkDB, err := s.db.GetNetwork(ctx, chaincodeDB.NetworkID)
+	networkDB, err := s.queries.GetNetwork(ctx, chaincodeDB.NetworkID)
 	if err != nil {
 		return nil, err
 	}
@@ -857,7 +897,7 @@ func (s *ChaincodeService) AddChaincodeDefinitionEvent(ctx context.Context, defi
 	if err != nil {
 		return err
 	}
-	return s.db.AddChaincodeDefinitionEvent(ctx, &db.AddChaincodeDefinitionEventParams{
+	return s.queries.AddChaincodeDefinitionEvent(ctx, &db.AddChaincodeDefinitionEventParams{
 		DefinitionID: definitionID,
 		EventType:    eventType,
 		EventData:    sql.NullString{String: string(dataBytes), Valid: true},
@@ -866,7 +906,7 @@ func (s *ChaincodeService) AddChaincodeDefinitionEvent(ctx context.Context, defi
 
 // ListChaincodeDefinitionEvents returns the timeline of events for a chaincode definition
 func (s *ChaincodeService) ListChaincodeDefinitionEvents(ctx context.Context, definitionID int64) ([]*ChaincodeDefinitionEvent, error) {
-	dbEvents, err := s.db.ListChaincodeDefinitionEvents(ctx, definitionID)
+	dbEvents, err := s.queries.ListChaincodeDefinitionEvents(ctx, definitionID)
 	if err != nil {
 		return nil, err
 	}
@@ -892,7 +932,6 @@ func (s *ChaincodeService) ensureChaincodeAddress(ctx context.Context, definitio
 	externalIP := "0.0.0.0"
 	chaincodeAddress := definition.ChaincodeAddress
 	exposedPort := ""
-	addressChanged := false
 	if chaincodeAddress == "" {
 		alloc, err := ports.GetFreePort("fabric-chaincode")
 		if err != nil {
@@ -900,30 +939,7 @@ func (s *ChaincodeService) ensureChaincodeAddress(ctx context.Context, definitio
 		}
 		exposedPort = fmt.Sprintf("%d", alloc.Port)
 		chaincodeAddress = fmt.Sprintf("%s:%s", externalIP, exposedPort)
-		addressChanged = true
-	} else {
-		_, portStr, err := net.SplitHostPort(chaincodeAddress)
-		if err != nil {
-			return "", "", fmt.Errorf("invalid chaincode address format: %s", chaincodeAddress)
-		}
-		portNum, err := strconv.Atoi(portStr)
-		if err != nil {
-			return "", "", fmt.Errorf("invalid port in chaincode address: %s", portStr)
-		}
-		if !ports.IsPortAvailable(portNum) {
-			alloc, err := ports.GetFreePort("fabric-chaincode")
-			if err != nil {
-				return "", "", fmt.Errorf("no free ports available for chaincode: %w", err)
-			}
-			exposedPort = fmt.Sprintf("%d", alloc.Port)
-			chaincodeAddress = fmt.Sprintf("%s:%s", externalIP, exposedPort)
-			addressChanged = true
-		} else {
-			exposedPort = portStr
-		}
-	}
-	if addressChanged {
-		err := s.db.UpdateFabricChaincodeDefinitionAddress(ctx, &db.UpdateFabricChaincodeDefinitionAddressParams{
+		err = s.queries.UpdateFabricChaincodeDefinitionAddress(ctx, &db.UpdateFabricChaincodeDefinitionAddressParams{
 			ChaincodeAddress: sql.NullString{String: chaincodeAddress, Valid: true},
 			ID:               definition.ID,
 		})

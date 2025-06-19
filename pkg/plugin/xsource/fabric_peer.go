@@ -192,7 +192,7 @@ func (v *FabricPeerValue) GetVolumeMounts(ctx context.Context) ([]VolumeMount, e
 		}
 
 		certPath := filepath.Join(tempDir, "cert.pem")
-		if err := os.WriteFile(certPath, []byte(peer.FabricPeer.TLSCert), 0644); err != nil {
+		if err := os.WriteFile(certPath, []byte(peer.FabricPeer.TLSCACert), 0644); err != nil {
 			return nil, fmt.Errorf("failed to write TLS cert: %w", err)
 		}
 

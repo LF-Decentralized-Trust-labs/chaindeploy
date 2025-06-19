@@ -12,6 +12,7 @@ export type AiChatMessagePart = {
 };
 
 export type AiChatRequest = {
+    conversationId?: number;
     id?: string;
     messages?: Array<AiChatMessage>;
     projectId?: string;
@@ -32,15 +33,6 @@ export type AiConversationResponse = {
 
 export type AiCreateConversationRequest = {
     title?: string;
-};
-
-export type AiGenerateRequest = {
-    projectId?: number;
-    prompt?: string;
-};
-
-export type AiGenerateResponse = {
-    code?: string;
 };
 
 export type AiMessage = {
@@ -267,6 +259,11 @@ export type ChainlaunchdeployChaincodeDefinition = {
     version?: string;
 };
 
+export type ChainlaunchdeployChaincodeDefinitionDetailResponse = {
+    definition?: ChainlaunchdeployChaincodeDefinitionResponse;
+    events?: Array<ChainlaunchdeployChaincodeDefinitionEvent>;
+};
+
 export type ChainlaunchdeployChaincodeDefinitionEvent = {
     created_at?: string;
     definition_id?: number;
@@ -436,31 +433,6 @@ export type ChainlaunchdeployFabricChaincodeDetail = {
     chaincode?: ChainlaunchdeployChaincode;
     definitions?: Array<ChainlaunchdeployChaincodeDefinition>;
     docker_info?: ChainlaunchdeployDockerContainerInfo;
-};
-
-export type ChainlaunchdeployFabricChaincodeDockerDeployRequest = {
-    /**
-     * optional, defaults to 7052
-     */
-    container_port?: number;
-    docker_image: string;
-    /**
-     * optional, if 0 a free port is chosen
-     */
-    host_port?: number;
-    name: string;
-    package_id: string;
-    /**
-     * optional, for updates
-     */
-    slug?: string;
-};
-
-export type ChainlaunchdeployFabricChaincodeDockerDeployResponse = {
-    message?: string;
-    result?: ChainlaunchdeployDeploymentResult;
-    slug?: string;
-    status?: string;
 };
 
 export type ChainlaunchdeployFabricChaincodeInstallParams = {
@@ -1704,6 +1676,8 @@ export type ProjectsProject = {
     lastStoppedAt?: string;
     name?: string;
     networkId?: number;
+    networkName?: string;
+    networkPlatform?: string;
     slug?: string;
     status?: string;
 };
@@ -2258,42 +2232,6 @@ export type GetAiBoilerplatesResponses = {
 };
 
 export type GetAiBoilerplatesResponse = GetAiBoilerplatesResponses[keyof GetAiBoilerplatesResponses];
-
-export type PostAiGenerateData = {
-    /**
-     * Generation request
-     */
-    body: AiGenerateRequest;
-    path?: never;
-    query?: never;
-    url: '/ai/generate';
-};
-
-export type PostAiGenerateErrors = {
-    /**
-     * Bad Request
-     */
-    400: ResponseErrorResponse;
-    /**
-     * Not Found
-     */
-    404: ResponseErrorResponse;
-    /**
-     * Internal Server Error
-     */
-    500: ResponseErrorResponse;
-};
-
-export type PostAiGenerateError = PostAiGenerateErrors[keyof PostAiGenerateErrors];
-
-export type PostAiGenerateResponses = {
-    /**
-     * OK
-     */
-    200: AiGenerateResponse;
-};
-
-export type PostAiGenerateResponse = PostAiGenerateResponses[keyof PostAiGenerateResponses];
 
 export type GetAiModelsData = {
     body?: never;
@@ -3393,6 +3331,46 @@ export type PostChaincodeProjectsResponses = {
 };
 
 export type PostChaincodeProjectsResponse = PostChaincodeProjectsResponses[keyof PostChaincodeProjectsResponses];
+
+export type DeleteChaincodeProjectsByIdData = {
+    body?: never;
+    path: {
+        /**
+         * Project ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/chaincode-projects/{id}';
+};
+
+export type DeleteChaincodeProjectsByIdErrors = {
+    /**
+     * Bad Request
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type DeleteChaincodeProjectsByIdError = DeleteChaincodeProjectsByIdErrors[keyof DeleteChaincodeProjectsByIdErrors];
+
+export type DeleteChaincodeProjectsByIdResponses = {
+    /**
+     * OK
+     */
+    200: {
+        [key: string]: string;
+    };
+};
+
+export type DeleteChaincodeProjectsByIdResponse = DeleteChaincodeProjectsByIdResponses[keyof DeleteChaincodeProjectsByIdResponses];
 
 export type GetChaincodeProjectsByIdData = {
     body?: never;
@@ -8246,6 +8224,48 @@ export type PostScFabricChaincodesByChaincodeIdDefinitionsResponses = {
 
 export type PostScFabricChaincodesByChaincodeIdDefinitionsResponse = PostScFabricChaincodesByChaincodeIdDefinitionsResponses[keyof PostScFabricChaincodesByChaincodeIdDefinitionsResponses];
 
+export type GetScFabricChaincodesByChaincodeIdDefinitionsByDefinitionIdData = {
+    body?: never;
+    path: {
+        /**
+         * Chaincode ID
+         */
+        chaincodeId: number;
+        /**
+         * Chaincode Definition ID
+         */
+        definitionId: number;
+    };
+    query?: never;
+    url: '/sc/fabric/chaincodes/{chaincodeId}/definitions/{definitionId}';
+};
+
+export type GetScFabricChaincodesByChaincodeIdDefinitionsByDefinitionIdErrors = {
+    /**
+     * Bad Request
+     */
+    400: ResponseResponse;
+    /**
+     * Not Found
+     */
+    404: ResponseResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ResponseResponse;
+};
+
+export type GetScFabricChaincodesByChaincodeIdDefinitionsByDefinitionIdError = GetScFabricChaincodesByChaincodeIdDefinitionsByDefinitionIdErrors[keyof GetScFabricChaincodesByChaincodeIdDefinitionsByDefinitionIdErrors];
+
+export type GetScFabricChaincodesByChaincodeIdDefinitionsByDefinitionIdResponses = {
+    /**
+     * OK
+     */
+    200: ChainlaunchdeployChaincodeDefinitionDetailResponse;
+};
+
+export type GetScFabricChaincodesByChaincodeIdDefinitionsByDefinitionIdResponse = GetScFabricChaincodesByChaincodeIdDefinitionsByDefinitionIdResponses[keyof GetScFabricChaincodesByChaincodeIdDefinitionsByDefinitionIdResponses];
+
 export type GetScFabricChaincodesByIdData = {
     body?: never;
     path: {
@@ -8578,38 +8598,6 @@ export type PostScFabricDeployResponses = {
 };
 
 export type PostScFabricDeployResponse = PostScFabricDeployResponses[keyof PostScFabricDeployResponses];
-
-export type PostScFabricDockerDeployData = {
-    /**
-     * Fabric chaincode Docker deployment parameters (host_port: optional, container_port: optional, defaults to 7052)
-     */
-    body: ChainlaunchdeployFabricChaincodeDockerDeployRequest;
-    path?: never;
-    query?: never;
-    url: '/sc/fabric/docker-deploy';
-};
-
-export type PostScFabricDockerDeployErrors = {
-    /**
-     * Bad Request
-     */
-    400: ResponseResponse;
-    /**
-     * Internal Server Error
-     */
-    500: ResponseResponse;
-};
-
-export type PostScFabricDockerDeployError = PostScFabricDockerDeployErrors[keyof PostScFabricDockerDeployErrors];
-
-export type PostScFabricDockerDeployResponses = {
-    /**
-     * OK
-     */
-    200: ChainlaunchdeployFabricChaincodeDockerDeployResponse;
-};
-
-export type PostScFabricDockerDeployResponse = PostScFabricDockerDeployResponses[keyof PostScFabricDockerDeployResponses];
 
 export type PostScFabricPeerByPeerIdChaincodeApproveData = {
     /**

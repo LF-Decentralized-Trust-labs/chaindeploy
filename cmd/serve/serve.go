@@ -145,6 +145,9 @@ func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // @tag.name Audit
 // @tag.description Audit management operations
 
+// @tag.name Chaincode Projects
+// @tag.description Chaincode project management operations
+
 // @tag.name Authentication
 // @tag.description User authentication and authorization operations
 

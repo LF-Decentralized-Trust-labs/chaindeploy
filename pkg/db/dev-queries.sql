@@ -1,5 +1,8 @@
 -- name: ListProjects :many
-SELECT * FROM chaincode_projects ORDER BY created_at DESC;
+SELECT cp.*, n.name as network_name, n.platform as network_platform 
+FROM chaincode_projects cp 
+LEFT JOIN networks n ON cp.network_id = n.id 
+ORDER BY cp.created_at DESC;
 
 -- name: CreateProject :one
 INSERT INTO chaincode_projects (name, description, boilerplate, slug, network_id, endorsement_policy) VALUES (?, ?, ?, ?, ?, ?) RETURNING *;
@@ -8,10 +11,16 @@ INSERT INTO chaincode_projects (name, description, boilerplate, slug, network_id
 DELETE FROM chaincode_projects WHERE id = ?;
 
 -- name: GetProject :one
-SELECT * FROM chaincode_projects WHERE id = ?;
+SELECT cp.*, n.name as network_name, n.platform as network_platform 
+FROM chaincode_projects cp 
+LEFT JOIN networks n ON cp.network_id = n.id 
+WHERE cp.id = ?;
 
 -- name: GetProjectBySlug :one
-SELECT * FROM chaincode_projects WHERE slug = ?;
+SELECT cp.*, n.name as network_name, n.platform as network_platform 
+FROM chaincode_projects cp 
+LEFT JOIN networks n ON cp.network_id = n.id 
+WHERE cp.slug = ?;
 
 -- name: UpdateProjectEndorsementPolicy :one
 UPDATE chaincode_projects
@@ -61,6 +70,3 @@ WHERE id = ?;
 
 -- name: UpdateMessageEnhancedContent :one
 UPDATE messages SET enhanced_content = ? WHERE id = ? RETURNING *;
-
--- name: GetConversation :one
-SELECT * FROM conversations WHERE id = ?;

@@ -99,6 +99,7 @@ func (h *ProjectsHandler) RegisterRoutes(r chi.Router) {
 		r.Post("/", response.Middleware(h.CreateProject))
 		r.Get("/", response.Middleware(h.ListProjects))
 		r.Get("/{id}", response.Middleware(h.GetProject))
+		r.Delete("/{id}", response.Middleware(h.DeleteProject))
 		r.Post("/{id}/start", response.Middleware(h.StartProjectServer))
 		r.Post("/{id}/stop", response.Middleware(h.StopProjectServer))
 		r.Get("/{id}/logs", response.Middleware(h.GetProjectLogs))
@@ -116,7 +117,7 @@ func (h *ProjectsHandler) RegisterRoutes(r chi.Router) {
 // CreateProject godoc
 // @Summary      Create a project
 // @Description  Create a new project, scaffold its directory, and store it in the DB
-// @Tags         projects
+// @Tags         Chaincode Projects
 // @Accept       json
 // @Produce      json
 // @Param        request body CreateProjectRequest true "Project info"
@@ -173,7 +174,7 @@ func (h *ProjectsHandler) CreateProject(w http.ResponseWriter, r *http.Request) 
 // ListProjects godoc
 // @Summary      List all projects
 // @Description  Get a list of all projects
-// @Tags         projects
+// @Tags         Chaincode Projects
 // @Produce      json
 // @Success      200 {object} ListProjectsResponse
 // @Failure      500 {object} response.ErrorResponse
@@ -192,7 +193,7 @@ func (h *ProjectsHandler) ListProjects(w http.ResponseWriter, r *http.Request) e
 // GetProject godoc
 // @Summary      Get a project by ID
 // @Description  Get details of a project by its ID
-// @Tags         projects
+// @Tags         Chaincode Projects
 // @Produce      json
 // @Param        id path int true "Project ID"
 // @Success      200 {object} Project
@@ -222,10 +223,45 @@ func (h *ProjectsHandler) GetProject(w http.ResponseWriter, r *http.Request) err
 	return response.WriteJSON(w, http.StatusOK, proj)
 }
 
+// DeleteProject godoc
+// @Summary      Delete a project
+// @Description  Delete a project and its associated files from the system
+// @Tags         Chaincode Projects
+// @Produce      json
+// @Param        id path int true "Project ID"
+// @Success      200 {object} map[string]string
+// @Failure      400 {object} response.ErrorResponse
+// @Failure      404 {object} response.ErrorResponse
+// @Failure      500 {object} response.ErrorResponse
+// @Router       /chaincode-projects/{id} [delete]
+func (h *ProjectsHandler) DeleteProject(w http.ResponseWriter, r *http.Request) error {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid project id", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	err = h.Service.DeleteProject(r.Context(), id)
+	if err != nil {
+		if err == ErrNotFound {
+			return errors.NewNotFoundError("project not found", nil)
+		}
+		return errors.NewInternalError("failed to delete project", err, nil)
+	}
+
+	zap.L().Info("deleted project", zap.Int64("id", id), zap.String("request_id", middleware.GetReqID(r.Context())))
+
+	return response.WriteJSON(w, http.StatusOK, map[string]string{
+		"status": "project deleted successfully",
+	})
+}
+
 // StartProjectServer godoc
 // @Summary      Start the server for a project
 // @Description  Start the server process for a given project using its boilerplate
-// @Tags         projects
+// @Tags         Chaincode Projects
 // @Produce      json
 // @Param        id path int true "Project ID"
 // @Success      200 {object} map[string]string
@@ -263,7 +299,7 @@ func (h *ProjectsHandler) StartProjectServer(w http.ResponseWriter, r *http.Requ
 // StopProjectServer godoc
 // @Summary      Stop the server for a project
 // @Description  Stop the server process for a given project
-// @Tags         projects
+// @Tags         Chaincode Projects
 // @Produce      json
 // @Param        id path int true "Project ID"
 // @Success      200 {object} map[string]string
@@ -293,7 +329,7 @@ func (h *ProjectsHandler) StopProjectServer(w http.ResponseWriter, r *http.Reque
 // GetProjectLogs godoc
 // @Summary      Get logs for a project server
 // @Description  Stream or return the logs for the project's running container
-// @Tags         projects
+// @Tags         Chaincode Projects
 // @Produce      text/plain
 // @Param        id path int true "Project ID"
 // @Success      200 {string} string "Logs"
@@ -324,7 +360,7 @@ func (h *ProjectsHandler) GetProjectLogs(w http.ResponseWriter, r *http.Request)
 // StreamProjectLogs godoc
 // @Summary      Stream real-time logs for a project server
 // @Description  Stream logs for the project's running container using SSE
-// @Tags         projects
+// @Tags         Chaincode Projects
 // @Produce      text/event-stream
 // @Param        id path int true "Project ID"
 // @Success      200 {string} string "SSE stream of logs"
@@ -366,7 +402,7 @@ func (h *ProjectsHandler) StreamProjectLogs(w http.ResponseWriter, r *http.Reque
 // GetProjectCommits godoc
 // @Summary      List project commits with file changes
 // @Description  Get a paginated list of commits for a project, including added/removed/modified files
-// @Tags         projects
+// @Tags         Chaincode Projects
 // @Produce      json
 // @Param        id path int true "Project ID"
 // @Param        page query int false "Page number (default 1)"
@@ -444,7 +480,7 @@ func (h *ProjectsHandler) GetProjectCommits(w http.ResponseWriter, r *http.Reque
 // GetProjectCommitDetail godoc
 // @Summary      Get commit details
 // @Description  Get details for a single commit, including file changes
-// @Tags         projects
+// @Tags         Chaincode Projects
 // @Produce      json
 // @Param        id path int true "Project ID"
 // @Param        commitHash path string true "Commit hash"
@@ -498,7 +534,7 @@ func (h *ProjectsHandler) GetProjectCommitDetail(w http.ResponseWriter, r *http.
 // GetProjectFileDiff godoc
 // @Summary      Get file diff between two commits
 // @Description  Get the diff of a file between two commits
-// @Tags         projects
+// @Tags         Chaincode Projects
 // @Produce      text/plain
 // @Param        id path int true "Project ID"
 // @Param        file query string true "File path (relative to project root)"
@@ -549,7 +585,7 @@ func (h *ProjectsHandler) GetProjectFileDiff(w http.ResponseWriter, r *http.Requ
 // GetProjectFileAtCommit godoc
 // @Summary      Get file contents at a specific commit
 // @Description  Get the contents of a file at a specific commit hash
-// @Tags         projects
+// @Tags         Chaincode Projects
 // @Produce      text/plain
 // @Param        id path int true "Project ID"
 // @Param        file query string true "File path (relative to project root)"
@@ -598,7 +634,7 @@ func (h *ProjectsHandler) GetProjectFileAtCommit(w http.ResponseWriter, r *http.
 // UpdateProjectEndorsementPolicy godoc
 // @Summary      Update a project's endorsement policy
 // @Description  Update the endorsement policy of an existing project
-// @Tags         projects
+// @Tags         Chaincode Projects
 // @Accept       json
 // @Produce      json
 // @Param        id path int true "Project ID"

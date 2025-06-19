@@ -1,8 +1,26 @@
 {
+    "schemes": [
+        "http",
+        "https"
+    ],
     "swagger": "2.0",
     "info": {
-        "contact": {}
+        "description": "ChainLaunch API provides services for managing blockchain networks and cryptographic keys",
+        "title": "ChainLaunch API",
+        "termsOfService": "http://swagger.io/terms/",
+        "contact": {
+            "name": "API Support",
+            "url": "http://chainlaunch.dev/support",
+            "email": "support@chainlaunch.dev"
+        },
+        "license": {
+            "name": "Apache 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+        },
+        "version": "1.0"
     },
+    "host": "localhost:8100",
+    "basePath": "/api/v1",
     "paths": {
         "/ai/boilerplates": {
             "get": {
@@ -31,58 +49,6 @@
                             "items": {
                                 "$ref": "#/definitions/boilerplates.BoilerplateConfig"
                             }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/ai/generate": {
-            "post": {
-                "description": "Generates code based on the provided prompt and project context",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "ai"
-                ],
-                "summary": "Generate code",
-                "parameters": [
-                    {
-                        "description": "Generation request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/ai.GenerateRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/ai.GenerateResponse"
                         }
                     },
                     "400": {
@@ -1478,7 +1444,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "projects"
+                    "Chaincode Projects"
                 ],
                 "summary": "List all projects",
                 "responses": {
@@ -1505,7 +1471,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "projects"
+                    "Chaincode Projects"
                 ],
                 "summary": "Create a project",
                 "parameters": [
@@ -1578,7 +1544,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "projects"
+                    "Chaincode Projects"
                 ],
                 "summary": "Get a project by ID",
                 "parameters": [
@@ -1616,6 +1582,54 @@
                         }
                     }
                 }
+            },
+            "delete": {
+                "description": "Delete a project and its associated files from the system",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chaincode Projects"
+                ],
+                "summary": "Delete a project",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
             }
         },
         "/chaincode-projects/{id}/commits": {
@@ -1625,7 +1639,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "projects"
+                    "Chaincode Projects"
                 ],
                 "summary": "List project commits with file changes",
                 "parameters": [
@@ -1684,7 +1698,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "projects"
+                    "Chaincode Projects"
                 ],
                 "summary": "Get commit details",
                 "parameters": [
@@ -1738,7 +1752,7 @@
                     "text/plain"
                 ],
                 "tags": [
-                    "projects"
+                    "Chaincode Projects"
                 ],
                 "summary": "Get file diff between two commits",
                 "parameters": [
@@ -1809,7 +1823,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "projects"
+                    "Chaincode Projects"
                 ],
                 "summary": "Update a project's endorsement policy",
                 "parameters": [
@@ -1865,7 +1879,7 @@
                     "text/plain"
                 ],
                 "tags": [
-                    "projects"
+                    "Chaincode Projects"
                 ],
                 "summary": "Get file contents at a specific commit",
                 "parameters": [
@@ -1990,7 +2004,7 @@
                     "text/plain"
                 ],
                 "tags": [
-                    "projects"
+                    "Chaincode Projects"
                 ],
                 "summary": "Get logs for a project server",
                 "parameters": [
@@ -2037,7 +2051,7 @@
                     "text/event-stream"
                 ],
                 "tags": [
-                    "projects"
+                    "Chaincode Projects"
                 ],
                 "summary": "Stream real-time logs for a project server",
                 "parameters": [
@@ -2148,7 +2162,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "projects"
+                    "Chaincode Projects"
                 ],
                 "summary": "Start the server for a project",
                 "parameters": [
@@ -2198,7 +2212,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "projects"
+                    "Chaincode Projects"
                 ],
                 "summary": "Stop the server for a project",
                 "parameters": [
@@ -8034,6 +8048,63 @@
                 }
             }
         },
+        "/sc/fabric/chaincodes/{chaincodeId}/definitions/{definitionId}": {
+            "get": {
+                "description": "Get detailed information about a specific chaincode definition including its events",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chaincode"
+                ],
+                "summary": "Get chaincode definition details by ID",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Chaincode ID",
+                        "name": "chaincodeId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Chaincode Definition ID",
+                        "name": "definitionId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/chainlaunchdeploy.ChaincodeDefinitionDetailResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/sc/fabric/chaincodes/{id}": {
             "get": {
                 "description": "Get a specific Fabric chaincode and its Docker/runtime info by ID",
@@ -8482,52 +8553,6 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/chainlaunchdeploy.FabricDeployResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/response.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/response.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/sc/fabric/docker-deploy": {
-            "post": {
-                "description": "Deploy a chaincode to a Fabric network using a Docker image, package ID, and port mapping. If host_port is empty, a free port is chosen. If container_port is empty, defaults to 7052.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "SmartContracts"
-                ],
-                "summary": "Deploy Fabric chaincode with Docker image",
-                "parameters": [
-                    {
-                        "description": "Fabric chaincode Docker deployment parameters (host_port: optional, container_port: optional, defaults to 7052)",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/chainlaunchdeploy.FabricChaincodeDockerDeployRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/chainlaunchdeploy.FabricChaincodeDockerDeployResponse"
                         }
                     },
                     "400": {
@@ -9250,25 +9275,6 @@
                 }
             }
         },
-        "ai.GenerateRequest": {
-            "type": "object",
-            "properties": {
-                "projectId": {
-                    "type": "integer"
-                },
-                "prompt": {
-                    "type": "string"
-                }
-            }
-        },
-        "ai.GenerateResponse": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "string"
-                }
-            }
-        },
         "ai.Message": {
             "type": "object",
             "properties": {
@@ -9832,6 +9838,20 @@
                 }
             }
         },
+        "chainlaunchdeploy.ChaincodeDefinitionDetailResponse": {
+            "type": "object",
+            "properties": {
+                "definition": {
+                    "$ref": "#/definitions/chainlaunchdeploy.ChaincodeDefinitionResponse"
+                },
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/chainlaunchdeploy.ChaincodeDefinitionEvent"
+                    }
+                }
+            }
+        },
         "chainlaunchdeploy.ChaincodeDefinitionEvent": {
             "type": "object",
             "properties": {
@@ -10148,54 +10168,6 @@
                 },
                 "docker_info": {
                     "$ref": "#/definitions/chainlaunchdeploy.DockerContainerInfo"
-                }
-            }
-        },
-        "chainlaunchdeploy.FabricChaincodeDockerDeployRequest": {
-            "type": "object",
-            "required": [
-                "docker_image",
-                "name",
-                "package_id"
-            ],
-            "properties": {
-                "container_port": {
-                    "description": "optional, defaults to 7052",
-                    "type": "integer"
-                },
-                "docker_image": {
-                    "type": "string"
-                },
-                "host_port": {
-                    "description": "optional, if 0 a free port is chosen",
-                    "type": "integer"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "package_id": {
-                    "type": "string"
-                },
-                "slug": {
-                    "description": "optional, for updates",
-                    "type": "string"
-                }
-            }
-        },
-        "chainlaunchdeploy.FabricChaincodeDockerDeployResponse": {
-            "type": "object",
-            "properties": {
-                "message": {
-                    "type": "string"
-                },
-                "result": {
-                    "$ref": "#/definitions/chainlaunchdeploy.DeploymentResult"
-                },
-                "slug": {
-                    "type": "string"
-                },
-                "status": {
-                    "type": "string"
                 }
             }
         },
@@ -13259,6 +13231,12 @@
                 "networkId": {
                     "type": "integer"
                 },
+                "networkName": {
+                    "type": "string"
+                },
+                "networkPlatform": {
+                    "type": "string"
+                },
                 "slug": {
                     "type": "string",
                     "example": "myproject-abc12"
@@ -14466,5 +14444,89 @@
                 "KeyUsageDecipherOnly"
             ]
         }
-    }
+    },
+    "securityDefinitions": {
+        "BasicAuth": {
+            "type": "basic"
+        },
+        "CookieAuth": {
+            "type": "apiKey",
+            "name": "session_id",
+            "in": "cookie"
+        }
+    },
+    "tags": [
+        {
+            "description": "Audit management operations",
+            "name": "Audit"
+        },
+        {
+            "description": "Chaincode project management operations",
+            "name": "Chaincode Projects"
+        },
+        {
+            "description": "User authentication and authorization operations",
+            "name": "Authentication"
+        },
+        {
+            "description": "Backup schedule configuration and management",
+            "name": "Backup Schedules"
+        },
+        {
+            "description": "Backup target location configuration and management",
+            "name": "Backup Targets"
+        },
+        {
+            "description": "Backup management operations",
+            "name": "Backups"
+        },
+        {
+            "description": "Hyperledger Besu network management operations",
+            "name": "Besu Networks"
+        },
+        {
+            "description": "Hyperledger Fabric network management operations",
+            "name": "Fabric Networks"
+        },
+        {
+            "description": "Cryptographic key management operations",
+            "name": "Keys"
+        },
+        {
+            "description": "Metrics management operations",
+            "name": "Metrics"
+        },
+        {
+            "description": "Network node management operations",
+            "name": "Nodes"
+        },
+        {
+            "description": "System notification configuration and management",
+            "name": "Notifications"
+        },
+        {
+            "description": "Organization management operations",
+            "name": "Organizations"
+        },
+        {
+            "description": "Plugin management operations",
+            "name": "Plugins"
+        },
+        {
+            "description": "Key provider management operations",
+            "name": "Providers"
+        },
+        {
+            "description": "Settings management operations",
+            "name": "Settings"
+        },
+        {
+            "description": "Smart contract management operations",
+            "name": "SmartContracts"
+        },
+        {
+            "description": "User account management operations",
+            "name": "Users"
+        }
+    ]
 }

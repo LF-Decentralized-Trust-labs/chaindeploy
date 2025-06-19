@@ -1,9 +1,10 @@
-import { getChaincodeProjectsByIdOptions, putChaincodeProjectsByIdEndorsementPolicyMutation } from '@/api/client/@tanstack/react-query.gen'
+import { deleteChaincodeProjectsByIdMutation, getChaincodeProjectsByIdOptions, putChaincodeProjectsByIdEndorsementPolicyMutation } from '@/api/client/@tanstack/react-query.gen'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Code } from 'lucide-react'
+import { Code, MoreVertical, Trash2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
@@ -30,6 +31,7 @@ export default function ChaincodeProjectDetailPage() {
 	})
 
 	const [isDialogOpen, setIsDialogOpen] = useState(false)
+	const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
 	const form = useForm<EndorsementPolicyFormValues>({
 		resolver: zodResolver(endorsementPolicySchema),
 		defaultValues: {
@@ -38,6 +40,7 @@ export default function ChaincodeProjectDetailPage() {
 	})
 
 	const [updating, setUpdating] = useState(false)
+	const [deleting, setDeleting] = useState(false)
 	const queryClient = useQueryClient()
 	const updateEndorsementPolicyMutation = useMutation(putChaincodeProjectsByIdEndorsementPolicyMutation())
 
@@ -58,6 +61,22 @@ export default function ChaincodeProjectDetailPage() {
 			setUpdating(false)
 		}
 	}
+	const deleteChaincodeProjectMutation = useMutation({
+		...deleteChaincodeProjectsByIdMutation(),
+	})
+	const handleDelete = async () => {
+		setDeleting(true)
+		try {
+			await deleteChaincodeProjectMutation.mutateAsync({ path: { id: projectId } })
+			toast.success('Chaincode project deleted')
+			navigate('/smart-contracts/fabric')
+		} catch (err: any) {
+			toast.error('Failed to delete chaincode project', { description: err?.message })
+		} finally {
+			setDeleting(false)
+			setIsDeleteDialogOpen(false)
+		}
+	}
 
 	if (isLoading) return <div className="container p-8">Loading...</div>
 	if (error) return <div className="container p-8 text-red-500">Error loading project</div>
@@ -72,46 +91,26 @@ export default function ChaincodeProjectDetailPage() {
 						<Code className="mr-2 h-4 w-4" />
 						Open Editor
 					</Button>
-					<Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-						<DialogTrigger asChild>
-							<Button variant="outline">Update Endorsement Policy</Button>
-						</DialogTrigger>
-						<DialogContent>
-							<DialogHeader>
-								<DialogTitle>Update Endorsement Policy</DialogTitle>
-							</DialogHeader>
-							<Form {...form}>
-								<form onSubmit={form.handleSubmit(handleUpdate)} className="space-y-4">
-									<FormField
-										control={form.control}
-										name="endorsementPolicy"
-										render={({ field }) => (
-											<FormItem>
-												<FormLabel>Endorsement Policy</FormLabel>
-												<FormControl>
-													<Input placeholder="e.g. OR('Org1MSP.member')" {...field} />
-												</FormControl>
-												<FormMessage />
-												<div className="text-xs text-muted-foreground mt-1">
-													Example policies:
-													<ul className="list-disc list-inside mt-1">
-														<li>OR('Org1MSP.member') - Any member of Org1</li>
-														<li>AND('Org1MSP.member', 'Org2MSP.member') - Both Org1 and Org2 members</li>
-														<li>OR('Org1MSP.member', 'Org2MSP.member') - Any member of Org1 or Org2</li>
-													</ul>
-												</div>
-											</FormItem>
-										)}
-									/>
-									<DialogFooter>
-										<Button type="submit" disabled={updating}>
-											{updating ? 'Updating...' : 'Update'}
-										</Button>
-									</DialogFooter>
-								</form>
-							</Form>
-						</DialogContent>
-					</Dialog>
+					<DropdownMenu>
+						<DropdownMenuTrigger asChild>
+							<Button variant="outline" size="icon">
+								<MoreVertical className="h-4 w-4" />
+							</Button>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent align="end">
+							<DropdownMenuItem onClick={() => setIsDialogOpen(true)}>
+								Update Endorsement Policy
+							</DropdownMenuItem>
+							<DropdownMenuSeparator />
+							<DropdownMenuItem 
+								className="text-destructive" 
+								onClick={() => setIsDeleteDialogOpen(true)}
+							>
+								<Trash2 className="mr-2 h-4 w-4" />
+								Delete Chaincode Project
+							</DropdownMenuItem>
+						</DropdownMenuContent>
+					</DropdownMenu>
 				</div>
 			</div>
 
@@ -171,6 +170,67 @@ export default function ChaincodeProjectDetailPage() {
 					</CardContent>
 				</Card>
 			</div>
+
+			{/* Delete Confirmation Dialog */}
+			<Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Delete Chaincode Project</DialogTitle>
+					</DialogHeader>
+					<div className="py-4">
+						<p>Are you sure you want to delete "{project.name}"? This action cannot be undone.</p>
+					</div>
+					<DialogFooter>
+						<Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+							Cancel
+						</Button>
+						<Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+							{deleting ? 'Deleting...' : 'Delete'}
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+
+			<Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+				<DialogTrigger asChild>
+					<Button variant="outline">Update Endorsement Policy</Button>
+				</DialogTrigger>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Update Endorsement Policy</DialogTitle>
+					</DialogHeader>
+					<Form {...form}>
+						<form onSubmit={form.handleSubmit(handleUpdate)} className="space-y-4">
+							<FormField
+								control={form.control}
+								name="endorsementPolicy"
+								render={({ field }) => (
+									<FormItem>
+										<FormLabel>Endorsement Policy</FormLabel>
+										<FormControl>
+											<Input placeholder="e.g. OR('Org1MSP.member')" {...field} />
+										</FormControl>
+										<FormMessage />
+										<div className="text-xs text-muted-foreground mt-1">
+											Example policies:
+											<ul className="list-disc list-inside mt-1">
+												<li>OR('Org1MSP.member') - Any member of Org1</li>
+												<li>AND('Org1MSP.member', 'Org2MSP.member') - Both Org1 and Org2 members</li>
+												<li>OR('Org1MSP.member', 'Org2MSP.member') - Any member of Org1 or Org2</li>
+											</ul>
+										</div>
+									</FormItem>
+								)}
+							/>
+							<DialogFooter>
+								<Button type="submit" disabled={updating}>
+									{updating ? 'Updating...' : 'Update'}
+								</Button>
+							</DialogFooter>
+						</form>
+					</Form>
+				</DialogContent>
+			</Dialog>
 		</div>
 	)
 } 

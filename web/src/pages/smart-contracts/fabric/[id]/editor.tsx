@@ -105,21 +105,21 @@ export default function ChaincodeProjectEditorPage() {
 						{project?.status}
 					</Badge>
 					{project?.status === 'running' ? (
-						<Button onClick={handleStop} disabled={stopMutation.isPending} variant="destructive" className='size-8' size="icon">
+						<Button onClick={handleStop} disabled={stopMutation.isPending} variant="destructive" className="size-8" size="icon">
 							{stopMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <StopCircle className="h-4 w-4" />}
 						</Button>
 					) : (
-						<Button onClick={handleStart} disabled={startMutation.isPending} className='size-8' size="icon">
+						<Button onClick={handleStart} disabled={startMutation.isPending} className="size-8" size="icon">
 							{startMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
 						</Button>
 					)}
 				</div>
 				<div className="ml-auto flex gap-2 items-center">
-					<Button size="icon" className='size-10' variant={mode === 'editor' ? 'default' : 'outline'} onClick={() => setMode('editor')} title="Editor mode">
-						<Code2  />
+					<Button size="icon" className="size-10" variant={mode === 'editor' ? 'default' : 'outline'} onClick={() => setMode('editor')} title="Editor mode">
+						<Code2 />
 					</Button>
-					<Button size="icon" className='size-10' variant={mode === 'playground' ? 'default' : 'outline'} onClick={() => setMode('playground')} title="Playground mode">
-						<PlayCircle  />
+					<Button size="icon" className="size-10" variant={mode === 'playground' ? 'default' : 'outline'} onClick={() => setMode('playground')} title="Playground mode">
+						<PlayCircle />
 					</Button>
 				</div>
 			</div>

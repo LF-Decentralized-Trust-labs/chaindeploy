@@ -50,6 +50,8 @@ type Project struct {
 	LastStoppedAt     *string `json:"lastStoppedAt,omitempty" description:"Last time the project was stopped (RFC3339)"`
 	ContainerPort     *int    `json:"containerPort,omitempty" description:"Host port mapped to the container, if running"`
 	NetworkID         *int64  `json:"networkId,omitempty" description:"ID of the linked network"`
+	NetworkName       *string `json:"networkName,omitempty" description:"Name of the linked network"`
+	NetworkPlatform   *string `json:"networkPlatform,omitempty" description:"Platform of the linked network (FABRIC/BESU)"`
 	EndorsementPolicy string  `json:"endorsementPolicy,omitempty" example:"OR('Org1MSP.member','Org2MSP.member')" description:"Endorsement policy for the chaincode"`
 }
 
@@ -65,6 +67,7 @@ func NewProjectsService(queries *db.Queries, runner *projectrunner.Runner, proje
 	if err != nil {
 		return nil, err
 	}
+
 	return &ProjectsService{
 		Queries:            queries,
 		Runner:             runner,
@@ -160,6 +163,15 @@ func (s *ProjectsService) CreateProject(ctx context.Context, name, description, 
 	}
 	zap.L().Info("created project in DB", zap.Int64("id", proj.ID), zap.String("name", proj.Name), zap.String("slug", proj.Slug), zap.String("request_id", getReqID(ctx)))
 
+	// Create a default conversation for the project
+	_, err = s.Queries.CreateConversation(ctx, proj.ID)
+	if err != nil {
+		zap.L().Error("failed to create default conversation for project", zap.Int64("projectID", proj.ID), zap.Error(err), zap.String("request_id", getReqID(ctx)))
+		// Don't fail the project creation if conversation creation fails
+	} else {
+		zap.L().Info("created default conversation for project", zap.Int64("projectID", proj.ID), zap.String("request_id", getReqID(ctx)))
+	}
+
 	// Download boilerplate if specified
 	if boilerplate != "" {
 		projectDir := filepath.Join(s.ProjectsDir, slug)
@@ -194,7 +206,7 @@ func (s *ProjectsService) ListProjects(ctx context.Context) ([]Project, error) {
 	}
 	var projects []Project
 	for _, p := range dbProjects {
-		projects = append(projects, dbProjectToAPI(p))
+		projects = append(projects, listDBProjectToAPI(p))
 	}
 	zap.L().Info("listed projects from DB", zap.Int("count", len(projects)), zap.String("request_id", getReqID(ctx)))
 	return projects, nil
@@ -211,7 +223,43 @@ func (s *ProjectsService) GetProject(ctx context.Context, id int64) (Project, er
 		return Project{}, err
 	}
 	zap.L().Info("got project from DB", zap.Int64("id", p.ID), zap.String("name", p.Name), zap.String("request_id", getReqID(ctx)))
-	return dbProjectToAPI(p), nil
+	return getDBProjectToAPI(p), nil
+}
+
+// DeleteProject deletes a project and its associated files
+func (s *ProjectsService) DeleteProject(ctx context.Context, id int64) error {
+	// First get the project to get the slug for file cleanup
+	proj, err := s.Queries.GetProject(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			zap.L().Warn("project not found for deletion", zap.Int64("id", id), zap.String("request_id", getReqID(ctx)))
+			return ErrNotFound
+		}
+		zap.L().Error("DB error in GetProject for deletion", zap.Int64("id", id), zap.Error(err), zap.String("request_id", getReqID(ctx)))
+		return err
+	}
+
+	// Stop the project server if it's running
+	if err := s.StopProjectServer(ctx, id); err != nil {
+		zap.L().Warn("failed to stop project server before deletion", zap.Int64("id", id), zap.Error(err))
+		// Continue with deletion even if stop fails
+	}
+
+	// Delete the project from database
+	if err := s.Queries.DeleteProject(ctx, id); err != nil {
+		zap.L().Error("DB error in DeleteProject", zap.Int64("id", id), zap.Error(err), zap.String("request_id", getReqID(ctx)))
+		return err
+	}
+
+	// Clean up project files
+	projectDir := filepath.Join(s.ProjectsDir, proj.Slug)
+	if err := os.RemoveAll(projectDir); err != nil {
+		zap.L().Warn("failed to remove project directory", zap.Int64("id", id), zap.String("slug", proj.Slug), zap.Error(err))
+		// Continue even if file cleanup fails
+	}
+
+	zap.L().Info("deleted project", zap.Int64("id", id), zap.String("name", proj.Name), zap.String("slug", proj.Slug), zap.String("request_id", getReqID(ctx)))
+	return nil
 }
 
 // UpdateProjectEndorsementPolicy updates the endorsement policy of a project
@@ -239,6 +287,94 @@ func (s *ProjectsService) UpdateProjectEndorsementPolicy(ctx context.Context, id
 	zap.L().Info("updated project endorsement policy", zap.Int64("id", proj.ID), zap.String("name", proj.Name), zap.String("request_id", getReqID(ctx)))
 
 	return dbProjectToAPI(proj), nil
+}
+
+func listDBProjectToAPI(p *db.ListProjectsRow) Project {
+	var started, stopped *string
+	if p.LastStartedAt.Valid {
+		ts := p.LastStartedAt.Time.UTC().Format(time.RFC3339)
+		started = &ts
+	}
+	if p.LastStoppedAt.Valid {
+		ts := p.LastStoppedAt.Time.UTC().Format(time.RFC3339)
+		stopped = &ts
+	}
+	var containerPort *int
+	if p.ContainerPort.Valid {
+		v := int(p.ContainerPort.Int64)
+		containerPort = &v
+	}
+	var networkID *int64
+	if p.NetworkID.Valid {
+		networkID = &p.NetworkID.Int64
+	}
+	var networkName *string
+	if p.NetworkName.Valid {
+		networkName = &p.NetworkName.String
+	}
+	var networkPlatform *string
+	if p.NetworkPlatform.Valid {
+		networkPlatform = &p.NetworkPlatform.String
+	}
+	return Project{
+		ID:                p.ID,
+		Name:              p.Name,
+		Slug:              p.Slug,
+		Description:       p.Description.String,
+		Boilerplate:       p.Boilerplate.String,
+		Status:            p.Status.String,
+		LastStartedAt:     started,
+		LastStoppedAt:     stopped,
+		ContainerPort:     containerPort,
+		NetworkID:         networkID,
+		NetworkName:       networkName,
+		NetworkPlatform:   networkPlatform,
+		EndorsementPolicy: p.EndorsementPolicy.String,
+	}
+}
+
+func getDBProjectToAPI(p *db.GetProjectRow) Project {
+	var started, stopped *string
+	if p.LastStartedAt.Valid {
+		ts := p.LastStartedAt.Time.UTC().Format(time.RFC3339)
+		started = &ts
+	}
+	if p.LastStoppedAt.Valid {
+		ts := p.LastStoppedAt.Time.UTC().Format(time.RFC3339)
+		stopped = &ts
+	}
+	var containerPort *int
+	if p.ContainerPort.Valid {
+		v := int(p.ContainerPort.Int64)
+		containerPort = &v
+	}
+	var networkID *int64
+	if p.NetworkID.Valid {
+		networkID = &p.NetworkID.Int64
+	}
+	var networkName *string
+	if p.NetworkName.Valid {
+		networkName = &p.NetworkName.String
+	}
+	var networkPlatform *string
+	if p.NetworkPlatform.Valid {
+		networkPlatform = &p.NetworkPlatform.String
+	}
+	return Project{
+		ID:                p.ID,
+		Name:              p.Name,
+		Slug:              p.Slug,
+		Description:       p.Description.String,
+		Boilerplate:       p.Boilerplate.String,
+		Status:            p.Status.String,
+		LastStartedAt:     started,
+		LastStoppedAt:     stopped,
+		ContainerPort:     containerPort,
+		NetworkID:         networkID,
+		NetworkName:       networkName,
+		NetworkPlatform:   networkPlatform,
+		EndorsementPolicy: p.EndorsementPolicy.String,
+	}
 }
 
 func dbProjectToAPI(p *db.ChaincodeProject) Project {
