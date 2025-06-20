@@ -56,7 +56,6 @@ const toolComponents = {
 export const ToolEventRenderer = React.memo(({ event }: ToolEventProps) => {
 	const [copiedCode, setCopiedCode] = useState<string | null>(null)
 	const previousDeltaRef = useRef<any>(null)
-	console.log('previousDeltaRef', event, previousDeltaRef.current)
 	// Reset previous delta when tool event changes (new tool call starts)
 	useEffect(() => {
 		if (event.type === 'start') {
@@ -70,14 +69,11 @@ export const ToolEventRenderer = React.memo(({ event }: ToolEventProps) => {
 			const parsed = JSON.parse(deltaString)
 			return parsed
 		} catch (e) {
-			console.error('Failed to parse JSON:', e, deltaString)
 			try {
 				const repaired = jsonrepair(deltaString)
-				console.log('repaired', repaired)
 				const parsed = JSON.parse(repaired)
 				return parsed
 			} catch (e) {
-				console.error('Failed to repair JSON:', e, deltaString)
 				// Return null to indicate parsing failure
 				return null
 			}

@@ -12,10 +12,8 @@ interface FabricKeySelectProps {
 }
 
 export const FabricKeySelect = ({ value, onChange, disabled }: FabricKeySelectProps) => {
-	const [selectedOrgId, setSelectedOrgId] = useState<number | null>(value?.orgId ?? null)
 	const [selectedKeys, setSelectedKeys] = useState<Array<{ id: number; name: string; description?: string; algorithm?: string; keySize?: number; curve?: string }>>([])
 	const [isLoading, setIsLoading] = useState(false)
-	const [pendingKeyId, setPendingKeyId] = useState<number | null>(null)
 
 	// Fetch organizations
 	const { data: organizations } = useQuery({
@@ -23,7 +21,7 @@ export const FabricKeySelect = ({ value, onChange, disabled }: FabricKeySelectPr
 	})
 
 	// Get the selected organization
-	const selectedOrg = useMemo(() => organizations?.items?.find((org) => org.id === selectedOrgId), [organizations, selectedOrgId])
+	const selectedOrg = useMemo(() => organizations?.items?.find((org) => org.id === value?.orgId), [organizations, value?.orgId])
 
 	// Get key IDs for the selected organization
 	const keyIds = useMemo(() => {
@@ -67,45 +65,19 @@ export const FabricKeySelect = ({ value, onChange, disabled }: FabricKeySelectPr
 	}
 
 	useEffect(() => {
-		if (selectedOrgId && keyIds.length > 0) {
+		if (value?.orgId && keyIds.length > 0) {
 			fetchKeyDetails()
 		}
-	}, [selectedOrgId, keyIds])
-
-	// When org changes, reset key selection
-	useEffect(() => {
-		if (selectedOrgId !== value?.orgId) {
-			onChange({ orgId: selectedOrgId ?? 0, keyId: 0 })
-		}
-	}, [selectedOrgId, onChange, value?.orgId])
-
-	// Add this effect to sync org/key when value changes
-	useEffect(() => {
-		if (value?.orgId && value.orgId !== selectedOrgId) {
-			setSelectedOrgId(value.orgId)
-		}
-		// If orgId is set and keyId is set, but key is not loaded, set pendingKeyId
-		if (value?.orgId && value?.keyId && !selectedKeys.find((k) => k.id === value.keyId)) {
-			setPendingKeyId(value.keyId)
-		}
-	}, [value, selectedOrgId, selectedKeys])
-
-	// When selectedKeys updates and pendingKeyId is present, set the key
-	useEffect(() => {
-		if (pendingKeyId && selectedKeys.find((k) => k.id === pendingKeyId)) {
-			if (selectedOrgId) {
-				onChange({ orgId: selectedOrgId, keyId: pendingKeyId })
-				setPendingKeyId(null)
-			}
-		}
-	}, [pendingKeyId, selectedKeys, selectedOrgId, onChange])
+	}, [value?.orgId, keyIds])
 
 	return (
 		<div className="space-y-4">
 			<Select
-				value={selectedOrgId?.toString()}
+				value={value?.orgId?.toString()}
 				onValueChange={(val) => {
-					setSelectedOrgId(Number(val))
+					const orgId = Number(val)
+					// When org changes, reset key selection to 0
+					onChange({ orgId, keyId: 0 })
 				}}
 				disabled={disabled}
 			>
@@ -126,11 +98,11 @@ export const FabricKeySelect = ({ value, onChange, disabled }: FabricKeySelectPr
 			<Select
 				value={value?.keyId ? value.keyId.toString() : undefined}
 				onValueChange={(val) => {
-					if (selectedOrgId) {
-						onChange({ orgId: selectedOrgId, keyId: Number(val) })
+					if (value?.orgId) {
+						onChange({ orgId: value.orgId, keyId: Number(val) })
 					}
 				}}
-				disabled={disabled || !selectedOrgId || isLoading}
+				disabled={disabled || !value?.orgId || isLoading}
 			>
 				<SelectTrigger>
 					{selectedKey ? (

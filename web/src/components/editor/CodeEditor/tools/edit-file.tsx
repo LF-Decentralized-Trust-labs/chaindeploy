@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react'
 import { Check, Copy, Edit } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
@@ -29,6 +29,14 @@ export const EditFileUpdate = ({ event, accumulatedArgs, copyToClipboard }: Edit
 	const instructions = accumulatedArgs.instructions || ''
 	const codeEdit = accumulatedArgs.code_edit || ''
 	const language = getLanguage(targetFile)
+	const scrollContainerRef = useRef<HTMLDivElement>(null)
+
+	// Auto-scroll to bottom when new content is received
+	useEffect(() => {
+		if (scrollContainerRef.current && codeEdit) {
+			scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
+		}
+	}, [codeEdit])
 
 	const handleCopyDelta = async () => {
 		await copyToClipboard(JSON.stringify(accumulatedArgs, null, 2))
@@ -54,9 +62,14 @@ export const EditFileUpdate = ({ event, accumulatedArgs, copyToClipboard }: Edit
 							<Copy className="w-3 h-3" />
 						</button>
 					</div>
-					{instructions && <div className="text-xs text-muted-foreground mt-2 italic line-clamp-2">{instructions}</div>}
+					{instructions && (
+						<div className="text-xs text-muted-foreground mt-2">
+							<div className="font-medium text-foreground mb-1">Instructions:</div>
+							<div className="italic line-clamp-2">{instructions}</div>
+						</div>
+					)}
 				</div>
-				<div className="max-h-[300px] overflow-auto w-full">
+				<div className="max-h-[300px] overflow-auto w-full" ref={scrollContainerRef}>
 					{codeEdit ? (
 						<div className="overflow-auto w-full">
 							<SyntaxHighlighterComp
@@ -80,9 +93,7 @@ export const EditFileUpdate = ({ event, accumulatedArgs, copyToClipboard }: Edit
 							</SyntaxHighlighterComp>
 						</div>
 					) : (
-						<div className="p-3 text-muted-foreground italic flex items-center justify-center h-[200px] w-full">
-							Waiting for content...
-						</div>
+						<div className="p-3 text-muted-foreground italic flex items-center justify-center h-[200px] w-full">Waiting for content...</div>
 					)}
 				</div>
 			</div>
@@ -91,17 +102,23 @@ export const EditFileUpdate = ({ event, accumulatedArgs, copyToClipboard }: Edit
 }
 
 export const EditFileResult = ({ event }: EditFileResultProps) => {
-	const result = event.result && typeof event.result === 'object' ? (event.result as any) : {}
 	const resultArgs = useMemo(() => {
 		const args = event.arguments && typeof event.arguments === 'string' ? JSON.parse(event.arguments) : {}
 		return args
 	}, [event.arguments])
 	const [copiedCode, setCopiedCode] = useState<string | null>(null)
-	console.log('resultArgs', resultArgs)
-	const filePath = resultArgs.target_file || ''
-	const instructions = resultArgs.instructions || ''
-	console.log('result', result)
-	const summary = `File "${filePath}" edited successfully.`
+	const scrollContainerRef = useRef<HTMLDivElement>(null)
+
+	// Auto-scroll to bottom when new content is received
+	useEffect(() => {
+		if (scrollContainerRef.current && resultArgs.code_edit) {
+			scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
+		}
+	}, [resultArgs.code_edit])
+
+	const filePath = useMemo(() => resultArgs.target_file || '', [resultArgs.target_file])
+	const instructions = useMemo(() => resultArgs.instructions || '', [resultArgs.instructions])
+	const summary = useMemo(() => `File "${filePath}" edited successfully.`, [filePath])
 	const copyToClipboard = useCallback((content: string) => {
 		navigator.clipboard.writeText(content)
 		setCopiedCode(content)
@@ -124,38 +141,36 @@ export const EditFileResult = ({ event }: EditFileResultProps) => {
 							<div className="font-semibold text-sm mb-2">File:</div>
 							<div className="text-sm break-all">{filePath}</div>
 						</div>
-						{resultArgs.code_edit && (
-							<div className="p-3 bg-muted rounded-lg">
-								<div className="font-semibold text-sm mb-2">Modified Content:</div>
-								<div className="relative">
-									<button
-										onClick={() => copyToClipboard(resultArgs.code_edit)}
-										className="absolute top-2 right-2 p-1.5 rounded bg-background hover:bg-background/80 transition-colors z-10"
-										title="Copy code"
+						<div className="p-3 bg-muted rounded-lg">
+							<div className="font-semibold text-sm mb-2">Modified Content:</div>
+							<div className="relative">
+								<button
+									onClick={() => copyToClipboard(resultArgs.code_edit)}
+									className="absolute top-2 right-2 p-1.5 rounded bg-background hover:bg-background/80 transition-colors z-10"
+									title="Copy code"
+								>
+									{copiedCode === resultArgs.code_edit ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+								</button>
+								<div className="overflow-auto" ref={scrollContainerRef}>
+									<SyntaxHighlighterComp
+										language={getLanguage(filePath)}
+										style={vscDarkPlus}
+										wrapLines={false}
+										wrapLongLines={false}
+										showLineNumbers={true}
+										customStyle={{
+											margin: 0,
+											padding: '0.5rem',
+											background: 'rgb(20, 20, 20)',
+											fontSize: '11px',
+											minWidth: '100%',
+										}}
 									>
-										{copiedCode === resultArgs.code_edit ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-									</button>
-									<div className="overflow-auto">
-										<SyntaxHighlighterComp
-											language={getLanguage(filePath)}
-											style={vscDarkPlus}
-											wrapLines={false}
-											wrapLongLines={false}
-											showLineNumbers={true}
-											customStyle={{
-												margin: 0,
-												padding: '0.5rem',
-												background: 'rgb(20, 20, 20)',
-												fontSize: '11px',
-												minWidth: '100%',
-											}}
-										>
-											{resultArgs.code_edit}
-										</SyntaxHighlighterComp>
-									</div>
+										{resultArgs.code_edit}
+									</SyntaxHighlighterComp>
 								</div>
 							</div>
-						)}
+						</div>
 						{instructions && (
 							<div className="p-3 bg-muted rounded-lg">
 								<div className="font-semibold text-sm mb-2">Instructions:</div>
