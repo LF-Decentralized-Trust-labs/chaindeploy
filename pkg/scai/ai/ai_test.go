@@ -82,7 +82,7 @@ func TestWithExistingProject(t *testing.T) {
 	}
 
 	// Use the existing project directory
-	projectDir := "/Users/davidviejo/projects/kfs/chainlaunch/projects-data"
+	projectDir := "/Users/davidviejo/projects/kfs/beast-mode/lfdt-chainlaunch/projects-data-node1"
 
 	// Check if the project directory exists
 	if _, err := os.Stat(projectDir); os.IsNotExist(err) {
@@ -107,7 +107,7 @@ func TestWithExistingProject(t *testing.T) {
 	// Create a mock project
 	project := &db.GetProjectRow{
 		ID:          1,
-		Slug:        "dev-2a3eb",
+		Slug:        "testgo-4cf84",
 		Boilerplate: sql.NullString{String: "chaincode-fabric-go", Valid: true},
 	}
 
@@ -116,7 +116,9 @@ func TestWithExistingProject(t *testing.T) {
 
 	// Single test case: Add a function
 	// userMessage := "Add a new function called 'GetAssetCount' to the contract asset contract in go that returns the total number of assets in the ledger"
-	userMessage := "Make sure you modify the function InitLedger in the file chaincode/contract.go to create 10 new assets with different IDs"
+	// userMessage := "Modify the function InitLedger to create 10 new assets instead of 5"
+	userMessage := "Instead of creating in the smart contract asset 20 assets, create only 5 assets"
+	// userMessage := "Fix the contract.go file"
 
 	// Create observer to capture the model's behavior
 	observer := &MockAgentStepObserver{}

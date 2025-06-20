@@ -279,7 +279,7 @@ func (s *OpenAIChatService) GetExtendedToolSchemas(projectRoot string) []ToolSch
 		},
 		{
 			Name:        "grep_search",
-			Description: "Fast text-based regex search that finds exact pattern matches within files or directories, utilizing the ripgrep command for efficient searching.\nResults will be formatted in the style of ripgrep and can be configured to include line numbers and content.\nTo avoid overwhelming output, the results are capped at 50 matches.\nUse the include or exclude patterns to filter the search scope by file type or specific paths.\n\nThis is best for finding exact text matches or regex patterns.\nMore precise than semantic search for finding specific strings or patterns.\nThis is preferred over semantic search when we know the exact symbol/function name/etc. to search in some set of directories/file types.",
+			Description: "Fast text-based regex search that finds exact pattern matches within files or directories, utilizing the ripgrep command for efficient searching.\nTo avoid overwhelming output, the results are capped at 50 matches.\nUse the include or exclude patterns to filter the search scope by file type or specific paths.\nThis is best for finding exact text matches or regex patterns. This is preferred over semantic search when we know the exact symbol/function name/etc. to search in some set of directories/file types.",
 			Parameters: map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
@@ -287,32 +287,41 @@ func (s *OpenAIChatService) GetExtendedToolSchemas(projectRoot string) []ToolSch
 						"type":        "string",
 						"description": "The regex pattern to search for",
 					},
+					"case_sensitive": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Whether the search should be case sensitive",
+					},
 					"include_pattern": map[string]interface{}{
 						"type":        "string",
-						"description": "Glob pattern for files to include",
+						"description": "Glob pattern for files to include (e.g. '*.ts' for TypeScript files)",
 					},
 					"exclude_pattern": map[string]interface{}{
 						"type":        "string",
 						"description": "Glob pattern for files to exclude",
 					},
-					"case_sensitive": map[string]interface{}{
-						"type":        "boolean",
-						"description": "Whether the search should be case sensitive",
-					},
 					"explanation": map[string]interface{}{
 						"type":        "string",
-						"description": "One sentence explanation as to why this tool is being used, and how it contributes to the goal.",
+						"description": "One sentence explanation as to why this tool is being used.",
 					},
 				},
 				"required": []string{"query"},
 			},
 			Handler: func(toolName string, args map[string]interface{}) (interface{}, error) {
 				query, _ := args["query"].(string)
+				caseSensitive, _ := args["case_sensitive"].(bool)
 				includePattern, _ := args["include_pattern"].(string)
 				excludePattern, _ := args["exclude_pattern"].(string)
-				caseSensitive, _ := args["case_sensitive"].(bool)
 
-				cmdArgs := []string{"rg", "--line-number", "--with-filename"}
+				// Check if query contains regex patterns
+				hasRegexPatterns := strings.ContainsAny(query, ".*+?^$|()[]{}")
+
+				cmdArgs := []string{"/opt/homebrew/bin/rg", "--line-number", "--with-filename"}
+
+				// If query doesn't contain regex patterns, use literal matching for better reliability
+				if !hasRegexPatterns {
+					cmdArgs = append(cmdArgs, "-F")
+				}
+
 				if !caseSensitive {
 					cmdArgs = append(cmdArgs, "-i")
 				}
@@ -320,59 +329,72 @@ func (s *OpenAIChatService) GetExtendedToolSchemas(projectRoot string) []ToolSch
 					cmdArgs = append(cmdArgs, "-g", fmt.Sprintf("**/%s", includePattern))
 				}
 				if excludePattern != "" {
-					cmdArgs = append(cmdArgs, "-g", "!"+excludePattern)
+					cmdArgs = append(cmdArgs, "-g", fmt.Sprintf("!**/%s", excludePattern))
 				}
-				cmdArgs = append(cmdArgs, query, projectRoot)
+
+				// Use the query directly if using literal matching, otherwise escape it
+				searchQuery := query
+				if hasRegexPatterns {
+					searchQuery = escapeRegexQuery(query)
+				}
+
+				cmdArgs = append(cmdArgs, searchQuery, projectRoot)
 				s.Logger.Infof("grep_search cmd: %v", cmdArgs)
+				s.Logger.Infof("grep_search original query: %s", query)
+				s.Logger.Infof("grep_search search query: %s", searchQuery)
+				s.Logger.Infof("grep_search using literal matching: %v", !hasRegexPatterns)
+
 				cmd := exec.CommandContext(context.Background(), cmdArgs[0], cmdArgs[1:]...)
+
+				// Capture both stdout and stderr
 				output, err := cmd.CombinedOutput()
 				if err != nil {
-					if strings.Contains(err.Error(), "exit status 1") {
-						return map[string]interface{}{
-							"results": "No matches found",
-							"query":   query,
-						}, nil
+					// Log detailed error information
+					s.Logger.Infof("grep_search error: %v", err)
+					s.Logger.Infof("grep_search output: %s", string(output))
+					s.Logger.Infof("grep_search command: %v", cmdArgs)
+					s.Logger.Infof("grep_search original query: %s", query)
+					s.Logger.Infof("grep_search search query: %s", searchQuery)
+
+					// Check if it's an exit error (no matches found)
+					if exitErr, ok := err.(*exec.ExitError); ok {
+						s.Logger.Infof("grep_search exit code: %d", exitErr.ExitCode())
+						if exitErr.ExitCode() == 1 {
+							// No matches found, return empty results
+							return map[string]interface{}{
+								"results": []map[string]interface{}{},
+								"query":   query,
+							}, nil
+						}
 					}
-					s.Logger.Infof("grep_search error: %v, output: %s", err, string(output))
-					return nil, err
+					return nil, fmt.Errorf("grep_search failed: %w, output: %s", err, string(output))
 				}
 
-				// Parse the output and format it nicely
-				lines := strings.Split(string(output), "\n")
-				var formattedResults []string
+				lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+				var results []map[string]interface{}
 
-				for _, line := range lines {
-					line = strings.TrimSpace(line)
+				for i, line := range lines {
+					if i >= 50 { // Cap at 50 results
+						break
+					}
 					if line == "" {
 						continue
 					}
 
-					// Parse ripgrep output format: filepath:line:content
+					// Parse ripgrep output format: file:line:content
 					parts := strings.SplitN(line, ":", 3)
 					if len(parts) >= 3 {
-						filePath := parts[0]
-						lineNum := parts[1]
-						content := parts[2]
-
-						// Convert to relative path
-						relPath, err := filepath.Rel(projectRoot, filePath)
-						if err != nil {
-							relPath = filePath
-						}
-
-						formattedResults = append(formattedResults, fmt.Sprintf("```%s:%s:%s\n%s\n```", lineNum, lineNum, relPath, content))
+						results = append(results, map[string]interface{}{
+							"file":    parts[0],
+							"line":    parts[1],
+							"content": parts[2],
+						})
 					}
 				}
 
-				if len(formattedResults) > 50 {
-					formattedResults = formattedResults[:50]
-					formattedResults = append(formattedResults, "... (truncated to 50 results)")
-				}
-
 				return map[string]interface{}{
-					"results": strings.Join(formattedResults, "\n"),
+					"results": results,
 					"query":   query,
-					"count":   len(formattedResults),
 				}, nil
 			},
 		},
@@ -416,6 +438,7 @@ func (s *OpenAIChatService) GetExtendedToolSchemas(projectRoot string) []ToolSch
 				_, err := os.Stat(absPath)
 				fileExists := err == nil
 
+				// If file doesn't exist, create it with the new content
 				if !fileExists {
 					dir := filepath.Dir(absPath)
 					if err := os.MkdirAll(dir, 0755); err != nil {
@@ -432,15 +455,45 @@ func (s *OpenAIChatService) GetExtendedToolSchemas(projectRoot string) []ToolSch
 					}, nil
 				}
 
-				if err := os.WriteFile(absPath, []byte(codeEdit), 0644); err != nil {
-					return nil, err
+				// File exists, use search/replace functionality
+				// Read the existing file content
+				existingContent, err := os.ReadFile(absPath)
+				if err != nil {
+					return nil, fmt.Errorf("failed to read existing file: %w", err)
+				}
+
+				// Use the search/replace functionality to apply the edit
+				opts := SearchReplaceOptions{
+					From:         "edit_file_tool",
+					ApplyStr:     codeEdit,
+					OriginalCode: string(existingContent),
+					URI:          absPath,
+					AIClient:     s.Client, // Use the service's OpenAI client
+					Model:        "gpt-4.1-mini",
+					MaxRetries:   3,
+				}
+
+				result, err := InitializeSearchAndReplaceStream(opts)
+				if err != nil {
+					return nil, fmt.Errorf("search/replace operation failed: %w", err)
+				}
+
+				if !result.Success {
+					return nil, fmt.Errorf("search/replace operation failed: %v", result.Error)
+				}
+
+				// Write the modified content back to the file
+				if err := os.WriteFile(absPath, []byte(result.FinalCode), 0644); err != nil {
+					return nil, fmt.Errorf("failed to write modified file: %w", err)
 				}
 				sessionchanges.RegisterChange(absPath)
 
 				return map[string]interface{}{
-					"result":       "File edited successfully",
-					"file_path":    targetFile,
-					"instructions": instructions,
+					"result":         "File edited successfully using AI search/replace",
+					"file_path":      targetFile,
+					"instructions":   instructions,
+					"blocks_applied": len(result.Blocks),
+					"ai_used":        true,
 				}, nil
 			},
 		},
@@ -620,4 +673,21 @@ func shouldSkipPath(path string) bool {
 	}
 
 	return false
+}
+
+// escapeRegexQuery escapes special regex characters in the query
+func escapeRegexQuery(query string) string {
+	// For simple text searches, we want to escape regex special characters
+	// but we need to be careful not to over-escape
+
+	// First, handle backslashes (must be first)
+	escapedQuery := strings.ReplaceAll(query, "\\", "\\\\")
+
+	// Escape regex special characters
+	specialChars := []string{".", "*", "+", "?", "^", "$", "|", "(", ")", "[", "]", "{", "}", " "}
+	for _, char := range specialChars {
+		escapedQuery = strings.ReplaceAll(escapedQuery, char, "\\"+char)
+	}
+
+	return escapedQuery
 }
