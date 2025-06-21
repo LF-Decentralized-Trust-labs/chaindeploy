@@ -18,6 +18,19 @@ interface ListDirResultProps {
 	copiedCode: string | null
 }
 
+interface ListDirExecuteProps {
+	event: ToolEvent
+}
+
+export const ListDirExecute = ({ event }: ListDirExecuteProps) => {
+	return (
+		<div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg border border-border">
+			<div className="animate-spin h-4 w-4 border-2 border-green-500 border-t-transparent rounded-full" />
+			<span className="font-medium">Executing directory listing...</span>
+		</div>
+	)
+}
+
 export const ListDirUpdate = ({ event, accumulatedArgs, copyToClipboard }: ListDirUpdateProps) => {
 	const relativePath = accumulatedArgs.relative_workspace_path || ''
 	const explanation = accumulatedArgs.explanation || ''

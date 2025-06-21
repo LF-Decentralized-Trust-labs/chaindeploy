@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { Copy, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
@@ -18,12 +18,29 @@ interface GrepSearchResultProps {
 	copiedCode: string | null
 }
 
+interface GrepSearchExecuteProps {
+	event: ToolEvent
+}
+
+export const GrepSearchExecute = ({ event }: GrepSearchExecuteProps) => {
+	return (
+		<div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg border border-border">
+			<div className="animate-spin h-4 w-4 border-2 border-purple-500 border-t-transparent rounded-full" />
+			<span className="font-medium">Executing grep search...</span>
+		</div>
+	)
+}
+
 export const GrepSearchUpdate = ({ event, accumulatedArgs, copyToClipboard }: GrepSearchUpdateProps) => {
-	const query = accumulatedArgs.query || ''
-	const includePattern = accumulatedArgs.include_pattern || ''
-	const excludePattern = accumulatedArgs.exclude_pattern || ''
-	const caseSensitive = accumulatedArgs.case_sensitive || false
-	const explanation = accumulatedArgs.explanation || ''
+	const args = useMemo(() => {
+		return accumulatedArgs || {}
+	}, [accumulatedArgs])
+	
+	const query = useMemo(() => args.query || '', [args.query])
+	const includePattern = useMemo(() => args.include_pattern || '', [args.include_pattern])
+	const excludePattern = useMemo(() => args.exclude_pattern || '', [args.exclude_pattern])
+	const caseSensitive = useMemo(() => args.case_sensitive || false, [args.case_sensitive])
+	const explanation = useMemo(() => args.explanation || '', [args.explanation])
 	
 	const handleCopyDelta = async () => {
 		await copyToClipboard(JSON.stringify(accumulatedArgs, null, 2))
@@ -62,11 +79,15 @@ export const GrepSearchUpdate = ({ event, accumulatedArgs, copyToClipboard }: Gr
 }
 
 export const GrepSearchResult = ({ event }: GrepSearchResultProps) => {
-	const result = event.result && typeof event.result === 'object' ? event.result as any : {}
-	const query = result.query || ''
-	const results = result.results || []
+	const resultArgs = useMemo(() => {
+		const args = event.result && typeof event.result === 'object' ? event.result as any : {}
+		return args
+	}, [event.result])
+	
+	const query = useMemo(() => resultArgs.query || '', [resultArgs.query])
+	const results = useMemo(() => resultArgs.results || [], [resultArgs.results])
 
-	const summary = `Found ${results.length} matches for "${query}".`
+	const summary = useMemo(() => `Found ${results.length} matches for "${query}".`, [results.length, query])
 
 	const details = (
 		<Dialog>

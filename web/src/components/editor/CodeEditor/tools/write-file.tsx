@@ -24,6 +24,19 @@ interface WriteFileResultProps {
 	copiedCode: string | null
 }
 
+interface WriteFileExecuteProps {
+	event: ToolEvent
+}
+
+export const WriteFileExecute = ({ event }: WriteFileExecuteProps) => {
+	return (
+		<div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg border border-border">
+			<div className="animate-spin h-4 w-4 border-2 border-green-500 border-t-transparent rounded-full" />
+			<span className="font-medium">Executing file write...</span>
+		</div>
+	)
+}
+
 export const WriteFileUpdate = ({ event, accumulatedArgs, copyToClipboard }: WriteFileUpdateProps) => {
 	const targetFile = accumulatedArgs.target_file || ''
 	const content = accumulatedArgs.content || ''

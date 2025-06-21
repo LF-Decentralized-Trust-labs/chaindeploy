@@ -18,6 +18,19 @@ interface DeleteFileResultProps {
 	copiedCode: string | null
 }
 
+interface DeleteFileExecuteProps {
+	event: ToolEvent
+}
+
+export const DeleteFileExecute = ({ event }: DeleteFileExecuteProps) => {
+	return (
+		<div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg border border-border">
+			<div className="animate-spin h-4 w-4 border-2 border-red-500 border-t-transparent rounded-full" />
+			<span className="font-medium">Executing file deletion...</span>
+		</div>
+	)
+}
+
 export const DeleteFileUpdate = ({ event, accumulatedArgs, copyToClipboard }: DeleteFileUpdateProps) => {
 	const targetFile = accumulatedArgs.target_file || ''
 	const explanation = accumulatedArgs.explanation || ''

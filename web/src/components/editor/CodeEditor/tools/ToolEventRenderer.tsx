@@ -10,18 +10,18 @@ import { ToolStartComponent } from './ToolStartComponent'
 import { ToolSummaryCard } from './ToolSummaryCard'
 
 // Import all tool components
-import { CodebaseSearchResult, CodebaseSearchUpdate } from './codebase-search'
-import { DeleteFileResult, DeleteFileUpdate } from './delete-file'
-import { EditFileResult, EditFileUpdate } from './edit-file'
-import { FileSearchResult, FileSearchUpdate } from './file-search'
-import { GrepSearchResult, GrepSearchUpdate } from './grep-search'
-import { ListDirResult, ListDirUpdate } from './list-dir'
-import { ReadFileResult, ReadFileUpdate } from './read-file'
-import { ReadFileEnhancedResult, ReadFileEnhancedUpdate } from './read-file-enhanced'
-import { ReapplyResult, ReapplyUpdate } from './reapply'
-import { RunTerminalCmdResult, RunTerminalCmdUpdate } from './run-terminal-cmd'
-import { SearchReplaceResult, SearchReplaceUpdate } from './search-replace'
-import { WriteFileResult, WriteFileUpdate } from './write-file'
+import { CodebaseSearchResult, CodebaseSearchUpdate, CodebaseSearchExecute } from './codebase-search'
+import { DeleteFileResult, DeleteFileUpdate, DeleteFileExecute } from './delete-file'
+import { EditFileResult, EditFileUpdate, EditFileExecute } from './edit-file'
+import { FileSearchResult, FileSearchUpdate, FileSearchExecute } from './file-search'
+import { GrepSearchResult, GrepSearchUpdate, GrepSearchExecute } from './grep-search'
+import { ListDirResult, ListDirUpdate, ListDirExecute } from './list-dir'
+import { ReadFileResult, ReadFileUpdate, ReadFileExecute } from './read-file'
+import { ReadFileEnhancedResult, ReadFileEnhancedUpdate, ReadFileEnhancedExecute } from './read-file-enhanced'
+import { ReapplyResult, ReapplyUpdate, ReapplyExecute } from './reapply'
+import { RunTerminalCmdResult, RunTerminalCmdUpdate, RunTerminalCmdExecute } from './run-terminal-cmd'
+import { SearchReplaceResult, SearchReplaceUpdate, SearchReplaceExecute } from './search-replace'
+import { WriteFileResult, WriteFileUpdate, WriteFileExecute } from './write-file'
 
 export interface ToolEvent {
 	type: 'start' | 'update' | 'execute' | 'result'
@@ -39,18 +39,18 @@ interface ToolEventProps {
 
 // Tool component mapping
 const toolComponents = {
-	read_file: { update: ReadFileUpdate, result: ReadFileResult },
-	write_file: { update: WriteFileUpdate, result: WriteFileResult },
-	codebase_search: { update: CodebaseSearchUpdate, result: CodebaseSearchResult },
-	read_file_enhanced: { update: ReadFileEnhancedUpdate, result: ReadFileEnhancedResult },
-	run_terminal_cmd: { update: RunTerminalCmdUpdate, result: RunTerminalCmdResult },
-	list_dir: { update: ListDirUpdate, result: ListDirResult },
-	grep_search: { update: GrepSearchUpdate, result: GrepSearchResult },
-	edit_file: { update: EditFileUpdate, result: EditFileResult },
-	search_replace: { update: SearchReplaceUpdate, result: SearchReplaceResult },
-	file_search: { update: FileSearchUpdate, result: FileSearchResult },
-	delete_file: { update: DeleteFileUpdate, result: DeleteFileResult },
-	reapply: { update: ReapplyUpdate, result: ReapplyResult },
+	read_file: { update: ReadFileUpdate, result: ReadFileResult, execute: ReadFileExecute },
+	write_file: { update: WriteFileUpdate, result: WriteFileResult, execute: WriteFileExecute },
+	codebase_search: { update: CodebaseSearchUpdate, result: CodebaseSearchResult, execute: CodebaseSearchExecute },
+	read_file_enhanced: { update: ReadFileEnhancedUpdate, result: ReadFileEnhancedResult, execute: ReadFileEnhancedExecute },
+	run_terminal_cmd: { update: RunTerminalCmdUpdate, result: RunTerminalCmdResult, execute: RunTerminalCmdExecute },
+	list_dir: { update: ListDirUpdate, result: ListDirResult, execute: ListDirExecute },
+	grep_search: { update: GrepSearchUpdate, result: GrepSearchResult, execute: GrepSearchExecute },
+	edit_file: { update: EditFileUpdate, result: EditFileResult, execute: EditFileExecute },
+	search_replace: { update: SearchReplaceUpdate, result: SearchReplaceResult, execute: SearchReplaceExecute },
+	file_search: { update: FileSearchUpdate, result: FileSearchResult, execute: FileSearchExecute },
+	delete_file: { update: DeleteFileUpdate, result: DeleteFileResult, execute: DeleteFileExecute },
+	reapply: { update: ReapplyUpdate, result: ReapplyResult, execute: ReapplyExecute },
 }
 
 export const ToolEventRenderer = React.memo(({ event }: ToolEventProps) => {
@@ -117,7 +117,7 @@ export const ToolEventRenderer = React.memo(({ event }: ToolEventProps) => {
 			if (toolComponent?.update) {
 				const UpdateComponent = toolComponent.update
 				let accumulatedArgs = previousDeltaRef.current || {}
-				
+
 				if (event.arguments) {
 					const parsed = parseDelta(event.arguments)
 					if (parsed !== null) {
@@ -127,7 +127,7 @@ export const ToolEventRenderer = React.memo(({ event }: ToolEventProps) => {
 					}
 					// If parsing failed, keep using previousDeltaRef.current (accumulatedArgs already set above)
 				}
-				
+
 				return <UpdateComponent event={event} accumulatedArgs={accumulatedArgs} copyToClipboard={copyToClipboard} />
 			}
 
@@ -147,6 +147,13 @@ export const ToolEventRenderer = React.memo(({ event }: ToolEventProps) => {
 
 		// Handle execute events
 		if (event.type === 'execute') {
+			const toolComponent = toolComponents[event.name as keyof typeof toolComponents]
+			if (toolComponent?.execute) {
+				const ExecuteComponent = toolComponent.execute
+				return <ExecuteComponent event={event} />
+			}
+
+			// Fallback for unknown tools
 			return <ToolExecuteComponent event={event} />
 		}
 

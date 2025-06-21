@@ -18,6 +18,19 @@ interface CodebaseSearchResultProps {
 	copiedCode: string | null
 }
 
+interface CodebaseSearchExecuteProps {
+	event: ToolEvent
+}
+
+export const CodebaseSearchExecute = ({ event }: CodebaseSearchExecuteProps) => {
+	return (
+		<div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg border border-border">
+			<div className="animate-spin h-4 w-4 border-2 border-purple-500 border-t-transparent rounded-full" />
+			<span className="font-medium">Executing codebase search...</span>
+		</div>
+	)
+}
+
 export const CodebaseSearchUpdate = ({ event, accumulatedArgs, copyToClipboard }: CodebaseSearchUpdateProps) => {
 	const query = accumulatedArgs.query || ''
 	const targetDirectories = accumulatedArgs.target_directories || []

@@ -24,6 +24,19 @@ interface ReadFileResultProps {
 	copiedCode: string | null
 }
 
+interface ReadFileExecuteProps {
+	event: ToolEvent
+}
+
+export const ReadFileExecute = ({ event }: ReadFileExecuteProps) => {
+	return (
+		<div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg border border-border">
+			<div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
+			<span className="font-medium">Executing file read...</span>
+		</div>
+	)
+}
+
 export const ReadFileUpdate = ({ event, accumulatedArgs, copyToClipboard }: ReadFileUpdateProps) => {
 	const path = accumulatedArgs.path || ''
 
@@ -58,19 +71,26 @@ export const ReadFileResult = ({ event, copyToClipboard, copiedCode }: ReadFileR
 		const args = event.arguments && typeof event.arguments === 'string' ? JSON.parse(event.arguments) : {}
 		return args
 	}, [event.arguments])
-	
-	const path = resultArgs.path || ''
-	const result = event.result && typeof event.result === 'object' ? (event.result as any) : {}
-	const content = result.content || ''
+	const path = useMemo(() => resultArgs.target_file || '', [resultArgs.target_file])
+	const explanation = useMemo(() => resultArgs.explanation || '', [resultArgs.explanation])
 
-	const summary = `The file "${path}" has been read successfully.`
-
+	const summary = useMemo(() => `The file "${path}" has been read successfully.`, [path])
+	console.log('event.result', path, explanation)
 	const details = (
 		<Dialog>
 			<DialogTrigger asChild>
-				<Button variant="ghost" size="sm" className="h-6 text-xs">
-					View Content
-				</Button>
+				<>
+					{explanation && (
+						<div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800 mb-3">
+							<div className="font-semibold text-sm mb-2 text-blue-700 dark:text-blue-300">Explanation:</div>
+							<div className="text-sm text-blue-600 dark:text-blue-200">{explanation}</div>
+						</div>
+					)}
+
+					<Button variant="ghost" size="sm" className="h-6 text-xs">
+						View Content
+					</Button>
+				</>
 			</DialogTrigger>
 			<DialogContent className="max-w-2xl">
 				<DialogHeader>
@@ -82,24 +102,18 @@ export const ReadFileResult = ({ event, copyToClipboard, copiedCode }: ReadFileR
 							<div className="font-semibold text-sm mb-2">File:</div>
 							<div className="text-sm">{path}</div>
 						</div>
+						{explanation && (
+							<div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+								<div className="font-semibold text-sm mb-2 text-blue-700 dark:text-blue-300">Explanation:</div>
+								<div className="text-sm text-blue-600 dark:text-blue-200">{explanation}</div>
+							</div>
+						)}
 						<div className="relative group">
 							<div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
-								<button onClick={() => copyToClipboard(content)} className="p-1.5 rounded bg-muted hover:bg-muted/80 transition-colors" title="Copy content">
-									{copiedCode === content ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+								<button onClick={() => copyToClipboard(event.result as string)} className="p-1.5 rounded bg-muted hover:bg-muted/80 transition-colors" title="Copy content">
+									{copiedCode === event.result ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
 								</button>
 							</div>
-							<SyntaxHighlighterComp
-								language={getLanguage(path)}
-								style={vscDarkPlus}
-								PreTag="div"
-								className="rounded-lg"
-								showLineNumbers={true}
-								wrapLines={true}
-								wrapLongLines={true}
-								customStyle={{ margin: 0, padding: '1rem' }}
-							>
-								{content}
-							</SyntaxHighlighterComp>
 						</div>
 					</div>
 				</ScrollArea>

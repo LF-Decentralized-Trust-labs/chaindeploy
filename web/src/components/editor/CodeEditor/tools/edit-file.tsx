@@ -24,6 +24,42 @@ interface EditFileResultProps {
 	copiedCode: string | null
 }
 
+interface EditFileExecuteProps {
+	event: ToolEvent
+}
+
+export const EditFileExecute = ({ event }: EditFileExecuteProps) => {
+	const args = useMemo(() => (event.arguments ? JSON.parse(event.arguments) : {}), [event.arguments])
+	return (
+		<div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg border border-border">
+			<div className="animate-spin h-4 w-4 border-2 border-yellow-500 border-t-transparent rounded-full" />
+			<span className="font-medium">Applying changes...</span>
+			{event.arguments && (
+				<div className="mt-2 text-xs bg-background/50 p-2 rounded">
+					<div className="font-semibold mb-1">Final arguments:</div>
+					<SyntaxHighlighterComp
+						language="json"
+						style={vscDarkPlus}
+						PreTag="div"
+						className="rounded text-xs"
+						showLineNumbers={false}
+						wrapLines={false}
+						wrapLongLines={false}
+						customStyle={{
+							margin: 0,
+							padding: '0.5rem',
+							background: 'rgb(20, 20, 20)',
+							fontSize: '10px',
+						}}
+					>
+						{args.code_edit}
+					</SyntaxHighlighterComp>
+				</div>
+			)}
+		</div>
+	)
+}
+
 export const EditFileUpdate = ({ event, accumulatedArgs, copyToClipboard }: EditFileUpdateProps) => {
 	const targetFile = accumulatedArgs.target_file || ''
 	const instructions = accumulatedArgs.instructions || ''
@@ -106,6 +142,7 @@ export const EditFileResult = ({ event }: EditFileResultProps) => {
 		const args = event.arguments && typeof event.arguments === 'string' ? JSON.parse(event.arguments) : {}
 		return args
 	}, [event.arguments])
+	console.log('resultArgs', resultArgs, event)
 	const [copiedCode, setCopiedCode] = useState<string | null>(null)
 	const scrollContainerRef = useRef<HTMLDivElement>(null)
 
@@ -126,10 +163,18 @@ export const EditFileResult = ({ event }: EditFileResultProps) => {
 	}, [])
 	const details = (
 		<Dialog>
-			<DialogTrigger asChild>
-				<Button variant="ghost" size="sm" className="h-6 text-xs">
-					View Details
-				</Button>
+			<DialogTrigger>
+				<>
+					{instructions && (
+						<div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800 mb-3">
+							<div className="font-semibold text-sm mb-2 text-blue-700 dark:text-blue-300">Explanation:</div>
+							<div className="text-sm text-blue-600 dark:text-blue-200">{instructions}</div>
+						</div>
+					)}
+					<Button variant="ghost" size="sm" className="h-6 text-xs">
+						View Details
+					</Button>
+				</>
 			</DialogTrigger>
 			<DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0">
 				<DialogHeader className="px-6 pt-6 pb-2 border-b">

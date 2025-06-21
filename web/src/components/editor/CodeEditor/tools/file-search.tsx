@@ -18,6 +18,19 @@ interface FileSearchResultProps {
 	copiedCode: string | null
 }
 
+interface FileSearchExecuteProps {
+	event: ToolEvent
+}
+
+export const FileSearchExecute = ({ event }: FileSearchExecuteProps) => {
+	return (
+		<div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg border border-border">
+			<div className="animate-spin h-4 w-4 border-2 border-indigo-500 border-t-transparent rounded-full" />
+			<span className="font-medium">Executing file search...</span>
+		</div>
+	)
+}
+
 export const FileSearchUpdate = ({ event, accumulatedArgs, copyToClipboard }: FileSearchUpdateProps) => {
 	const query = accumulatedArgs.query || ''
 	const explanation = accumulatedArgs.explanation || ''

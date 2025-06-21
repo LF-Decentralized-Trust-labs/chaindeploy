@@ -24,6 +24,19 @@ interface ReadFileEnhancedResultProps {
 	copiedCode: string | null
 }
 
+interface ReadFileEnhancedExecuteProps {
+	event: ToolEvent
+}
+
+export const ReadFileEnhancedExecute = ({ event }: ReadFileEnhancedExecuteProps) => {
+	return (
+		<div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg border border-border">
+			<div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
+			<span className="font-medium">Executing enhanced file read...</span>
+		</div>
+	)
+}
+
 export const ReadFileEnhancedUpdate = ({ event, accumulatedArgs, copyToClipboard }: ReadFileEnhancedUpdateProps) => {
 	const targetFile = accumulatedArgs.target_file || ''
 	const shouldReadEntireFile = accumulatedArgs.should_read_entire_file || false
