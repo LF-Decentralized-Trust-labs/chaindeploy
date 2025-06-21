@@ -61,9 +61,9 @@ export const EditFileExecute = ({ event }: EditFileExecuteProps) => {
 }
 
 export const EditFileUpdate = ({ event, accumulatedArgs, copyToClipboard }: EditFileUpdateProps) => {
-	const targetFile = accumulatedArgs.target_file || ''
-	const instructions = accumulatedArgs.instructions || ''
-	const codeEdit = accumulatedArgs.code_edit || ''
+	const targetFile = useMemo(() => accumulatedArgs.target_file || '', [accumulatedArgs.target_file])
+	const instructions = useMemo(() => accumulatedArgs.instructions || '', [accumulatedArgs.instructions])
+	const codeEdit = useMemo(() => accumulatedArgs.search_replace_blocks || '', [accumulatedArgs.search_replace_blocks])
 	const language = getLanguage(targetFile)
 	const scrollContainerRef = useRef<HTMLDivElement>(null)
 

@@ -3550,6 +3550,42 @@ export type GetChaincodeProjectsByIdDiffResponses = {
 
 export type GetChaincodeProjectsByIdDiffResponse = GetChaincodeProjectsByIdDiffResponses[keyof GetChaincodeProjectsByIdDiffResponses];
 
+export type GetChaincodeProjectsByIdDownloadData = {
+    body?: never;
+    path: {
+        /**
+         * Project ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/chaincode-projects/{id}/download';
+};
+
+export type GetChaincodeProjectsByIdDownloadErrors = {
+    /**
+     * Bad Request
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetChaincodeProjectsByIdDownloadError = GetChaincodeProjectsByIdDownloadErrors[keyof GetChaincodeProjectsByIdDownloadErrors];
+
+export type GetChaincodeProjectsByIdDownloadResponses = {
+    /**
+     * OK
+     */
+    200: unknown;
+};
+
 export type PutChaincodeProjectsByIdEndorsementPolicyData = {
     /**
      * Update project endorsement policy request

@@ -150,7 +150,8 @@ It is *EXTREMELY* important that your generated code can be run immediately by t
 5. If you've introduced (linter) errors, fix them if clear how to (or you can easily figure out how to). Do not make uneducated guesses. And DO NOT loop more than 3 times on fixing linter errors on the same file. On the third time, you should stop and ask the user what to do next.
 6. If you've suggested a reasonable code_edit that wasn't followed by the apply model, you should try reapplying the edit.
 7. You have both the edit_file and search_replace tools at your disposal. Use the search_replace tool for files larger than 2500 lines, otherwise prefer the edit_file tool.
-8. **ALWAYS read the current content of a file before making changes to it, unless you are creating a new file.** This ensures your modifications are accurate and contextually appropriate.
+8. **ALWAYS** if the code_edit is a large change and overrides a lot of the file, you should use the write_file tool to write the contents of the file to the USER.
+9. **ALWAYS read the current content of a file before making changes to it, unless you are creating a new file.** This ensures your modifications are accurate and contextually appropriate.
 
 </making_code_changes>
 
@@ -234,6 +235,19 @@ func (s *OpenAIChatService) getProjectStructurePrompt(projectRoot string, toolSc
 	}
 	var sb strings.Builder
 	sb.WriteString(systemPrompt)
+
+	// Add network information if available
+	if project.NetworkID.Valid {
+		sb.WriteString("\n\n<network_information>\n")
+		sb.WriteString(fmt.Sprintf("Network ID: %d\n", project.NetworkID.Int64))
+		if project.NetworkName.Valid {
+			sb.WriteString(fmt.Sprintf("Network Name: %s\n", project.NetworkName.String))
+		}
+		if project.NetworkPlatform.Valid {
+			sb.WriteString(fmt.Sprintf("Network Platform: %s\n", project.NetworkPlatform.String))
+		}
+		sb.WriteString("</network_information>\n")
+	}
 
 	// Add boilerplate-specific prompt if available
 	if project.Boilerplate.Valid && project.Boilerplate.String != "" {
@@ -334,6 +348,11 @@ func (s *OpenAIChatService) StreamChat(
 	maxSteps int,
 	sessionTracker *sessionchanges.Tracker,
 ) error {
+	// Validate that we have messages to process
+	if len(messages) == 0 {
+		return fmt.Errorf("no messages provided for AI processing")
+	}
+
 	var chatMsgs []openai.ChatCompletionMessage
 	projectID := project.ID
 	projectSlug := project.Slug
@@ -366,6 +385,12 @@ func (s *OpenAIChatService) StreamChat(
 	})
 	var lastParentMsgID *int64
 	for _, m := range messages {
+		// Validate that message content is not empty
+		if strings.TrimSpace(m.Content) == "" {
+			s.Logger.Warnf("[StreamChat] Skipping empty message from sender: %s", m.Sender)
+			continue
+		}
+
 		role := openai.ChatMessageRoleUser
 		if m.Sender == "assistant" {
 			role = openai.ChatMessageRoleAssistant
@@ -374,6 +399,18 @@ func (s *OpenAIChatService) StreamChat(
 			Role:    role,
 			Content: m.Content,
 		})
+	}
+
+	// Validate that we have messages after filtering empty ones
+	if len(chatMsgs) <= 1 { // Only system message
+		return fmt.Errorf("no valid messages found after filtering empty content")
+	}
+
+	// Debug logging for message flow
+	s.Logger.Debugf("[StreamChat] Processing %d messages (including system message)", len(chatMsgs))
+	for i, msg := range chatMsgs {
+		s.Logger.Debugf("[StreamChat] Message %d: Role=%s, ContentLength=%d, ToolCalls=%d",
+			i, msg.Role, len(msg.Content), len(msg.ToolCalls))
 	}
 
 	toolSchemasMap := make(map[string]ToolSchema)
@@ -412,11 +449,6 @@ func (s *OpenAIChatService) StreamChat(
 			return err
 		}
 
-		s.Logger.Debugf("[StreamChat] Agent step: %d, assistant message: %s", step, msg.Content)
-		if len(msg.ToolCalls) > 0 {
-			s.Logger.Debugf("[StreamChat] Tool calls in step: %d, %v", step, msg.ToolCalls)
-		}
-
 		chatMsgs = append(chatMsgs, msg)
 
 		// If no tool calls, we're done
@@ -427,12 +459,10 @@ func (s *OpenAIChatService) StreamChat(
 
 		// Process all tool calls in this step
 		for _, toolCall := range msg.ToolCalls {
-			s.Logger.Debugf("[StreamChat] Handling tool call: %s, args: %s", toolCall.Function.Name, toolCall.Function.Arguments)
 			resultObj, _ := s.executeAndSerializeToolCall(toolCall, projectRoot)
 			resultStr := resultObj.resultStr
 			errStr := resultObj.errStr
 			argsStr := resultObj.argsStr
-			s.Logger.Debugf("[StreamChat] Tool result for: %s, %v", toolCall.Function.Name, resultStr)
 
 			// Add tool result message to DB and get its ID, set parentID to lastParentMsgID
 			toolMsg, err := s.ChatService.AddMessage(ctx, conversationID, lastParentMsgID, "tool", resultStr, "")
@@ -451,6 +481,7 @@ func (s *OpenAIChatService) StreamChat(
 				Content:    resultStr,
 				ToolCallID: toolCall.ID,
 			})
+			s.Logger.Debugf("[StreamChat] Adding tool message: ToolCallID=%s, ContentLength=%d", toolCall.ID, len(resultStr))
 		}
 	}
 
@@ -551,6 +582,11 @@ func StreamAgentStep(
 	toolSchemas map[string]ToolSchema,
 	observer AgentStepObserver, // new observer argument, can be nil
 ) (openai.ChatCompletionMessage, error) {
+	// Validate that we have messages to process
+	if len(messages) == 0 {
+		return openai.ChatCompletionMessage{}, fmt.Errorf("no messages provided for AI processing")
+	}
+
 	var contentBuilder strings.Builder
 	toolCallsMap := map[string]*openai.ToolCall{} // toolCallID -> ToolCall
 	var lastToolCallID string                     // Track the last tool call ID for argument accumulation
@@ -727,67 +763,6 @@ func (o *streamingObserver) OnLLMContent(content string) {
 	}
 }
 
-// enhancePrompt uses AI to improve the user's prompt for better results
-func (s *OpenAIChatService) enhancePrompt(ctx context.Context, userMessage string) (string, error) {
-	enhancementPrompt := fmt.Sprintf(`You are a professional prompt engineer specializing in crafting precise, effective prompts.
-Your task is to enhance prompts by making them more specific, actionable, and effective.
-
-I want you to improve the user prompt that is wrapped in <original_prompt> tags.
-
-For valid prompts:
-- Make instructions explicit and unambiguous
-- Add relevant context and constraints
-- Remove redundant information
-- Maintain the core intent
-- Ensure the prompt is self-contained
-- Use professional language
-
-For invalid or unclear prompts:
-- Respond with clear, professional guidance
-- Keep responses concise and actionable
-- Maintain a helpful, constructive tone
-- Focus on what the user should provide
-- Use a standard template for consistency
-
-IMPORTANT: Your response must ONLY contain the enhanced prompt text.
-Do not include any explanations, metadata, or wrapper tags.
-
-<original_prompt>
-%s
-</original_prompt>`, userMessage)
-
-	// Use a simpler model for prompt enhancement to save costs
-	resp, err := s.Client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
-		Model: "gpt-4.1-mini",
-
-		Messages: []openai.ChatCompletionMessage{
-			{
-				Role:    openai.ChatMessageRoleSystem,
-				Content: `You are a senior software principal architect, you should help the user analyse the user query and enrich it with the necessary context and constraints to make it more specific, actionable, and effective. You should also ensure that the prompt is self-contained and uses professional language. Your response should ONLY contain the enhanced prompt text. Do not include any explanations, metadata, or wrapper tags.`,
-			},
-			{
-				Role:    openai.ChatMessageRoleUser,
-				Content: enhancementPrompt,
-			},
-		},
-		MaxTokens:   1000,
-		Temperature: 0.3, // Lower temperature for more consistent results
-	})
-	if err != nil {
-		s.Logger.Warnf("Failed to enhance prompt: %v, using original", err)
-		return userMessage, nil // Fallback to original message
-	}
-
-	if len(resp.Choices) == 0 || resp.Choices[0].Message.Content == "" {
-		s.Logger.Warnf("Empty response from prompt enhancement, using original")
-		return userMessage, nil
-	}
-
-	enhancedPrompt := strings.TrimSpace(resp.Choices[0].Message.Content)
-	s.Logger.Debugf("Enhanced prompt: %s", enhancedPrompt)
-	return enhancedPrompt, nil
-}
-
 // ChatWithPersistence handles chat with DB persistence for a project.
 func (s *OpenAIChatService) ChatWithPersistence(
 	ctx context.Context,
@@ -798,6 +773,11 @@ func (s *OpenAIChatService) ChatWithPersistence(
 	conversationID int64,
 	sessionTracker *sessionchanges.Tracker,
 ) error {
+	// Validate that user message is not empty
+	if strings.TrimSpace(userMessage) == "" {
+		return fmt.Errorf("user message cannot be empty")
+	}
+
 	project, err := s.Queries.GetProject(ctx, projectID)
 	if err != nil {
 		return err
@@ -833,6 +813,11 @@ func (s *OpenAIChatService) ChatWithPersistence(
 			continue
 		}
 		content := m.Content
+		// Validate that content is not empty
+		if strings.TrimSpace(content) == "" {
+			s.Logger.Warnf("Skipping empty message from sender: %s", m.Sender)
+			continue
+		}
 		// If enhanced content is available, use it for AI interaction
 		if m.EnhancedContent.Valid && m.EnhancedContent.String != "" {
 			content = m.EnhancedContent.String
@@ -848,6 +833,11 @@ func (s *OpenAIChatService) ChatWithPersistence(
 			Sender:  m.Sender,
 			Content: content,
 		})
+	}
+
+	// Validate that we have at least one message to process
+	if len(messages) == 0 {
+		return fmt.Errorf("no valid messages found for AI processing")
 	}
 
 	// 5. Call the streaming chat logic (this will stream and also generate the assistant reply)

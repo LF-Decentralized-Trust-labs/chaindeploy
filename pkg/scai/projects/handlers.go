@@ -111,6 +111,7 @@ func (h *ProjectsHandler) RegisterRoutes(r chi.Router) {
 		r.Post("/{id}/invoke", response.Middleware(h.InvokeTransaction))
 		r.Post("/{id}/query", response.Middleware(h.QueryTransaction))
 		r.Put("/{id}/endorsement-policy", response.Middleware(h.UpdateProjectEndorsementPolicy))
+		r.Get("/{id}/download", response.Middleware(h.DownloadProject))
 	})
 }
 
@@ -671,4 +672,49 @@ func (h *ProjectsHandler) UpdateProjectEndorsementPolicy(w http.ResponseWriter, 
 	zap.L().Info("updated project endorsement policy", zap.Int64("id", proj.ID), zap.String("name", proj.Name), zap.String("request_id", middleware.GetReqID(r.Context())))
 
 	return response.WriteJSON(w, http.StatusOK, proj)
+}
+
+// DownloadProject godoc
+// @Summary      Download a project as a zip file
+// @Description  Download a project and its associated files as a zip file, excluding common folders like node_modules, .vscode, etc.
+// @Tags         Chaincode Projects
+// @Produce      application/zip
+// @Param        id path int true "Project ID"
+// @Success      200 {file} application/zip "Project zip file"
+// @Failure      400 {object} response.ErrorResponse
+// @Failure      404 {object} response.ErrorResponse
+// @Failure      500 {object} response.ErrorResponse
+// @Router       /chaincode-projects/{id}/download [get]
+func (h *ProjectsHandler) DownloadProject(w http.ResponseWriter, r *http.Request) error {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid project id", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	proj, err := h.Service.GetProject(r.Context(), id)
+	if err != nil {
+		if err == ErrNotFound {
+			return errors.NewNotFoundError("project not found", nil)
+		}
+		return errors.NewInternalError("failed to get project", err, nil)
+	}
+
+	// Set response headers for streaming download
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s.zip", proj.Slug))
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Transfer-Encoding", "chunked")
+	w.Header().Set("Cache-Control", "no-cache")
+
+	// Stream the zip file directly to the response writer
+	err = h.Service.DownloadProjectAsZip(r.Context(), id, w)
+	if err != nil {
+		return errors.NewInternalError("failed to create project zip", err, nil)
+	}
+
+	zap.L().Info("downloaded project", zap.Int64("id", proj.ID), zap.String("name", proj.Name), zap.String("request_id", middleware.GetReqID(r.Context())))
+
+	return nil
 }

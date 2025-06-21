@@ -98,6 +98,8 @@ export interface EditorTabsProps {
 	handleTabClick: (file: File) => void
 	handleTabClose: (file: File, e: React.MouseEvent) => void
 	dirtyFiles: string[]
+	projectId: number
+	projectName?: string
 }
 
 export interface EditorContentProps {

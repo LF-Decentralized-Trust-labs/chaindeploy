@@ -33,8 +33,16 @@ export const GrepSearchExecute = ({ event }: GrepSearchExecuteProps) => {
 
 export const GrepSearchUpdate = ({ event, accumulatedArgs, copyToClipboard }: GrepSearchUpdateProps) => {
 	const args = useMemo(() => {
+		if (event.arguments) {
+			try {
+				const parsed = JSON.parse(event.arguments)
+				return parsed
+			} catch (e) {
+				return accumulatedArgs || {}
+			}
+		}
 		return accumulatedArgs || {}
-	}, [accumulatedArgs])
+	}, [event.arguments, accumulatedArgs])
 	
 	const query = useMemo(() => args.query || '', [args.query])
 	const includePattern = useMemo(() => args.include_pattern || '', [args.include_pattern])
@@ -43,7 +51,7 @@ export const GrepSearchUpdate = ({ event, accumulatedArgs, copyToClipboard }: Gr
 	const explanation = useMemo(() => args.explanation || '', [args.explanation])
 	
 	const handleCopyDelta = async () => {
-		await copyToClipboard(JSON.stringify(accumulatedArgs, null, 2))
+		await copyToClipboard(JSON.stringify(args, null, 2))
 	}
 
 	return (
@@ -78,16 +86,33 @@ export const GrepSearchUpdate = ({ event, accumulatedArgs, copyToClipboard }: Gr
 	)
 }
 
-export const GrepSearchResult = ({ event }: GrepSearchResultProps) => {
+export const GrepSearchResult = ({ event, copyToClipboard }: GrepSearchResultProps) => {
+	const args = useMemo(() => {
+		if (event.arguments) {
+			try {
+				const parsed = JSON.parse(event.arguments)
+				return parsed
+			} catch (e) {
+				return {}
+			}
+		}
+		return {}
+	}, [event.arguments])
+	
 	const resultArgs = useMemo(() => {
-		const args = event.result && typeof event.result === 'object' ? event.result as any : {}
-		return args
+		const result = event.result && typeof event.result === 'object' ? event.result as any : {}
+		return result
 	}, [event.result])
 	
-	const query = useMemo(() => resultArgs.query || '', [resultArgs.query])
+	const query = useMemo(() => args.query || resultArgs.query || '', [args.query, resultArgs.query])
+	const explanation = useMemo(() => args.explanation || '', [args.explanation])
 	const results = useMemo(() => resultArgs.results || [], [resultArgs.results])
 
 	const summary = useMemo(() => `Found ${results.length} matches for "${query}".`, [results.length, query])
+
+	const handleCopyArgs = async () => {
+		await copyToClipboard(JSON.stringify(args, null, 2))
+	}
 
 	const details = (
 		<Dialog>
@@ -123,7 +148,26 @@ export const GrepSearchResult = ({ event }: GrepSearchResultProps) => {
 
 	return (
 		<ToolSummaryCard event={event} summary={summary}>
-			{details}
+			<div className="flex items-center gap-2">
+				{details}
+				{Object.keys(args).length > 0 && (
+					<Button 
+						variant="ghost" 
+						size="sm" 
+						className="h-6 text-xs"
+						onClick={handleCopyArgs}
+						title="Copy arguments"
+					>
+						<Copy className="w-3 h-3 mr-1" />
+						Args
+					</Button>
+				)}
+			</div>
+			{explanation && (
+				<div className="text-xs text-muted-foreground italic mt-2">
+					{explanation}
+				</div>
+			)}
 		</ToolSummaryCard>
 	)
 } 

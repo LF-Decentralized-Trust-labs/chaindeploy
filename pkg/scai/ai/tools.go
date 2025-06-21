@@ -304,7 +304,7 @@ func (s *OpenAIChatService) GetExtendedToolSchemas(projectRoot string) []ToolSch
 						"description": "One sentence explanation as to why this tool is being used.",
 					},
 				},
-				"required": []string{"query"},
+				"required": []string{"query", "include_pattern"},
 			},
 			Handler: func(toolName string, args map[string]interface{}) (interface{}, error) {
 				query, _ := args["query"].(string)
@@ -400,7 +400,7 @@ func (s *OpenAIChatService) GetExtendedToolSchemas(projectRoot string) []ToolSch
 		},
 		{
 			Name:        "edit_file",
-			Description: "Use this tool to propose an edit to an existing file.\n\nThis will be read by a less intelligent model, which will quickly apply the edit. You should make it clear what the edit is, while also minimizing the unchanged code you write.\nWhen writing the edit, you should specify each edit in sequence, with the special comment `// ... existing code ...` to represent unchanged code in between edited lines.\n\nFor example:\n\n```\n// ... existing code ...\nFIRST_EDIT\n// ... existing code ...\nSECOND_EDIT\n// ... existing code ...\nTHIRD_EDIT\n// ... existing code ...\n```\n\nYou should still bias towards repeating as few lines of the original file as possible to convey the change.\nBut, each edit should contain sufficient context of unchanged lines around the code you're editing to resolve ambiguity.\nDO NOT omit spans of pre-existing code (or comments) without using the `// ... existing code ...` comment to indicate its absence. If you omit the existing code comment, the model may inadvertently delete these lines.\nMake sure it is clear what the edit should be, and where it should be applied.\n\nYou should specify the following arguments before the others: [target_file]",
+			Description: "Edit the contents of a file. You must provide the file's URI as well as a SINGLE string of SEARCH/REPLACE block(s) that will be used to apply the edit.",
 			Parameters: map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
@@ -410,22 +410,21 @@ func (s *OpenAIChatService) GetExtendedToolSchemas(projectRoot string) []ToolSch
 					},
 					"instructions": map[string]interface{}{
 						"type":        "string",
-						"description": "A single sentence instruction describing what you are going to do.",
+						"description": "Instructions for the edit. This will be used to guide the edit.",
 					},
-					"code_edit": map[string]interface{}{
+					"search_replace_blocks": map[string]interface{}{
 						"type":        "string",
-						"description": "The code to edit or create.",
+						"description": replaceTool_description,
 					},
 				},
-				"required": []string{"target_file", "instructions", "code_edit"},
+				"required": []string{"target_file", "search_replace_blocks"},
 			},
 			Handler: func(toolName string, args map[string]interface{}) (interface{}, error) {
 				targetFile, _ := args["target_file"].(string)
-				instructions, _ := args["instructions"].(string)
-				codeEdit, _ := args["code_edit"].(string)
+				searchReplaceBlocks, _ := args["search_replace_blocks"].(string)
 
 				// Check if content is empty and return early
-				if strings.TrimSpace(codeEdit) == "" {
+				if strings.TrimSpace(searchReplaceBlocks) == "" {
 					return map[string]interface{}{
 						"result":    "No changes made - content is empty",
 						"file_path": targetFile,
@@ -440,19 +439,7 @@ func (s *OpenAIChatService) GetExtendedToolSchemas(projectRoot string) []ToolSch
 
 				// If file doesn't exist, create it with the new content
 				if !fileExists {
-					dir := filepath.Dir(absPath)
-					if err := os.MkdirAll(dir, 0755); err != nil {
-						return nil, err
-					}
-					if err := os.WriteFile(absPath, []byte(codeEdit), 0644); err != nil {
-						return nil, err
-					}
-					sessionchanges.RegisterChange(absPath)
-					return map[string]interface{}{
-						"result":    "File created successfully",
-						"file_path": targetFile,
-						"created":   true,
-					}, nil
+					return nil, fmt.Errorf("file does not exist: %s", absPath)
 				}
 
 				// File exists, use search/replace functionality
@@ -465,12 +452,12 @@ func (s *OpenAIChatService) GetExtendedToolSchemas(projectRoot string) []ToolSch
 				// Use the search/replace functionality to apply the edit
 				opts := SearchReplaceOptions{
 					From:         "edit_file_tool",
-					ApplyStr:     codeEdit,
+					ApplyStr:     searchReplaceBlocks,
 					OriginalCode: string(existingContent),
 					URI:          absPath,
 					AIClient:     s.Client, // Use the service's OpenAI client
 					Model:        "gpt-4.1-mini",
-					MaxRetries:   3,
+					MaxRetries:   1,
 				}
 
 				result, err := InitializeSearchAndReplaceStream(opts)
@@ -491,7 +478,6 @@ func (s *OpenAIChatService) GetExtendedToolSchemas(projectRoot string) []ToolSch
 				return map[string]interface{}{
 					"result":         "File edited successfully using AI search/replace",
 					"file_path":      targetFile,
-					"instructions":   instructions,
 					"blocks_applied": len(result.Blocks),
 					"ai_used":        true,
 				}, nil

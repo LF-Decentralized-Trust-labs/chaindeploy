@@ -186,7 +186,15 @@ export function CodeEditor({ mode = 'editor', projectId, chaincodeProject }: Cod
 						<ResizablePanelGroup direction="vertical">
 							<ResizablePanel defaultSize={80} minSize={40}>
 								<div className="grid h-full grid-rows-[auto_1fr] bg-background text-foreground">
-									<EditorTabs openTabs={openTabs} selectedFile={selectedFile} handleTabClick={handleTabClick} handleTabClose={handleTabClose} dirtyFiles={dirtyFiles} />
+									<EditorTabs 
+										openTabs={openTabs} 
+										selectedFile={selectedFile} 
+										handleTabClick={handleTabClick} 
+										handleTabClose={handleTabClose} 
+										dirtyFiles={dirtyFiles}
+										projectId={projectId}
+										projectName={chaincodeProject.name}
+									/>
 									<div className="grid grid-rows-1">
 										<ResizablePanelGroup direction="horizontal">
 											<ResizablePanel defaultSize={20} minSize={15} maxSize={30}>

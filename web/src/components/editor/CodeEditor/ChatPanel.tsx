@@ -747,10 +747,80 @@ interface MessageProps {
 }
 
 const Message = React.memo(({ message }: MessageProps) => {
+	const [copiedMessage, setCopiedMessage] = useState<string | null>(null)
+
+	const copyToClipboard = async (content: string) => {
+		try {
+			await navigator.clipboard.writeText(content)
+			setCopiedMessage(content)
+			setTimeout(() => setCopiedMessage(null), 2000)
+			toast.success('Message copied to clipboard')
+		} catch (err) {
+			console.error('Failed to copy message:', err)
+			toast.error('Failed to copy message')
+		}
+	}
+
+	const getMessageContent = useCallback(() => {
+		let content = ''
+		
+		// Add role indicator
+		content += `${message.role === 'user' ? 'User' : 'Assistant'}:\n\n`
+		
+		// Add each part's content
+		message.parts.forEach((part, index) => {
+			if (part.type === 'text' && part.content) {
+				content += part.content
+				if (index < message.parts.length - 1) {
+					content += '\n\n'
+				}
+			} else if (part.type === 'tool' && part.toolEvent) {
+				content += `[Tool: ${part.toolEvent.name}]\n`
+				if (part.toolEvent.arguments) {
+					try {
+						const args = JSON.parse(part.toolEvent.arguments)
+						content += `Arguments: ${JSON.stringify(args, null, 2)}\n`
+					} catch {
+						content += `Arguments: ${part.toolEvent.arguments}\n`
+					}
+				}
+				if (part.toolEvent.result) {
+					content += `Result: ${JSON.stringify(part.toolEvent.result, null, 2)}\n`
+				}
+				if (part.toolEvent.error) {
+					content += `Error: ${part.toolEvent.error}\n`
+				}
+				if (index < message.parts.length - 1) {
+					content += '\n\n'
+				}
+			}
+		})
+		
+		return content
+	}, [message])
+
+	const handleCopyMessage = () => {
+		const messageContent = getMessageContent()
+		copyToClipboard(messageContent)
+	}
+
 	const messageContent = useMemo(
 		() => (
-			<div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-				<div className={`max-w-[80%] rounded-lg p-3 ${message.role === 'user' ? 'bg-muted' : 'bg-muted'}`}>
+			<div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} relative group`}>
+				<div className={`max-w-[80%] rounded-lg p-3 ${message.role === 'user' ? 'bg-muted' : 'bg-muted'} relative`}>
+					{/* Copy button - positioned at top right */}
+					<button
+						onClick={handleCopyMessage}
+						className="absolute top-2 right-2 p-1.5 rounded bg-background/80 hover:bg-background transition-colors opacity-0 group-hover:opacity-100 z-10"
+						title="Copy message"
+					>
+						{copiedMessage === getMessageContent() ? (
+							<Check className="w-3 h-3 text-green-500" />
+						) : (
+							<Copy className="w-3 h-3" />
+						)}
+					</button>
+					
 					{message.parts.map((part, index) => {
 						if (part.type === 'text' && part.content) {
 							return <MarkdownRenderer key={index} content={part.content} />
@@ -763,7 +833,7 @@ const Message = React.memo(({ message }: MessageProps) => {
 				</div>
 			</div>
 		),
-		[message]
+		[message, copiedMessage, getMessageContent, handleCopyMessage]
 	)
 
 	return messageContent

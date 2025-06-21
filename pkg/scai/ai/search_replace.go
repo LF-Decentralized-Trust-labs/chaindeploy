@@ -48,52 +48,96 @@ var searchReplaceBlockTemplate = `\
 ` + FINAL
 
 var createSearchReplaceBlocks_systemMessage = `
-You are a coding assistant that takes in a diff, and outputs SEARCH/REPLACE code blocks to implement the change(s) in the diff.
+You are a coding assistant that takes in a diff and automatically identifies the exact chunks of code in the original file that need to be replaced to implement the changes.
+
 The diff will be labeled ` + "`" + "DIFF" + "`" + ` and the original file will be labeled ` + "`" + "ORIGINAL_FILE" + "`" + `.
+
+Your task is to:
+1. Analyze the diff to understand what changes need to be made
+2. Find the EXACT corresponding code chunks in the original file
+3. Generate SEARCH/REPLACE blocks that will apply the changes
 
 Format your SEARCH/REPLACE blocks as follows:
 ` + tripleTick[0] + `
 ` + searchReplaceBlockTemplate + `
 ` + tripleTick[1] + `
 
-1. Your SEARCH/REPLACE block(s) must implement the diff EXACTLY. Do NOT leave anything out.
+## CRITICAL INSTRUCTIONS FOR AUTOMATIC CHUNK IDENTIFICATION:
 
-2. You are allowed to output multiple SEARCH/REPLACE blocks to implement the change.
+1. **ANALYZE THE DIFF FIRST**: Look at the diff to understand what function, method, or code section needs to be added, modified, or removed.
 
-3. Assume any comments in the diff are PART OF THE CHANGE. Include them in the output.
+2. **FIND THE RIGHT LOCATION**: In the original file, identify where this change should be applied:
+   - For new functions: Find the end of the struct/class or the last function in the file
+   - For modifications: Find the exact function/method that needs to be changed
+   - For additions: Find the appropriate location (end of file, after similar functions, etc.)
 
-4. Your output should consist ONLY of SEARCH/REPLACE blocks. Do NOT output any text or explanations before or after this.
+3. **INCLUDE SUFFICIENT CONTEXT**: The ORIGINAL text must include enough context to uniquely identify the location:
+   - Include function signatures, struct definitions, or surrounding code
+   - Include enough lines to make the location unambiguous
+   - For new functions: Include the closing brace of the last function or the end of the struct
+   - **CRITICAL**: The ORIGINAL text must EXACTLY match what exists in the original file
 
-5. The ORIGINAL code in each SEARCH/REPLACE block must EXACTLY match lines in the original file. Do not add or remove any whitespace, comments, or modifications from the original code.
+4. **EXACT MATCHING**: The ORIGINAL code must EXACTLY match lines in the original file (including whitespace, comments, etc.)
 
-6. Each ORIGINAL text must be large enough to uniquely identify the change in the file. However, bias towards writing as little as possible.
+5. **MULTIPLE BLOCKS**: You may need multiple blocks if the diff contains multiple changes in different locations.
 
-7. Each ORIGINAL text must be DISJOINT from all other ORIGINAL text.
+6. **FOR NEW FUNCTIONS**: When adding a new function that doesn't exist in the original file:
+   - Find the last function in the file or the end of the struct
+   - Include the closing brace and any trailing whitespace/newlines
+   - The FINAL text should include the original closing brace PLUS the new function
 
-## EXAMPLE 1
-DIFF
+## EXAMPLE FOR ADDING A NEW FUNCTION:
+DIFF:
 ` + tripleTick[0] + `
-// ... existing code
-let x = 6.5
-// ... existing code
+// GetClientIdentity returns the client identity's ID string
+func (t *SimpleChaincode) GetClientIdentity(ctx contractapi.TransactionContextInterface) (string, error) {
+	clientID, err := ctx.GetClientIdentity().GetID()
+	if err != nil {
+		return "", fmt.Errorf("failed to get client identity: %v", err)
+	}
+	return clientID, nil
+}
 ` + tripleTick[1] + `
 
-ORIGINAL_FILE
+ORIGINAL_FILE:
 ` + tripleTick[0] + `
-let w = 5
-let x = 6
-let y = 7
-let z = 8
+func (t *SimpleChaincode) CreateAsset(ctx contractapi.TransactionContextInterface, assetID, color string, size int) error {
+	// ... function body ...
+	return nil
+}
 ` + tripleTick[1] + `
 
-ACCEPTED OUTPUT
+CORRECT OUTPUT:
 ` + tripleTick[0] + `
 ` + ORIGINAL + `
-let x = 6
+	return nil
+}
 ` + DIVIDER + `
-let x = 6.5
+	return nil
+}
+
+// GetClientIdentity returns the client identity's ID string
+func (t *SimpleChaincode) GetClientIdentity(ctx contractapi.TransactionContextInterface) (string, error) {
+	clientID, err := ctx.GetClientIdentity().GetID()
+	if err != nil {
+		return "", fmt.Errorf("failed to get client identity: %v", err)
+	}
+	return clientID, nil
+}
 ` + FINAL + `
-` + tripleTick[1] + ``
+` + tripleTick[1] + `
+
+## IMPORTANT RULES:
+- The ORIGINAL text must EXIST in the original file
+- For new functions, find the insertion point (usually the end of the last function)
+- Include the closing brace and any trailing whitespace in the ORIGINAL text
+- The FINAL text should preserve the original closing brace and add the new function after it
+
+## OUTPUT FORMAT:
+Your output should consist ONLY of SEARCH/REPLACE blocks. Do NOT output any text or explanations before or after this.
+
+Each ORIGINAL text must be large enough to uniquely identify the change in the file, but bias towards including sufficient context to ensure accurate placement.
+`
 
 var replaceTool_description = `\
 A string of SEARCH/REPLACE block(s) which will be applied to the given file.
@@ -219,7 +263,7 @@ ORIGINAL_FILE
 			lastError = fmt.Errorf("no response from AI (attempt %d)", attempt+1)
 			continue
 		}
-
+		fmt.Printf("Response: %+v\n", response)
 		// Extract the generated search/replace blocks
 		generatedContent := response.Choices[0].Message.Content
 
@@ -229,7 +273,7 @@ ORIGINAL_FILE
 			lastError = fmt.Errorf("failed to extract search/replace blocks (attempt %d): %w", attempt+1, err)
 			continue
 		}
-
+		fmt.Printf("Blocks: %+v\n", blocks)
 		if len(blocks) == 0 {
 			lastError = fmt.Errorf("no valid search/replace blocks found (attempt %d)", attempt+1)
 			continue

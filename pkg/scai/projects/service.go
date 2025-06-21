@@ -17,6 +17,8 @@ import (
 	"encoding/hex"
 	"strings"
 
+	"archive/zip"
+
 	"github.com/chainlaunch/chainlaunch/pkg/common/addresses"
 	"github.com/chainlaunch/chainlaunch/pkg/db"
 	fabricService "github.com/chainlaunch/chainlaunch/pkg/fabric/service"
@@ -639,4 +641,121 @@ func (s *ProjectsService) GetProjectLogs(ctx context.Context, projectID int64) (
 
 func (s *ProjectsService) StreamProjectLogs(ctx context.Context, projectID int64, onLog func([]byte)) error {
 	return s.Runner.StreamLogs(ctx, fmt.Sprintf("%d", projectID), onLog)
+}
+
+// DownloadProjectAsZip creates a zip file containing the project files, excluding common ignored folders
+// This version streams the zip directly to the provided writer to avoid memory issues
+func (s *ProjectsService) DownloadProjectAsZip(ctx context.Context, projectID int64, writer io.Writer) error {
+	// Get project details
+	project, err := s.Queries.GetProject(ctx, projectID)
+	if err != nil {
+		return fmt.Errorf("failed to get project: %w", err)
+	}
+
+	// Build project directory path
+	projectDir := filepath.Join(s.ProjectsDir, project.Slug)
+
+	// Check if project directory exists
+	if _, err := os.Stat(projectDir); os.IsNotExist(err) {
+		return fmt.Errorf("project directory does not exist: %s", projectDir)
+	}
+
+	// Create zip writer that writes directly to the provided writer
+	zipWriter := zip.NewWriter(writer)
+	defer zipWriter.Close()
+
+	// Define folders to ignore
+	ignoredFolders := map[string]bool{
+		"node_modules":           true,
+		".vscode":                true,
+		".git":                   true,
+		"tmp":                    true,
+		"temp":                   true,
+		".DS_Store":              true,
+		"__pycache__":            true,
+		".pytest_cache":          true,
+		"coverage":               true,
+		"dist":                   true,
+		"build":                  true,
+		".next":                  true,
+		".nuxt":                  true,
+		".cache":                 true,
+		"logs":                   true,
+		".env.local":             true,
+		".env.development.local": true,
+		".env.test.local":        true,
+		".env.production.local":  true,
+	}
+
+	// Walk through the project directory
+	err = filepath.Walk(projectDir, func(path string, info os.FileInfo, err error) error {
+		// Check for context cancellation
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		if err != nil {
+			return err
+		}
+
+		// Get relative path from project directory
+		relPath, err := filepath.Rel(projectDir, path)
+		if err != nil {
+			return err
+		}
+
+		// Skip the root directory itself
+		if relPath == "." {
+			return nil
+		}
+
+		// Check if this is a directory that should be ignored
+		if info.IsDir() {
+			dirName := filepath.Base(path)
+			if ignoredFolders[dirName] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		// Check if this is a file that should be ignored
+		fileName := filepath.Base(path)
+		if ignoredFolders[fileName] {
+			return nil
+		}
+
+		// Create zip file entry
+		zipFile, err := zipWriter.Create(relPath)
+		if err != nil {
+			return fmt.Errorf("failed to create zip entry for %s: %w", relPath, err)
+		}
+
+		// Open and read the file
+		file, err := os.Open(path)
+		if err != nil {
+			return fmt.Errorf("failed to open file %s: %w", path, err)
+		}
+		defer file.Close()
+
+		// Copy file content to zip
+		_, err = io.Copy(zipFile, file)
+		if err != nil {
+			return fmt.Errorf("failed to copy file %s to zip: %w", path, err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to create zip file: %w", err)
+	}
+
+	// Close the zip writer to finalize the zip file
+	if err := zipWriter.Close(); err != nil {
+		return fmt.Errorf("failed to close zip writer: %w", err)
+	}
+
+	return nil
 }
