@@ -108,6 +108,7 @@ type AIChatService struct {
 	ProjectsDir       string
 	ValidationService *ValidationService
 	AIProvider        AIProviderInterface
+	Model             string
 }
 
 // NewAIChatService creates a new generic AI chat service
@@ -117,6 +118,7 @@ func NewAIChatService(
 	queries *db.Queries,
 	projectsDir string,
 	aiProvider AIProviderInterface,
+	model string,
 ) *AIChatService {
 	// Create boilerplate service
 	boilerplateService, err := boilerplates.NewBoilerplateService(queries)
@@ -142,6 +144,7 @@ func NewAIChatService(
 		ProjectsDir:       projectsDir,
 		ValidationService: validationService,
 		AIProvider:        aiProvider,
+		Model:             model,
 	}
 }
 
@@ -402,7 +405,7 @@ func (s *AIChatService) StreamChat(
 		msg, toolCalls, toolCallResults, err := s.AIProvider.StreamAgentStep(
 			ctx,
 			chatMsgs,
-			"gpt-4.1-mini",
+			s.Model,
 			tools,
 			toolSchemasMap,
 			observer,
@@ -693,10 +696,10 @@ func (s *AIChatService) GetExtendedToolSchemas(projectRoot string) []ToolSchema 
 					"target_file",
 					"should_read_entire_file",
 					"start_line_one_indexed",
-					"end_line_one_indexed_inclusive",
+					"end_line_one_indexed",
 				},
 			},
-			Handler: func(projectRoot string, args map[string]interface{}) (interface{}, error) {
+			Handler: func(toolName string, args map[string]interface{}) (interface{}, error) {
 				targetFile, _ := args["target_file"].(string)
 				shouldReadEntireFile, _ := args["should_read_entire_file"].(bool)
 				startLine, _ := args["start_line_one_indexed"].(float64)
@@ -743,16 +746,17 @@ func (s *AIChatService) GetExtendedToolSchemas(projectRoot string) []ToolSchema 
 		},
 		{
 			Name:        "write_file",
-			Description: "Write content to a file.",
+			Description: "Write content to a file at the specified path. This tool creates the file if it doesn't exist, or overwrites it if it does. The tool will skip writing if the content is empty.",
 			Parameters: map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
-					"path":    map[string]interface{}{"type": "string", "description": "Path to the file (relative to project root)"},
-					"content": map[string]interface{}{"type": "string", "description": "Content to write"},
+					"path":        map[string]interface{}{"type": "string", "description": "Path to the file (relative to project root)"},
+					"content":     map[string]interface{}{"type": "string", "description": "Content to write"},
+					"explanation": map[string]interface{}{"type": "string", "description": "One sentence explanation as to why this command needs to be run."},
 				},
 				"required": []string{"path", "content"},
 			},
-			Handler: func(projectRoot string, args map[string]interface{}) (interface{}, error) {
+			Handler: func(toolName string, args map[string]interface{}) (interface{}, error) {
 				path, _ := args["path"].(string)
 				content, _ := args["content"].(string)
 
@@ -802,7 +806,7 @@ func (s *AIChatService) GetExtendedToolSchemas(projectRoot string) []ToolSchema 
 				},
 				"required": []string{"command", "is_background"},
 			},
-			Handler: func(projectRoot string, args map[string]interface{}) (interface{}, error) {
+			Handler: func(toolName string, args map[string]interface{}) (interface{}, error) {
 				command, _ := args["command"].(string)
 				isBackground, _ := args["is_background"].(bool)
 
@@ -1070,10 +1074,10 @@ func systemToolsXMLPrompt(mode ChatMode, mcpTools []InternalToolInfo) string {
 	return sb.String()
 }
 
-func NewOpenAIChatService(apiKey string, logger *logger.Logger, chatService *ChatService, queries *db.Queries, projectsDir string) *AIChatService {
+func NewOpenAIChatService(apiKey string, logger *logger.Logger, chatService *ChatService, queries *db.Queries, projectsDir string, model string) *AIChatService {
 	// Create OpenAI provider
 	openAIProvider := NewOpenAIProvider(apiKey, logger)
 
 	// Create the generic AI chat service with OpenAI provider
-	return NewAIChatService(logger, chatService, queries, projectsDir, openAIProvider)
+	return NewAIChatService(logger, chatService, queries, projectsDir, openAIProvider, model)
 }
