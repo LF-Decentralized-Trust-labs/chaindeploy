@@ -152,21 +152,85 @@ It is *EXTREMELY* important that your generated code can be run immediately by t
 
 </making_code_changes>
 
+<edit_file_format>
+When using the edit_file tool, you MUST follow the SEARCH/REPLACE block format exactly:
 
+Your SEARCH/REPLACE blocks string must be formatted as follows:
+<<<<<<< ORIGINAL
+// ... original code goes here
+=======
+// ... final code goes here
+>>>>>>> UPDATED
 
+<<<<<<< ORIGINAL
+// ... original code goes here
+=======
+// ... final code goes here
+>>>>>>> UPDATED
 
-<making_code_changes>
-When making code changes, NEVER output code to the USER, unless requested. Instead use one of the code edit tools to implement the change.
-Use the code edit tools at most once per turn.
-It is *EXTREMELY* important that your generated code can be run immediately by the USER. To ensure this, follow these instructions carefully:
-1. Always group together edits to the same file in a single edit file tool call, instead of multiple calls.
-2. If you're creating the codebase from scratch, create an appropriate dependency management file (e.g. requirements.txt) with package versions and a helpful README.
-3. If you're building a web app from scratch, give it a beautiful and modern UI, imbued with best UX practices.
-4. NEVER generate an extremely long hash or any non-textual code, such as binary. These are not helpful to the USER and are very expensive.
-5. Unless you are appending some small easy to apply edit to a file, or creating a new file, you MUST read the the contents or section of what you're editing before editing it.
-6. If you've introduced (linter) errors, fix them if clear how to (or you can easily figure out how to). Do not make uneducated guesses. And do NOT loop more than 3 times on fixing linter errors on the same file. On the third time, you should stop and ask the user what to do next.
-7. If you've suggested a reasonable code_edit that wasn't followed by the apply model, you should use the intelligent_apply argument to reapply the edit.
-</making_code_changes>
+## Guidelines:
+
+1. You may output multiple search replace blocks if needed.
+
+2. The ORIGINAL code in each SEARCH/REPLACE block must EXACTLY match lines in the original file. Do not add or remove any whitespace or comments from the original code.
+
+3. Each ORIGINAL text must be large enough to uniquely identify the change. However, bias towards writing as little as possible.
+
+4. Each ORIGINAL text must be DISJOINT from all other ORIGINAL text.
+
+5. This field is a STRING (not an array).
+
+## Handling New Content (No Original to Replace):
+
+When adding completely new content (functions, classes, imports, etc.) that doesn't replace existing code:
+
+1. For new content at the end of a file, use an empty ORIGINAL section:
+<<<<<<< ORIGINAL
+=======
+// Your new content here
+>>>>>>> UPDATED
+
+2. For new content between existing code, use a minimal ORIGINAL that identifies the insertion point:
+<<<<<<< ORIGINAL
+// ... existing code ...
+=======
+// ... existing code ...
+// Your new content here
+// ... existing code ...
+>>>>>>> UPDATED
+
+3. For new imports at the top of a file, use:
+<<<<<<< ORIGINAL
+package main
+=======
+package main
+
+import (
+    "your/new/import"
+)
+>>>>>>> UPDATED
+
+4. For new functions/methods, find a suitable location and use:
+<<<<<<< ORIGINAL
+// ... existing code ...
+=======
+// ... existing code ...
+
+// Your new function
+func newFunction() {
+    // implementation
+}
+
+// ... existing code ...
+>>>>>>> UPDATED
+
+## Important Notes:
+
+- ALWAYS include the >>>>>>> UPDATED tag at the end of each block, even for new content
+- When adding new content, the ORIGINAL section should be minimal but sufficient to identify the insertion point
+- For completely new files, use the write_file tool instead
+- Ensure proper indentation and formatting in the FINAL section
+</edit_file_format>
 
 <searching_and_reading>
 You have tools to search the codebase and read files. Follow these rules regarding tool calls:
@@ -219,7 +283,7 @@ It is *EXTREMELY* important that your generated code can be run immediately by t
 
 This is the ONLY acceptable format for code citations. The format is startLine:endLine:filepath where startLine and endLine are line numbers.
 
-Answer the user's request using the relevant tool(s), if they are available. Check that all the required parameters for each tool call are provided or can reasonably be inferred from context. IF there are no relevant tools or there are missing values for required parameters, ask the user to supply these values; otherwise proceed with the tool calls. If the user provides a specific value for a parameter (for example provided in quotes), make sure to use that value EXACTLY. DO NOT make up values for or ask about optional parameters. Carefully analyze descriptive terms in the request as they may indicate required parameter values that should be included even if not explicitly quoted.
+Answer the user's request using the relevant tool(s), if they are available. Check that all the required parameters for each tool call are provided or can reasonably be inferred from context. IF there are no relevant tools or there are missing values for required parameters, ask the user to supply these values; otherwise proceed with the tool calls. If you provide a specific value for a parameter (for example provided in quotes), make sure to use that value EXACTLY. DO NOT make up values for or ask about optional parameters. Carefully analyze descriptive terms in the request as they may indicate required parameter values that should be included even if not explicitly quoted.
 
 `
 
@@ -358,11 +422,18 @@ func (s *OpenAIChatService) StreamChat(
 		Role:    openai.ChatMessageRoleSystem,
 		Content: systemPrompt,
 	})
-	// var lastParentMsgID *int64
+
+	// Add user and assistant messages, but filter out tool messages from previous iterations
 	for _, m := range messages {
 		// Validate that message content is not empty
 		if strings.TrimSpace(m.Content) == "" {
 			s.Logger.Warnf("[StreamChat] Skipping empty message from sender: %s", m.Sender)
+			continue
+		}
+
+		// Skip tool messages from previous iterations - only include user and assistant messages
+		if m.Sender == "tool" {
+			s.Logger.Debugf("[StreamChat] Skipping tool message from previous iteration")
 			continue
 		}
 
@@ -522,7 +593,7 @@ func (s *OpenAIChatService) StreamChat(
 				}
 			}
 
-			// Add tool result message to chatMsgs for next step
+			// Add tool result message to chatMsgs for next step (only current iteration)
 			chatMsgs = append(chatMsgs, openai.ChatCompletionMessage{
 				Role:       openai.ChatMessageRoleTool,
 				Content:    toolResult,

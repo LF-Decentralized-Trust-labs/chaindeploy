@@ -376,8 +376,84 @@ func (s *OpenAIChatService) GetExtendedToolSchemas(projectRoot string) []ToolSch
 			},
 		},
 		{
-			Name:        "edit_file",
-			Description: "Edit the contents of a file. You must provide the file's URI as well as a SINGLE string of SEARCH/REPLACE block(s) that will be used to apply the edit.",
+			Name: "edit_file",
+			Description: `Edit the contents of a file using SEARCH/REPLACE blocks. You must provide the file's URI as well as a SINGLE string of SEARCH/REPLACE block(s) that will be used to apply the edit.
+
+Your SEARCH/REPLACE blocks string must be formatted as follows:
+<<<<<<< ORIGINAL
+// ... original code goes here
+=======
+// ... final code goes here
+>>>>>>> UPDATED
+
+<<<<<<< ORIGINAL
+// ... original code goes here
+=======
+// ... final code goes here
+>>>>>>> UPDATED
+
+## Guidelines:
+
+1. You may output multiple search replace blocks if needed.
+
+2. The ORIGINAL code in each SEARCH/REPLACE block must EXACTLY match lines in the original file. Do not add or remove any whitespace or comments from the original code.
+
+3. Each ORIGINAL text must be large enough to uniquely identify the change. However, bias towards writing as little as possible.
+
+4. Each ORIGINAL text must be DISJOINT from all other ORIGINAL text.
+
+5. This field is a STRING (not an array).
+
+## Handling New Content (No Original to Replace):
+
+When adding completely new content (functions, classes, imports, etc.) that doesn't replace existing code:
+
+1. For new content at the end of a file, use an empty ORIGINAL section:
+<<<<<<< ORIGINAL
+=======
+// Your new content here
+>>>>>>> UPDATED
+
+2. For new content between existing code, use a minimal ORIGINAL that identifies the insertion point:
+<<<<<<< ORIGINAL
+// ... existing code ...
+=======
+// ... existing code ...
+// Your new content here
+// ... existing code ...
+>>>>>>> UPDATED
+
+3. For new imports at the top of a file, use:
+<<<<<<< ORIGINAL
+package main
+=======
+package main
+
+import (
+    "your/new/import"
+)
+>>>>>>> UPDATED
+
+4. For new functions/methods, find a suitable location and use:
+<<<<<<< ORIGINAL
+// ... existing code ...
+=======
+// ... existing code ...
+
+// Your new function
+func newFunction() {
+    // implementation
+}
+
+// ... existing code ...
+>>>>>>> UPDATED
+
+## Important Notes:
+
+- ALWAYS include the >>>>>>> UPDATED tag at the end of each block, even for new content
+- When adding new content, the ORIGINAL section should be minimal but sufficient to identify the insertion point
+- For completely new files, use the write_file tool instead
+- Ensure proper indentation and formatting in the FINAL section`,
 			Parameters: map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
@@ -391,7 +467,7 @@ func (s *OpenAIChatService) GetExtendedToolSchemas(projectRoot string) []ToolSch
 					},
 					"search_replace_blocks": map[string]interface{}{
 						"type":        "string",
-						"description": replaceTool_description,
+						"description": "A string of SEARCH/REPLACE block(s) formatted according to the tool description above.",
 					},
 				},
 				"required": []string{"target_file", "search_replace_blocks"},

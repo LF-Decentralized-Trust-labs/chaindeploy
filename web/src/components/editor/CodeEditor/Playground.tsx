@@ -129,10 +129,7 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 					path: { id: projectId },
 					body: {
 						function: fnParam,
-						args: argsParam
-							.split(',')
-							.map((a) => a.trim())
-							.filter(Boolean),
+						args: argsParam.split(',').map((a) => a.trim()),
 						keyId: selectedKeyParam.keyId,
 						orgId: selectedKeyParam.orgId,
 					},
@@ -170,10 +167,7 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 					path: { id: projectId },
 					body: {
 						function: fnParam,
-						args: argsParam
-							.split(',')
-							.map((a) => a.trim())
-							.filter(Boolean),
+						args: argsParam.split(',').map((a) => a.trim()),
 						keyId: selectedKeyParam.keyId,
 						orgId: selectedKeyParam.orgId,
 					},
