@@ -52,7 +52,7 @@ export const EditFileExecute = ({ event }: EditFileExecuteProps) => {
 							fontSize: '10px',
 						}}
 					>
-						{args.code_edit}
+						{args.search_replace_blocks}
 					</SyntaxHighlighterComp>
 				</div>
 			)}
@@ -148,10 +148,10 @@ export const EditFileResult = ({ event }: EditFileResultProps) => {
 
 	// Auto-scroll to bottom when new content is received
 	useEffect(() => {
-		if (scrollContainerRef.current && resultArgs.code_edit) {
+		if (scrollContainerRef.current && resultArgs.search_replace_blocks) {
 			scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
 		}
-	}, [resultArgs.code_edit])
+	}, [resultArgs.search_replace_blocks])
 
 	const filePath = useMemo(() => resultArgs.target_file || '', [resultArgs.target_file])
 	const instructions = useMemo(() => resultArgs.instructions || '', [resultArgs.instructions])
@@ -190,11 +190,11 @@ export const EditFileResult = ({ event }: EditFileResultProps) => {
 							<div className="font-semibold text-sm mb-2">Modified Content:</div>
 							<div className="relative">
 								<button
-									onClick={() => copyToClipboard(resultArgs.code_edit)}
+									onClick={() => copyToClipboard(resultArgs.search_replace_blocks)}
 									className="absolute top-2 right-2 p-1.5 rounded bg-background hover:bg-background/80 transition-colors z-10"
 									title="Copy code"
 								>
-									{copiedCode === resultArgs.code_edit ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+									{copiedCode === resultArgs.search_replace_blocks ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
 								</button>
 								<div className="overflow-auto" ref={scrollContainerRef}>
 									<SyntaxHighlighterComp
@@ -211,7 +211,7 @@ export const EditFileResult = ({ event }: EditFileResultProps) => {
 											minWidth: '100%',
 										}}
 									>
-										{resultArgs.code_edit}
+										{resultArgs.search_replace_blocks}
 									</SyntaxHighlighterComp>
 								</div>
 							</div>

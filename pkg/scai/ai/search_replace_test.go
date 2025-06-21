@@ -61,7 +61,7 @@ func (s *SimpleChaincode) GetClientIdentity(ctx contractapi.TransactionContextIn
 // TestInstantlyApplySearchReplaceBlocks tests the logic similar to instantlyApplySearchReplaceBlocks
 func TestInstantlyApplySearchReplaceBlocks(t *testing.T) {
 	// Read the original file
-	fullFile, err := os.ReadFile("resources/contract.go")
+	fullFile, err := os.ReadFile("resources/contract.txt")
 	if err != nil {
 		t.Fatalf("Failed to read test file: %v", err)
 	}
@@ -344,7 +344,7 @@ func TestInstantlyApplySearchReplaceBlocks(t *testing.T) {
 // 	}
 
 // 	client := openai.NewClient(apiKey)
-// 	fullFile, err := os.ReadFile("resources/contract.go")
+// 	fullFile, err := os.ReadFile("resources/contract.txt")
 // 	if err != nil {
 // 		t.Fatalf("Expected no error, got: %v", err)
 // 	}

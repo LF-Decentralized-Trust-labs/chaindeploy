@@ -21,16 +21,17 @@ import (
 
 // BoilerplateConfig represents a boilerplate configuration
 type BoilerplateConfig struct {
-	ID          string   `yaml:"-" json:"id"` // ID is the key in the configs map
-	Name        string   `yaml:"name" json:"name"`
-	Description string   `yaml:"description" json:"description"`
-	Platform    string   `yaml:"platform" json:"platform"`
-	Command     string   `yaml:"command" json:"command"`
-	Args        []string `yaml:"args" json:"args"`
-	Image       string   `yaml:"image" json:"image"`
-	RepoOwner   string   `yaml:"repoOwner" json:"repoOwner"`
-	RepoName    string   `yaml:"repoName" json:"repoName"`
-	RepoPath    string   `yaml:"repoPath,omitempty" json:"repoPath,omitempty"`
+	ID              string   `yaml:"-" json:"id"` // ID is the key in the configs map
+	Name            string   `yaml:"name" json:"name"`
+	Description     string   `yaml:"description" json:"description"`
+	Platform        string   `yaml:"platform" json:"platform"`
+	Command         string   `yaml:"command" json:"command"`
+	Args            []string `yaml:"args" json:"args"`
+	Image           string   `yaml:"image" json:"image"`
+	RepoOwner       string   `yaml:"repoOwner" json:"repoOwner"`
+	RepoName        string   `yaml:"repoName" json:"repoName"`
+	RepoPath        string   `yaml:"repoPath,omitempty" json:"repoPath,omitempty"`
+	ValidateCommand string   `yaml:"validateCommand,omitempty" json:"validateCommand,omitempty"`
 }
 
 // BoilerplatesConfig represents the top-level configuration structure

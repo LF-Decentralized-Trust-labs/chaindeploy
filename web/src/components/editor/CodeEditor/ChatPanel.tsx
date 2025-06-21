@@ -754,7 +754,6 @@ const Message = React.memo(({ message }: MessageProps) => {
 			await navigator.clipboard.writeText(content)
 			setCopiedMessage(content)
 			setTimeout(() => setCopiedMessage(null), 2000)
-			toast.success('Message copied to clipboard')
 		} catch (err) {
 			console.error('Failed to copy message:', err)
 			toast.error('Failed to copy message')

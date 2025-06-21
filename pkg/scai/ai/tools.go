@@ -172,66 +172,43 @@ func (s *OpenAIChatService) GetExtendedToolSchemas(projectRoot string) []ToolSch
 		// 		}, nil
 		// 	},
 		// },
-		// {
-		// 	Name:        "run_terminal_cmd",
-		// 	Description: "Run a terminal command on behalf of the user.",
-		// 	Parameters: map[string]interface{}{
-		// 		"type": "object",
-		// 		"properties": map[string]interface{}{
-		// 			"command": map[string]interface{}{
-		// 				"type":        "string",
-		// 				"description": "The terminal command to execute",
-		// 			},
-		// 			"is_background": map[string]interface{}{
-		// 				"type":        "boolean",
-		// 				"description": "Whether the command should be run in the background",
-		// 			},
-		// 			"explanation": map[string]interface{}{
-		// 				"type":        "string",
-		// 				"description": "One sentence explanation as to why this command needs to be run.",
-		// 			},
-		// 		},
-		// 		"required": []string{"command", "is_background"},
-		// 	},
-		// 	Handler: func(toolName string, args map[string]interface{}) (interface{}, error) {
-		// 		command, _ := args["command"].(string)
-		// 		isBackground, _ := args["is_background"].(bool)
+		{
+			Name:        "run_terminal_cmd",
+			Description: "Run a terminal command in the project's Docker container. This tool executes commands inside the running project container, not on the host system.",
+			Parameters: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"command": map[string]interface{}{
+						"type":        "string",
+						"description": "The terminal command to execute in the project container",
+					},
+					"is_background": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Whether the command should be run in the background",
+					},
+					"explanation": map[string]interface{}{
+						"type":        "string",
+						"description": "One sentence explanation as to why this command needs to be run.",
+					},
+				},
+				"required": []string{"command", "is_background"},
+			},
+			Handler: func(toolName string, args map[string]interface{}) (interface{}, error) {
+				command, _ := args["command"].(string)
+				isBackground, _ := args["is_background"].(bool)
 
-		// 		parts := strings.Fields(command)
-		// 		if len(parts) == 0 {
-		// 			return nil, fmt.Errorf("empty command")
-		// 		}
+				// Extract project slug from project root path
+				projectSlug := filepath.Base(projectRoot)
 
-		// 		cmd := exec.CommandContext(context.Background(), parts[0], parts[1:]...)
-		// 		cmd.Dir = projectRoot
+				// Execute command in the project container
+				result, err := s.runCommandInContainer(projectSlug, command, isBackground)
+				if err != nil {
+					return nil, fmt.Errorf("failed to execute command in container: %w", err)
+				}
 
-		// 		if isBackground {
-		// 			err := cmd.Start()
-		// 			if err != nil {
-		// 				return nil, err
-		// 			}
-		// 			return map[string]interface{}{
-		// 				"result":     "Command started in background",
-		// 				"pid":        cmd.Process.Pid,
-		// 				"command":    command,
-		// 				"background": true,
-		// 			}, nil
-		// 		} else {
-		// 			output, err := cmd.CombinedOutput()
-		// 			if err != nil {
-		// 				return map[string]interface{}{
-		// 					"result":  string(output),
-		// 					"error":   err.Error(),
-		// 					"command": command,
-		// 				}, nil
-		// 			}
-		// 			return map[string]interface{}{
-		// 				"result":  string(output),
-		// 				"command": command,
-		// 			}, nil
-		// 		}
-		// 	},
-		// },
+				return result, nil
+			},
+		},
 		{
 			Name:        "list_dir",
 			Description: "List the contents of a directory. The quick tool to use for discovery, before using more targeted tools like semantic search or file reading. Useful to try to understand the file structure before diving deeper into specific files. Can be used to explore the codebase.",

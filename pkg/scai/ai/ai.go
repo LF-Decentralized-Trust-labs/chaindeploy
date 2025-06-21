@@ -12,6 +12,7 @@ import (
 
 	"github.com/chainlaunch/chainlaunch/pkg/db"
 	"github.com/chainlaunch/chainlaunch/pkg/logger"
+	"github.com/chainlaunch/chainlaunch/pkg/scai/boilerplates"
 	"github.com/chainlaunch/chainlaunch/pkg/scai/projectrunner"
 	"github.com/chainlaunch/chainlaunch/pkg/scai/sessionchanges"
 	"github.com/sashabaranov/go-openai"
@@ -27,68 +28,42 @@ type ToolSchema struct {
 
 // OpenAIChatService implements ChatServiceInterface using OpenAI's API and function-calling tools.
 type OpenAIChatService struct {
-	Client      *openai.Client
-	Logger      *logger.Logger
-	ChatService *ChatService
-	Queries     *db.Queries
-	ProjectsDir string
+	Client            *openai.Client
+	Logger            *logger.Logger
+	ChatService       *ChatService
+	Queries           *db.Queries
+	ProjectsDir       string
+	ValidationService *ValidationService
 }
 
 func NewOpenAIChatService(apiKey string, logger *logger.Logger, chatService *ChatService, queries *db.Queries, projectsDir string) *OpenAIChatService {
+	// Create boilerplate service
+	boilerplateService, err := boilerplates.NewBoilerplateService(queries)
+	if err != nil {
+		logger.Errorf("Failed to create boilerplate service: %v", err)
+		// Continue without boilerplate service
+		boilerplateService = nil
+	}
+
+	// Create project runner
+	runner := projectrunner.NewRunner(queries)
+
+	// Create validation service
+	var validationService *ValidationService
+	if boilerplateService != nil {
+		validationService = NewValidationService(queries, boilerplateService, runner)
+	}
+
 	return &OpenAIChatService{
-		Client:      openai.NewClient(apiKey),
-		Logger:      logger,
-		ChatService: chatService,
-		Queries:     queries,
-		ProjectsDir: projectsDir,
+		Client:            openai.NewClient(apiKey),
+		Logger:            logger,
+		ChatService:       chatService,
+		Queries:           queries,
+		ProjectsDir:       projectsDir,
+		ValidationService: validationService,
 	}
 }
 
-// const systemPrompt = `
-// You are a powerful agentic AI coding assistant, powered by ChatGPT 4.1 Mini. You operate exclusively in ChainLaunch, the world's best Blockchain Development Platform.
-
-// You are pair programming with a USER to solve their coding task.
-// The task may require creating a new codebase, modifying or debugging an existing codebase, or simply answering a question.
-// Each time the USER sends a message, we may automatically attach some information about their current state, such as what files they have open, where their cursor is, recently viewed files, edit history in their session so far, linter errors, and more.
-// This information may or may not be relevant to the coding task, it is up for you to decide.
-// Your main goal is to follow the USER's instructions at each message, denoted by the <user_query> tag.
-
-// <tool_calling>
-// You have tools at your disposal to solve the coding task. Follow these rules regarding tool calls:
-// 1. ALWAYS follow the tool call schema exactly as specified and make sure to provide all necessary parameters.
-// 2. The conversation may reference tools that are no longer available. NEVER call tools that are not explicitly provided.
-// 3. **NEVER refer to tool names when speaking to the USER.** For example, instead of saying 'I need to use the edit_file tool to edit your file', just say 'I will edit your file'.
-// 4. Only calls tools when they are necessary. If the USER's task is general or you already know the answer, just respond without calling tools.
-// 5. Before calling each tool, first explain to the USER why you are calling it.
-// </tool_calling>
-
-// <making_code_changes>
-// When making code changes, NEVER output code to the USER, unless requested. Instead use one of the code edit tools to implement the change.
-// Use the code edit tools at most once per turn.
-// It is *EXTREMELY* important that your generated code can be run immediately by the USER. To ensure this, follow these instructions carefully:
-// 1. Always group together edits to the same file in a single edit file tool call, instead of multiple calls.
-// 2. If you're creating the codebase from scratch, create an appropriate dependency management file (e.g. requirements.txt) with package versions and a helpful README.
-// 3. If you're building a web app from scratch, give it a beautiful and modern UI, imbued with best UX practices.
-// 4. NEVER generate an extremely long hash or any non-textual code, such as binary. These are not helpful to the USER and are very expensive.
-// 5. Unless you are appending some small easy to apply edit to a file, or creating a new file, you MUST read the the contents or section of what you're editing before editing it.
-// 6. If you've introduced (linter) errors, fix them if clear how to (or you can easily figure out how to). Do not make uneducated guesses. And DO NOT loop more than 3 times on fixing linter errors on the same file. On the third time, you should stop and ask the user what to do next.
-// 7. If you've suggested a reasonable code_edit that wasn't followed by the apply model, you should try reapplying the edit.
-// </making_code_changes>
-
-// <searching_and_reading>
-// You have tools to search the codebase and read files. Follow these rules regarding tool calls:
-// 1. If available, heavily prefer the semantic search tool to grep search, file search, and list dir tools.
-// 2. If you need to read a file, prefer to read larger sections of the file at once over multiple smaller calls.
-// 3. If you have found a reasonable place to edit or answer, do not continue calling tools. Edit or answer from the information you have found.
-// </searching_and_reading>
-
-// You MUST use the following format when citing code regions or blocks:
-// ` + "```" + `startLine:endLine:filepath
-// // ... existing code ...
-// ` + "```" + `
-// This is the ONLY acceptable format for code citations. The format is ` + "```" + `startLine:endLine:filepath` + "```" + ` where startLine and endLine are line numbers.
-//
-// `
 const systemPrompt = `
 You are an AI coding assistant, powered by ChatGPT 4.1 Mini. You operate in ChainLaunch.
 
@@ -100,6 +75,21 @@ Your main goal is to follow the USER's instructions at each message, denoted by 
 When using markdown in assistant messages, use backticks to format file, directory, function, and class names. Use \( and \) for inline math, \[ and \] for block math.
 </communication>
 
+<validation_system>
+After every file operation (write_file, edit_file, delete_file), the system automatically runs a validation command to check for compilation/syntax errors. If validation fails, you will receive a validation message with the error details. You should:
+
+1. Review the validation errors carefully
+2. Fix the issues in the code
+3. Re-run the validation to ensure all errors are resolved
+4. Continue with the task only after validation passes
+
+The validation command is specific to each project type:
+- Go projects: "go vet ./..."
+- TypeScript projects: "npm run build"
+- Other project types may have different validation commands
+
+When you receive validation errors, treat them as high priority and fix them immediately before proceeding with other tasks.
+</validation_system>
 
 <tool_calling>
 You have tools at your disposal to solve the coding task. Follow these rules regarding tool calls:
@@ -147,7 +137,7 @@ It is *EXTREMELY* important that your generated code can be run immediately by t
 2. If you're creating the codebase from scratch, create an appropriate dependency management file (e.g. requirements.txt) with package versions and a helpful README.
 3. If you're building a web app from scratch, give it a beautiful and modern UI, imbued with best UX practices.
 4. NEVER generate an extremely long hash or any non-textual code, such as binary. These are not helpful to the USER and are very expensive.
-5. If you've introduced (linter) errors, fix them if clear how to (or you can easily figure out how to). Do not make uneducated guesses. And DO NOT loop more than 3 times on fixing linter errors on the same file. On the third time, you should stop and ask the user what to do next.
+5. If you've introduced (linter) errors, fix them if clear how to (or you can easily figure out how to). Do not make uneducated guesses. And do NOT loop more than 3 times on fixing linter errors on the same file. On the third time, you should stop and ask the user what to do next.
 6. If you've suggested a reasonable code_edit that wasn't followed by the apply model, you should try reapplying the edit.
 7. You have both the edit_file and search_replace tools at your disposal. Use the search_replace tool for files larger than 2500 lines, otherwise prefer the edit_file tool.
 8. **ALWAYS** if the code_edit is a large change and overrides a lot of the file, you should use the write_file tool to write the contents of the file to the USER.
@@ -167,8 +157,8 @@ It is *EXTREMELY* important that your generated code can be run immediately by t
 3. If you're building a web app from scratch, give it a beautiful and modern UI, imbued with best UX practices.
 4. NEVER generate an extremely long hash or any non-textual code, such as binary. These are not helpful to the USER and are very expensive.
 5. Unless you are appending some small easy to apply edit to a file, or creating a new file, you MUST read the the contents or section of what you're editing before editing it.
-6. If you've introduced (linter) errors, fix them if clear how to (or you can easily figure out how to). Do not make uneducated guesses. And DO NOT loop more than 3 times on fixing linter errors on the same file. On the third time, you should stop and ask the user what to do next.
-7. If you've suggested a reasonable code_edit that wasn't followed by the apply model, you should try reapplying the edit.
+6. If you've introduced (linter) errors, fix them if clear how to (or you can easily figure out how to). Do not make uneducated guesses. And do NOT loop more than 3 times on fixing linter errors on the same file. On the third time, you should stop and ask the user what to do next.
+7. If you've suggested a reasonable code_edit that wasn't followed by the apply model, you should use the intelligent_apply argument to reapply the edit.
 </making_code_changes>
 
 <searching_and_reading>
@@ -201,9 +191,9 @@ If you see a section called "<most_important_user_query>", you should treat that
 You have tools at your disposal to solve the coding task. Follow these rules regarding tool calls:
 1. ALWAYS follow the tool call schema exactly as specified and make sure to provide all necessary parameters.
 2. The conversation may reference tools that are no longer available. NEVER call tools that are not explicitly provided.
-3. **NEVER refer to tool names when speaking to the user.** For example, instead of saying 'I need to use the edit_file tool to edit your file', just say 'I will edit your file'.
-4. Only calls tools when they are necessary. If the user's task is general or you already know the answer, just respond without calling tools.
-5. Before calling each tool, first explain to the user why you are calling it.
+3. **NEVER refer to tool names when speaking to the USER.** For example, instead of saying 'I need to use the edit_file tool to edit your file', just say 'I will edit your file'.
+4. Only calls tools when they are necessary. If the USER's task is general or you already know the answer, just respond without calling tools.
+5. Before calling each tool, first explain to the USER why you are calling it.
 </tool_calling>
 
 <making_code_changes>
@@ -311,33 +301,6 @@ func (s *OpenAIChatService) getProjectStructurePrompt(projectRoot string, toolSc
 
 const maxAgentSteps = 10
 
-// handleToolCall executes a tool call and returns the result as a string.
-func (s *OpenAIChatService) handleToolCall(toolCall openai.ToolCall, projectRoot string) string {
-	toolSchemas := s.GetExtendedToolSchemas(projectRoot)
-	var tool ToolSchema
-	ok := false
-	for _, t := range toolSchemas {
-		if t.Name == toolCall.Function.Name {
-			tool = t
-			ok = true
-			break
-		}
-	}
-	if !ok {
-		return `{"error": "Unknown tool function: ` + toolCall.Function.Name + `"}`
-	}
-	var args map[string]interface{}
-	if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
-		return `{"error": "Failed to parse arguments: ` + err.Error() + `"}`
-	}
-	result, err := tool.Handler(projectRoot, args)
-	if err != nil {
-		return `{"error": "Tool error: ` + err.Error() + `"}`
-	}
-	resultJson, _ := json.Marshal(result)
-	return string(resultJson)
-}
-
 // StreamChat uses a multi-step tool execution loop with OpenAI function-calling.
 func (s *OpenAIChatService) StreamChat(
 	ctx context.Context,
@@ -395,6 +358,10 @@ func (s *OpenAIChatService) StreamChat(
 		if m.Sender == "assistant" {
 			role = openai.ChatMessageRoleAssistant
 		}
+		if m.Content == "" && m.Sender == "assistant" {
+			s.Logger.Warnf("[StreamChat] Skipping empty message from sender: %s", m.Sender)
+			continue
+		}
 		chatMsgs = append(chatMsgs, openai.ChatCompletionMessage{
 			Role:    role,
 			Content: m.Content,
@@ -435,7 +402,7 @@ func (s *OpenAIChatService) StreamChat(
 
 	for step := 0; step < maxSteps; step++ {
 		s.Logger.Debugf("[StreamChat] Agent step: %d", step)
-		msg, err := StreamAgentStep(
+		msg, toolCalls, err := StreamAgentStep(
 			ctx,
 			s.Client,
 			chatMsgs,
@@ -448,21 +415,38 @@ func (s *OpenAIChatService) StreamChat(
 			s.Logger.Debugf("[StreamChat] Error in StreamAgentStep: %v", err)
 			return err
 		}
-
-		chatMsgs = append(chatMsgs, msg)
+		if msg != nil {
+			chatMsgs = append(chatMsgs, *msg)
+		}
 
 		// If no tool calls, we're done
-		if len(msg.ToolCalls) == 0 {
+		if len(toolCalls) == 0 {
 			s.Logger.Debugf("[StreamChat] No tool calls in step: %d - finishing", step)
 			return nil
 		}
 
 		// Process all tool calls in this step
-		for _, toolCall := range msg.ToolCalls {
+		for _, toolCall := range toolCalls {
 			resultObj, _ := s.executeAndSerializeToolCall(toolCall, projectRoot)
 			resultStr := resultObj.resultStr
 			errStr := resultObj.errStr
 			argsStr := resultObj.argsStr
+
+			// Check if validation failed and we need to trigger additional AI steps
+			var validationRequired bool
+			var validationMessage string
+			if resultObj.errStr == nil {
+				// Parse the result to check for validation information
+				var resultMap map[string]interface{}
+				if err := json.Unmarshal([]byte(resultStr), &resultMap); err == nil {
+					if val, ok := resultMap["validation_required"].(bool); ok && val {
+						validationRequired = true
+						if msg, ok := resultMap["validation_message"].(string); ok {
+							validationMessage = msg
+						}
+					}
+				}
+			}
 
 			// Add tool result message to DB and get its ID, set parentID to lastParentMsgID
 			toolMsg, err := s.ChatService.AddMessage(ctx, conversationID, lastParentMsgID, "tool", resultStr, "")
@@ -475,13 +459,34 @@ func (s *OpenAIChatService) StreamChat(
 			if err != nil {
 				s.Logger.Debugf("[StreamChat] Failed to persist tool call: %v", err)
 			}
+			toolResult := resultStr
+			if len(toolResult) == 0 {
+				toolResult = "No result"
+			}
+
 			// Add tool result message to chatMsgs for next step
 			chatMsgs = append(chatMsgs, openai.ChatCompletionMessage{
 				Role:       openai.ChatMessageRoleTool,
-				Content:    resultStr,
+				Content:    toolResult,
 				ToolCallID: toolCall.ID,
 			})
 			s.Logger.Debugf("[StreamChat] Adding tool message: ToolCallID=%s, ContentLength=%d", toolCall.ID, len(resultStr))
+
+			// If validation failed, add a user message to trigger the AI to fix the errors
+			if validationRequired && validationMessage != "" {
+				s.Logger.Debugf("[StreamChat] Validation failed, triggering AI fix step")
+				_, err := s.ChatService.AddMessage(ctx, conversationID, &toolMsg.ID, "user", validationMessage, "")
+				if err != nil {
+					s.Logger.Debugf("[StreamChat] Failed to persist validation message: %v", err)
+					continue
+				}
+				// Add the validation message to chatMsgs for the next step
+				chatMsgs = append(chatMsgs, openai.ChatCompletionMessage{
+					Role:    openai.ChatMessageRoleUser,
+					Content: validationMessage,
+				})
+				s.Logger.Debugf("[StreamChat] Added validation message: %s", validationMessage)
+			}
 		}
 	}
 
@@ -490,7 +495,7 @@ func (s *OpenAIChatService) StreamChat(
 		observer.OnMaxStepsReached()
 	}
 	s.Logger.Debugf("[StreamChat] Reached maxSteps, making final call")
-	msg, err := StreamAgentStep(
+	msg, toolCalls, err := StreamAgentStep(
 		ctx,
 		s.Client,
 		chatMsgs,
@@ -503,10 +508,12 @@ func (s *OpenAIChatService) StreamChat(
 		s.Logger.Debugf("[StreamChat] Error in final StreamAgentStep: %v", err)
 		return err
 	}
-	chatMsgs = append(chatMsgs, msg)
+	if msg != nil {
+		chatMsgs = append(chatMsgs, *msg)
+	}
 	s.Logger.Debugf("[StreamChat] Final assistant message: %s", msg.Content)
-	if len(msg.ToolCalls) > 0 {
-		s.Logger.Debugf("[StreamChat] Final tool calls: %v", msg.ToolCalls)
+	if len(toolCalls) > 0 {
+		s.Logger.Debugf("[StreamChat] Final tool calls: %v", toolCalls)
 	}
 
 	return nil
@@ -555,6 +562,39 @@ func (s *OpenAIChatService) executeAndSerializeToolCall(toolCall openai.ToolCall
 		errMsg := err.Error()
 		errStr = &errMsg
 	}
+
+	// Check if this is a file operation that should trigger validation
+	if s.ValidationService != nil && ShouldTriggerValidation(toolCall.Function.Name) && err == nil {
+		// Extract project slug from project root path
+		projectSlug := filepath.Base(projectRoot)
+
+		ctx := context.Background()
+
+		// Try to validate the project
+		validationResult, validationErr := s.ValidationService.ValidateProjectAfterFileOperation(ctx, projectSlug)
+		if validationErr != nil {
+			// Log the validation error but don't fail the tool call
+			s.Logger.Warnf("Validation failed after %s operation: %v", toolCall.Function.Name, validationErr)
+		} else if validationResult != nil && !validationResult.Success {
+			// If validation failed, create a validation message and append it to the result
+			validationMessage := CreateValidationMessage(validationResult)
+
+			// Add validation information to the result
+			if resultMap, ok := result.(map[string]interface{}); ok {
+				resultMap["validation_required"] = true
+				resultMap["validation_message"] = validationMessage
+				resultMap["validation_output"] = validationResult.Output
+				resultMap["validation_exit_code"] = validationResult.ExitCode
+				result = resultMap
+
+				// Re-serialize the updated result
+				if b, err := json.Marshal(result); err == nil {
+					resultStr = string(b)
+				}
+			}
+		}
+	}
+
 	argsStr, _ := json.Marshal(args)
 	return struct {
 		resultStr, argsStr string
@@ -581,10 +621,17 @@ func StreamAgentStep(
 	tools []openai.Tool,
 	toolSchemas map[string]ToolSchema,
 	observer AgentStepObserver, // new observer argument, can be nil
-) (openai.ChatCompletionMessage, error) {
+) (*openai.ChatCompletionMessage, []openai.ToolCall, error) {
 	// Validate that we have messages to process
 	if len(messages) == 0 {
-		return openai.ChatCompletionMessage{}, fmt.Errorf("no messages provided for AI processing")
+		return nil, nil, fmt.Errorf("no messages provided for AI processing")
+	}
+
+	// Validate that all messages have content
+	for i, msg := range messages {
+		if msg.Content == "" {
+			return nil, nil, fmt.Errorf("message at index %d has empty content", i)
+		}
 	}
 
 	var contentBuilder strings.Builder
@@ -619,7 +666,7 @@ func StreamAgentStep(
 		Stream:   true,
 	})
 	if err != nil {
-		return openai.ChatCompletionMessage{}, err
+		return nil, nil, err
 	}
 	defer stream.Close()
 
@@ -636,7 +683,7 @@ func StreamAgentStep(
 			if err == io.EOF {
 				break
 			}
-			return openai.ChatCompletionMessage{}, err
+			return nil, nil, err
 		}
 		for _, choice := range response.Choices {
 			// Stream assistant text
@@ -707,11 +754,6 @@ func StreamAgentStep(
 	for _, tc := range toolCallsMap {
 		toolCalls = append(toolCalls, *tc)
 	}
-	assistantMsg := openai.ChatCompletionMessage{
-		Role:      openai.ChatMessageRoleAssistant,
-		Content:   contentBuilder.String(),
-		ToolCalls: toolCalls,
-	}
 
 	// If there are tool calls, execute them and stream progress
 	for _, toolCall := range toolCalls {
@@ -743,8 +785,16 @@ func StreamAgentStep(
 		}
 		// resultJson, _ := json.Marshal(result)
 	}
-
-	return assistantMsg, nil
+	content := contentBuilder.String()
+	if content == "" {
+		content = "No content generated"
+	}
+	assistantMsg := &openai.ChatCompletionMessage{
+		Role:      openai.ChatMessageRoleAssistant,
+		Content:   content,
+		ToolCalls: toolCalls,
+	}
+	return assistantMsg, toolCalls, nil
 }
 
 // streamingObserver wraps an AgentStepObserver and captures assistant tokens
@@ -856,4 +906,23 @@ func (s *OpenAIChatService) ChatWithPersistence(
 	// 6. Store the assistant's reply in the DB
 	_, err = s.ChatService.AddMessage(ctx, conv.ID, nil, "assistant", assistantReply.String(), "")
 	return err
+}
+
+// runCommandInContainer executes a command in the project's Docker container
+func (s *OpenAIChatService) runCommandInContainer(projectSlug, command string, isBackground bool) (map[string]interface{}, error) {
+	ctx := context.Background()
+
+	// Get project ID from slug
+	projectID, err := s.ValidationService.GetProjectIDFromSlug(ctx, projectSlug)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get project ID: %w", err)
+	}
+
+	// Execute command in the container
+	result, err := s.ValidationService.Runner.RunCommandInContainer(ctx, fmt.Sprintf("%d", projectID), command, isBackground)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute command in container: %w", err)
+	}
+
+	return result, nil
 }

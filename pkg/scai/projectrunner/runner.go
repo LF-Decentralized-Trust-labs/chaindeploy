@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/chainlaunch/chainlaunch/pkg/db"
@@ -264,6 +265,222 @@ func (r *Runner) StreamLogs(ctx context.Context, projectID string, onLog func([]
 			onLog(payload)
 		}
 	}
+}
+
+// ValidationResult represents the result of a project validation
+type ValidationResult struct {
+	Success  bool   `json:"success"`
+	Output   string `json:"output"`
+	Error    string `json:"error,omitempty"`
+	ExitCode int    `json:"exitCode"`
+}
+
+// ValidateProject executes the validation command in the project container
+func (r *Runner) ValidateProject(ctx context.Context, projectID string, validateCommand string) (*ValidationResult, error) {
+	idInt64, _ := parseProjectID(projectID)
+	proj, err := r.queries.GetProject(ctx, idInt64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get project: %w", err)
+	}
+
+	if !proj.Status.Valid || proj.Status.String != "running" {
+		return nil, fmt.Errorf("project container is not running")
+	}
+
+	// Check if container exists
+	_, err = r.docker.ContainerInspect(ctx, proj.ContainerID.String)
+	if err != nil {
+		return nil, fmt.Errorf("container not found for project %s: %w", projectID, err)
+	}
+
+	// Execute the validation command in the container
+	execResp, err := r.docker.ContainerExecCreate(ctx, proj.ContainerID.String, container.ExecOptions{
+		Cmd:          []string{"sh", "-c", validateCommand},
+		WorkingDir:   "/app",
+		AttachStdout: true,
+		AttachStderr: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create exec instance: %w", err)
+	}
+
+	// Attach to the exec instance to get output
+	execAttachResp, err := r.docker.ContainerExecAttach(ctx, execResp.ID, container.ExecAttachOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to attach to exec instance: %w", err)
+	}
+	defer execAttachResp.Close()
+
+	// Read the output
+	var output strings.Builder
+	header := make([]byte, 8)
+	for {
+		// Read the 8-byte header
+		_, err := io.ReadFull(execAttachResp.Reader, header)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, fmt.Errorf("failed to read exec output header: %w", err)
+		}
+		// Get the payload length
+		length := int(uint32(header[4])<<24 | uint32(header[5])<<16 | uint32(header[6])<<8 | uint32(header[7]))
+		if length == 0 {
+			continue
+		}
+		// Read the payload
+		payload := make([]byte, length)
+		_, err = io.ReadFull(execAttachResp.Reader, payload)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, fmt.Errorf("failed to read exec output payload: %w", err)
+		}
+		output.Write(payload)
+	}
+
+	// Get the exit code
+	execInspectResp, err := r.docker.ContainerExecInspect(ctx, execResp.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to inspect exec instance: %w", err)
+	}
+
+	outputStr := output.String()
+	success := execInspectResp.ExitCode == 0
+
+	result := &ValidationResult{
+		Success:  success,
+		Output:   outputStr,
+		ExitCode: execInspectResp.ExitCode,
+	}
+
+	if !success {
+		result.Error = fmt.Sprintf("Validation command failed with exit code %d", execInspectResp.ExitCode)
+	}
+
+	return result, nil
+}
+
+// CommandResult represents the result of a command execution
+type CommandResult struct {
+	Success    bool   `json:"success"`
+	Output     string `json:"output"`
+	Error      string `json:"error,omitempty"`
+	ExitCode   int    `json:"exitCode"`
+	PID        int    `json:"pid,omitempty"`
+	Background bool   `json:"background"`
+}
+
+// RunCommandInContainer executes a command in the project container
+func (r *Runner) RunCommandInContainer(ctx context.Context, projectID string, command string, isBackground bool) (map[string]interface{}, error) {
+	idInt64, _ := parseProjectID(projectID)
+	proj, err := r.queries.GetProject(ctx, idInt64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get project: %w", err)
+	}
+
+	if !proj.Status.Valid || proj.Status.String != "running" {
+		return nil, fmt.Errorf("project container is not running")
+	}
+
+	// Check if container exists
+	_, err = r.docker.ContainerInspect(ctx, proj.ContainerID.String)
+	if err != nil {
+		return nil, fmt.Errorf("container not found for project %s: %w", projectID, err)
+	}
+
+	if isBackground {
+		// For background commands, we'll start the process and return immediately
+		execResp, err := r.docker.ContainerExecCreate(ctx, proj.ContainerID.String, container.ExecOptions{
+			Cmd:          []string{"sh", "-c", command},
+			WorkingDir:   "/app",
+			AttachStdout: false,
+			AttachStderr: false,
+			Detach:       true,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create background exec instance: %w", err)
+		}
+
+		return map[string]interface{}{
+			"success":    true,
+			"result":     "Command started in background",
+			"exec_id":    execResp.ID,
+			"command":    command,
+			"background": true,
+		}, nil
+	}
+
+	// For foreground commands, we'll execute and capture output
+	execResp, err := r.docker.ContainerExecCreate(ctx, proj.ContainerID.String, container.ExecOptions{
+		Cmd:          []string{"sh", "-c", command},
+		WorkingDir:   "/app",
+		AttachStdout: true,
+		AttachStderr: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create exec instance: %w", err)
+	}
+
+	// Attach to the exec instance to get output
+	execAttachResp, err := r.docker.ContainerExecAttach(ctx, execResp.ID, container.ExecAttachOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to attach to exec instance: %w", err)
+	}
+	defer execAttachResp.Close()
+
+	// Read the output
+	var output strings.Builder
+	header := make([]byte, 8)
+	for {
+		// Read the 8-byte header
+		_, err := io.ReadFull(execAttachResp.Reader, header)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, fmt.Errorf("failed to read exec output header: %w", err)
+		}
+		// Get the payload length
+		length := int(uint32(header[4])<<24 | uint32(header[5])<<16 | uint32(header[6])<<8 | uint32(header[7]))
+		if length == 0 {
+			continue
+		}
+		// Read the payload
+		payload := make([]byte, length)
+		_, err = io.ReadFull(execAttachResp.Reader, payload)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, fmt.Errorf("failed to read exec output payload: %w", err)
+		}
+		output.Write(payload)
+	}
+
+	// Get the exit code
+	execInspectResp, err := r.docker.ContainerExecInspect(ctx, execResp.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to inspect exec instance: %w", err)
+	}
+
+	outputStr := output.String()
+	success := execInspectResp.ExitCode == 0
+
+	result := map[string]interface{}{
+		"success":    success,
+		"output":     outputStr,
+		"exit_code":  execInspectResp.ExitCode,
+		"command":    command,
+		"background": false,
+	}
+
+	if !success {
+		result["error"] = fmt.Sprintf("Command failed with exit code %d", execInspectResp.ExitCode)
+	}
+
+	return result, nil
 }
 
 // Helpers

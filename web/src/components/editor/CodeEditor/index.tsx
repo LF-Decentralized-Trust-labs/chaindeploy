@@ -85,7 +85,7 @@ export function CodeEditor({ mode = 'editor', projectId, chaincodeProject }: Cod
 
 	const handleToolResult = useCallback(
 		async (toolName: string) => {
-			if (toolName === 'write_file') {
+			if (toolName === 'write_file' || toolName === 'edit_file' || toolName === 'delete_file') {
 				// Reload the file tree
 				await refetchTree()
 				await refetchCommits()
