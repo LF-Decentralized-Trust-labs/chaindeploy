@@ -649,7 +649,7 @@ func (c *serveCmd) initializeAIServices(queries *db.Queries, logger *logger.Logg
 	}
 	_ = aiClient
 	chatService := ai.NewChatService(queries)
-	openAIchatService := ai.NewOpenAIChatService(c.openaiKey, logger, chatService, queries, projectsDir)
+	aiService := ai.NewOpenAIChatService(c.openaiKey, logger, chatService, queries, projectsDir)
 
 	// Initialize projectsService
 	runner := projectrunner.NewRunner(queries)
@@ -673,7 +673,7 @@ func (c *serveCmd) initializeAIServices(queries *db.Queries, logger *logger.Logg
 	}
 
 	// Create and return AI handler
-	return ai.NewAIHandler(openAIchatService, chatService, projectsService, boilerplateService), filesHandler, dirsHandler, nil
+	return ai.NewAIHandler(aiService, chatService, projectsService, boilerplateService), filesHandler, dirsHandler, nil
 }
 
 type serveCmd struct {

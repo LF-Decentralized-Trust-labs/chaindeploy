@@ -101,7 +101,7 @@ func TestWithExistingProject(t *testing.T) {
 	chatService := NewChatService(queries)
 
 	// Create the AI service
-	aiService := NewOpenAIChatService(apiKey, logger, chatService, queries, projectDir)
+	aiChatService := NewOpenAIChatService(apiKey, logger, chatService, queries, projectDir)
 
 	// Create a mock project
 	project := &db.GetProjectRow{
@@ -138,7 +138,7 @@ func TestWithExistingProject(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	err = aiService.StreamChat(ctx, project, conversationID, messages, observer, 5, sessionTracker)
+	err = aiChatService.StreamChat(ctx, project, conversationID, messages, observer, 5, sessionTracker)
 
 	// Output everything to stdout for analysis
 	fmt.Println("=== AI RESPONSE ANALYSIS ===")

@@ -16,7 +16,7 @@ func TestShouldTriggerValidationForTerminalCommand(t *testing.T) {
 func TestTerminalCommandDescription(t *testing.T) {
 	// This test verifies that the terminal command tool is properly configured
 	// by checking that it's included in the tool schemas
-	service := &OpenAIChatService{}
+	service := &AIChatService{}
 	tools := service.GetExtendedToolSchemas("/tmp/test")
 
 	var terminalTool *ToolSchema

@@ -44,21 +44,21 @@ type GenerateResponse struct {
 }
 
 // NewAIHandler creates a new instance of AIHandler with the required dependencies
-func NewAIHandler(openAIService *OpenAIChatService, chatService *ChatService, projectsService *projects.ProjectsService, boilerplateService *boilerplates.BoilerplateService) *AIHandler {
+func NewAIHandler(aiService *AIChatService, chatService *ChatService, projectsService *projects.ProjectsService, boilerplateService *boilerplates.BoilerplateService) *AIHandler {
 	return &AIHandler{
-		OpenAIChatService: openAIService,
-		ChatService:       chatService,
-		Projects:          projectsService,
-		Boilerplates:      boilerplateService,
+		AIChatService: aiService,
+		ChatService:   chatService,
+		Projects:      projectsService,
+		Boilerplates:  boilerplateService,
 	}
 }
 
 // AIHandler now has a ChatService field for dependency injection.
 type AIHandler struct {
-	OpenAIChatService *OpenAIChatService
-	ChatService       *ChatService
-	Projects          *projects.ProjectsService
-	Boilerplates      *boilerplates.BoilerplateService
+	AIChatService *AIChatService
+	ChatService   *ChatService
+	Projects      *projects.ProjectsService
+	Boilerplates  *boilerplates.BoilerplateService
 }
 
 // RegisterRoutes registers all AI-related routes
@@ -552,7 +552,7 @@ func (h *AIHandler) Chat(w http.ResponseWriter, r *http.Request) error {
 
 	// Create a new session changes tracker for this chat session
 	sessionTracker := sessionchanges.NewTracker()
-	err = h.OpenAIChatService.ChatWithPersistence(r.Context(), projectID, userMessage, observer, 0, req.ConversationID, sessionTracker)
+	err = h.AIChatService.ChatWithPersistence(r.Context(), projectID, userMessage, observer, 0, req.ConversationID, sessionTracker)
 	if err != nil && err != io.EOF {
 		return fmt.Errorf("chat error: %w", err)
 	}

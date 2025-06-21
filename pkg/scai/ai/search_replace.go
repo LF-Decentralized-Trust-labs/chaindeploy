@@ -68,6 +68,9 @@ type SearchReplaceOptions struct {
 	ApplyStr     string
 	OriginalCode string
 	URI          string
+	AIClient     interface{} // OpenAI client or other AI client
+	Model        string      // AI model to use
+	MaxRetries   int         // Maximum number of retries
 }
 
 // SearchReplaceBlock represents a single search/replace block

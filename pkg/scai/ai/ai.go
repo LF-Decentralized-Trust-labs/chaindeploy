@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -18,9 +18,76 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
-// ToolCallResult combines OpenAI function definition with the execution result
+// AIChatServiceInterface defines the interface for AI chat services
+type AIChatServiceInterface interface {
+	StreamChat(
+		ctx context.Context,
+		project *db.GetProjectRow,
+		conversationID int64,
+		messages []Message,
+		observer AgentStepObserver,
+		maxSteps int,
+		sessionTracker *sessionchanges.Tracker,
+	) error
+	ChatWithPersistence(
+		ctx context.Context,
+		projectID int64,
+		userMessage string,
+		observer AgentStepObserver,
+		maxSteps int,
+		conversationID int64,
+		sessionTracker *sessionchanges.Tracker,
+	) error
+}
+
+// AIProviderInterface defines the interface for AI providers (OpenAI, Anthropic, etc.)
+type AIProviderInterface interface {
+	StreamAgentStep(
+		ctx context.Context,
+		messages []AIMessage,
+		model string,
+		tools []AITool,
+		toolSchemas map[string]ToolSchema,
+		observer AgentStepObserver,
+	) (*AIMessage, []AIToolCall, []ToolCallResult, error)
+}
+
+// AIMessage represents a generic AI message
+type AIMessage struct {
+	Role      string
+	Content   string
+	ToolCalls []AIToolCall
+}
+
+// AIToolCall represents a generic AI tool call
+type AIToolCall struct {
+	ID       string
+	Type     string
+	Function AIFunctionCall
+}
+
+// AIFunctionCall represents a generic AI function call
+type AIFunctionCall struct {
+	Name      string
+	Arguments string
+}
+
+// AITool represents a generic AI tool
+type AITool struct {
+	Type     string
+	Function *AIFunctionDefinition
+}
+
+// AIFunctionDefinition represents a generic AI function definition
+type AIFunctionDefinition struct {
+	Name        string
+	Description string
+	Parameters  map[string]interface{}
+}
+
+// ToolCallResult combines AI function definition with the execution result
 type ToolCallResult struct {
-	ToolCall openai.ToolCall
+	ToolCall AIToolCall
 	Result   interface{}
 	Error    error
 }
@@ -33,17 +100,24 @@ type ToolSchema struct {
 	Handler     func(projectRoot string, args map[string]interface{}) (interface{}, error)
 }
 
-// OpenAIChatService implements ChatServiceInterface using OpenAI's API and function-calling tools.
-type OpenAIChatService struct {
-	Client            *openai.Client
+// AIChatService implements the generic AI chat service
+type AIChatService struct {
 	Logger            *logger.Logger
 	ChatService       *ChatService
 	Queries           *db.Queries
 	ProjectsDir       string
 	ValidationService *ValidationService
+	AIProvider        AIProviderInterface
 }
 
-func NewOpenAIChatService(apiKey string, logger *logger.Logger, chatService *ChatService, queries *db.Queries, projectsDir string) *OpenAIChatService {
+// NewAIChatService creates a new generic AI chat service
+func NewAIChatService(
+	logger *logger.Logger,
+	chatService *ChatService,
+	queries *db.Queries,
+	projectsDir string,
+	aiProvider AIProviderInterface,
+) *AIChatService {
 	// Create boilerplate service
 	boilerplateService, err := boilerplates.NewBoilerplateService(queries)
 	if err != nil {
@@ -61,234 +135,74 @@ func NewOpenAIChatService(apiKey string, logger *logger.Logger, chatService *Cha
 		validationService = NewValidationService(queries, boilerplateService, runner)
 	}
 
-	return &OpenAIChatService{
-		Client:            openai.NewClient(apiKey),
+	return &AIChatService{
 		Logger:            logger,
 		ChatService:       chatService,
 		Queries:           queries,
 		ProjectsDir:       projectsDir,
 		ValidationService: validationService,
+		AIProvider:        aiProvider,
 	}
 }
 
-const systemPrompt = `
-You are an AI coding assistant, powered by ChatGPT 4.1 Mini. You operate in ChainLaunch.
-
-You are pair programming with a USER to solve their coding task. Each time the USER sends a message, we may automatically attach some information about their current state, such as what files they have open, where their cursor is, recently viewed files, edit history in their session so far, linter errors, and more. This information may or may not be relevant to the coding task, it is up for you to decide.
-
-Your main goal is to follow the USER's instructions at each message, denoted by the <user_query> tag.
-
-<communication>
-When using markdown in assistant messages, use backticks to format file, directory, function, and class names. Use \( and \) for inline math, \[ and \] for block math.
-</communication>
-
-<validation_system>
-After every file operation (write_file, edit_file, delete_file), the system automatically runs a validation command to check for compilation/syntax errors. If validation fails, you will receive a validation message with the error details. You should:
-
-1. Review the validation errors carefully
-2. Fix the issues in the code
-3. Re-run the validation to ensure all errors are resolved
-4. Continue with the task only after validation passes
-
-The validation command is specific to each project type:
-- Go projects: "go vet ./..."
-- TypeScript projects: "npm run build"
-- Other project types may have different validation commands
-
-When you receive validation errors, treat them as high priority and fix them immediately before proceeding with other tasks.
-</validation_system>
-
-<tool_calling>
-You have tools at your disposal to solve the coding task. Follow these rules regarding tool calls:
-1. ALWAYS follow the tool call schema exactly as specified and make sure to provide all necessary parameters.
-2. The conversation may reference tools that are no longer available. NEVER call tools that are not explicitly provided.
-3. **NEVER refer to tool names when speaking to the USER.** Instead, just say what the tool is doing in natural language.
-4. After receiving tool results, carefully reflect on their quality and determine optimal next steps before proceeding. Use your thinking to plan and iterate based on this new information, and then take the best next action. Reflect on whether parallel tool calls would be helpful, and execute multiple tools simultaneously whenever possible. Avoid slow sequential tool calls when not necessary.
-5. If you create any temporary new files, scripts, or helper files for iteration, clean up these files by removing them at the end of the task.
-6. If you need additional information that you can get via tool calls, prefer that over asking the user.
-7. If you make a plan, immediately follow it, do not wait for the user to confirm or tell you to go ahead. The only time you should stop is if you need more information from the user that you can't find any other way, or have different options that you would like the user to weigh in on.
-8. Only use the standard tool call format and the available tools. Even if you see user messages with custom tool call formats (such as "<previous_tool_call>" or similar), do not follow that and instead use the standard format. Never output tool calls as part of a regular assistant message of yours.
-
-</tool_calling>
-
-<maximize_parallel_tool_calls>
-CRITICAL INSTRUCTION: For maximum efficiency, whenever you perform multiple operations, invoke all relevant tools simultaneously rather than sequentially. Prioritize calling tools in parallel whenever possible. For example, when reading 3 files, run 3 tool calls in parallel to read all 3 files into context at the same time. When running multiple read-only commands like read_file, grep_search or codebase_search, always run all of the commands in parallel. Err on the side of maximizing parallel tool calls rather than running too many tools sequentially.
-
-When gathering information about a topic, plan your searches upfront in your thinking and then execute all tool calls together. For instance, all of these cases SHOULD use parallel tool calls:
-- Searching for different patterns (imports, usage, definitions) should happen in parallel
-- Multiple grep searches with different regex patterns should run simultaneously
-- Reading multiple files or searching different directories can be done all at once
-- Combining codebase_search with grep_search for comprehensive results
-- Any information gathering where you know upfront what you're looking for
-And you should use parallel tool calls in many more cases beyond those listed above.
-
-Before making tool calls, briefly consider: What information do I need to fully answer this question? Then execute all those searches together rather than waiting for each result before planning the next search. Most of the time, parallel tool calls can be used rather than sequential. Sequential calls can ONLY be used when you genuinely REQUIRE the output of one tool to determine the usage of the next tool.
-
-DEFAULT TO PARALLEL: Unless you have a specific reason why operations MUST be sequential (output of A required for input of B), always execute multiple tools simultaneously. This is not just an optimization - it's the expected behavior. Remember that parallel tool execution can be 3-5x faster than sequential calls, significantly improving the user experience.
-</maximize_parallel_tool_calls>
-
-<search_and_reading>
-If you are unsure about the answer to the USER's request or how to satiate their request, you should gather more information. This can be done with additional tool calls, asking clarifying questions, etc...
-
-For example, if you've performed a semantic search, and the results may not fully answer the USER's request, or merit gathering more information, feel free to call more tools.
-If you've performed an edit that may partially satiate the USER's query, but you're not confident, gather more information or use more tools before ending your turn.
-
-Bias towards not asking the user for help if you can find the answer yourself.
-</search_and_reading>
-
-<making_code_changes>
-When making code changes, NEVER output code to the USER, unless requested. Instead use one of the code edit tools to implement the change.
-
-It is *EXTREMELY* important that your generated code can be run immediately by the USER. To ensure this, follow these instructions carefully:
-1. Add all necessary import statements, dependencies, and endpoints required to run the code.
-2. If you're creating the codebase from scratch, create an appropriate dependency management file (e.g. requirements.txt) with package versions and a helpful README.
-3. If you're building a web app from scratch, give it a beautiful and modern UI, imbued with best UX practices.
-4. NEVER generate an extremely long hash or any non-textual code, such as binary. These are not helpful to the USER and are very expensive.
-5. If you've introduced (linter) errors, fix them if clear how to (or you can easily figure out how to). Do not make uneducated guesses. And do NOT loop more than 3 times on fixing linter errors on the same file. On the third time, you should stop and ask the user what to do next.
-6. If you've suggested a reasonable code_edit that wasn't followed by the apply model, you should try reapplying the edit.
-7. You have both the edit_file and search_replace tools at your disposal. Use the search_replace tool for files larger than 2500 lines, otherwise prefer the edit_file tool.
-8. **ALWAYS** if the code_edit is a large change and overrides a lot of the file, you should use the write_file tool to write the contents of the file to the USER.
-9. **ALWAYS read the current content of a file before making changes to it, unless you are creating a new file.** This ensures your modifications are accurate and contextually appropriate.
-
-</making_code_changes>
-
-<edit_file_format>
-When using the edit_file tool, you MUST follow the SEARCH/REPLACE block format exactly:
-
-Your SEARCH/REPLACE blocks string must be formatted as follows:
-<<<<<<< ORIGINAL
-// ... original code goes here
-=======
-// ... final code goes here
->>>>>>> UPDATED
-
-<<<<<<< ORIGINAL
-// ... original code goes here
-=======
-// ... final code goes here
->>>>>>> UPDATED
-
-## Guidelines:
-
-1. You may output multiple search replace blocks if needed.
-
-2. The ORIGINAL code in each SEARCH/REPLACE block must EXACTLY match lines in the original file. Do not add or remove any whitespace or comments from the original code.
-
-3. Each ORIGINAL text must be large enough to uniquely identify the change. However, bias towards writing as little as possible.
-
-4. Each ORIGINAL text must be DISJOINT from all other ORIGINAL text.
-
-5. This field is a STRING (not an array).
-
-## Handling New Content (No Original to Replace):
-
-When adding completely new content (functions, classes, imports, etc.) that doesn't replace existing code:
-
-1. For new content at the end of a file, use an empty ORIGINAL section:
-<<<<<<< ORIGINAL
-=======
-// Your new content here
->>>>>>> UPDATED
-
-2. For new content between existing code, use a minimal ORIGINAL that identifies the insertion point:
-<<<<<<< ORIGINAL
-// ... existing code ...
-=======
-// ... existing code ...
-// Your new content here
-// ... existing code ...
->>>>>>> UPDATED
-
-3. For new imports at the top of a file, use:
-<<<<<<< ORIGINAL
-package main
-=======
-package main
-
-import (
-    "your/new/import"
-)
->>>>>>> UPDATED
-
-4. For new functions/methods, find a suitable location and use:
-<<<<<<< ORIGINAL
-// ... existing code ...
-=======
-// ... existing code ...
-
-// Your new function
-func newFunction() {
-    // implementation
+// Conversion functions between OpenAI types and generic AI types
+func openAIToolCallToAIToolCall(tc openai.ToolCall) AIToolCall {
+	return AIToolCall{
+		ID:   tc.ID,
+		Type: string(tc.Type),
+		Function: AIFunctionCall{
+			Name:      tc.Function.Name,
+			Arguments: tc.Function.Arguments,
+		},
+	}
 }
 
-// ... existing code ...
->>>>>>> UPDATED
+func openAIMessageToAIMessage(msg openai.ChatCompletionMessage) AIMessage {
+	var toolCalls []AIToolCall
+	for _, tc := range msg.ToolCalls {
+		toolCalls = append(toolCalls, openAIToolCallToAIToolCall(tc))
+	}
 
-## Important Notes:
+	return AIMessage{
+		Role:      msg.Role,
+		Content:   msg.Content,
+		ToolCalls: toolCalls,
+	}
+}
 
-- ALWAYS include the >>>>>>> UPDATED tag at the end of each block, even for new content
-- When adding new content, the ORIGINAL section should be minimal but sufficient to identify the insertion point
-- For completely new files, use the write_file tool instead
-- Ensure proper indentation and formatting in the FINAL section
-</edit_file_format>
+func aiMessageToOpenAIMessage(msg AIMessage) openai.ChatCompletionMessage {
+	var toolCalls []openai.ToolCall
+	for _, tc := range msg.ToolCalls {
+		toolCalls = append(toolCalls, openai.ToolCall{
+			ID:   tc.ID,
+			Type: openai.ToolType(tc.Type),
+			Function: openai.FunctionCall{
+				Name:      tc.Function.Name,
+				Arguments: tc.Function.Arguments,
+			},
+		})
+	}
 
-<searching_and_reading>
-You have tools to search the codebase and read files. Follow these rules regarding tool calls:
-1. If available, heavily prefer the semantic search tool to grep search, file search, and list dir tools.
-2. If you need to read a file, prefer to read larger sections of the file at once over multiple smaller calls.
-3. If you have found a reasonable place to edit or answer, do not continue calling tools. Edit or answer from the information you have found.
-</searching_and_reading>
+	return openai.ChatCompletionMessage{
+		Role:      msg.Role,
+		Content:   msg.Content,
+		ToolCalls: toolCalls,
+	}
+}
 
-
-You MUST use the following format when citing code regions or blocks:
-` + "```" + `startLine:endLine:filepath
-// ... existing code ...
-` + "```" + `
-This is the ONLY acceptable format for code citations. The format is ` + "```" + `startLine:endLine:filepath` + "```" + ` where startLine and endLine are line numbers.
-
-Answer the user's request using the relevant tool(s), if they are available. Check that all the required parameters for each tool call are provided or can reasonably be inferred from context. IF there are no relevant tools or there are missing values for required parameters, ask the user to supply these values; otherwise proceed with the tool calls. If you provide a specific value for a parameter (for example provided in quotes), make sure to use that value EXACTLY. DO NOT make up values for or ask about optional parameters. Carefully analyze descriptive terms in the request as they may indicate required parameter values that should be included even if not explicitly quoted.
-
-Do what has been asked; nothing more, nothing less.
-NEVER create files unless they're absolutely necessary for achieving your goal.
-ALWAYS prefer editing an existing file to creating a new one.
-NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
-
-<summarization>
-If you see a section called "<most_important_user_query>", you should treat that query as the one to answer, and ignore previous user queries. If you are asked to summarize the conversation, you MUST NOT use any tools, even if they are available. You MUST answer the "<most_important_user_query>" query.
-</summarization>
-
-
-<tool_calling>
-You have tools at your disposal to solve the coding task. Follow these rules regarding tool calls:
-1. ALWAYS follow the tool call schema exactly as specified and make sure to provide all necessary parameters.
-2. The conversation may reference tools that are no longer available. NEVER call tools that are not explicitly provided.
-3. **NEVER refer to tool names when speaking to the USER.** For example, instead of saying 'I need to use the edit_file tool to edit your file', just say 'I will edit your file'.
-4. Only calls tools when they are necessary. If the USER's task is general or you already know the answer, just respond without calling tools.
-5. Before calling each tool, first explain to the USER why you are calling it.
-</tool_calling>
-
-<making_code_changes>
-When making code edits, NEVER output code to the user, unless requested. Instead use one of the code edit tools to implement the change.
-It is *EXTREMELY* important that your generated code can be run immediately by the user, ERROR-FREE. To ensure this, follow these instructions carefully:
-1. Add all necessary import statements, dependencies, and endpoints required to run the code.
-2. NEVER generate an extremely long hash, binary, ico, or any non-textual code. These are not helpful to the user and are very expensive.
-3. **ALWAYS read the current content of a file before making changes to it, unless you are creating a new file.** This ensures your modifications are accurate and contextually appropriate.
-3. Unless you are appending some small easy to apply edit to a file, or creating a new file, you MUST read the contents or section of what you're editing before editing it.
-4. If you are copying the UI of a website, you should scrape the website to get the screenshot, styling, and assets. Aim for pixel-perfect cloning. Pay close attention to the every detail of the design: backgrounds, gradients, colors, spacing, etc.
-5. If you see linter or runtime errors, fix them if clear how to (or you can easily figure out how to). DO NOT loop more than 3 times on fixing errors on the same file. On the third time, you should stop and ask the user what to do next. You don't have to fix warnings. If the server has a 502 bad gateway error, you can fix this by simply restarting the dev server.
-6. If you've suggested a reasonable code_edit that wasn't followed by the apply model, you should use the intelligent_apply argument to reapply the edit.
-7. If the runtime errors are preventing the app from running, fix the errors immediately.
-</making_code_changes>
-
-
-This is the ONLY acceptable format for code citations. The format is startLine:endLine:filepath where startLine and endLine are line numbers.
-
-Answer the user's request using the relevant tool(s), if they are available. Check that all the required parameters for each tool call are provided or can reasonably be inferred from context. IF there are no relevant tools or there are missing values for required parameters, ask the user to supply these values; otherwise proceed with the tool calls. If you provide a specific value for a parameter (for example provided in quotes), make sure to use that value EXACTLY. DO NOT make up values for or ask about optional parameters. Carefully analyze descriptive terms in the request as they may indicate required parameter values that should be included even if not explicitly quoted.
-
-`
+func aiToolToOpenAITool(tool AITool) openai.Tool {
+	return openai.Tool{
+		Type: openai.ToolType(tool.Type),
+		Function: &openai.FunctionDefinition{
+			Name:        tool.Function.Name,
+			Description: tool.Function.Description,
+			Parameters:  tool.Function.Parameters,
+		},
+	}
+}
 
 // getProjectStructurePrompt generates a system prompt with the project structure and file contents.
-func (s *OpenAIChatService) getProjectStructurePrompt(projectRoot string, toolSchemas []ToolSchema, project *db.GetProjectRow) string {
+func (s *AIChatService) getProjectStructurePrompt(projectRoot string, toolSchemas []ToolSchema, project *db.GetProjectRow) string {
 	ignored := map[string]bool{
 		"node_modules": true,
 		".git":         true,
@@ -377,8 +291,8 @@ func (s *OpenAIChatService) getProjectStructurePrompt(projectRoot string, toolSc
 
 const maxAgentSteps = 10
 
-// StreamChat uses a multi-step tool execution loop with OpenAI function-calling.
-func (s *OpenAIChatService) StreamChat(
+// StreamChat uses a multi-step tool execution loop with AI function-calling.
+func (s *AIChatService) StreamChat(
 	ctx context.Context,
 	project *db.GetProjectRow,
 	conversationID int64,
@@ -392,7 +306,7 @@ func (s *OpenAIChatService) StreamChat(
 		return fmt.Errorf("no messages provided for AI processing")
 	}
 
-	var chatMsgs []openai.ChatCompletionMessage
+	var chatMsgs []AIMessage
 	projectID := project.ID
 	projectSlug := project.Slug
 	projectRoot := filepath.Join(s.ProjectsDir, projectSlug)
@@ -418,8 +332,8 @@ func (s *OpenAIChatService) StreamChat(
 	s.Logger.Debugf("[StreamChat] projectID: %s", projectID)
 	s.Logger.Debugf("[StreamChat] projectRoot: %s", projectRoot)
 	s.Logger.Debugf("[StreamChat] systemPrompt: %s", systemPrompt)
-	chatMsgs = append(chatMsgs, openai.ChatCompletionMessage{
-		Role:    openai.ChatMessageRoleSystem,
+	chatMsgs = append(chatMsgs, AIMessage{
+		Role:    "system",
 		Content: systemPrompt,
 	})
 
@@ -437,15 +351,15 @@ func (s *OpenAIChatService) StreamChat(
 			continue
 		}
 
-		role := openai.ChatMessageRoleUser
+		role := "user"
 		if m.Sender == "assistant" {
-			role = openai.ChatMessageRoleAssistant
+			role = "assistant"
 		}
 		if m.Content == "" && m.Sender == "assistant" {
 			s.Logger.Warnf("[StreamChat] Skipping empty message from sender: %s", m.Sender)
 			continue
 		}
-		chatMsgs = append(chatMsgs, openai.ChatCompletionMessage{
+		chatMsgs = append(chatMsgs, AIMessage{
 			Role:    role,
 			Content: m.Content,
 		})
@@ -467,11 +381,11 @@ func (s *OpenAIChatService) StreamChat(
 	for _, tool := range toolSchemas {
 		toolSchemasMap[tool.Name] = tool
 	}
-	tools := []openai.Tool{}
+	tools := []AITool{}
 	for _, tool := range toolSchemas {
-		tools = append(tools, openai.Tool{
+		tools = append(tools, AITool{
 			Type: "function",
-			Function: &openai.FunctionDefinition{
+			Function: &AIFunctionDefinition{
 				Name:        tool.Name,
 				Description: tool.Description,
 				Parameters:  tool.Parameters,
@@ -485,9 +399,8 @@ func (s *OpenAIChatService) StreamChat(
 
 	for step := 0; step < maxSteps; step++ {
 		s.Logger.Debugf("[StreamChat] Agent step: %d", step)
-		msg, toolCalls, toolCallResults, err := s.StreamAgentStep(
+		msg, toolCalls, toolCallResults, err := s.AIProvider.StreamAgentStep(
 			ctx,
-			s.Client,
 			chatMsgs,
 			"gpt-4.1-mini",
 			tools,
@@ -594,12 +507,12 @@ func (s *OpenAIChatService) StreamChat(
 			}
 
 			// Add tool result message to chatMsgs for next step (only current iteration)
-			chatMsgs = append(chatMsgs, openai.ChatCompletionMessage{
-				Role:       openai.ChatMessageRoleTool,
-				Content:    toolResult,
-				ToolCallID: toolCall.ID,
+			chatMsgs = append(chatMsgs, AIMessage{
+				Role:      "tool",
+				Content:   toolResult,
+				ToolCalls: []AIToolCall{}, // Tool result messages don't have tool calls
 			})
-			s.Logger.Debugf("[StreamChat] Adding tool message: ToolCallID=%s, ContentLength=%d", toolCall.ID, len(toolResult))
+			s.Logger.Debugf("[StreamChat] Adding tool message: ContentLength=%d", len(toolResult))
 
 			// If validation failed, add a user message to trigger the AI to fix the errors
 			if validationRequired && validationMessage != "" {
@@ -610,8 +523,8 @@ func (s *OpenAIChatService) StreamChat(
 					continue
 				}
 				// Add the validation message to chatMsgs for the next step
-				chatMsgs = append(chatMsgs, openai.ChatCompletionMessage{
-					Role:    openai.ChatMessageRoleUser,
+				chatMsgs = append(chatMsgs, AIMessage{
+					Role:    "user",
 					Content: validationMessage,
 				})
 				s.Logger.Debugf("[StreamChat] Added validation message: %s", validationMessage)
@@ -624,9 +537,8 @@ func (s *OpenAIChatService) StreamChat(
 		observer.OnMaxStepsReached()
 	}
 	s.Logger.Debugf("[StreamChat] Reached maxSteps, making final call")
-	msg, toolCalls, toolCallResults, err := s.StreamAgentStep(
+	msg, toolCalls, toolCallResults, err := s.AIProvider.StreamAgentStep(
 		ctx,
-		s.Client,
 		chatMsgs,
 		"gpt-4o",
 		tools,
@@ -654,238 +566,8 @@ func (s *OpenAIChatService) StreamChat(
 	return nil
 }
 
-// AgentStepObserver defines hooks for observing agent step events.
-type AgentStepObserver interface {
-	OnLLMContent(content string)
-	OnToolCallStart(toolCallID, name string)
-	OnToolCallUpdate(toolCallID, name, arguments string)
-	OnToolCallExecute(toolCallID, name string, args map[string]interface{})
-	OnToolCallResult(toolCallID, name string, result interface{}, err error)
-	OnMaxStepsReached()
-}
-
-// StreamAgentStep streams the assistant's response for a single agent step, executes tool calls if present, and streams tool execution progress.
-func (s *OpenAIChatService) StreamAgentStep(
-	ctx context.Context,
-	client *openai.Client,
-	messages []openai.ChatCompletionMessage,
-	model string,
-	tools []openai.Tool,
-	toolSchemas map[string]ToolSchema,
-	observer AgentStepObserver, // new observer argument, can be nil
-) (*openai.ChatCompletionMessage, []openai.ToolCall, []ToolCallResult, error) {
-	// Validate that we have messages to process
-	if len(messages) == 0 {
-		return nil, nil, nil, fmt.Errorf("no messages provided for AI processing")
-	}
-
-	// Validate that all messages have content
-	for i, msg := range messages {
-		if msg.Content == "" {
-			return nil, nil, nil, fmt.Errorf("message at index %d has empty content", i)
-		}
-	}
-
-	var contentBuilder strings.Builder
-	toolCallsMap := map[string]*openai.ToolCall{} // toolCallID -> ToolCall
-	var lastToolCallID string                     // Track the last tool call ID for argument accumulation
-
-	// Delta grouping and delay mechanism
-	type pendingUpdate struct {
-		toolCallID string
-		name       string
-		delta      string
-	}
-	pendingUpdates := make(map[string]*pendingUpdate) // toolCallID -> pendingUpdate
-	updateTimer := time.NewTimer(100 * time.Millisecond)
-	updateTimer.Stop() // Start stopped
-
-	// Function to send accumulated updates
-	sendPendingUpdates := func() {
-		if observer == nil {
-			return
-		}
-		for _, update := range pendingUpdates {
-			observer.OnToolCallUpdate(update.toolCallID, update.name, update.delta)
-		}
-		pendingUpdates = make(map[string]*pendingUpdate)
-	}
-
-	stream, err := client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{
-		Model:    model,
-		Messages: messages,
-		Tools:    tools,
-		Stream:   true,
-	})
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	defer stream.Close()
-
-	for {
-		select {
-		case <-updateTimer.C:
-			sendPendingUpdates()
-		default:
-			// Continue with normal processing
-		}
-
-		response, err := stream.Recv()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return nil, nil, nil, err
-		}
-		for _, choice := range response.Choices {
-			// Stream assistant text
-			if choice.Delta.Content != "" {
-				contentBuilder.WriteString(choice.Delta.Content)
-				if observer != nil {
-					observer.OnLLMContent(choice.Delta.Content)
-				}
-			}
-
-			// Handle tool call deltas robustly
-			for _, tc := range choice.Delta.ToolCalls {
-				if tc.ID != "" {
-					// New tool call or new chunk for an existing one
-					lastToolCallID = tc.ID
-					if _, ok := toolCallsMap[tc.ID]; !ok {
-						toolCallsMap[tc.ID] = &openai.ToolCall{
-							ID:       tc.ID,
-							Type:     tc.Type,
-							Function: openai.FunctionCall{},
-						}
-						if observer != nil {
-							observer.OnToolCallStart(tc.ID, tc.Function.Name)
-						}
-					}
-				}
-				// Use lastToolCallID for argument accumulation
-				if lastToolCallID != "" {
-					toolCall := toolCallsMap[lastToolCallID]
-					if tc.Function.Name != "" && toolCall.Function.Name != tc.Function.Name {
-						toolCall.Function.Name = tc.Function.Name
-					}
-					if tc.Function.Arguments != "" {
-						toolCall.Function.Arguments += tc.Function.Arguments
-						// Group deltas and schedule update with delay
-						if observer != nil {
-							if pending, exists := pendingUpdates[lastToolCallID]; exists {
-								// Accumulate delta
-								pending.delta += tc.Function.Arguments
-							} else {
-								// Create new pending update
-								pendingUpdates[lastToolCallID] = &pendingUpdate{
-									toolCallID: lastToolCallID,
-									name:       toolCall.Function.Name,
-									delta:      tc.Function.Arguments,
-								}
-								// Start/reset timer for this group
-								updateTimer.Reset(100 * time.Millisecond)
-							}
-						}
-					}
-				}
-			}
-
-			// If we get a tool calls finish reason, break out of the stream and reset state
-			if choice.FinishReason == openai.FinishReasonToolCalls {
-				lastToolCallID = ""
-				break
-			}
-		}
-	}
-
-	// Send any remaining pending updates
-	sendPendingUpdates()
-
-	// After stream, reconstruct tool calls
-	var toolCalls []openai.ToolCall
-	for _, tc := range toolCallsMap {
-		toolCalls = append(toolCalls, *tc)
-	}
-
-	// If there are tool calls, execute them and stream progress
-	var toolCallResults []ToolCallResult
-	for _, toolCall := range toolCalls {
-		toolSchema, ok := toolSchemas[toolCall.Function.Name]
-		if !ok {
-			result := ToolCallResult{
-				ToolCall: toolCall,
-				Result:   nil,
-				Error:    fmt.Errorf("Unknown tool function: %s", toolCall.Function.Name),
-			}
-			toolCallResults = append(toolCallResults, result)
-			if observer != nil {
-				observer.OnToolCallResult(toolCall.ID, toolCall.Function.Name, nil, result.Error)
-			}
-			continue
-		}
-		var args map[string]interface{}
-		err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args)
-		if err != nil {
-			result := ToolCallResult{
-				ToolCall: toolCall,
-				Result:   nil,
-				Error:    err,
-			}
-			toolCallResults = append(toolCallResults, result)
-			if observer != nil {
-				observer.OnToolCallResult(toolCall.ID, toolCall.Function.Name, nil, err)
-			}
-			continue
-		}
-		if observer != nil {
-			observer.OnToolCallExecute(toolCall.ID, toolCall.Function.Name, args)
-		}
-		result, err := toolSchema.Handler(toolCall.Function.Name, args)
-		toolCallResult := ToolCallResult{
-			ToolCall: toolCall,
-			Result:   result,
-			Error:    err,
-		}
-		toolCallResults = append(toolCallResults, toolCallResult)
-		if observer != nil {
-			observer.OnToolCallResult(toolCall.ID, toolCall.Function.Name, result, err)
-		}
-		if err != nil {
-			s.Logger.Debugf("[StreamChat] Error in tool call: %v", err)
-			continue
-		}
-		// resultJson, _ := json.Marshal(result)
-	}
-	content := contentBuilder.String()
-	if content == "" {
-		content = "No content generated"
-	}
-	assistantMsg := &openai.ChatCompletionMessage{
-		Role:      openai.ChatMessageRoleAssistant,
-		Content:   content,
-		ToolCalls: toolCalls,
-	}
-	return assistantMsg, toolCalls, toolCallResults, nil
-}
-
-// streamingObserver wraps an AgentStepObserver and captures assistant tokens
-// for persistence after streaming.
-type streamingObserver struct {
-	AgentStepObserver
-	onAssistantToken func(token string)
-}
-
-func (o *streamingObserver) OnLLMContent(content string) {
-	if o.AgentStepObserver != nil {
-		o.AgentStepObserver.OnLLMContent(content)
-	}
-	if o.onAssistantToken != nil {
-		o.onAssistantToken(content)
-	}
-}
-
 // ChatWithPersistence handles chat with DB persistence for a project.
-func (s *OpenAIChatService) ChatWithPersistence(
+func (s *AIChatService) ChatWithPersistence(
 	ctx context.Context,
 	projectID int64,
 	userMessage string,
@@ -974,13 +656,205 @@ func (s *OpenAIChatService) ChatWithPersistence(
 		return err
 	}
 
-	// // 6. Store the assistant's reply in the DB
-	// _, err = s.ChatService.AddMessage(ctx, conv.ID, nil, "assistant", assistantReply.String(), "", "")
 	return err
 }
 
+// GetExtendedToolSchemas returns the extended tool schemas for the project
+func (s *AIChatService) GetExtendedToolSchemas(projectRoot string) []ToolSchema {
+	allTools := []ToolSchema{
+		{
+			Name:        "read_file",
+			Description: "Read the contents of a file. the output of this tool call will be the 1-indexed file contents from start_line_one_indexed to end_line_one_indexed_inclusive, together with a summary of the lines outside start_line_one_indexed and end_line_one_indexed_inclusive.\nNote that this call can view at most 250 lines at a time.\n\nWhen using this tool to gather information, it's your responsibility to ensure you have the COMPLETE context. Specifically, each time you call this command you should:\n1) Assess if the contents you viewed are sufficient to proceed with your task.\n2) Take note of where there are lines not shown.\n3) If the file contents you have viewed are insufficient, and you suspect they may be in lines not shown, proactively call the tool again to view those lines.\n4) When in doubt, call this tool again to gather more information. Remember that partial file views may miss critical dependencies, imports, or functionality.\n\nIn some cases, if reading a range of lines is not enough, you may choose to read the entire file.\nReading entire files is often wasteful and slow, especially for large files (i.e. more than a few hundred lines). So you should use this option sparingly.\nReading the entire file is not allowed in most cases. You are only allowed to read the entire file if it has been edited or manually attached to the conversation by the user.",
+			Parameters: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"target_file": map[string]interface{}{
+						"type":        "string",
+						"description": "The path of the file to read (relative to project root).",
+					},
+					"explanation": map[string]interface{}{
+						"type":        "string",
+						"description": "One sentence explanation as to why this tool is being used, and how it contributes to the goal.",
+					},
+					"should_read_entire_file": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Whether to read the entire file or just a portion",
+					},
+					"start_line_one_indexed": map[string]interface{}{
+						"type":        "number",
+						"description": "The line number to start reading from (1-indexed)",
+					},
+					"end_line_one_indexed": map[string]interface{}{
+						"type":        "number",
+						"description": "The line number to end reading at (inclusive, 1-indexed)",
+					},
+				},
+				"required": []string{
+					"target_file",
+					"should_read_entire_file",
+					"start_line_one_indexed",
+					"end_line_one_indexed_inclusive",
+				},
+			},
+			Handler: func(projectRoot string, args map[string]interface{}) (interface{}, error) {
+				targetFile, _ := args["target_file"].(string)
+				shouldReadEntireFile, _ := args["should_read_entire_file"].(bool)
+				startLine, _ := args["start_line_one_indexed"].(float64)
+				endLine, _ := args["end_line_one_indexed"].(float64)
+
+				absPath := filepath.Join(projectRoot, targetFile)
+
+				data, err := os.ReadFile(absPath)
+				if err != nil {
+					return nil, err
+				}
+
+				lines := strings.Split(string(data), "\n")
+				totalLines := len(lines)
+
+				if shouldReadEntireFile {
+					return map[string]interface{}{
+						"content":     string(data),
+						"total_lines": totalLines,
+						"file_path":   targetFile,
+					}, nil
+				}
+
+				start := int(startLine) - 1
+				end := int(endLine)
+				if start < 0 {
+					start = 0
+				}
+				if end > totalLines {
+					end = totalLines
+				}
+
+				selectedLines := lines[start:end]
+				content := strings.Join(selectedLines, "\n")
+
+				return map[string]interface{}{
+					"content":     content,
+					"start_line":  int(startLine),
+					"end_line":    int(endLine),
+					"total_lines": totalLines,
+					"file_path":   targetFile,
+				}, nil
+			},
+		},
+		{
+			Name:        "write_file",
+			Description: "Write content to a file.",
+			Parameters: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"path":    map[string]interface{}{"type": "string", "description": "Path to the file (relative to project root)"},
+					"content": map[string]interface{}{"type": "string", "description": "Content to write"},
+				},
+				"required": []string{"path", "content"},
+			},
+			Handler: func(projectRoot string, args map[string]interface{}) (interface{}, error) {
+				path, _ := args["path"].(string)
+				content, _ := args["content"].(string)
+
+				// Check if content is empty and return early
+				if strings.TrimSpace(content) == "" {
+					return map[string]interface{}{
+						"result":    "No changes made - content is empty",
+						"file_path": path,
+						"skipped":   true,
+					}, nil
+				}
+
+				absPath := filepath.Join(projectRoot, path)
+
+				// Ensure directory exists
+				dir := filepath.Dir(absPath)
+				if err := os.MkdirAll(dir, 0755); err != nil {
+					return nil, err
+				}
+
+				if err := os.WriteFile(absPath, []byte(content), 0644); err != nil {
+					return nil, err
+				}
+				// Register the change with the global tracker for backward compatibility
+				sessionchanges.RegisterChange(absPath)
+				return map[string]interface{}{"result": "file written successfully"}, nil
+			},
+		},
+		{
+			Name:        "run_terminal_cmd",
+			Description: "Run a terminal command in the project's Docker container. This tool executes commands inside the running project container, not on the host system.",
+			Parameters: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"command": map[string]interface{}{
+						"type":        "string",
+						"description": "The terminal command to execute in the project container",
+					},
+					"is_background": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Whether the command should be run in the background",
+					},
+					"explanation": map[string]interface{}{
+						"type":        "string",
+						"description": "One sentence explanation as to why this command needs to be run.",
+					},
+				},
+				"required": []string{"command", "is_background"},
+			},
+			Handler: func(projectRoot string, args map[string]interface{}) (interface{}, error) {
+				command, _ := args["command"].(string)
+				isBackground, _ := args["is_background"].(bool)
+
+				// Extract project slug from project root path
+				projectSlug := filepath.Base(projectRoot)
+
+				// Use the validation service to run the command
+				if s.ValidationService != nil {
+					result, err := s.runCommandInContainer(projectSlug, command, isBackground)
+					if err != nil {
+						return nil, err
+					}
+					return result, nil
+				}
+
+				// Fallback to direct execution if validation service is not available
+				cmd := exec.Command("sh", "-c", command)
+				cmd.Dir = projectRoot
+
+				if isBackground {
+					err := cmd.Start()
+					if err != nil {
+						return nil, err
+					}
+					return map[string]interface{}{
+						"result":  "Command started in background",
+						"pid":     cmd.Process.Pid,
+						"command": command,
+					}, nil
+				} else {
+					output, err := cmd.CombinedOutput()
+					if err != nil {
+						return map[string]interface{}{
+							"error":   err.Error(),
+							"output":  string(output),
+							"command": command,
+						}, nil
+					}
+					return map[string]interface{}{
+						"result":  string(output),
+						"command": command,
+					}, nil
+				}
+			},
+		},
+	}
+
+	return allTools
+}
+
 // runCommandInContainer executes a command in the project's Docker container
-func (s *OpenAIChatService) runCommandInContainer(projectSlug, command string, isBackground bool) (map[string]interface{}, error) {
+func (s *AIChatService) runCommandInContainer(projectSlug, command string, isBackground bool) (map[string]interface{}, error) {
 	ctx := context.Background()
 
 	// Get project ID from slug
@@ -996,6 +870,32 @@ func (s *OpenAIChatService) runCommandInContainer(projectSlug, command string, i
 	}
 
 	return result, nil
+}
+
+// streamingObserver wraps an AgentStepObserver and captures assistant tokens
+// for persistence after streaming.
+type streamingObserver struct {
+	AgentStepObserver
+	onAssistantToken func(token string)
+}
+
+func (o *streamingObserver) OnLLMContent(content string) {
+	if o.AgentStepObserver != nil {
+		o.AgentStepObserver.OnLLMContent(content)
+	}
+	if o.onAssistantToken != nil {
+		o.onAssistantToken(content)
+	}
+}
+
+// AgentStepObserver defines hooks for observing agent step events.
+type AgentStepObserver interface {
+	OnLLMContent(content string)
+	OnToolCallStart(toolCallID, name string)
+	OnToolCallUpdate(toolCallID, name, arguments string)
+	OnToolCallExecute(toolCallID, name string, args map[string]interface{})
+	OnToolCallResult(toolCallID, name string, result interface{}, err error)
+	OnMaxStepsReached()
 }
 
 // ChatMode represents the different modes of chat interaction
@@ -1168,4 +1068,12 @@ func systemToolsXMLPrompt(mode ChatMode, mcpTools []InternalToolInfo) string {
 
 	sb.WriteString("</functions>")
 	return sb.String()
+}
+
+func NewOpenAIChatService(apiKey string, logger *logger.Logger, chatService *ChatService, queries *db.Queries, projectsDir string) *AIChatService {
+	// Create OpenAI provider
+	openAIProvider := NewOpenAIProvider(apiKey, logger)
+
+	// Create the generic AI chat service with OpenAI provider
+	return NewAIChatService(logger, chatService, queries, projectsDir, openAIProvider)
 }
