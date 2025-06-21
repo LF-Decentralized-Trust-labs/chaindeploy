@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS messages (
     sender TEXT NOT NULL, -- 'user' or 'assistant'
     content TEXT NOT NULL,
     enhanced_content TEXT, -- Enhanced version of the content for AI interaction
+    tool_arguments TEXT, -- JSON string containing tool arguments
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (conversation_id) REFERENCES conversations(id),
     FOREIGN KEY (parent_id) REFERENCES messages(id)

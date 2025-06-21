@@ -207,6 +207,7 @@ type Message struct {
 	Sender          string         `json:"sender"`
 	Content         string         `json:"content"`
 	EnhancedContent sql.NullString `json:"enhancedContent"`
+	ToolArguments   sql.NullString `json:"toolArguments"`
 	CreatedAt       time.Time      `json:"createdAt"`
 }
 

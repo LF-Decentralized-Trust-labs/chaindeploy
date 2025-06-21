@@ -432,9 +432,6 @@ func (s *OpenAIChatService) GetExtendedToolSchemas(projectRoot string) []ToolSch
 					ApplyStr:     searchReplaceBlocks,
 					OriginalCode: string(existingContent),
 					URI:          absPath,
-					AIClient:     s.Client, // Use the service's OpenAI client
-					Model:        "gpt-4.1-mini",
-					MaxRetries:   1,
 				}
 
 				result, err := InitializeSearchAndReplaceStream(opts)
@@ -453,10 +450,10 @@ func (s *OpenAIChatService) GetExtendedToolSchemas(projectRoot string) []ToolSch
 				sessionchanges.RegisterChange(absPath)
 
 				return map[string]interface{}{
-					"result":         "File edited successfully using AI search/replace",
+					"result":         "File edited successfully using search/replace",
 					"file_path":      targetFile,
 					"blocks_applied": len(result.Blocks),
-					"ai_used":        true,
+					"ai_used":        false,
 				}, nil
 			},
 		},

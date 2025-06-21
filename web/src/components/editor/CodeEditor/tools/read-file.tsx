@@ -38,7 +38,7 @@ export const ReadFileExecute = ({ event }: ReadFileExecuteProps) => {
 }
 
 export const ReadFileUpdate = ({ event, accumulatedArgs, copyToClipboard }: ReadFileUpdateProps) => {
-	const path = accumulatedArgs.path || ''
+	const path = useMemo(() => accumulatedArgs.target_file || '', [accumulatedArgs.target_file])
 
 	const handleCopyDelta = async () => {
 		await copyToClipboard(JSON.stringify(accumulatedArgs, null, 2))
@@ -51,7 +51,7 @@ export const ReadFileUpdate = ({ event, accumulatedArgs, copyToClipboard }: Read
 					<circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
 					<path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
 				</svg>
-				<span className="font-medium">Updating {event.name.replace(/_/g, ' ')}...</span>
+				<span className="font-medium">Reading file {path}</span>
 			</div>
 			<div className="mt-2 text-xs bg-background/50 p-2 rounded border border-border relative">
 				<button onClick={handleCopyDelta} className="absolute top-2 right-2 p-1.5 rounded bg-muted hover:bg-muted/80 transition-colors" title="Copy arguments">

@@ -71,8 +71,8 @@ func (s *ChatService) EnsureConversationForProject(ctx context.Context, projectI
 	}, nil
 }
 
-// AddMessage stores a message in the conversation. Accepts optional parentID and enhanced content.
-func (s *ChatService) AddMessage(ctx context.Context, conversationID int64, parentID *int64, sender, content string, enhancedContent string) (*db.Message, error) {
+// AddMessage stores a message in the conversation. Accepts optional parentID, enhanced content, and tool arguments.
+func (s *ChatService) AddMessage(ctx context.Context, conversationID int64, parentID *int64, sender, content string, enhancedContent string, toolArguments string) (*db.Message, error) {
 	var parentNull sql.NullInt64
 	if parentID != nil {
 		parentNull = sql.NullInt64{Int64: *parentID, Valid: true}
@@ -83,12 +83,18 @@ func (s *ChatService) AddMessage(ctx context.Context, conversationID int64, pare
 		enhancedContentNull = sql.NullString{String: enhancedContent, Valid: true}
 	}
 
+	var toolArgumentsNull sql.NullString
+	if len(toolArguments) > 0 && toolArguments != "" {
+		toolArgumentsNull = sql.NullString{String: toolArguments, Valid: true}
+	}
+
 	row, err := s.Queries.InsertMessage(ctx, &db.InsertMessageParams{
 		ConversationID:  conversationID,
 		ParentID:        parentNull,
 		Sender:          sender,
 		Content:         content,
 		EnhancedContent: enhancedContentNull,
+		ToolArguments:   toolArgumentsNull,
 	})
 	if err != nil {
 		return nil, err
@@ -138,13 +144,29 @@ func (s *ChatService) GetConversationMessages(ctx context.Context, projectID, co
 	// Convert messages to response format
 	result := []Message{}
 	for _, msg := range messages {
+		var toolArguments *string
+		if msg.ToolArguments.Valid {
+			toolArguments = &msg.ToolArguments.String
+		}
+		var toolCalls []*ToolCallAI
+		for _, toolCall := range toolCallsByMsg[msg.ID] {
+			toolCalls = append(toolCalls, &ToolCallAI{
+				ID:        toolCall.ID,
+				MessageID: toolCall.MessageID,
+				ToolName:  toolCall.ToolName,
+				Arguments: toolCall.Arguments,
+				Result:    toolCall.Result.String,
+				Error:     toolCall.Error.String,
+			})
+		}
 		result = append(result, Message{
 			ID:             msg.ID,
 			ConversationID: msg.ConversationID,
 			Sender:         msg.Sender,
 			Content:        msg.Content,
 			CreatedAt:      msg.CreatedAt.Format(time.RFC3339),
-			ToolCalls:      toolCallsByMsg[msg.ID],
+			ToolArguments:  toolArguments,
+			ToolCalls:      toolCalls,
 		})
 	}
 
@@ -182,12 +204,23 @@ func (s *ChatService) GenerateCode(ctx context.Context, prompt string, project *
 
 // Message represents a chat message with its tool calls
 type Message struct {
-	ID             int64          `json:"id"`
-	ConversationID int64          `json:"conversationId"`
-	Sender         string         `json:"sender"`
-	Content        string         `json:"content"`
-	CreatedAt      string         `json:"createdAt"`
-	ToolCalls      []*db.ToolCall `json:"toolCalls,omitempty"`
+	ID             int64         `json:"id"`
+	ConversationID int64         `json:"conversationId"`
+	Sender         string        `json:"sender"`
+	Content        string        `json:"content"`
+	CreatedAt      string        `json:"createdAt"`
+	ToolArguments  *string       `json:"toolArguments,omitempty"`
+	ToolCalls      []*ToolCallAI `json:"toolCalls,omitempty"`
+}
+
+type ToolCallAI struct {
+	ID        int64     `json:"id"`
+	MessageID int64     `json:"messageId"`
+	ToolName  string    `json:"toolName"`
+	Arguments string    `json:"arguments"`
+	Result    string    `json:"result"`
+	Error     string    `json:"error"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 // ConversationDetail represents detailed information about a conversation

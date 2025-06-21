@@ -13,7 +13,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { jsonrepair } from 'jsonrepair'
-import { ArrowLeft, Check, ChevronDown, Copy, GitCommit, History, Plus } from 'lucide-react'
+import { ArrowLeft, Check, ChevronDown, Copy, GitCommit, History, Plus, Square } from 'lucide-react'
 import * as monaco from 'monaco-editor'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Components } from 'react-markdown'
@@ -85,6 +85,7 @@ export interface UseStreamingChatResult {
 	setMessages: React.Dispatch<React.SetStateAction<Message[]>>
 	onToolResult?: (toolName: string, result: unknown) => void
 	onComplete?: () => void
+	handleStop: () => void
 }
 
 export function useStreamingChat(projectId: number, conversationId: number, onToolResult?: (toolName: string, result: unknown) => void, onComplete?: () => void): UseStreamingChatResult {
@@ -94,6 +95,12 @@ export function useStreamingChat(projectId: number, conversationId: number, onTo
 	const [activeTool, setActiveTool] = useState<ToolExecution | null>(null)
 	const abortRef = useRef<AbortController | null>(null)
 	const partialArgsRef = useRef<string>('')
+
+	const handleStop = useCallback(() => {
+		if (abortRef.current) {
+			abortRef.current.abort()
+		}
+	}, [])
 
 	const handleSubmit = useCallback(
 		async (e: React.FormEvent<HTMLFormElement>) => {
@@ -299,7 +306,7 @@ export function useStreamingChat(projectId: number, conversationId: number, onTo
 		[input, projectId, onToolResult, onComplete]
 	)
 
-	return { messages, input, setInput, isLoading, activeTool, handleSubmit, partialArgsRef, setMessages }
+	return { messages, input, setInput, isLoading, activeTool, handleSubmit, partialArgsRef, setMessages, handleStop }
 }
 
 type ChatPanelProps = {
@@ -346,7 +353,7 @@ export function ChatPanel({ projectId = 1, handleToolResult, handleChatComplete 
 	const { data: commits } = useQuery({
 		...getChaincodeProjectsByIdCommitsOptions({ path: { id: projectId } }),
 	})
-	const { messages, input, setInput, isLoading, activeTool, handleSubmit, partialArgsRef, setMessages } = chatState
+	const { messages, input, setInput, isLoading, activeTool, handleSubmit, partialArgsRef, setMessages, handleStop } = chatState
 	const scrollToBottom = useCallback(() => {
 		messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
 	}, [])
@@ -412,8 +419,8 @@ export function ChatPanel({ projectId = 1, handleToolResult, handleChatComplete 
 								toolCallID: tool.id?.toString() || '',
 								name: tool.toolName || '',
 								arguments: tool.arguments,
-								result: tool.result && tool.result.valid ? (tool.result.string ?? '') : '',
-								error: tool.error && tool.error.valid ? (tool.error.string ?? '') : '',
+								result: tool.result && tool.result ? (typeof tool.result === 'string' ? tool.result : JSON.stringify(tool.result)) : '',
+								error: tool.error && tool.error ? (typeof tool.error === 'string' ? tool.error : JSON.stringify(tool.error)) : '',
 							},
 						})) || []),
 					],
@@ -594,9 +601,24 @@ export function ChatPanel({ projectId = 1, handleToolResult, handleChatComplete 
 					disabled={isLoading}
 					rows={3}
 				/>
-				<button type="submit" className="px-3 py-1 rounded bg-primary text-primary-foreground text-sm self-end" disabled={isLoading}>
-					Send
-				</button>
+				{isLoading ? (
+					<button
+						type="button"
+						onClick={handleStop}
+						className="px-3 py-1 rounded bg-destructive text-destructive-foreground hover:bg-destructive/90 text-sm self-end flex items-center gap-1"
+					>
+						<Square className="h-4 w-4" />
+						Stop
+					</button>
+				) : (
+					<button
+						type="submit"
+						className="px-3 py-1 rounded bg-primary text-primary-foreground text-sm self-end"
+						disabled={!input.trim()}
+					>
+						Send
+					</button>
+				)}
 			</form>
 		</div>
 	)

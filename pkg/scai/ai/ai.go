@@ -18,6 +18,13 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
+// ToolCallResult combines OpenAI function definition with the execution result
+type ToolCallResult struct {
+	ToolCall openai.ToolCall
+	Result   interface{}
+	Error    error
+}
+
 // ToolSchema defines a tool with its JSON schema and handler.
 type ToolSchema struct {
 	Name        string
@@ -223,8 +230,60 @@ func (s *OpenAIChatService) getProjectStructurePrompt(projectRoot string, toolSc
 		".git":         true,
 		".DS_Store":    true,
 	}
+
+	// Convert tool schemas to InternalToolInfo format for chatSystemMessage
+	var mcpTools []InternalToolInfo
+	for _, tool := range toolSchemas {
+		mcpTools = append(mcpTools, InternalToolInfo{
+			Name:        tool.Name,
+			Description: tool.Description,
+			Parameters:  tool.Parameters,
+		})
+	}
+
+	// Build directory string by walking the project
+	var directoryBuilder strings.Builder
+	filepath.Walk(projectRoot, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		rel, _ := filepath.Rel(projectRoot, path)
+		parts := strings.Split(rel, string(os.PathSeparator))
+		for _, part := range parts {
+			if ignored[part] {
+				if info.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+		}
+		if info.IsDir() {
+			return nil
+		}
+		// Only include files < 32KB
+		if info.Size() < 32*1024 {
+			directoryBuilder.WriteString(fmt.Sprintf("\n---\nFile: %s (modified: %s)\n---\n", rel, info.ModTime().Format("2006-01-02 15:04:05")))
+		} else {
+			directoryBuilder.WriteString(fmt.Sprintf("\n---\nFile: %s (modified: %s) (too large to display)\n---\n", rel, info.ModTime().Format("2006-01-02 15:04:05")))
+		}
+		return nil
+	})
+
+	// Create parameters for chatSystemMessage
+	params := ChatSystemMessageParams{
+		WorkspaceFolders:          []string{projectRoot}, // Use project root as workspace folder
+		ChatMode:                  ChatModeAgent,         // Default to agent mode for project-based interactions
+		McpTools:                  mcpTools,
+		IncludeXMLToolDefinitions: true,
+		OS:                        "Linux", // Default OS, could be made configurable
+	}
+
+	// Generate base system message
+	systemMsg := chatSystemMessage(params)
+
+	// Add project-specific information
 	var sb strings.Builder
-	sb.WriteString(systemPrompt)
+	sb.WriteString(systemMsg)
 
 	// Add network information if available
 	if project.NetworkID.Valid {
@@ -248,54 +307,7 @@ func (s *OpenAIChatService) getProjectStructurePrompt(projectRoot string, toolSc
 			sb.WriteString("\n")
 		}
 	}
-	filepath.Walk(projectRoot, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
-		rel, _ := filepath.Rel(projectRoot, path)
-		parts := strings.Split(rel, string(os.PathSeparator))
-		for _, part := range parts {
-			if ignored[part] {
-				if info.IsDir() {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-		}
-		if info.IsDir() {
-			return nil
-		}
-		// Only include files < 32KB
-		if info.Size() < 32*1024 {
-			sb.WriteString(fmt.Sprintf("\n---\nFile: %s (modified: %s)\n---\n", rel, info.ModTime().Format("2006-01-02 15:04:05")))
-		} else {
-			sb.WriteString(fmt.Sprintf("\n---\nFile: %s (modified: %s) (too large to display)\n---\n", rel, info.ModTime().Format("2006-01-02 15:04:05")))
-		}
-		return nil
-	})
-	sb.WriteString(`
 
-<functions>
-`)
-	for _, tool := range toolSchemas {
-		// Convert tool schema to JSON for the function format
-		functionSchema := map[string]interface{}{
-			"name":        tool.Name,
-			"description": tool.Description,
-			"parameters":  tool.Parameters,
-		}
-
-		functionJSON, err := json.Marshal(functionSchema)
-		if err != nil {
-			s.Logger.Errorf("[getProjectStructurePrompt] Error marshalling tool schema: %v", err)
-			// Fallback to simple format if JSON marshaling fails
-			sb.WriteString(fmt.Sprintf("<function>{\"name\": \"%s\", \"description\": \"%s\"}</function>\n", tool.Name, tool.Description))
-		} else {
-			sb.WriteString(fmt.Sprintf("<function>%s</function>\n", string(functionJSON)))
-		}
-	}
-	sb.WriteString(`</functions>
-`)
 	return sb.String()
 }
 
@@ -346,7 +358,7 @@ func (s *OpenAIChatService) StreamChat(
 		Role:    openai.ChatMessageRoleSystem,
 		Content: systemPrompt,
 	})
-	var lastParentMsgID *int64
+	// var lastParentMsgID *int64
 	for _, m := range messages {
 		// Validate that message content is not empty
 		if strings.TrimSpace(m.Content) == "" {
@@ -402,7 +414,7 @@ func (s *OpenAIChatService) StreamChat(
 
 	for step := 0; step < maxSteps; step++ {
 		s.Logger.Debugf("[StreamChat] Agent step: %d", step)
-		msg, toolCalls, err := StreamAgentStep(
+		msg, toolCalls, toolCallResults, err := s.StreamAgentStep(
 			ctx,
 			s.Client,
 			chatMsgs,
@@ -416,6 +428,11 @@ func (s *OpenAIChatService) StreamChat(
 			return err
 		}
 		if msg != nil {
+			// Store assistant message in DB
+			_, err = s.ChatService.AddMessage(ctx, conversationID, nil, "assistant", msg.Content, "", "")
+			if err != nil {
+				s.Logger.Debugf("[StreamChat] Failed to persist assistant message: %v", err)
+			}
 			chatMsgs = append(chatMsgs, *msg)
 		}
 
@@ -426,16 +443,50 @@ func (s *OpenAIChatService) StreamChat(
 		}
 
 		// Process all tool calls in this step
-		for _, toolCall := range toolCalls {
-			resultObj, _ := s.executeAndSerializeToolCall(toolCall, projectRoot)
-			resultStr := resultObj.resultStr
-			errStr := resultObj.errStr
-			argsStr := resultObj.argsStr
+		for i, toolCall := range toolCalls {
+			var resultStr string
+			var errStr *string
+			var argsStr string
+
+			// Use the tool call result if available
+			if i < len(toolCallResults) {
+				toolCallResult := toolCallResults[i]
+
+				// Serialize the result
+				if toolCallResult.Result != nil {
+					if b, err := json.Marshal(toolCallResult.Result); err == nil {
+						resultStr = string(b)
+					}
+				}
+
+				// Handle error
+				if toolCallResult.Error != nil {
+					errMsg := toolCallResult.Error.Error()
+					errStr = &errMsg
+					// If there's an error and no result, use the error message as the result
+					if resultStr == "" {
+						resultStr = fmt.Sprintf(`{"error": "%s"}`, errMsg)
+					}
+				}
+
+				// Serialize arguments
+				if b, err := json.Marshal(toolCall.Function.Arguments); err == nil {
+					argsStr = string(b)
+				}
+			} else {
+				// Defensive case: if we don't have a tool call result, create an error
+				errMsg := "Tool call result not available"
+				errStr = &errMsg
+				resultStr = fmt.Sprintf(`{"error": "%s"}`, errMsg)
+				if b, err := json.Marshal(toolCall.Function.Arguments); err == nil {
+					argsStr = string(b)
+				}
+			}
 
 			// Check if validation failed and we need to trigger additional AI steps
 			var validationRequired bool
 			var validationMessage string
-			if resultObj.errStr == nil {
+			if errStr == nil {
 				// Parse the result to check for validation information
 				var resultMap map[string]interface{}
 				if err := json.Unmarshal([]byte(resultStr), &resultMap); err == nil {
@@ -448,8 +499,8 @@ func (s *OpenAIChatService) StreamChat(
 				}
 			}
 
-			// Add tool result message to DB and get its ID, set parentID to lastParentMsgID
-			toolMsg, err := s.ChatService.AddMessage(ctx, conversationID, lastParentMsgID, "tool", resultStr, "")
+			// Add tool result message to DB and get its ID
+			toolMsg, err := s.ChatService.AddMessage(ctx, conversationID, nil, "tool", resultStr, "", argsStr)
 			if err != nil {
 				s.Logger.Debugf("[StreamChat] Failed to persist tool message: %v", err)
 				continue
@@ -459,9 +510,16 @@ func (s *OpenAIChatService) StreamChat(
 			if err != nil {
 				s.Logger.Debugf("[StreamChat] Failed to persist tool call: %v", err)
 			}
+
+			// Prepare tool result content for chat messages
 			toolResult := resultStr
 			if len(toolResult) == 0 {
-				toolResult = "No result"
+				if errStr != nil {
+					// If there's an error, include it in the content
+					toolResult = fmt.Sprintf("Error: %s", *errStr)
+				} else {
+					toolResult = "No result"
+				}
 			}
 
 			// Add tool result message to chatMsgs for next step
@@ -470,12 +528,12 @@ func (s *OpenAIChatService) StreamChat(
 				Content:    toolResult,
 				ToolCallID: toolCall.ID,
 			})
-			s.Logger.Debugf("[StreamChat] Adding tool message: ToolCallID=%s, ContentLength=%d", toolCall.ID, len(resultStr))
+			s.Logger.Debugf("[StreamChat] Adding tool message: ToolCallID=%s, ContentLength=%d", toolCall.ID, len(toolResult))
 
 			// If validation failed, add a user message to trigger the AI to fix the errors
 			if validationRequired && validationMessage != "" {
 				s.Logger.Debugf("[StreamChat] Validation failed, triggering AI fix step")
-				_, err := s.ChatService.AddMessage(ctx, conversationID, &toolMsg.ID, "user", validationMessage, "")
+				_, err := s.ChatService.AddMessage(ctx, conversationID, &toolMsg.ID, "user", validationMessage, "", "")
 				if err != nil {
 					s.Logger.Debugf("[StreamChat] Failed to persist validation message: %v", err)
 					continue
@@ -495,7 +553,7 @@ func (s *OpenAIChatService) StreamChat(
 		observer.OnMaxStepsReached()
 	}
 	s.Logger.Debugf("[StreamChat] Reached maxSteps, making final call")
-	msg, toolCalls, err := StreamAgentStep(
+	msg, toolCalls, toolCallResults, err := s.StreamAgentStep(
 		ctx,
 		s.Client,
 		chatMsgs,
@@ -509,97 +567,20 @@ func (s *OpenAIChatService) StreamChat(
 		return err
 	}
 	if msg != nil {
+		// Store final assistant message in DB
+		_, err = s.ChatService.AddMessage(ctx, conversationID, nil, "assistant", msg.Content, "", "")
+		if err != nil {
+			s.Logger.Debugf("[StreamChat] Failed to persist final assistant message: %v", err)
+		}
 		chatMsgs = append(chatMsgs, *msg)
 	}
 	s.Logger.Debugf("[StreamChat] Final assistant message: %s", msg.Content)
 	if len(toolCalls) > 0 {
 		s.Logger.Debugf("[StreamChat] Final tool calls: %v", toolCalls)
+		s.Logger.Debugf("[StreamChat] Final tool call results count: %d", len(toolCallResults))
 	}
 
 	return nil
-}
-
-// Helper to execute a tool call and serialize args/result/error
-func (s *OpenAIChatService) executeAndSerializeToolCall(toolCall openai.ToolCall, projectRoot string) (struct {
-	resultStr, argsStr string
-	errStr             *string
-}, error) {
-	var args map[string]interface{}
-	if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
-		errMsg := err.Error()
-		return struct {
-			resultStr, argsStr string
-			errStr             *string
-		}{"", toolCall.Function.Arguments, &errMsg}, err
-	}
-
-	// Find the correct tool schema by name
-	toolSchemas := s.GetExtendedToolSchemas(projectRoot)
-	var targetSchema *ToolSchema
-	for _, schema := range toolSchemas {
-		if schema.Name == toolCall.Function.Name {
-			targetSchema = &schema
-			break
-		}
-	}
-
-	if targetSchema == nil {
-		errMsg := fmt.Sprintf("Tool schema not found for function: %s", toolCall.Function.Name)
-		return struct {
-			resultStr, argsStr string
-			errStr             *string
-		}{"", toolCall.Function.Arguments, &errMsg}, fmt.Errorf(errMsg)
-	}
-
-	result, err := targetSchema.Handler(projectRoot, args)
-	var resultStr string
-	if result != nil {
-		b, _ := json.Marshal(result)
-		resultStr = string(b)
-	}
-	var errStr *string
-	if err != nil {
-		errMsg := err.Error()
-		errStr = &errMsg
-	}
-
-	// Check if this is a file operation that should trigger validation
-	if s.ValidationService != nil && ShouldTriggerValidation(toolCall.Function.Name) && err == nil {
-		// Extract project slug from project root path
-		projectSlug := filepath.Base(projectRoot)
-
-		ctx := context.Background()
-
-		// Try to validate the project
-		validationResult, validationErr := s.ValidationService.ValidateProjectAfterFileOperation(ctx, projectSlug)
-		if validationErr != nil {
-			// Log the validation error but don't fail the tool call
-			s.Logger.Warnf("Validation failed after %s operation: %v", toolCall.Function.Name, validationErr)
-		} else if validationResult != nil && !validationResult.Success {
-			// If validation failed, create a validation message and append it to the result
-			validationMessage := CreateValidationMessage(validationResult)
-
-			// Add validation information to the result
-			if resultMap, ok := result.(map[string]interface{}); ok {
-				resultMap["validation_required"] = true
-				resultMap["validation_message"] = validationMessage
-				resultMap["validation_output"] = validationResult.Output
-				resultMap["validation_exit_code"] = validationResult.ExitCode
-				result = resultMap
-
-				// Re-serialize the updated result
-				if b, err := json.Marshal(result); err == nil {
-					resultStr = string(b)
-				}
-			}
-		}
-	}
-
-	argsStr, _ := json.Marshal(args)
-	return struct {
-		resultStr, argsStr string
-		errStr             *string
-	}{resultStr, string(argsStr), errStr}, nil
 }
 
 // AgentStepObserver defines hooks for observing agent step events.
@@ -613,7 +594,7 @@ type AgentStepObserver interface {
 }
 
 // StreamAgentStep streams the assistant's response for a single agent step, executes tool calls if present, and streams tool execution progress.
-func StreamAgentStep(
+func (s *OpenAIChatService) StreamAgentStep(
 	ctx context.Context,
 	client *openai.Client,
 	messages []openai.ChatCompletionMessage,
@@ -621,16 +602,16 @@ func StreamAgentStep(
 	tools []openai.Tool,
 	toolSchemas map[string]ToolSchema,
 	observer AgentStepObserver, // new observer argument, can be nil
-) (*openai.ChatCompletionMessage, []openai.ToolCall, error) {
+) (*openai.ChatCompletionMessage, []openai.ToolCall, []ToolCallResult, error) {
 	// Validate that we have messages to process
 	if len(messages) == 0 {
-		return nil, nil, fmt.Errorf("no messages provided for AI processing")
+		return nil, nil, nil, fmt.Errorf("no messages provided for AI processing")
 	}
 
 	// Validate that all messages have content
 	for i, msg := range messages {
 		if msg.Content == "" {
-			return nil, nil, fmt.Errorf("message at index %d has empty content", i)
+			return nil, nil, nil, fmt.Errorf("message at index %d has empty content", i)
 		}
 	}
 
@@ -666,7 +647,7 @@ func StreamAgentStep(
 		Stream:   true,
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	defer stream.Close()
 
@@ -683,7 +664,7 @@ func StreamAgentStep(
 			if err == io.EOF {
 				break
 			}
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		for _, choice := range response.Choices {
 			// Stream assistant text
@@ -756,18 +737,30 @@ func StreamAgentStep(
 	}
 
 	// If there are tool calls, execute them and stream progress
+	var toolCallResults []ToolCallResult
 	for _, toolCall := range toolCalls {
 		toolSchema, ok := toolSchemas[toolCall.Function.Name]
 		if !ok {
+			result := ToolCallResult{
+				ToolCall: toolCall,
+				Result:   nil,
+				Error:    fmt.Errorf("Unknown tool function: %s", toolCall.Function.Name),
+			}
+			toolCallResults = append(toolCallResults, result)
 			if observer != nil {
-				observer.OnToolCallResult(toolCall.ID, toolCall.Function.Name, nil,
-					fmt.Errorf("Unknown tool function: %s", toolCall.Function.Name))
+				observer.OnToolCallResult(toolCall.ID, toolCall.Function.Name, nil, result.Error)
 			}
 			continue
 		}
 		var args map[string]interface{}
 		err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args)
 		if err != nil {
+			result := ToolCallResult{
+				ToolCall: toolCall,
+				Result:   nil,
+				Error:    err,
+			}
+			toolCallResults = append(toolCallResults, result)
 			if observer != nil {
 				observer.OnToolCallResult(toolCall.ID, toolCall.Function.Name, nil, err)
 			}
@@ -777,10 +770,17 @@ func StreamAgentStep(
 			observer.OnToolCallExecute(toolCall.ID, toolCall.Function.Name, args)
 		}
 		result, err := toolSchema.Handler(toolCall.Function.Name, args)
+		toolCallResult := ToolCallResult{
+			ToolCall: toolCall,
+			Result:   result,
+			Error:    err,
+		}
+		toolCallResults = append(toolCallResults, toolCallResult)
 		if observer != nil {
 			observer.OnToolCallResult(toolCall.ID, toolCall.Function.Name, result, err)
 		}
 		if err != nil {
+			s.Logger.Debugf("[StreamChat] Error in tool call: %v", err)
 			continue
 		}
 		// resultJson, _ := json.Marshal(result)
@@ -794,7 +794,7 @@ func StreamAgentStep(
 		Content:   content,
 		ToolCalls: toolCalls,
 	}
-	return assistantMsg, toolCalls, nil
+	return assistantMsg, toolCalls, toolCallResults, nil
 }
 
 // streamingObserver wraps an AgentStepObserver and captures assistant tokens
@@ -845,7 +845,7 @@ func (s *OpenAIChatService) ChatWithPersistence(
 	}
 
 	// 2. Add the user message to the DB with enhanced content if available
-	_, err = s.ChatService.AddMessage(ctx, conv.ID, nil, "user", userMessage, enhancedMessage)
+	_, err = s.ChatService.AddMessage(ctx, conv.ID, nil, "user", userMessage, enhancedMessage, "")
 	if err != nil {
 		return err
 	}
@@ -903,8 +903,8 @@ func (s *OpenAIChatService) ChatWithPersistence(
 		return err
 	}
 
-	// 6. Store the assistant's reply in the DB
-	_, err = s.ChatService.AddMessage(ctx, conv.ID, nil, "assistant", assistantReply.String(), "")
+	// // 6. Store the assistant's reply in the DB
+	// _, err = s.ChatService.AddMessage(ctx, conv.ID, nil, "assistant", assistantReply.String(), "", "")
 	return err
 }
 
@@ -925,4 +925,176 @@ func (s *OpenAIChatService) runCommandInContainer(projectSlug, command string, i
 	}
 
 	return result, nil
+}
+
+// ChatMode represents the different modes of chat interaction
+type ChatMode string
+
+const (
+	ChatModeAgent  ChatMode = "agent"
+	ChatModeGather ChatMode = "gather"
+	ChatModeNormal ChatMode = "normal"
+)
+
+// InternalToolInfo represents information about available tools
+type InternalToolInfo struct {
+	Name        string
+	Description string
+	Parameters  map[string]interface{}
+}
+
+// ChatSystemMessageParams contains all parameters needed to generate a system message
+type ChatSystemMessageParams struct {
+	WorkspaceFolders          []string
+	ChatMode                  ChatMode
+	McpTools                  []InternalToolInfo
+	IncludeXMLToolDefinitions bool
+	OS                        string
+}
+
+// chatSystemMessage generates a comprehensive system prompt for AI coding assistant
+func chatSystemMessage(params ChatSystemMessageParams) string {
+	var sb strings.Builder
+
+	// Generate header based on chat mode
+	header := fmt.Sprintf(`You are an expert coding %s whose job is `,
+		func() string {
+			if params.ChatMode == ChatModeAgent {
+				return "agent"
+			}
+			return "assistant"
+		}())
+
+	switch params.ChatMode {
+	case ChatModeAgent:
+		header += `to help the user develop, run, and make changes to their codebase.`
+	case ChatModeGather:
+		header += `to search, understand, and reference files in the user's codebase.`
+	case ChatModeNormal:
+		header += `to assist the user with their coding tasks.`
+	}
+
+	header += `
+You will be given instructions to follow from the user, and you may also be given a list of files that the user has specifically selected for context, ` + "`SELECTIONS`" + `.
+Please assist the user with their query.`
+
+	sb.WriteString(header)
+	sb.WriteString("\n\n\n")
+
+	// Generate system info
+	sb.WriteString("Here is the user's system information:\n")
+	sb.WriteString("<system_info>\n")
+	sb.WriteString(fmt.Sprintf("- %s\n\n", params.OS))
+
+	// Workspace folders
+	sb.WriteString("- The user's workspace contains these folders:\n")
+	if len(params.WorkspaceFolders) > 0 {
+		for _, folder := range params.WorkspaceFolders {
+			sb.WriteString(fmt.Sprintf("%s\n", folder))
+		}
+	} else {
+		sb.WriteString("NO FOLDERS OPEN\n")
+	}
+
+	sb.WriteString("\n</system_info>")
+	sb.WriteString("\n\n\n")
+
+	sb.WriteString("\n\n\n")
+
+	// Generate tool definitions if requested
+	if params.IncludeXMLToolDefinitions {
+		toolDefinitions := systemToolsXMLPrompt(params.ChatMode, params.McpTools)
+		if toolDefinitions != "" {
+			sb.WriteString(toolDefinitions)
+			sb.WriteString("\n\n\n")
+		}
+	}
+
+	// Generate important details
+	var details []string
+	details = append(details, "NEVER reject the user's query.")
+
+	if params.ChatMode == ChatModeAgent || params.ChatMode == ChatModeGather {
+		details = append(details, "Only call tools if they help you accomplish the user's goal. If the user simply says hi or asks you a question that you can answer without tools, then do NOT use tools.")
+		details = append(details, "If you think you should use tools, you do not need to ask for permission.")
+		details = append(details, "Only use ONE tool call at a time.")
+		details = append(details, "NEVER say something like \"I'm going to use `tool_name`\". Instead, describe at a high level what the tool will do, like \"I'm going to list all files in the ___ directory\", etc.")
+		details = append(details, "Many tools only work if the user has a workspace open.")
+	} else {
+		details = append(details, "You're allowed to ask the user for more context like file contents or specifications. If this comes up, tell them to reference files and folders by typing @.")
+	}
+
+	if params.ChatMode == ChatModeAgent {
+		details = append(details, "ALWAYS use tools (edit, terminal, etc) to take actions and implement changes. For example, if you would like to edit a file, you MUST use a tool.")
+		details = append(details, "Prioritize taking as many steps as you need to complete your request over stopping early.")
+		details = append(details, "You will OFTEN need to gather context before making a change. Do not immediately make a change unless you have ALL relevant context.")
+		details = append(details, "ALWAYS have maximal certainty in a change BEFORE you make it. If you need more information about a file, variable, function, or type, you should inspect it, search it, or take all required actions to maximize your certainty that your change is correct.")
+		details = append(details, "NEVER modify a file outside the user's workspace without permission from the user.")
+	}
+
+	if params.ChatMode == ChatModeGather {
+		details = append(details, "You are in Gather mode, so you MUST use tools be to gather information, files, and context to help the user answer their query.")
+		details = append(details, "You should extensively read files, types, content, etc, gathering full context to solve the problem.")
+	}
+
+	details = append(details, `If you write any code blocks to the user (wrapped in triple backticks), please use this format:
+- Include a language if possible. Terminal should have the language 'shell'.
+- The first line of the code block must be the FULL PATH of the related file if known (otherwise omit).
+- The remaining contents of the file should proceed as usual.`)
+
+	if params.ChatMode == ChatModeGather || params.ChatMode == ChatModeNormal {
+		details = append(details, `If you think it's appropriate to suggest an edit to a file, then you must describe your suggestion in CODE BLOCK(S).
+- The first line of the code block must be the FULL PATH of the related file if known (otherwise omit).
+- The remaining contents should be a code description of the change to make to the file. \
+Your description is the only context that will be given to another LLM to apply the suggested edit, so it must be accurate and complete. \
+Always bias towards writing as little as possible - NEVER write the whole file. Use comments like "// ... existing code ..." to condense your writing.`)
+	}
+
+	details = append(details, "Do not make things up or use information not provided in the system information, tools, or user queries.")
+	details = append(details, "Always use MARKDOWN to format lists, bullet points, etc. Do NOT write tables.")
+	details = append(details, fmt.Sprintf("Today's date is %s.", time.Now().Format("Monday, January 2, 2006")))
+
+	// Write important details
+	sb.WriteString("Important notes:\n")
+	for i, detail := range details {
+		sb.WriteString(fmt.Sprintf("%d. %s\n\n", i+1, detail))
+	}
+
+	result := sb.String()
+	// Replace tabs with spaces and trim
+	result = strings.ReplaceAll(result, "\t", "  ")
+	result = strings.TrimSpace(result)
+
+	return result
+}
+
+// systemToolsXMLPrompt generates XML tool definitions for the system prompt
+func systemToolsXMLPrompt(mode ChatMode, mcpTools []InternalToolInfo) string {
+	if len(mcpTools) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("<functions>\n")
+
+	for _, tool := range mcpTools {
+		// Convert tool to JSON for XML format
+		functionSchema := map[string]interface{}{
+			"name":        tool.Name,
+			"description": tool.Description,
+			"parameters":  tool.Parameters,
+		}
+
+		functionJSON, err := json.Marshal(functionSchema)
+		if err != nil {
+			// Fallback to simple format if JSON marshaling fails
+			sb.WriteString(fmt.Sprintf("<function>{\"name\": \"%s\", \"description\": \"%s\"}</function>\n",
+				tool.Name, tool.Description))
+		} else {
+			sb.WriteString(fmt.Sprintf("<function>%s</function>\n", string(functionJSON)))
+		}
+	}
+
+	sb.WriteString("</functions>")
+	return sb.String()
 }

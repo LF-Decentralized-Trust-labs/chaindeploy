@@ -36,7 +36,7 @@ INSERT INTO conversations (project_id) VALUES (?) RETURNING *;
 SELECT * FROM conversations WHERE project_id = ? ORDER BY started_at ASC LIMIT 1;
 
 -- name: InsertMessage :one
-INSERT INTO messages (conversation_id, parent_id, sender, content, enhanced_content) VALUES (?, ?, ?, ?, ?) RETURNING *;
+INSERT INTO messages (conversation_id, parent_id, sender, content, enhanced_content, tool_arguments) VALUES (?, ?, ?, ?, ?, ?) RETURNING *;
 
 -- name: ListMessagesForConversation :many
 SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC;

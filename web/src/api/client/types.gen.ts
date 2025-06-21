@@ -41,13 +41,24 @@ export type AiMessage = {
     createdAt?: string;
     id?: number;
     sender?: string;
-    toolCalls?: Array<DbToolCall>;
+    toolArguments?: string;
+    toolCalls?: Array<AiToolCallAi>;
 };
 
 export type AiModel = {
     description?: string;
     maxTokens?: number;
     name?: string;
+};
+
+export type AiToolCallAi = {
+    arguments?: string;
+    createdAt?: string;
+    error?: string;
+    id?: number;
+    messageId?: number;
+    result?: string;
+    toolName?: string;
 };
 
 export type AuditEvent = {
@@ -174,6 +185,7 @@ export type BoilerplatesBoilerplateConfig = {
     repoName?: string;
     repoOwner?: string;
     repoPath?: string;
+    validateCommand?: string;
 };
 
 export type ChaincodeGateway = {
@@ -556,16 +568,6 @@ export type CommonQueryResult = {
         resultType?: string;
     };
     status?: string;
-};
-
-export type DbToolCall = {
-    arguments?: string;
-    createdAt?: string;
-    error?: SqlNullString;
-    id?: number;
-    messageId?: number;
-    result?: SqlNullString;
-    toolName?: string;
 };
 
 export type DirsCreateDirRequest = {
@@ -1875,14 +1877,6 @@ export type ServiceSettingConfig = {
     besuTemplateCMD?: string;
     ordererTemplateCMD?: string;
     peerTemplateCMD?: string;
-};
-
-export type SqlNullString = {
-    string?: string;
-    /**
-     * Valid is true if String is not NULL
-     */
-    valid?: boolean;
 };
 
 export type TimeDuration = -9223372036854776000 | 9223372036854776000 | 1 | 1000 | 1000000 | 1000000000 | 60000000000 | 3600000000000;
