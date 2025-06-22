@@ -252,5 +252,5 @@ export function CodeEditor({ mode = 'editor', projectId, chaincodeProject }: Cod
 		</div>
 	)
 }
-
 export { useStreamingChat }
+

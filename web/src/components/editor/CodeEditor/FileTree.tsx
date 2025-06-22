@@ -101,19 +101,21 @@ export function FileTree({
 	if (isRoot) {
 		// Render only children, not the root node itself
 		return (
-			<div className="ml-2">
-				{node.children?.map((child) => (
-					<FileTree
-						key={child.path || child.name}
-						projectId={projectId}
-						node={child}
-						openFolders={openFolders}
-						setOpenFolders={setOpenFolders}
-						selectedFile={selectedFile}
-						handleFileClick={handleFileClick}
-						refetchTree={refetchTree}
-					/>
-				))}
+			<div className="overflow-y-auto max-h-[calc(100vh-200px)]">
+				<div className="ml-2">
+					{node.children?.map((child) => (
+						<FileTree
+							key={child.path || child.name}
+							projectId={projectId}
+							node={child}
+							openFolders={openFolders}
+							setOpenFolders={setOpenFolders}
+							selectedFile={selectedFile}
+							handleFileClick={handleFileClick}
+							refetchTree={refetchTree}
+						/>
+					))}
+				</div>
 			</div>
 		)
 	}

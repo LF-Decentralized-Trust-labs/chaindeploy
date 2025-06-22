@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/chainlaunch/chainlaunch/pkg/logger"
@@ -56,103 +57,209 @@ func (p *ClaudeProvider) StreamAgentStep(
 		claudeTools = append(claudeTools, aiToolToClaudeTool(tool))
 	}
 
-	// Call Claude (non-streaming for now)
-	resp, err := p.Client.Messages.New(ctx, anthropic.MessageNewParams{
+	// Call Claude with streaming
+	stream := p.Client.Messages.NewStreaming(ctx, anthropic.MessageNewParams{
 		Model:     anthropic.Model(model),
 		Messages:  claudeMessages,
 		Tools:     claudeTools,
 		MaxTokens: 4096,
 	})
-	if err != nil {
-		return nil, nil, nil, err
-	}
+	defer stream.Close()
 
-	// Extract content and tool calls from response
+	// Process streaming response with sophisticated tool call handling
 	var contentBuilder strings.Builder
+	toolCallsMap := map[string]*AIToolCall{} // toolCallID -> AIToolCall
+	var currentToolCallID string             // Track the current tool call being built
+
+	// Delta grouping and delay mechanism (similar to OpenAI provider)
+	type pendingUpdate struct {
+		toolCallID string
+		name       string
+		delta      string
+	}
+	pendingUpdates := make(map[string]*pendingUpdate) // toolCallID -> pendingUpdate
+
+	// Use a ticker for fixed 50ms intervals instead of debouncing
+	updateTicker := time.NewTicker(100 * time.Millisecond)
+	defer updateTicker.Stop()
+
+	// Function to send accumulated updates
+	sendPendingUpdates := func() {
+		for toolCallID, update := range pendingUpdates {
+			if toolCall, exists := toolCallsMap[toolCallID]; exists {
+				// Update the tool call arguments
+				toolCall.Function.Arguments += update.delta
+
+				// Notify observer of the update
+				if observer != nil {
+					observer.OnToolCallUpdate(toolCallID, update.name, update.delta)
+				}
+			}
+		}
+		// Clear pending updates
+		pendingUpdates = make(map[string]*pendingUpdate)
+	}
+
+	for {
+		select {
+		case <-updateTicker.C:
+			sendPendingUpdates()
+		default:
+			// Continue with normal processing
+		}
+		if !stream.Next() {
+			break
+		}
+
+		event := stream.Current()
+
+		switch event.Type {
+		case "content_block_start":
+			// Handle content block start - could be tool use
+			contentBlock := event.AsContentBlockStart()
+			if contentBlock.ContentBlock.Type == "tool_use" {
+				toolUse := contentBlock.ContentBlock.AsToolUse()
+				currentToolCallID = toolUse.ID
+
+				// Create new tool call
+				toolCall := &AIToolCall{
+					ID:   toolUse.ID,
+					Type: "function",
+					Function: AIFunctionCall{
+						Name:      toolUse.Name,
+						Arguments: "",
+					},
+				}
+				toolCallsMap[toolUse.ID] = toolCall
+
+				// Notify observer of tool call start
+				if observer != nil {
+					observer.OnToolCallStart(toolUse.ID, toolUse.Name)
+				}
+
+				p.Logger.Debugf("[StreamChat] Tool use started: %s (%s)", toolUse.Name, toolUse.ID)
+			}
+
+		case "content_block_delta":
+			// Handle content block delta - could be tool call arguments
+			delta := event.AsContentBlockDelta()
+			if delta.Delta.Type == "text_delta" {
+				text := delta.Delta.AsTextDelta().Text
+				contentBuilder.WriteString(text)
+				// Stream content to observer
+				if observer != nil {
+					observer.OnLLMContent(text)
+				}
+			} else if delta.Delta.Type == "input_json_delta" {
+				// This is tool call argument accumulation
+				inputDelta := delta.Delta.AsInputJSONDelta()
+
+				if currentToolCallID != "" {
+					// Add to pending updates
+					if observer != nil {
+						if pending, exists := pendingUpdates[currentToolCallID]; exists {
+							// Accumulate delta
+							pending.delta += inputDelta.PartialJSON
+						} else {
+							// Create new pending update
+							pendingUpdates[currentToolCallID] = &pendingUpdate{
+								toolCallID: currentToolCallID,
+								name:       toolCallsMap[currentToolCallID].Function.Name,
+								delta:      inputDelta.PartialJSON,
+							}
+							// Start/reset timer for this group
+							updateTicker.Reset(100 * time.Millisecond)
+						}
+					}
+				}
+			}
+
+		case "message_delta":
+			// Message delta event - could contain tool calls completion
+			delta := event.AsMessageDelta()
+			if delta.Delta.StopReason == "tool_use" {
+				p.Logger.Debugf("[StreamChat] Tool use detected in message delta")
+			}
+
+		case "message_stop":
+			// Message is complete
+			break
+		}
+	}
+
+	if stream.Err() != nil {
+		return nil, nil, nil, stream.Err()
+	}
+
+	// Send any remaining pending updates
+	sendPendingUpdates()
+
+	// Convert tool calls map to slice
 	var aiToolCalls []AIToolCall
-
-	for _, block := range resp.Content {
-		if block.Type == "text" {
-			textBlock := block.AsText()
-			contentBuilder.WriteString(textBlock.Text)
-			// Stream content to observer
-			if observer != nil {
-				observer.OnLLMContent(textBlock.Text)
-			}
-		} else if block.Type == "tool_use" {
-			toolUse := block.AsToolUse()
-			args, _ := json.Marshal(toolUse.Input)
-			aiToolCall := AIToolCall{
-				ID:   toolUse.ID,
-				Type: "function",
-				Function: AIFunctionCall{
-					Name:      toolUse.Name,
-					Arguments: string(args),
-				},
-			}
-			aiToolCalls = append(aiToolCalls, aiToolCall)
-
-			// Notify observer of tool call start
-			if observer != nil {
-				observer.OnToolCallStart(toolUse.ID, toolUse.Name)
-			}
-		}
+	for _, toolCall := range toolCallsMap {
+		aiToolCalls = append(aiToolCalls, *toolCall)
 	}
 
-	// If there are tool calls, execute them and stream progress
-	var toolCallResults []ToolCallResult
-	for _, toolCall := range aiToolCalls {
-		toolSchema, ok := toolSchemas[toolCall.Function.Name]
-		if !ok {
-			result := ToolCallResult{
-				ToolCall: toolCall,
-				Result:   nil,
-				Error:    fmt.Errorf("Unknown tool function: %s", toolCall.Function.Name),
-			}
-			toolCallResults = append(toolCallResults, result)
-			if observer != nil {
-				observer.OnToolCallResult(toolCall.ID, toolCall.Function.Name, nil, result.Error)
-			}
-			continue
-		}
-
-		// Parse arguments
-		var args map[string]interface{}
-		if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
-			args = make(map[string]interface{})
-		}
-
-		if observer != nil {
-			observer.OnToolCallExecute(toolCall.ID, toolCall.Function.Name, args)
-		}
-
-		// Execute the tool
-		result, err := toolSchema.Handler(toolCall.Function.Name, args)
-		toolCallResult := ToolCallResult{
-			ToolCall: toolCall,
-			Result:   result,
-			Error:    err,
-		}
-		toolCallResults = append(toolCallResults, toolCallResult)
-		if observer != nil {
-			observer.OnToolCallResult(toolCall.ID, toolCall.Function.Name, result, err)
-		}
-		if err != nil {
-			p.Logger.Debugf("[StreamChat] Error in tool call: %v", err)
-			continue
-		}
-	}
-
-	content := contentBuilder.String()
-	if content == "" {
-		content = "No content generated"
-	}
-	assistantMsg := &AIMessage{
+	// Create the final AI message
+	aiMessage := &AIMessage{
 		Role:      "assistant",
-		Content:   content,
+		Content:   contentBuilder.String(),
 		ToolCalls: aiToolCalls,
 	}
-	return assistantMsg, aiToolCalls, toolCallResults, nil
+
+	// Execute tool calls if any
+	var toolCallResults []ToolCallResult
+	if len(aiToolCalls) > 0 {
+		for _, toolCall := range aiToolCalls {
+			// Parse arguments
+			var args map[string]interface{}
+			if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
+				p.Logger.Errorf("[StreamChat] Failed to parse tool call arguments: %v", err)
+				toolCallResults = append(toolCallResults, ToolCallResult{
+					ToolCall: toolCall,
+					Result:   nil,
+					Error:    err,
+				})
+				continue
+			}
+
+			// Notify observer of tool execution
+			if observer != nil {
+				observer.OnToolCallExecute(toolCall.ID, toolCall.Function.Name, args)
+			}
+
+			// Execute the tool
+			schema, exists := toolSchemas[toolCall.Function.Name]
+			if !exists {
+				err := fmt.Errorf("tool schema not found for: %s", toolCall.Function.Name)
+				p.Logger.Errorf("[StreamChat] %v", err)
+				toolCallResults = append(toolCallResults, ToolCallResult{
+					ToolCall: toolCall,
+					Result:   nil,
+					Error:    err,
+				})
+				if observer != nil {
+					observer.OnToolCallResult(toolCall.ID, toolCall.Function.Name, nil, err)
+				}
+				continue
+			}
+
+			// Execute tool and get result
+			result, err := schema.Handler(toolCall.Function.Name, args)
+			toolCallResults = append(toolCallResults, ToolCallResult{
+				ToolCall: toolCall,
+				Result:   result,
+				Error:    err,
+			})
+
+			// Notify observer of tool result
+			if observer != nil {
+				observer.OnToolCallResult(toolCall.ID, toolCall.Function.Name, result, err)
+			}
+		}
+	}
+
+	return aiMessage, aiToolCalls, toolCallResults, nil
 }
 
 // Conversion functions between Claude types and generic AI types
@@ -187,4 +294,19 @@ func aiToolToClaudeTool(tool AITool) anthropic.ToolUnionParam {
 		Type:       "object",
 		Properties: properties,
 	}, tool.Function.Name)
+}
+
+// Helper functions for max and min
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

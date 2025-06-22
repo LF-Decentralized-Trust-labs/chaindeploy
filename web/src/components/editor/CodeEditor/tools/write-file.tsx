@@ -41,6 +41,14 @@ export const WriteFileUpdate = ({ event, accumulatedArgs, copyToClipboard }: Wri
 	const targetFile = accumulatedArgs.target_file || ''
 	const content = accumulatedArgs.content || ''
 	const language = getLanguage(targetFile)
+	const scrollContainerRef = useRef<HTMLDivElement>(null)
+
+	// Auto-scroll to bottom whenever content updates
+	useEffect(() => {
+		if (scrollContainerRef.current && content) {
+			scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
+		}
+	}, [content])
 
 	const handleCopyDelta = async () => {
 		await copyToClipboard(JSON.stringify(accumulatedArgs, null, 2))
@@ -67,7 +75,7 @@ export const WriteFileUpdate = ({ event, accumulatedArgs, copyToClipboard }: Wri
 						</button>
 					</div>
 				</div>
-				<div className="max-h-[500px] overflow-auto">
+				<div ref={scrollContainerRef} className="max-h-[500px] overflow-auto">
 					{content ? (
 						<div className="overflow-auto">
 							<SyntaxHighlighterComp
@@ -90,9 +98,7 @@ export const WriteFileUpdate = ({ event, accumulatedArgs, copyToClipboard }: Wri
 							</SyntaxHighlighterComp>
 						</div>
 					) : (
-						<div className="p-3 text-muted-foreground italic flex items-center justify-center h-[200px]">
-							Waiting for content...
-						</div>
+						<div className="p-3 text-muted-foreground italic flex items-center justify-center h-[200px]">Waiting for content...</div>
 					)}
 				</div>
 			</div>
@@ -105,16 +111,14 @@ export const WriteFileResult = ({ event, copyToClipboard, copiedCode }: WriteFil
 		const args = event.arguments && typeof event.arguments === 'string' ? JSON.parse(event.arguments) : {}
 		return args
 	}, [event.arguments])
-	
+
 	const path = resultArgs.path || ''
 	const content = resultArgs.content || ''
 	const result = event.result && typeof event.result === 'object' ? (event.result as any) : {}
 	const resultMessage = result.result || ''
 	const created = result.created || false
 
-	const summary = created 
-		? `New file "${path}" has been created.`
-		: `The file "${path}" has been updated.`
+	const summary = created ? `New file "${path}" has been created.` : `The file "${path}" has been updated.`
 
 	const details = (
 		<Dialog>
