@@ -191,46 +191,6 @@ export default function ChaincodeProjectDetailPage() {
 				</DialogContent>
 			</Dialog>
 
-			<Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-				<DialogTrigger asChild>
-					<Button variant="outline">Update Endorsement Policy</Button>
-				</DialogTrigger>
-				<DialogContent>
-					<DialogHeader>
-						<DialogTitle>Update Endorsement Policy</DialogTitle>
-					</DialogHeader>
-					<Form {...form}>
-						<form onSubmit={form.handleSubmit(handleUpdate)} className="space-y-4">
-							<FormField
-								control={form.control}
-								name="endorsementPolicy"
-								render={({ field }) => (
-									<FormItem>
-										<FormLabel>Endorsement Policy</FormLabel>
-										<FormControl>
-											<Input placeholder="e.g. OR('Org1MSP.member')" {...field} />
-										</FormControl>
-										<FormMessage />
-										<div className="text-xs text-muted-foreground mt-1">
-											Example policies:
-											<ul className="list-disc list-inside mt-1">
-												<li>OR('Org1MSP.member') - Any member of Org1</li>
-												<li>AND('Org1MSP.member', 'Org2MSP.member') - Both Org1 and Org2 members</li>
-												<li>OR('Org1MSP.member', 'Org2MSP.member') - Any member of Org1 or Org2</li>
-											</ul>
-										</div>
-									</FormItem>
-								)}
-							/>
-							<DialogFooter>
-								<Button type="submit" disabled={updating}>
-									{updating ? 'Updating...' : 'Update'}
-								</Button>
-							</DialogFooter>
-						</form>
-					</Form>
-				</DialogContent>
-			</Dialog>
 		</div>
 	)
 } 
