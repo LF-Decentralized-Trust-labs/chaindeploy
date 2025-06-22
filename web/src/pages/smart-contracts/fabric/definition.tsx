@@ -154,7 +154,7 @@ export default function FabricChaincodeDefinitionDetail() {
 	})
 
 	const availablePeers = useMemo(() => networkNodesResponse?.nodes?.filter((node) => node.node?.nodeType === 'FABRIC_PEER' && node.status === 'joined') || [], [networkNodesResponse?.nodes])
-	
+
 	const form = useForm<VersionFormValues>({
 		resolver: zodResolver(versionFormSchema),
 		defaultValues: {
@@ -333,7 +333,7 @@ export default function FabricChaincodeDefinitionDetail() {
 			refetch()
 			refreshTimeline(variables.path.definitionId)
 		},
-		onError: (error: any) => {
+		onError: (error: any, variables) => {
 			let message = 'Failed to deploy chaincode.'
 			if (error?.response?.data?.message) {
 				message = error.response.data.message
@@ -342,6 +342,7 @@ export default function FabricChaincodeDefinitionDetail() {
 			}
 			setDeployError(message)
 			setDeployLoading(false)
+			refreshTimeline(variables.path.definitionId)
 		},
 	})
 
@@ -382,29 +383,9 @@ export default function FabricChaincodeDefinitionDetail() {
 		})
 	}
 
-	// Add timeline query for each definition
-	const timelineQueries = useMemo(() => {
-		return versions.map((v) => ({
-			...getScFabricDefinitionsByDefinitionIdTimelineOptions({ path: { definitionId: v.id } }),
-			enabled: !!v.id,
-		}))
-	}, [versions])
-
 	const refreshTimeline = (definitionId: number) => {
 		queryClient.invalidateQueries({
 			queryKey: getScFabricDefinitionsByDefinitionIdTimelineOptions({ path: { definitionId } }).queryKey,
-		})
-	}
-
-	const toggleTimeline = (definitionId: number) => {
-		setExpandedTimelines((prev) => {
-			const next = new Set(prev)
-			if (next.has(definitionId)) {
-				next.delete(definitionId)
-			} else {
-				next.add(definitionId)
-			}
-			return next
 		})
 	}
 

@@ -437,7 +437,7 @@ const DeploymentModal = ({ isOpen, onClose, onDeploy, parameters }: DeploymentMo
 												{parameters.required?.includes(key) && <span className="text-red-500 ml-1">*</span>}
 											</FormLabel>
 											<div className="border rounded-md">
-												<ScrollArea className="h-[200px]">
+												<ScrollArea className="h-[200px] overflow-y-auto">
 													<div className="p-4 space-y-3">
 														{nodes?.items
 															?.filter((node) => node.nodeType === 'FABRIC_PEER')
@@ -462,6 +462,7 @@ const DeploymentModal = ({ isOpen, onClose, onDeploy, parameters }: DeploymentMo
 																	>
 																		<div className="font-semibold">{peer.name}</div>
 																		<div className="text-muted-foreground text-xs mt-1">ID: {peer.id}</div>
+																		<div className="text-muted-foreground text-xs mt-1">MSPID: {peer.fabricPeer?.mspId}</div>
 																	</label>
 																</div>
 															))}
