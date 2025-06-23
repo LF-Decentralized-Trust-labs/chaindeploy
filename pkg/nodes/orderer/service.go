@@ -283,7 +283,10 @@ func (o *LocalOrderer) startDocker(env map[string]string, mspConfigPath, dataCon
 		return nil, fmt.Errorf("failed to pull image %s: %w", imageName, err)
 	}
 	defer reader.Close()
-	io.Copy(io.Discard, reader) // Wait for pull to complete
+	_, err = io.Copy(io.Discard, reader) // Wait for pull to complete
+	if err != nil {
+		return nil, fmt.Errorf("failed to pull image %s: %w", imageName, err)
+	}
 
 	containerName := o.getContainerName()
 
