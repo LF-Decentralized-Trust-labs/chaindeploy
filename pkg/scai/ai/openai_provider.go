@@ -233,14 +233,19 @@ func (p *OpenAIProvider) StreamAgentStep(
 			continue
 		}
 	}
+
+	// Always create one assistant message with content and tool calls
 	content := contentBuilder.String()
 	if content == "" {
 		content = "No content generated"
 	}
+
+	// Create the single assistant message with all tool calls linked to it
 	assistantMsg := &AIMessage{
 		Role:      "assistant",
 		Content:   content,
-		ToolCalls: aiToolCalls,
+		ToolCalls: aiToolCalls, // All tool calls are linked to this single assistant message
 	}
+
 	return assistantMsg, aiToolCalls, toolCallResults, nil
 }

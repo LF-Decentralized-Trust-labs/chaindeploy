@@ -120,33 +120,38 @@ export const WriteFileResult = ({ event, copyToClipboard, copiedCode }: WriteFil
 
 	const summary = created ? `New file "${path}" has been created.` : `The file "${path}" has been updated.`
 
-	const details = (
-		<Dialog>
-			<DialogTrigger asChild>
-				<Button variant="ghost" size="sm" className="h-6 text-xs">
-					View Contents
-				</Button>
-			</DialogTrigger>
-			<DialogContent className="max-w-2xl">
-				<DialogHeader>
-					<DialogTitle>File: {path}</DialogTitle>
-				</DialogHeader>
-				<ScrollArea className="max-h-[60vh]">
-					<div className="space-y-4">
-						<div className="p-3 bg-muted rounded-lg">
-							<div className="font-semibold text-sm mb-2">File Info:</div>
-							<div className="text-sm space-y-1">
-								<div>Path: {path}</div>
-								<div>Status: {created ? 'Created new file' : 'Updated existing file'}</div>
-								{resultMessage && <div>Result: {resultMessage}</div>}
-							</div>
+	return (
+		<ToolSummaryCard event={event}>
+			<div className="space-y-3">
+				{/* Summary Section */}
+				<div className="text-sm text-muted-foreground mb-3">
+					{summary}
+				</div>
+
+				{/* File Info */}
+				<div className="bg-background/50 p-3 rounded border border-border">
+					<div className="font-semibold text-sm mb-2">File Info:</div>
+					<div className="text-sm space-y-1">
+						<div>Path: {path}</div>
+						<div>Status: {created ? 'Created new file' : 'Updated existing file'}</div>
+						{resultMessage && <div>Result: {resultMessage}</div>}
+					</div>
+				</div>
+
+				{/* File Content */}
+				{content && (
+					<div className="bg-background/50 p-3 rounded border border-border">
+						<div className="font-semibold text-sm mb-2 flex items-center justify-between">
+							<span>File Content:</span>
+							<button 
+								onClick={() => copyToClipboard(content)} 
+								className="p-1.5 rounded bg-muted hover:bg-muted/80 transition-colors" 
+								title="Copy code"
+							>
+								{copiedCode === content ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+							</button>
 						</div>
-						<div className="relative group">
-							<div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
-								<button onClick={() => copyToClipboard(content)} className="p-1.5 rounded bg-muted hover:bg-muted/80 transition-colors" title="Copy code">
-									{copiedCode === content ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-								</button>
-							</div>
+						<ScrollArea className="max-h-[400px]">
 							<SyntaxHighlighterComp
 								language={getLanguage(path)}
 								style={vscDarkPlus}
@@ -159,16 +164,10 @@ export const WriteFileResult = ({ event, copyToClipboard, copiedCode }: WriteFil
 							>
 								{content}
 							</SyntaxHighlighterComp>
-						</div>
+						</ScrollArea>
 					</div>
-				</ScrollArea>
-			</DialogContent>
-		</Dialog>
-	)
-
-	return (
-		<ToolSummaryCard event={event} summary={summary}>
-			{details}
+				)}
+			</div>
 		</ToolSummaryCard>
 	)
 }

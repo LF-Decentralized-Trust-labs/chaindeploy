@@ -73,43 +73,49 @@ export const ListDirResult = ({ event }: ListDirResultProps) => {
 
 	const summary = `Found ${items.length} items in "${path}".`
 
-	const details = (
-		<Dialog>
-			<DialogTrigger asChild>
-				<Button variant="ghost" size="sm" className="h-6 text-xs">
-					View Contents
-				</Button>
-			</DialogTrigger>
-			<DialogContent className="max-w-2xl">
-				<DialogHeader>
-					<DialogTitle>Directory Contents: {path}</DialogTitle>
-				</DialogHeader>
-				<ScrollArea className="max-h-[60vh]">
-					<div className="space-y-2">
-						{items.map((item: any, index: number) => (
-							<div key={index} className="flex items-center justify-between p-2 border rounded">
-								<div className="flex items-center gap-2">
-									<span className={item.is_dir ? 'text-blue-500' : 'text-gray-500'}>
-										{item.is_dir ? '📁' : '📄'}
-									</span>
-									<span className="font-medium">{item.name}</span>
-								</div>
-								{!item.is_dir && item.size !== undefined && (
-									<span className="text-xs text-muted-foreground">
-										{(item.size / 1024).toFixed(1)} KB
-									</span>
-								)}
-							</div>
-						))}
-					</div>
-				</ScrollArea>
-			</DialogContent>
-		</Dialog>
-	)
-
 	return (
-		<ToolSummaryCard event={event} summary={summary}>
-			{details}
+		<ToolSummaryCard event={event}>
+			<div className="space-y-3">
+				{/* Summary Section */}
+				<div className="text-sm text-muted-foreground mb-3">
+					{summary}
+				</div>
+
+				{/* Directory Path */}
+				<div className="bg-background/50 p-3 rounded border border-border">
+					<div className="font-semibold text-green-600 flex items-center gap-2 mb-2">
+						<FolderOpen className="w-3 h-3" />
+						Directory:
+					</div>
+					<div className="text-sm">{path}</div>
+				</div>
+
+				{/* Directory Contents */}
+				{items.length > 0 && (
+					<div className="bg-background/50 p-3 rounded border border-border">
+						<div className="font-semibold text-sm mb-2">Contents:</div>
+						<ScrollArea className="max-h-[300px]">
+							<div className="space-y-2">
+								{items.map((item: any, index: number) => (
+									<div key={index} className="flex items-center justify-between p-2 border rounded">
+										<div className="flex items-center gap-2">
+											<span className={item.is_dir ? 'text-blue-500' : 'text-gray-500'}>
+												{item.is_dir ? '📁' : '📄'}
+											</span>
+											<span className="font-medium">{item.name}</span>
+										</div>
+										{!item.is_dir && item.size !== undefined && (
+											<span className="text-xs text-muted-foreground">
+												{(item.size / 1024).toFixed(1)} KB
+											</span>
+										)}
+									</div>
+								))}
+							</div>
+						</ScrollArea>
+					</div>
+				)}
+			</div>
 		</ToolSummaryCard>
 	)
 } 

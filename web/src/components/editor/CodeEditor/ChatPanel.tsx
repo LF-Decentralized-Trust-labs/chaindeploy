@@ -72,6 +72,7 @@ interface ToolExecution {
 	name: string
 	status: 'started' | 'updating' | 'executing' | 'completed' | 'error'
 	error?: string
+	result?: unknown
 }
 
 export interface UseStreamingChatResult {
@@ -172,10 +173,10 @@ export function useStreamingChat(projectId: number, conversationId: number, onTo
 												}
 												break
 											}
-											case 'tool_result':
 											case 'tool_start':
 											case 'tool_update':
-											case 'tool_execute': {
+											case 'tool_execute':
+											case 'tool_result': {
 												const toolEvent = {
 													...event,
 												}
@@ -188,69 +189,50 @@ export function useStreamingChat(projectId: number, conversationId: number, onTo
 												setMessages((prev) => {
 													const lastMsgIdx = prev.length - 1
 													if (lastMsgIdx < 0 || prev[lastMsgIdx].role !== 'assistant') {
-														const updated = [...prev, { role: 'assistant', parts: [{ type: 'tool', toolEvent }] }] as Message[]
-														return updated
+														const newPart = {
+															type: 'tool' as const,
+															toolEvent: {
+																type: mappingBetweenToolEvents[event.type],
+																toolCallID: toolEvent.toolCallID,
+																name: toolEvent.name,
+																arguments: event.type === 'tool_update' ? event.arguments : undefined,
+																result: event.type === 'tool_result' ? event.result : undefined,
+																error: event.type === 'tool_result' ? event.error : undefined,
+															},
+														}
+														return [...prev, { role: 'assistant', parts: [newPart] }] as Message[]
 													}
 													const lastMsg = prev[lastMsgIdx]
 													const updatedParts = [...lastMsg.parts]
 													const toolPartIdx = updatedParts.findIndex((part) => part.type === 'tool' && part.toolEvent?.toolCallID === toolEvent.toolCallID)
 													if (toolPartIdx !== -1) {
 														const existingToolEvent = updatedParts[toolPartIdx].toolEvent
-														let mergedArguments = existingToolEvent?.arguments || '{}'
+														let mergedArguments = existingToolEvent?.arguments || ''
 
-														// For tool_update, merge the delta with existing arguments
 														if (event.type === 'tool_update' && event.arguments) {
-															console.log('=== TOOL_UPDATE DEBUG ===')
-															console.log('Event type:', event.type)
-															console.log('Tool name:', event.name)
-															console.log('New delta arguments (raw):', event.arguments)
-															console.log('Existing merged arguments (raw):', mergedArguments)
-
-															// Always accumulate raw strings - this is the source of truth
-															let accumulatedRaw = ''
 															if (mergedArguments === '{}' || mergedArguments === '') {
-																// If starting fresh, just use the new delta
-																accumulatedRaw = event.arguments
-																console.log('Starting fresh with delta:', accumulatedRaw)
+																mergedArguments = event.arguments
 															} else {
-																// Always accumulate as raw strings, regardless of whether existing is valid JSON
-																accumulatedRaw = mergedArguments + event.arguments
-																console.log('Accumulated as raw strings:', accumulatedRaw)
+																mergedArguments += event.arguments
 															}
-
-															// Try to parse the accumulated raw string for display/processing
-															try {
-																const repaired = jsonrepair(accumulatedRaw)
-																console.log('Repaired accumulated string:', repaired)
-																const parsed = JSON.parse(repaired)
-																console.log('Parsed accumulated object:', parsed)
-
-																// Store the raw accumulated string, not the parsed result
-																mergedArguments = accumulatedRaw
-																console.log('Final merged arguments (raw accumulated):', mergedArguments)
-															} catch (error) {
-																console.log('Error parsing accumulated string:', error)
-																// If parsing fails, still store the raw accumulated string
-																mergedArguments = accumulatedRaw
-																console.log('Fallback: storing raw accumulated string:', mergedArguments)
-															}
-															console.log('=== END TOOL_UPDATE DEBUG ===')
 														} else if (event.type === 'tool_execute') {
 															mergedArguments = JSON.stringify(event.args)
 														}
 
-														const updatedToolEvent: any = {
-															...existingToolEvent,
+														const updatedToolEvent: ToolEvent = {
+															...(existingToolEvent as ToolEvent),
 															type: mappingBetweenToolEvents[event.type],
 															toolCallID: event.toolCallID,
 															name: event.name,
 															arguments: mergedArguments,
+															result: event.type === 'tool_result' ? event.result : existingToolEvent?.result,
+															error: event.type === 'tool_result' ? event.error : existingToolEvent?.error,
 														}
 
 														updatedParts[toolPartIdx] = {
 															type: 'tool',
 															toolEvent: updatedToolEvent,
-														} as MessagePart
+														}
 													} else {
 														updatedParts.push({
 															type: 'tool',
@@ -259,15 +241,27 @@ export function useStreamingChat(projectId: number, conversationId: number, onTo
 																toolCallID: toolEvent.toolCallID,
 																name: toolEvent.name,
 																arguments: event.type === 'tool_update' ? event.arguments : undefined,
+																result: event.type === 'tool_result' ? event.result : undefined,
+																error: event.type === 'tool_result' ? event.error : undefined,
 															},
-														} as MessagePart)
+														})
 													}
-													const updated = [...prev.slice(0, lastMsgIdx), { ...lastMsg, parts: updatedParts }]
-													return updated
+													return [...prev.slice(0, lastMsgIdx), { ...lastMsg, parts: updatedParts }]
 												})
-												if (mappingBetweenToolEvents[event.type] === 'result') {
+
+												if (event.type === 'tool_result') {
+													setActiveTool((prev) => {
+														if (prev && prev.toolCallID === event.toolCallID) {
+															return {
+																...prev,
+																status: event.error ? 'error' : 'completed',
+																result: event.result,
+																error: event.error,
+															}
+														}
+														return prev
+													})
 													partialArgsRef.current = ''
-													setActiveTool(null)
 													if (onToolResult && !event.error) {
 														onToolResult(event.name, event.result)
 													}
@@ -288,7 +282,8 @@ export function useStreamingChat(projectId: number, conversationId: number, onTo
 					}
 				}
 				setIsLoading(false)
-				setActiveTool(null)
+				// Only clear active tool if it doesn't have a result (i.e., it wasn't completed)
+				setActiveTool((prev) => prev && (prev.result !== undefined || prev.error) ? prev : null)
 				partialArgsRef.current = ''
 				if (onComplete) {
 					onComplete()
@@ -866,19 +861,49 @@ interface ActiveToolProps {
 }
 
 const ActiveTool = ({ tool, partialArgs }: ActiveToolProps) => {
+	const isCompleted = tool.status === 'completed' || tool.status === 'error'
+	const isError = tool.status === 'error'
+	
 	return (
 		<div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg border border-border">
 			<div className="flex items-center gap-2 mb-3">
-				<svg className="mr-3 -ml-1 size-5 animate-spin text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-					<circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-					<path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-				</svg>
-				<span className="font-medium">Executing {tool.name.replace(/_/g, ' ')}...</span>
+				{!isCompleted ? (
+					<svg className="mr-3 -ml-1 size-5 animate-spin text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+						<circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+						<path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+					</svg>
+				) : isError ? (
+					<div className="mr-3 -ml-1 size-5 rounded-full bg-red-500 flex items-center justify-center">
+						<span className="text-white text-xs">!</span>
+					</div>
+				) : (
+					<div className="mr-3 -ml-1 size-5 rounded-full bg-green-500 flex items-center justify-center">
+						<Check className="h-3 w-3 text-white" />
+					</div>
+				)}
+				<span className="font-medium">
+					{isCompleted 
+						? (isError ? `Error in ${tool.name.replace(/_/g, ' ')}` : `Completed ${tool.name.replace(/_/g, ' ')}`)
+						: `Executing ${tool.name.replace(/_/g, ' ')}...`
+					}
+				</span>
 			</div>
 			{partialArgs && (
 				<div className="mt-2 text-xs bg-background/50 p-2 rounded border border-border">
 					<div className="font-semibold mb-1">Arguments:</div>
 					<pre className="overflow-x-auto">{JSON.stringify(partialArgs, null, 2)}</pre>
+				</div>
+			)}
+			{tool.result && (
+				<div className="mt-2 text-xs bg-background/50 p-2 rounded border border-border">
+					<div className="font-semibold mb-1">Result:</div>
+					<pre className="overflow-x-auto">{JSON.stringify(tool.result, null, 2)}</pre>
+				</div>
+			)}
+			{tool.error && (
+				<div className="mt-2 text-xs bg-red-50 p-2 rounded border border-red-200">
+					<div className="font-semibold mb-1 text-red-700">Error:</div>
+					<pre className="overflow-x-auto text-red-600">{tool.error}</pre>
 				</div>
 			)}
 		</div>

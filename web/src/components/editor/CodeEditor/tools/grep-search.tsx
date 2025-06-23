@@ -114,60 +114,74 @@ export const GrepSearchResult = ({ event, copyToClipboard }: GrepSearchResultPro
 		await copyToClipboard(JSON.stringify(args, null, 2))
 	}
 
-	const details = (
-		<Dialog>
-			<DialogTrigger asChild>
-				<Button variant="ghost" size="sm" className="h-6 text-xs">
-					View Results
-				</Button>
-			</DialogTrigger>
-			<DialogContent className="max-w-4xl">
-				<DialogHeader>
-					<DialogTitle>Grep Search Results</DialogTitle>
-				</DialogHeader>
-				<ScrollArea className="max-h-[60vh]">
-					<div className="space-y-4">
-						{results.map((result: any, index: number) => (
-							<div key={index} className="p-3 border rounded-lg">
-								<div className="font-semibold text-sm mb-2">{result.path}</div>
-								{result.line_number && (
-									<div className="text-xs text-muted-foreground mb-2">Line: {result.line_number}</div>
-								)}
-								{result.lines && (
-									<pre className="text-xs bg-muted p-2 rounded overflow-x-auto">
-										{result.lines}
-									</pre>
-								)}
-							</div>
-						))}
-					</div>
-				</ScrollArea>
-			</DialogContent>
-		</Dialog>
-	)
-
 	return (
-		<ToolSummaryCard event={event} summary={summary}>
-			<div className="flex items-center gap-2">
-				{details}
+		<ToolSummaryCard event={event}>
+			<div className="space-y-3">
+				{/* Summary Section */}
+				<div className="text-sm text-muted-foreground mb-3">
+					{summary}
+				</div>
+
+				{/* Search Query */}
+				<div className="bg-background/50 p-3 rounded border border-border">
+					<div className="font-semibold text-purple-600 flex items-center gap-2 mb-2">
+						<Search className="w-3 h-3" />
+						Search Query:
+					</div>
+					<div className="text-sm">{query}</div>
+				</div>
+
+				{/* Search Parameters */}
 				{Object.keys(args).length > 0 && (
-					<Button 
-						variant="ghost" 
-						size="sm" 
-						className="h-6 text-xs"
-						onClick={handleCopyArgs}
-						title="Copy arguments"
-					>
-						<Copy className="w-3 h-3 mr-1" />
-						Args
-					</Button>
+					<div className="bg-background/50 p-3 rounded border border-border">
+						<div className="font-semibold text-sm mb-2">Search Parameters:</div>
+						<div className="text-xs text-muted-foreground space-y-1">
+							{args.include_pattern && <div>Include: {args.include_pattern}</div>}
+							{args.exclude_pattern && <div>Exclude: {args.exclude_pattern}</div>}
+							<div>Case sensitive: {args.case_sensitive ? 'Yes' : 'No'}</div>
+						</div>
+						<button 
+							onClick={handleCopyArgs}
+							className="mt-2 text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+							title="Copy arguments"
+						>
+							<Copy className="w-3 h-3" />
+							Copy Args
+						</button>
+					</div>
+				)}
+
+				{/* Results */}
+				{results.length > 0 && (
+					<div className="bg-background/50 p-3 rounded border border-border">
+						<div className="font-semibold text-sm mb-2">Search Results:</div>
+						<ScrollArea className="max-h-[300px]">
+							<div className="space-y-2">
+								{results.map((result: any, index: number) => (
+									<div key={index} className="p-2 border rounded">
+										<div className="font-semibold text-sm mb-1">{result.path}</div>
+										{result.line_number && (
+											<div className="text-xs text-muted-foreground mb-1">Line: {result.line_number}</div>
+										)}
+										{result.lines && (
+											<pre className="text-xs bg-muted p-2 rounded overflow-x-auto">
+												{result.lines}
+											</pre>
+										)}
+									</div>
+								))}
+							</div>
+						</ScrollArea>
+					</div>
+				)}
+
+				{/* Explanation */}
+				{explanation && (
+					<div className="text-xs text-muted-foreground italic">
+						{explanation}
+					</div>
 				)}
 			</div>
-			{explanation && (
-				<div className="text-xs text-muted-foreground italic mt-2">
-					{explanation}
-				</div>
-			)}
 		</ToolSummaryCard>
 	)
 } 

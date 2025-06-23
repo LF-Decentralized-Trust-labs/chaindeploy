@@ -13,6 +13,7 @@ import { ToolSummaryCard } from './ToolSummaryCard'
 import { CodebaseSearchResult, CodebaseSearchUpdate, CodebaseSearchExecute } from './codebase-search'
 import { DeleteFileResult, DeleteFileUpdate, DeleteFileExecute } from './delete-file'
 import { EditFileResult, EditFileUpdate, EditFileExecute } from './edit-file'
+import { FileExistsResult, FileExistsUpdate, FileExistsExecute } from './file-exists'
 import { FileSearchResult, FileSearchUpdate, FileSearchExecute } from './file-search'
 import { GrepSearchResult, GrepSearchUpdate, GrepSearchExecute } from './grep-search'
 import { ListDirResult, ListDirUpdate, ListDirExecute } from './list-dir'
@@ -39,6 +40,7 @@ interface ToolEventProps {
 
 // Tool component mapping
 const toolComponents = {
+	file_exists: { update: FileExistsUpdate, result: FileExistsResult, execute: FileExistsExecute },
 	read_file: { update: ReadFileUpdate, result: ReadFileResult, execute: ReadFileExecute },
 	write_file: { update: WriteFileUpdate, result: WriteFileResult, execute: WriteFileExecute },
 	codebase_search: { update: CodebaseSearchUpdate, result: CodebaseSearchResult, execute: CodebaseSearchExecute },
@@ -168,24 +170,25 @@ const DefaultResultComponent = ({ event, copyToClipboard, copiedCode }: { event:
 	const summary = `${event.name.replace(/_/g, ' ')} completed successfully.`
 
 	return (
-		<ToolSummaryCard event={event} summary={summary}>
-			{event.result && (
-				<Dialog>
-					<DialogTrigger asChild>
-						<Button variant="ghost" size="sm" className="h-6 text-xs">
-							View Details
-						</Button>
-					</DialogTrigger>
-					<DialogContent className="max-w-2xl">
-						<DialogHeader>
-							<DialogTitle>{event.name} Result</DialogTitle>
-						</DialogHeader>
-						<ScrollArea className="max-h-[60vh]">
-							<pre className="p-4 bg-muted rounded-lg overflow-x-auto">{JSON.stringify(event.result, null, 2)}</pre>
+		<ToolSummaryCard event={event}>
+			<div className="space-y-3">
+				{/* Summary Section */}
+				<div className="text-sm text-muted-foreground mb-3">
+					{summary}
+				</div>
+
+				{/* Result Content */}
+				{event.result && (
+					<div className="bg-background/50 p-3 rounded border border-border">
+						<div className="font-semibold text-sm mb-2">Result:</div>
+						<ScrollArea className="max-h-[300px]">
+							<pre className="text-xs bg-muted p-2 rounded overflow-x-auto">
+								{JSON.stringify(event.result, null, 2)}
+							</pre>
 						</ScrollArea>
-					</DialogContent>
-				</Dialog>
-			)}
+					</div>
+				)}
+			</div>
 		</ToolSummaryCard>
 	)
 }

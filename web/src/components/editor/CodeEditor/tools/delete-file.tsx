@@ -75,44 +75,34 @@ export const DeleteFileResult = ({ event }: DeleteFileResultProps) => {
 		? `File "${path}" does not exist.`
 		: `File "${path}" deleted successfully.`
 
-	const details = (
-		<Dialog>
-			<DialogTrigger asChild>
-				<Button variant="ghost" size="sm" className="h-6 text-xs">
-					View Details
-				</Button>
-			</DialogTrigger>
-			<DialogContent className="max-w-2xl">
-				<DialogHeader>
-					<DialogTitle>Delete File Details</DialogTitle>
-				</DialogHeader>
-				<ScrollArea className="max-h-[60vh]">
-					<div className="space-y-4">
-						<div className="p-3 bg-muted rounded-lg">
-							<div className="font-semibold text-sm mb-2">File:</div>
-							<div className="text-sm">{path}</div>
-						</div>
-						<div className={`p-3 rounded-lg border ${
-							resultMessage === 'File does not exist' 
-								? 'bg-yellow-50 border-yellow-200' 
-								: 'bg-green-50 border-green-200'
-						}`}>
-							<div className={`font-semibold text-sm mb-2 ${
-								resultMessage === 'File does not exist' ? 'text-yellow-700' : 'text-green-700'
-							}`}>Status:</div>
-							<div className={`text-sm ${
-								resultMessage === 'File does not exist' ? 'text-yellow-600' : 'text-green-600'
-							}`}>{resultMessage}</div>
-						</div>
-					</div>
-				</ScrollArea>
-			</DialogContent>
-		</Dialog>
-	)
-
 	return (
-		<ToolSummaryCard event={event} summary={summary}>
-			{details}
+		<ToolSummaryCard event={event}>
+			<div className="space-y-3">
+				{/* Summary Section */}
+				<div className="text-sm text-muted-foreground mb-3">
+					{summary}
+				</div>
+
+				{/* File Path */}
+				<div className="bg-background/50 p-3 rounded border border-border">
+					<div className="font-semibold text-sm mb-2">File:</div>
+					<div className="text-sm">{path}</div>
+				</div>
+
+				{/* Status */}
+				<div className={`p-3 rounded border ${
+					resultMessage === 'File does not exist' 
+						? 'bg-yellow-50 border-yellow-200' 
+						: 'bg-green-50 border-green-200'
+				}`}>
+					<div className={`font-semibold text-sm mb-2 ${
+						resultMessage === 'File does not exist' ? 'text-yellow-700' : 'text-green-700'
+					}`}>Status:</div>
+					<div className={`text-sm ${
+						resultMessage === 'File does not exist' ? 'text-yellow-600' : 'text-green-600'
+					}`}>{resultMessage}</div>
+				</div>
+			</div>
 		</ToolSummaryCard>
 	)
 } 

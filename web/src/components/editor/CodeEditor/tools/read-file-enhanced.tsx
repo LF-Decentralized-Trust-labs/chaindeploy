@@ -93,59 +93,56 @@ export const ReadFileEnhancedResult = ({ event, copyToClipboard, copiedCode }: R
 		? `Read ${endLine - startLine + 1} lines from "${filePath}" (${totalLines} total lines).`
 		: `Read file "${filePath}".`
 
-	const details = (
-		<Dialog>
-			<DialogTrigger asChild>
-				<Button variant="ghost" size="sm" className="h-6 text-xs">
-					View Content
-				</Button>
-			</DialogTrigger>
-			<DialogContent className="max-w-4xl">
-				<DialogHeader>
-					<DialogTitle>File Content: {filePath}</DialogTitle>
-				</DialogHeader>
-				<ScrollArea className="max-h-[60vh]">
-					<div className="space-y-4">
-						<div className="p-3 bg-muted rounded-lg">
-							<div className="font-semibold text-sm mb-2">File Info:</div>
-							<div className="text-sm space-y-1">
-								<div>Path: {filePath}</div>
-								<div>Total Lines: {totalLines}</div>
-								{startLine !== 1 || endLine !== totalLines ? (
-									<div>Lines Read: {startLine} - {endLine}</div>
-								) : null}
-							</div>
-						</div>
-						{content && (
-							<div className="relative group">
-								<div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
-									<button onClick={() => copyToClipboard(content)} className="p-1.5 rounded bg-muted hover:bg-muted/80 transition-colors" title="Copy content">
-										{copiedCode === content ? <span className="text-green-500">✓</span> : <Copy className="w-4 h-4" />}
-									</button>
-								</div>
-								<SyntaxHighlighterComp
-									language={language}
-									style={vscDarkPlus}
-									PreTag="div"
-									className="rounded-lg"
-									showLineNumbers={true}
-									wrapLines={true}
-									wrapLongLines={true}
-									customStyle={{ margin: 0, padding: '1rem' }}
-								>
-									{content}
-								</SyntaxHighlighterComp>
-							</div>
-						)}
-					</div>
-				</ScrollArea>
-			</DialogContent>
-		</Dialog>
-	)
-
 	return (
-		<ToolSummaryCard event={event} summary={summary}>
-			{details}
+		<ToolSummaryCard event={event}>
+			<div className="space-y-3">
+				{/* Summary Section */}
+				<div className="text-sm text-muted-foreground mb-3">
+					{summary}
+				</div>
+
+				{/* File Info */}
+				<div className="bg-background/50 p-3 rounded border border-border">
+					<div className="font-semibold text-sm mb-2">File Info:</div>
+					<div className="text-sm space-y-1">
+						<div>Path: {filePath}</div>
+						<div>Total Lines: {totalLines}</div>
+						{startLine !== 1 || endLine !== totalLines ? (
+							<div>Lines Read: {startLine} - {endLine}</div>
+						) : null}
+					</div>
+				</div>
+
+				{/* File Content */}
+				{content && (
+					<div className="bg-background/50 p-3 rounded border border-border">
+						<div className="font-semibold text-sm mb-2 flex items-center justify-between">
+							<span>File Content:</span>
+							<button 
+								onClick={() => copyToClipboard(content)} 
+								className="p-1.5 rounded bg-muted hover:bg-muted/80 transition-colors" 
+								title="Copy content"
+							>
+								{copiedCode === content ? <span className="text-green-500">✓</span> : <Copy className="w-4 h-4" />}
+							</button>
+						</div>
+						<ScrollArea className="max-h-[400px]">
+							<SyntaxHighlighterComp
+								language={language}
+								style={vscDarkPlus}
+								PreTag="div"
+								className="rounded-lg"
+								showLineNumbers={true}
+								wrapLines={true}
+								wrapLongLines={true}
+								customStyle={{ margin: 0, padding: '1rem' }}
+							>
+								{content}
+							</SyntaxHighlighterComp>
+						</ScrollArea>
+					</div>
+				)}
+			</div>
 		</ToolSummaryCard>
 	)
 } 

@@ -83,41 +83,47 @@ export const CodebaseSearchResult = ({ event }: CodebaseSearchResultProps) => {
 
 	const summary = `Found ${results.length} results for "${query}".`
 
-	const details = (
-		<Dialog>
-			<DialogTrigger asChild>
-				<Button variant="ghost" size="sm" className="h-6 text-xs">
-					View Results
-				</Button>
-			</DialogTrigger>
-			<DialogContent className="max-w-4xl">
-				<DialogHeader>
-					<DialogTitle>Codebase Search Results</DialogTitle>
-				</DialogHeader>
-				<ScrollArea className="max-h-[60vh]">
-					<div className="space-y-4">
-						{results.map((result: any, index: number) => (
-							<div key={index} className="p-3 border rounded-lg">
-								<div className="font-semibold text-sm mb-2">{result.file}</div>
-								{result.score && (
-									<div className="text-xs text-muted-foreground mb-2">Score: {result.score}</div>
-								)}
-								{result.content && (
-									<pre className="text-xs bg-muted p-2 rounded overflow-x-auto">
-										{result.content}
-									</pre>
-								)}
-							</div>
-						))}
-					</div>
-				</ScrollArea>
-			</DialogContent>
-		</Dialog>
-	)
-
 	return (
-		<ToolSummaryCard event={event} summary={summary}>
-			{details}
+		<ToolSummaryCard event={event}>
+			<div className="space-y-3">
+				{/* Summary Section */}
+				<div className="text-sm text-muted-foreground mb-3">
+					{summary}
+				</div>
+
+				{/* Search Query */}
+				<div className="bg-background/50 p-3 rounded border border-border">
+					<div className="font-semibold text-purple-600 flex items-center gap-2 mb-2">
+						<Search className="w-3 h-3" />
+						Search Query:
+					</div>
+					<div className="text-sm">{query}</div>
+				</div>
+
+				{/* Results Section */}
+				{results.length > 0 && (
+					<div className="bg-background/50 p-3 rounded border border-border">
+						<div className="font-semibold text-sm mb-2">Search Results:</div>
+						<ScrollArea className="max-h-[300px]">
+							<div className="space-y-2">
+								{results.map((result: any, index: number) => (
+									<div key={index} className="p-2 border rounded">
+										<div className="font-semibold text-sm mb-1">{result.file}</div>
+										{result.score && (
+											<div className="text-xs text-muted-foreground mb-1">Score: {result.score}</div>
+										)}
+										{result.content && (
+											<pre className="text-xs bg-muted p-2 rounded overflow-x-auto">
+												{result.content}
+											</pre>
+										)}
+									</div>
+								))}
+							</div>
+						</ScrollArea>
+					</div>
+				)}
+			</div>
 		</ToolSummaryCard>
 	)
 } 

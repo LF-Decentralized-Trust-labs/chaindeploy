@@ -73,41 +73,47 @@ export const FileSearchResult = ({ event }: FileSearchResultProps) => {
 
 	const summary = `Found ${results.length} files matching "${query}".`
 
-	const details = (
-		<Dialog>
-			<DialogTrigger asChild>
-				<Button variant="ghost" size="sm" className="h-6 text-xs">
-					View Results
-				</Button>
-			</DialogTrigger>
-			<DialogContent className="max-w-2xl">
-				<DialogHeader>
-					<DialogTitle>File Search Results</DialogTitle>
-				</DialogHeader>
-				<ScrollArea className="max-h-[60vh]">
-					<div className="space-y-2">
-						{results.map((result: any, index: number) => (
-							<div key={index} className="flex items-center justify-between p-2 border rounded">
-								<div className="flex items-center gap-2">
-									<span className="text-gray-500">📄</span>
-									<span className="font-medium">{result.path}</span>
-								</div>
-								{result.size !== undefined && (
-									<span className="text-xs text-muted-foreground">
-										{(result.size / 1024).toFixed(1)} KB
-									</span>
-								)}
-							</div>
-						))}
-					</div>
-				</ScrollArea>
-			</DialogContent>
-		</Dialog>
-	)
-
 	return (
-		<ToolSummaryCard event={event} summary={summary}>
-			{details}
+		<ToolSummaryCard event={event}>
+			<div className="space-y-3">
+				{/* Summary Section */}
+				<div className="text-sm text-muted-foreground mb-3">
+					{summary}
+				</div>
+
+				{/* Search Query */}
+				<div className="bg-background/50 p-3 rounded border border-border">
+					<div className="font-semibold text-indigo-600 flex items-center gap-2 mb-2">
+						<FileSearch className="w-3 h-3" />
+						Search Query:
+					</div>
+					<div className="text-sm">{query}</div>
+				</div>
+
+				{/* Results */}
+				{results.length > 0 && (
+					<div className="bg-background/50 p-3 rounded border border-border">
+						<div className="font-semibold text-sm mb-2">Found Files:</div>
+						<ScrollArea className="max-h-[300px]">
+							<div className="space-y-2">
+								{results.map((result: any, index: number) => (
+									<div key={index} className="flex items-center justify-between p-2 border rounded">
+										<div className="flex items-center gap-2">
+											<span className="text-gray-500">📄</span>
+											<span className="font-medium">{result.path}</span>
+										</div>
+										{result.size !== undefined && (
+											<span className="text-xs text-muted-foreground">
+												{(result.size / 1024).toFixed(1)} KB
+											</span>
+										)}
+									</div>
+								))}
+							</div>
+						</ScrollArea>
+					</div>
+				)}
+			</div>
 		</ToolSummaryCard>
 	)
 } 

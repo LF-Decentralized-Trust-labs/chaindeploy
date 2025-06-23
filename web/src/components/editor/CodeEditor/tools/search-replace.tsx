@@ -83,47 +83,39 @@ export const SearchReplaceResult = ({ event }: SearchReplaceResultProps) => {
 
 	const summary = `Search and replace completed successfully in "${filePath}".`
 
-	const details = (
-		<Dialog>
-			<DialogTrigger asChild>
-				<Button variant="ghost" size="sm" className="h-6 text-xs">
-					View Details
-				</Button>
-			</DialogTrigger>
-			<DialogContent className="max-w-2xl">
-				<DialogHeader>
-					<DialogTitle>Search and Replace Details</DialogTitle>
-				</DialogHeader>
-				<ScrollArea className="max-h-[60vh]">
-					<div className="space-y-4">
-						<div className="p-3 bg-muted rounded-lg">
-							<div className="font-semibold text-sm mb-2">File:</div>
-							<div className="text-sm">{filePath}</div>
+	return (
+		<ToolSummaryCard event={event}>
+			<div className="space-y-3">
+				{/* Summary Section */}
+				<div className="text-sm text-muted-foreground mb-3">
+					{summary}
+				</div>
+
+				{/* File Path */}
+				<div className="bg-background/50 p-3 rounded border border-border">
+					<div className="font-semibold text-sm mb-2">File:</div>
+					<div className="text-sm">{filePath}</div>
+				</div>
+
+				{/* Search and Replace Details */}
+				<div className="bg-background/50 p-3 rounded border border-border">
+					<div className="font-semibold text-sm mb-2">Search and Replace:</div>
+					<div className="text-sm space-y-2">
+						<div>
+							<span className="font-semibold">Find:</span> <span className="font-mono bg-[#392426] text-[#ffd1d1] px-2 py-0.5 rounded">{oldString}</span>
 						</div>
-						<div className="p-3 bg-muted rounded-lg">
-							<div className="font-semibold text-sm mb-2">Search and Replace:</div>
-							<div className="text-sm space-y-2">
-								<div>
-									<span className="font-semibold">Find:</span> <span className="font-mono bg-[#392426] text-[#ffd1d1] px-2 py-0.5 rounded">{oldString}</span>
-								</div>
-								<div>
-									<span className="font-semibold">Replace with:</span> <span className="font-mono bg-[#1a2721] text-[#d1ffda] px-2 py-0.5 rounded">{newString}</span>
-								</div>
-							</div>
-						</div>
-						<div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-							<div className="font-semibold text-sm mb-2 text-green-700">Status:</div>
-							<div className="text-sm text-green-600">Search and replace completed successfully</div>
+						<div>
+							<span className="font-semibold">Replace with:</span> <span className="font-mono bg-[#1a2721] text-[#d1ffda] px-2 py-0.5 rounded">{newString}</span>
 						</div>
 					</div>
-				</ScrollArea>
-			</DialogContent>
-		</Dialog>
-	)
+				</div>
 
-	return (
-		<ToolSummaryCard event={event} summary={summary}>
-			{details}
+				{/* Status */}
+				<div className="p-3 bg-green-50 border border-green-200 rounded">
+					<div className="font-semibold text-sm mb-2 text-green-700">Status:</div>
+					<div className="text-sm text-green-600">Search and replace completed successfully</div>
+				</div>
+			</div>
 		</ToolSummaryCard>
 	)
 }

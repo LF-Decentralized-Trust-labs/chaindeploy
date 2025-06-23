@@ -186,11 +186,15 @@ func aiMessageToOpenAIMessage(msg AIMessage) openai.ChatCompletionMessage {
 		})
 	}
 
-	return openai.ChatCompletionMessage{
+	chatCompletionMessage := openai.ChatCompletionMessage{
 		Role:      msg.Role,
 		Content:   msg.Content,
 		ToolCalls: toolCalls,
 	}
+	if len(msg.ToolCalls) > 0 {
+		chatCompletionMessage.ToolCallID = msg.ToolCalls[0].ID
+	}
+	return chatCompletionMessage
 }
 
 func aiToolToOpenAITool(tool AITool) openai.Tool {
@@ -314,7 +318,8 @@ func (s *AIChatService) StreamChat(
 	projectSlug := project.Slug
 	projectRoot := filepath.Join(s.ProjectsDir, projectSlug)
 
-	// Update the tool schemas to use the session tracker
+	// Set up tools for the current chat session
+	// Note: We skip tool messages from previous iterations but ensure tools are available for current chat
 	toolSchemas := s.GetExtendedToolSchemas(projectRoot)
 	for i := range toolSchemas {
 		originalHandler := toolSchemas[i].Handler
@@ -331,55 +336,8 @@ func (s *AIChatService) StreamChat(
 			return result, err
 		}
 	}
-	systemPrompt := s.getProjectStructurePrompt(projectRoot, toolSchemas, project)
-	s.Logger.Debugf("[StreamChat] projectID: %s", projectID)
-	s.Logger.Debugf("[StreamChat] projectRoot: %s", projectRoot)
-	s.Logger.Debugf("[StreamChat] systemPrompt: %s", systemPrompt)
-	chatMsgs = append(chatMsgs, AIMessage{
-		Role:    "system",
-		Content: systemPrompt,
-	})
 
-	// Add user and assistant messages, but filter out tool messages from previous iterations
-	for _, m := range messages {
-		// Validate that message content is not empty
-		if strings.TrimSpace(m.Content) == "" {
-			s.Logger.Warnf("[StreamChat] Skipping empty message from sender: %s", m.Sender)
-			continue
-		}
-
-		// Skip tool messages from previous iterations - only include user and assistant messages
-		if m.Sender == "tool" {
-			s.Logger.Debugf("[StreamChat] Skipping tool message from previous iteration")
-			continue
-		}
-
-		role := "user"
-		if m.Sender == "assistant" {
-			role = "assistant"
-		}
-		if m.Content == "" && m.Sender == "assistant" {
-			s.Logger.Warnf("[StreamChat] Skipping empty message from sender: %s", m.Sender)
-			continue
-		}
-		chatMsgs = append(chatMsgs, AIMessage{
-			Role:    role,
-			Content: m.Content,
-		})
-	}
-
-	// Validate that we have messages after filtering empty ones
-	if len(chatMsgs) <= 1 { // Only system message
-		return fmt.Errorf("no valid messages found after filtering empty content")
-	}
-
-	// Debug logging for message flow
-	s.Logger.Debugf("[StreamChat] Processing %d messages (including system message)", len(chatMsgs))
-	for i, msg := range chatMsgs {
-		s.Logger.Debugf("[StreamChat] Message %d: Role=%s, ContentLength=%d, ToolCalls=%d",
-			i, msg.Role, len(msg.Content), len(msg.ToolCalls))
-	}
-
+	// Create tool schemas map and tools list for current chat session
 	toolSchemasMap := make(map[string]ToolSchema)
 	for _, tool := range toolSchemas {
 		toolSchemasMap[tool.Name] = tool
@@ -394,6 +352,98 @@ func (s *AIChatService) StreamChat(
 				Parameters:  tool.Parameters,
 			},
 		})
+	}
+
+	s.Logger.Debugf("[StreamChat] Available tools for current chat: %d", len(tools))
+
+	systemPrompt := s.getProjectStructurePrompt(projectRoot, toolSchemas, project)
+	s.Logger.Debugf("[StreamChat] projectID: %s", projectID)
+	s.Logger.Debugf("[StreamChat] projectRoot: %s", projectRoot)
+	s.Logger.Debugf("[StreamChat] systemPrompt: %s", systemPrompt)
+	chatMsgs = append(chatMsgs, AIMessage{
+		Role:    "system",
+		Content: systemPrompt,
+	})
+
+	// Add user and assistant messages, but filter out tool messages from previous iterations
+	// This ensures we don't include tool results from previous chat sessions in the current context
+	for _, m := range messages {
+		// Validate that message content is not empty
+		if strings.TrimSpace(m.Content) == "" {
+			s.Logger.Warnf("[StreamChat] Skipping empty message from sender: %s", m.Sender)
+			continue
+		}
+
+		// Skip tool messages from previous iterations - only include user and assistant messages
+		// Tools are available for the current chat session but we don't want to include
+		// tool results from previous iterations in the conversation context
+		if m.Sender == "tool" {
+			s.Logger.Debugf("[StreamChat] Skipping tool message from previous iteration to avoid context pollution")
+			continue
+		}
+
+		role := "user"
+		if m.Sender == "assistant" {
+			role = "assistant"
+		}
+		if m.Content == "" && m.Sender == "assistant" {
+			s.Logger.Warnf("[StreamChat] Skipping empty message from sender: %s", m.Sender)
+			continue
+		}
+
+		// Create the message
+		aiMsg := AIMessage{
+			Role:    role,
+			Content: m.Content,
+		}
+
+		// If this is an assistant message, check if it has tool calls and add tool response messages
+		if m.Sender == "assistant" && len(m.ToolCalls) > 0 {
+			// Convert ToolCallAI to AIToolCall
+			var aiToolCalls []AIToolCall
+			for _, tc := range m.ToolCalls {
+				aiToolCalls = append(aiToolCalls, AIToolCall{
+					ID:   fmt.Sprintf("call_%d", tc.ID), // Generate a unique ID
+					Type: "function",
+					Function: AIFunctionCall{
+						Name:      tc.ToolName,
+						Arguments: tc.Arguments,
+					},
+				})
+			}
+			aiMsg.ToolCalls = aiToolCalls
+
+			// Add tool response messages for each tool call to satisfy OpenAI's API requirements
+			for _, tc := range m.ToolCalls {
+				// Use the tool call result from the database
+				toolResult := tc.Result
+				if tc.Error != "" {
+					toolResult = fmt.Sprintf("Tool call failed: %s", tc.Error)
+				} else if toolResult == "" {
+					toolResult = "Tool call executed successfully"
+				}
+
+				// Add tool response message
+				chatMsgs = append(chatMsgs, AIMessage{
+					Role:    "tool",
+					Content: toolResult,
+				})
+			}
+		}
+
+		chatMsgs = append(chatMsgs, aiMsg)
+	}
+
+	// Validate that we have messages after filtering empty ones
+	if len(chatMsgs) <= 1 { // Only system message
+		return fmt.Errorf("no valid messages found after filtering empty content")
+	}
+
+	// Debug logging for message flow
+	s.Logger.Debugf("[StreamChat] Processing %d messages (including system message)", len(chatMsgs))
+	for i, msg := range chatMsgs {
+		s.Logger.Debugf("[StreamChat] Message %d: Role=%s, ContentLength=%d, ToolCalls=%d",
+			i, msg.Role, len(msg.Content), len(msg.ToolCalls))
 	}
 
 	if maxSteps <= 0 {
@@ -414,14 +464,51 @@ func (s *AIChatService) StreamChat(
 			s.Logger.Debugf("[StreamChat] Error in StreamAgentStep: %v", err)
 			return err
 		}
-		if msg != nil {
-			// Store assistant message in DB
-			_, err = s.ChatService.AddMessage(ctx, conversationID, nil, "assistant", msg.Content, "", "")
-			if err != nil {
-				s.Logger.Debugf("[StreamChat] Failed to persist assistant message: %v", err)
+
+		// Always create one assistant message per step, even if empty
+		if msg == nil {
+			msg = &AIMessage{
+				Role:      "assistant",
+				Content:   "",
+				ToolCalls: []AIToolCall{},
 			}
-			chatMsgs = append(chatMsgs, *msg)
 		}
+
+		// Store assistant message in DB with tool calls
+		assistantMsg, err := s.ChatService.AddMessage(ctx, conversationID, nil, "assistant", msg.Content, "", "")
+		if err != nil {
+			s.Logger.Debugf("[StreamChat] Failed to persist assistant message: %v", err)
+		}
+
+		// Store tool calls linked to the assistant message (in tool_calls table)
+		if assistantMsg != nil {
+			for i, toolCall := range toolCalls {
+				var resultStr string
+				var errStr *string
+				if i < len(toolCallResults) {
+					toolCallResult := toolCallResults[i]
+					if toolCallResult.Result != nil {
+						if b, err := json.Marshal(toolCallResult.Result); err == nil {
+							resultStr = string(b)
+						}
+					}
+					if toolCallResult.Error != nil {
+						errMsg := toolCallResult.Error.Error()
+						errStr = &errMsg
+						if resultStr == "" {
+							resultStr = fmt.Sprintf(`{"error": "%s"}`, errMsg)
+						}
+					}
+				}
+				_, err := s.ChatService.AddToolCall(ctx, assistantMsg.ID, toolCall.Function.Name, toolCall.Function.Arguments, resultStr, errStr)
+				if err != nil {
+					s.Logger.Debugf("[StreamChat] Failed to persist tool call: %v", err)
+				}
+			}
+		}
+
+		// Add assistant message to chat context
+		chatMsgs = append(chatMsgs, *msg)
 
 		// If no tool calls, we're done
 		if len(toolCalls) == 0 {
@@ -433,7 +520,6 @@ func (s *AIChatService) StreamChat(
 		for i, toolCall := range toolCalls {
 			var resultStr string
 			var errStr *string
-			var argsStr string
 
 			// Use the tool call result if available
 			if i < len(toolCallResults) {
@@ -455,22 +541,20 @@ func (s *AIChatService) StreamChat(
 						resultStr = fmt.Sprintf(`{"error": "%s"}`, errMsg)
 					}
 				}
-
-				// Serialize arguments
-				if b, err := json.Marshal(toolCall.Function.Arguments); err == nil {
-					argsStr = string(b)
-				}
 			} else {
 				// Defensive case: if we don't have a tool call result, create an error
 				errMsg := "Tool call result not available"
 				errStr = &errMsg
 				resultStr = fmt.Sprintf(`{"error": "%s"}`, errMsg)
-				if b, err := json.Marshal(toolCall.Function.Arguments); err == nil {
-					argsStr = string(b)
-				}
 			}
 
-			// Check if validation failed and we need to trigger additional AI steps
+			// Store tool call in tool_calls table
+			_, err := s.ChatService.AddToolCall(ctx, assistantMsg.ID, toolCall.Function.Name, toolCall.Function.Arguments, resultStr, errStr)
+			if err != nil {
+				s.Logger.Debugf("[StreamChat] Failed to persist tool call: %v", err)
+			}
+
+			// If validation failed, add a user message to trigger the AI to fix the errors
 			var validationRequired bool
 			var validationMessage string
 			if errStr == nil {
@@ -486,41 +570,9 @@ func (s *AIChatService) StreamChat(
 				}
 			}
 
-			// Add tool result message to DB and get its ID
-			toolMsg, err := s.ChatService.AddMessage(ctx, conversationID, nil, "tool", resultStr, "", argsStr)
-			if err != nil {
-				s.Logger.Debugf("[StreamChat] Failed to persist tool message: %v", err)
-				continue
-			}
-			// Persist tool call
-			_, err = s.ChatService.AddToolCall(ctx, toolMsg.ID, toolCall.Function.Name, argsStr, resultStr, errStr)
-			if err != nil {
-				s.Logger.Debugf("[StreamChat] Failed to persist tool call: %v", err)
-			}
-
-			// Prepare tool result content for chat messages
-			toolResult := resultStr
-			if len(toolResult) == 0 {
-				if errStr != nil {
-					// If there's an error, include it in the content
-					toolResult = fmt.Sprintf("Error: %s", *errStr)
-				} else {
-					toolResult = "No result"
-				}
-			}
-
-			// Add tool result message to chatMsgs for next step (only current iteration)
-			chatMsgs = append(chatMsgs, AIMessage{
-				Role:      "tool",
-				Content:   toolResult,
-				ToolCalls: []AIToolCall{}, // Tool result messages don't have tool calls
-			})
-			s.Logger.Debugf("[StreamChat] Adding tool message: ContentLength=%d", len(toolResult))
-
-			// If validation failed, add a user message to trigger the AI to fix the errors
 			if validationRequired && validationMessage != "" {
 				s.Logger.Debugf("[StreamChat] Validation failed, triggering AI fix step")
-				_, err := s.ChatService.AddMessage(ctx, conversationID, &toolMsg.ID, "user", validationMessage, "", "")
+				_, err := s.ChatService.AddMessage(ctx, conversationID, nil, "user", validationMessage, "", "")
 				if err != nil {
 					s.Logger.Debugf("[StreamChat] Failed to persist validation message: %v", err)
 					continue
@@ -543,7 +595,7 @@ func (s *AIChatService) StreamChat(
 	msg, toolCalls, toolCallResults, err := s.AIProvider.StreamAgentStep(
 		ctx,
 		chatMsgs,
-		"gpt-4o",
+		s.Model,
 		tools,
 		toolSchemasMap,
 		observer,
@@ -552,14 +604,32 @@ func (s *AIChatService) StreamChat(
 		s.Logger.Debugf("[StreamChat] Error in final StreamAgentStep: %v", err)
 		return err
 	}
-	if msg != nil {
-		// Store final assistant message in DB
-		_, err = s.ChatService.AddMessage(ctx, conversationID, nil, "assistant", msg.Content, "", "")
-		if err != nil {
-			s.Logger.Debugf("[StreamChat] Failed to persist final assistant message: %v", err)
+
+	// Create final assistant message
+	if msg == nil {
+		msg = &AIMessage{
+			Role:      "assistant",
+			Content:   "",
+			ToolCalls: []AIToolCall{},
 		}
-		chatMsgs = append(chatMsgs, *msg)
 	}
+
+	// Store final assistant message in DB with tool calls
+	assistantMsg, err := s.ChatService.AddMessage(ctx, conversationID, nil, "assistant", msg.Content, "", "")
+	if err != nil {
+		s.Logger.Debugf("[StreamChat] Failed to persist final assistant message: %v", err)
+	}
+
+	// Store final tool calls linked to the assistant message
+	if assistantMsg != nil {
+		for _, tc := range toolCalls {
+			_, err := s.ChatService.AddToolCall(ctx, assistantMsg.ID, tc.Function.Name, tc.Function.Arguments, "", nil)
+			if err != nil {
+				s.Logger.Debugf("[StreamChat] Failed to persist final tool call: %v", err)
+			}
+		}
+	}
+
 	s.Logger.Debugf("[StreamChat] Final assistant message: %s", msg.Content)
 	if len(toolCalls) > 0 {
 		s.Logger.Debugf("[StreamChat] Final tool calls: %v", toolCalls)
@@ -850,6 +920,57 @@ func (s *AIChatService) GetExtendedToolSchemas(projectRoot string) []ToolSchema 
 						"command": command,
 					}, nil
 				}
+			},
+		},
+		{
+			Name:        "file_exists",
+			Description: "Check if a file exists at the specified path. Returns whether the file exists and additional file information if it does.",
+			Parameters: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"path": map[string]interface{}{
+						"type":        "string",
+						"description": "Path to the file (relative to project root)",
+					},
+					"explanation": map[string]interface{}{
+						"type":        "string",
+						"description": "One sentence explanation as to why this tool is being used, and how it contributes to the goal.",
+					},
+				},
+				"required": []string{"path", "explanation"},
+			},
+			Handler: func(toolName string, args map[string]interface{}) (interface{}, error) {
+				path, _ := args["path"].(string)
+
+				absPath := filepath.Join(projectRoot, path)
+
+				// Check if file exists
+				fileInfo, err := os.Stat(absPath)
+				if err != nil {
+					if os.IsNotExist(err) {
+						return map[string]interface{}{
+							"exists":    false,
+							"file_path": path,
+							"message":   "File does not exist",
+						}, nil
+					}
+					return nil, err
+				}
+
+				// File exists, return additional information
+				result := map[string]interface{}{
+					"exists":    true,
+					"file_path": path,
+					"size":      fileInfo.Size(),
+					"is_dir":    fileInfo.IsDir(),
+					"modified":  fileInfo.ModTime().Format("2006-01-02 15:04:05"),
+				}
+
+				// Add permissions info
+				mode := fileInfo.Mode()
+				result["permissions"] = mode.String()
+
+				return result, nil
 			},
 		},
 	}

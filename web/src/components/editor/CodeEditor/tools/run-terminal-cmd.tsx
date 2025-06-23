@@ -61,6 +61,8 @@ export const RunTerminalCmdUpdate = ({ event, accumulatedArgs, copyToClipboard }
 	const command = args.command || ''
 	const isBackground = args.is_background || false
 	const explanation = args.explanation || ''
+	const output = args.output || ''
+	const error = args.error || ''
 
 	const handleCopyDelta = async () => {
 		await copyToClipboard(JSON.stringify(args, null, 2))
@@ -78,15 +80,82 @@ export const RunTerminalCmdUpdate = ({ event, accumulatedArgs, copyToClipboard }
 				</svg>
 				<span className="font-medium">{statusText}</span>
 			</div>
-			<div className="mt-2 text-xs bg-background/50 p-2 rounded border border-border relative">
-				<button onClick={handleCopyDelta} className="absolute top-2 right-2 p-1.5 rounded bg-muted hover:bg-muted/80 transition-colors" title="Copy arguments">
-					<Copy className="w-3 h-3" />
-				</button>
-				<div className="font-semibold text-orange-600 flex items-center gap-2 mb-2">
-					<Terminal className="w-3 h-3" />
-					{isGoVet ? 'Go vet analysis' : isBackground ? 'Starting background command' : 'Preparing command'}: {command}
+
+			<div className="space-y-3">
+				{/* Command Section */}
+				<div className="bg-background/50 p-3 rounded border border-border relative">
+					<button onClick={handleCopyDelta} className="absolute top-2 right-2 p-1.5 rounded bg-muted hover:bg-muted/80 transition-colors" title="Copy arguments">
+						<Copy className="w-3 h-3" />
+					</button>
+					<div className="font-semibold text-orange-600 flex items-center gap-2 mb-2">
+						<Terminal className="w-3 h-3" />
+						{isGoVet ? 'Go vet analysis' : isBackground ? 'Starting background command' : 'Preparing command'}:
+					</div>
+					<SyntaxHighlighterComp
+						language="bash"
+						style={vscDarkPlus}
+						customStyle={{
+							margin: 0,
+							padding: '0.5rem',
+							borderRadius: '0.25rem',
+							fontSize: '0.75rem',
+							lineHeight: '1.2',
+						}}
+					>
+						{command}
+					</SyntaxHighlighterComp>
+					{explanation && <div className="text-xs text-muted-foreground italic mt-2">{explanation}</div>}
 				</div>
-				{explanation && <div className="text-xs text-muted-foreground italic">{explanation}</div>}
+
+				{/* Streaming Output Section */}
+				{output && (
+					<div className="bg-background/50 p-3 rounded border border-border">
+						<div className="font-semibold text-sm mb-2 flex items-center gap-2">
+							<div className="animate-pulse h-2 w-2 bg-green-500 rounded-full"></div>
+							Streaming Output:
+						</div>
+						<SyntaxHighlighterComp
+							language="bash"
+							style={vscDarkPlus}
+							customStyle={{
+								margin: 0,
+								padding: '0.5rem',
+								borderRadius: '0.25rem',
+								fontSize: '0.75rem',
+								lineHeight: '1.2',
+								maxHeight: '200px',
+								overflow: 'auto',
+							}}
+						>
+							{output}
+						</SyntaxHighlighterComp>
+					</div>
+				)}
+
+				{/* Streaming Error Section */}
+				{error && (
+					<div className="bg-red-50 border border-red-200 p-3 rounded">
+						<div className="font-semibold text-sm mb-2 text-red-700 flex items-center gap-2">
+							<AlertCircle className="w-3 h-3" />
+							Error:
+						</div>
+						<SyntaxHighlighterComp
+							language="bash"
+							style={vscDarkPlus}
+							customStyle={{
+								margin: 0,
+								padding: '0.5rem',
+								borderRadius: '0.25rem',
+								fontSize: '0.75rem',
+								lineHeight: '1.2',
+								maxHeight: '200px',
+								overflow: 'auto',
+							}}
+						>
+							{error}
+						</SyntaxHighlighterComp>
+					</div>
+				)}
 			</div>
 		</div>
 	)
@@ -107,83 +176,110 @@ export const RunTerminalCmdResult = ({ event }: RunTerminalCmdResultProps) => {
 		}
 		return rawResult && typeof rawResult === 'object' ? rawResult : {}
 	}, [event.result])
-	console.log('event', event)
-	const { command, output, error, background, pid, success } = useMemo(
+	const args = useMemo(() => {
+		if (typeof event.arguments === 'string') {
+			try {
+				const parsed = JSON.parse(event.arguments)
+				return parsed
+			} catch (e) {
+				return {}
+			}
+		}
+		return {}
+	}, [event.arguments])
+	const { command, output, error, success } = useMemo(
 		() => ({
-			command: resultData.command || '',
+			command: args.command || '',
 			output: resultData.output || resultData.result || '',
 			error: resultData.error || '',
-			background: resultData.background || false,
-			pid: resultData.pid,
 			success: resultData.success !== undefined ? resultData.success : !resultData.error,
 		}),
-		[resultData]
+		[resultData, args]
 	)
 
 	const summary = useMemo(() => {
-		if (background) {
-			return `Command started in background${pid ? ` (PID: ${pid})` : ''}.`
-		}
-
 		return success ? 'Command completed successfully.' : `Command failed${error ? '.' : ' with an error.'}`
-	}, [background, pid, success, error, output])
-
-	const details = (
-		<Dialog>
-			<DialogTrigger asChild>
-				<Button variant="ghost" size="sm" className="h-6 text-xs">
-					View Output
-				</Button>
-			</DialogTrigger>
-			<DialogContent className="max-w-4xl">
-				<DialogHeader>
-					<DialogTitle>Terminal Command Output</DialogTitle>
-				</DialogHeader>
-				<ScrollArea className="max-h-[60vh]">
-					<div className="space-y-4">
-						<div className="p-3 bg-muted rounded-lg">
-							<div className="font-semibold text-sm mb-2">Command:</div>
-							<SyntaxHighlighterComp language="bash" style={vscDarkPlus} customStyle={{ margin: 0, padding: '0.5rem', borderRadius: '0.25rem' }}>
-								{command}
-							</SyntaxHighlighterComp>
-						</div>
-						{output && (
-							<div className="p-3 bg-muted rounded-lg">
-								<div className="font-semibold text-sm mb-2 flex items-center gap-2">
-									{success ? <CheckCircle className="w-4 h-4 text-green-600" /> : <AlertCircle className="w-4 h-4 text-red-600" />}
-									Output:
-								</div>
-								<div className="text-sm bg-background p-2 rounded overflow-x-auto">
-									<SyntaxHighlighterComp language="bash" style={vscDarkPlus} customStyle={{ margin: 0 }}>
-										{output}
-									</SyntaxHighlighterComp>
-								</div>
-							</div>
-						)}
-						{error && (
-							<div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-								<div className="font-semibold text-sm mb-2 text-red-700">Error:</div>
-								<pre className="text-sm bg-background p-2 rounded overflow-x-auto text-red-600">{error}</pre>
-							</div>
-						)}
-						{background && (
-							<div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-								<div className="font-semibold text-sm mb-2 text-blue-700">Background Process:</div>
-								<div className="text-sm">
-									{pid && <div>PID: {pid}</div>}
-									<div>Status: Running in background</div>
-								</div>
-							</div>
-						)}
-					</div>
-				</ScrollArea>
-			</DialogContent>
-		</Dialog>
-	)
+	}, [success, error, output])
 
 	return (
-		<ToolSummaryCard event={event} summary={summary}>
-			{details}
+		<ToolSummaryCard event={event}>
+			<div className="space-y-3">
+				{/* Summary Section */}
+				<div className="text-sm text-muted-foreground mb-3">
+					{summary}
+				</div>
+
+				{/* Command Section */}
+				<div className="bg-background/50 p-3 rounded border border-border">
+					<div className="font-semibold text-orange-600 flex items-center gap-2 mb-2">
+						<Terminal className="w-3 h-3" />
+						Executed Command:
+					</div>
+					<SyntaxHighlighterComp 
+						language="bash" 
+						style={vscDarkPlus} 
+						customStyle={{ 
+							margin: 0, 
+							padding: '0.5rem', 
+							borderRadius: '0.25rem',
+							fontSize: '0.75rem',
+							lineHeight: '1.2',
+						}}
+					>
+						{command}
+					</SyntaxHighlighterComp>
+				</div>
+
+				{/* Output Section */}
+				{output && (
+					<div className="bg-background/50 p-3 rounded border border-border">
+						<div className="font-semibold text-sm mb-2 flex items-center gap-2">
+							{success ? <CheckCircle className="w-3 h-3 text-green-600" /> : <AlertCircle className="w-3 h-3 text-red-600" />}
+							Output:
+						</div>
+						<div className="max-h-[200px] overflow-auto">
+							<SyntaxHighlighterComp 
+								language="bash" 
+								style={vscDarkPlus} 
+								customStyle={{ 
+									margin: 0, 
+									padding: '0.5rem', 
+									borderRadius: '0.25rem',
+									fontSize: '0.75rem',
+									lineHeight: '1.2',
+								}}
+							>
+								{output}
+							</SyntaxHighlighterComp>
+						</div>
+					</div>
+				)}
+
+				{/* Error Section */}
+				{error && (
+					<div className="bg-red-50 border border-red-200 p-3 rounded">
+						<div className="font-semibold text-sm mb-2 text-red-700 flex items-center gap-2">
+							<AlertCircle className="w-3 h-3" />
+							Error:
+						</div>
+						<div className="max-h-[200px] overflow-auto">
+							<SyntaxHighlighterComp 
+								language="bash" 
+								style={vscDarkPlus} 
+								customStyle={{ 
+									margin: 0, 
+									padding: '0.5rem', 
+									borderRadius: '0.25rem',
+									fontSize: '0.75rem',
+									lineHeight: '1.2',
+								}}
+							>
+								{error}
+							</SyntaxHighlighterComp>
+						</div>
+					</div>
+				)}
+			</div>
 		</ToolSummaryCard>
 	)
 }

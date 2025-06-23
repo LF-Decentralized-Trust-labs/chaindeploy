@@ -102,11 +102,6 @@ func (s *ChatService) AddMessage(ctx context.Context, conversationID int64, pare
 	return row, nil
 }
 
-// GetMessages returns all messages for a conversation.
-func (s *ChatService) GetMessages(ctx context.Context, conversationID int64) ([]*db.Message, error) {
-	return s.Queries.ListMessagesForConversation(ctx, conversationID)
-}
-
 // AddToolCall stores a tool call for a message.
 func (s *ChatService) AddToolCall(ctx context.Context, messageID int64, toolName, arguments, result string, errStr *string) (*db.ToolCall, error) {
 	var resultNull sql.NullString
@@ -124,6 +119,11 @@ func (s *ChatService) AddToolCall(ctx context.Context, messageID int64, toolName
 		Result:    resultNull,
 		Error:     errorNull,
 	})
+}
+
+// GetMessages returns all messages for a conversation.
+func (s *ChatService) GetMessages(ctx context.Context, conversationID int64) ([]*db.Message, error) {
+	return s.Queries.ListMessagesForConversation(ctx, conversationID)
 }
 
 // GetConversationMessages returns all messages for a conversation with their tool calls.
@@ -157,6 +157,7 @@ func (s *ChatService) GetConversationMessages(ctx context.Context, projectID, co
 				Arguments: toolCall.Arguments,
 				Result:    toolCall.Result.String,
 				Error:     toolCall.Error.String,
+				CreatedAt: toolCall.CreatedAt,
 			})
 		}
 		result = append(result, Message{

@@ -161,80 +161,69 @@ export const EditFileResult = ({ event }: EditFileResultProps) => {
 		setCopiedCode(content)
 		setTimeout(() => setCopiedCode(null), 2000)
 	}, [])
-	const details = (
-		<Dialog>
-			<DialogTrigger>
-				<>
-					{instructions && (
-						<div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800 mb-3">
-							<div className="font-semibold text-sm mb-2 text-blue-700 dark:text-blue-300">Explanation:</div>
-							<div className="text-sm text-blue-600 dark:text-blue-200">{instructions}</div>
-						</div>
-					)}
-					<Button variant="ghost" size="sm" className="h-6 text-xs">
-						View Details
-					</Button>
-				</>
-			</DialogTrigger>
-			<DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0">
-				<DialogHeader className="px-6 pt-6 pb-2 border-b">
-					<DialogTitle>File Edit Details</DialogTitle>
-				</DialogHeader>
-				<div className="flex-1 overflow-auto px-6 py-4">
-					<div className="space-y-4">
-						<div className="p-3 bg-muted rounded-lg">
-							<div className="font-semibold text-sm mb-2">File:</div>
-							<div className="text-sm break-all">{filePath}</div>
-						</div>
-						<div className="p-3 bg-muted rounded-lg">
-							<div className="font-semibold text-sm mb-2">Modified Content:</div>
-							<div className="relative">
-								<button
-									onClick={() => copyToClipboard(resultArgs.search_replace_blocks)}
-									className="absolute top-2 right-2 p-1.5 rounded bg-background hover:bg-background/80 transition-colors z-10"
-									title="Copy code"
-								>
-									{copiedCode === resultArgs.search_replace_blocks ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-								</button>
-								<div className="overflow-auto" ref={scrollContainerRef}>
-									<SyntaxHighlighterComp
-										language={getLanguage(filePath)}
-										style={vscDarkPlus}
-										wrapLines={false}
-										wrapLongLines={false}
-										showLineNumbers={true}
-										customStyle={{
-											margin: 0,
-											padding: '0.5rem',
-											background: 'rgb(20, 20, 20)',
-											fontSize: '11px',
-											minWidth: '100%',
-										}}
-									>
-										{resultArgs.search_replace_blocks}
-									</SyntaxHighlighterComp>
-								</div>
-							</div>
-						</div>
-						{instructions && (
-							<div className="p-3 bg-muted rounded-lg">
-								<div className="font-semibold text-sm mb-2">Instructions:</div>
-								<div className="text-sm whitespace-pre-wrap">{instructions}</div>
-							</div>
-						)}
-						<div className="p-3 bg-muted rounded-lg">
-							<div className="font-semibold text-sm mb-2">Status:</div>
-							<div className="text-sm">File modified</div>
-						</div>
-					</div>
-				</div>
-			</DialogContent>
-		</Dialog>
-	)
 
 	return (
-		<ToolSummaryCard event={event} summary={summary}>
-			{details}
+		<ToolSummaryCard event={event}>
+			<div className="space-y-3">
+				{/* Summary Section */}
+				<div className="text-sm text-muted-foreground mb-3">
+					{summary}
+				</div>
+
+				{/* Explanation */}
+				{instructions && (
+					<div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+						<div className="font-semibold text-sm mb-2 text-blue-700 dark:text-blue-300">Explanation:</div>
+						<div className="text-sm text-blue-600 dark:text-blue-200">{instructions}</div>
+					</div>
+				)}
+
+				{/* File Path */}
+				<div className="bg-background/50 p-3 rounded border border-border">
+					<div className="font-semibold text-sm mb-2">File:</div>
+					<div className="text-sm break-all">{filePath}</div>
+				</div>
+
+				{/* Modified Content */}
+				{resultArgs.search_replace_blocks && (
+					<div className="bg-background/50 p-3 rounded border border-border">
+						<div className="font-semibold text-sm mb-2">Modified Content:</div>
+						<div className="relative">
+							<button
+								onClick={() => copyToClipboard(resultArgs.search_replace_blocks)}
+								className="absolute top-2 right-2 p-1.5 rounded bg-background hover:bg-background/80 transition-colors z-10"
+								title="Copy code"
+							>
+								{copiedCode === resultArgs.search_replace_blocks ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+							</button>
+							<ScrollArea className="max-h-[300px]">
+								<SyntaxHighlighterComp
+									language={getLanguage(filePath)}
+									style={vscDarkPlus}
+									wrapLines={false}
+									wrapLongLines={false}
+									showLineNumbers={true}
+									customStyle={{
+										margin: 0,
+										padding: '0.5rem',
+										background: 'rgb(20, 20, 20)',
+										fontSize: '11px',
+										minWidth: '100%',
+									}}
+								>
+									{resultArgs.search_replace_blocks}
+								</SyntaxHighlighterComp>
+							</ScrollArea>
+						</div>
+					</div>
+				)}
+
+				{/* Status */}
+				<div className="bg-background/50 p-3 rounded border border-border">
+					<div className="font-semibold text-sm mb-2">Status:</div>
+					<div className="text-sm">File modified</div>
+				</div>
+			</div>
 		</ToolSummaryCard>
 	)
 }
