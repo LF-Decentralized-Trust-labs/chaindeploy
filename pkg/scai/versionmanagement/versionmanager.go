@@ -83,8 +83,14 @@ func ListCommitsWithFileChanges(ctx context.Context, repoDir string, maxCommits 
 			if err == nil {
 				patch, err := parent.Patch(c)
 				if err == nil {
-					parentTree, _ := parent.Tree()
-					currTree, _ := c.Tree()
+					parentTree, err := parent.Tree()
+					if err != nil {
+						return err
+					}
+					currTree, err := c.Tree()
+					if err != nil {
+						return err
+					}
 					for _, stat := range patch.Stats() {
 						// Check file existence in parent and current tree
 						_, errParent := parentTree.File(stat.Name)
