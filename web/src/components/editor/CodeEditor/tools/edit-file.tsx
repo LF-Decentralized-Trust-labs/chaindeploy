@@ -37,23 +37,25 @@ export const EditFileExecute = ({ event }: EditFileExecuteProps) => {
 			{event.arguments && (
 				<div className="mt-2 text-xs bg-background/50 p-2 rounded">
 					<div className="font-semibold mb-1">Final arguments:</div>
-					<SyntaxHighlighterComp
-						language="json"
-						style={vscDarkPlus}
-						PreTag="div"
-						className="rounded text-xs"
-						showLineNumbers={false}
-						wrapLines={false}
-						wrapLongLines={false}
-						customStyle={{
-							margin: 0,
-							padding: '0.5rem',
-							background: 'rgb(20, 20, 20)',
-							fontSize: '10px',
-						}}
-					>
-						{args.search_replace_blocks}
-					</SyntaxHighlighterComp>
+					<ScrollArea className="max-h-[400px] overflow-auto">
+						<SyntaxHighlighterComp
+							language="json"
+							style={vscDarkPlus}
+							PreTag="div"
+							className="rounded text-xs"
+							showLineNumbers={false}
+							wrapLines={false}
+							wrapLongLines={false}
+							customStyle={{
+								margin: 0,
+								padding: '0.5rem',
+								background: 'rgb(20, 20, 20)',
+								fontSize: '10px',
+							}}
+						>
+							{args.search_replace_blocks}
+						</SyntaxHighlighterComp>
+					</ScrollArea>
 				</div>
 			)}
 		</div>
@@ -166,9 +168,7 @@ export const EditFileResult = ({ event }: EditFileResultProps) => {
 		<ToolSummaryCard event={event}>
 			<div className="space-y-3">
 				{/* Summary Section */}
-				<div className="text-sm text-muted-foreground mb-3">
-					{summary}
-				</div>
+				<div className="text-sm text-muted-foreground mb-3">{summary}</div>
 
 				{/* Explanation */}
 				{instructions && (
@@ -196,7 +196,7 @@ export const EditFileResult = ({ event }: EditFileResultProps) => {
 							>
 								{copiedCode === resultArgs.search_replace_blocks ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
 							</button>
-							<ScrollArea className="max-h-[300px]">
+							<div className="max-h-[300px] overflow-auto">
 								<SyntaxHighlighterComp
 									language={getLanguage(filePath)}
 									style={vscDarkPlus}
@@ -213,7 +213,7 @@ export const EditFileResult = ({ event }: EditFileResultProps) => {
 								>
 									{resultArgs.search_replace_blocks}
 								</SyntaxHighlighterComp>
-							</ScrollArea>
+							</div>
 						</div>
 					</div>
 				)}

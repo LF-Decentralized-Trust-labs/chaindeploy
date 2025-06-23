@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
-	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/anthropics/anthropic-sdk-go/option"
+	"github.com/anthropics/anthropic-sdk-go/packages/param"
 	"github.com/chainlaunch/chainlaunch/pkg/logger"
 )
 
@@ -17,10 +19,17 @@ type ClaudeProvider struct {
 	Logger *logger.Logger
 }
 
+func addHeaderMiddleware(r *http.Request, next option.MiddlewareNext) (res *http.Response, err error) {
+	r.Header.Add("anthropic-beta", "fine-grained-tool-streaming-2025-05-14")
+	return next(r)
+}
+
 // NewClaudeProvider creates a new Claude provider
 func NewClaudeProvider(apiKey string, logger *logger.Logger) *ClaudeProvider {
 	return &ClaudeProvider{
-		Client: anthropic.NewClient(),
+		Client: anthropic.NewClient(
+			option.WithMiddleware(addHeaderMiddleware),
+		),
 		Logger: logger,
 	}
 }
@@ -59,10 +68,11 @@ func (p *ClaudeProvider) StreamAgentStep(
 
 	// Call Claude with streaming
 	stream := p.Client.Messages.NewStreaming(ctx, anthropic.MessageNewParams{
-		Model:     anthropic.Model(model),
-		Messages:  claudeMessages,
-		Tools:     claudeTools,
-		MaxTokens: 4096,
+		Model:       anthropic.Model(model),
+		Messages:    claudeMessages,
+		Tools:       claudeTools,
+		MaxTokens:   4096,
+		Temperature: param.Opt[float64]{Value: 0.3},
 	})
 	defer stream.Close()
 
@@ -71,42 +81,7 @@ func (p *ClaudeProvider) StreamAgentStep(
 	toolCallsMap := map[string]*AIToolCall{} // toolCallID -> AIToolCall
 	var currentToolCallID string             // Track the current tool call being built
 
-	// Delta grouping and delay mechanism (similar to OpenAI provider)
-	type pendingUpdate struct {
-		toolCallID string
-		name       string
-		delta      string
-	}
-	pendingUpdates := make(map[string]*pendingUpdate) // toolCallID -> pendingUpdate
-
-	// Use a ticker for fixed 50ms intervals instead of debouncing
-	updateTicker := time.NewTicker(100 * time.Millisecond)
-	defer updateTicker.Stop()
-
-	// Function to send accumulated updates
-	sendPendingUpdates := func() {
-		for toolCallID, update := range pendingUpdates {
-			if toolCall, exists := toolCallsMap[toolCallID]; exists {
-				// Update the tool call arguments
-				toolCall.Function.Arguments += update.delta
-
-				// Notify observer of the update
-				if observer != nil {
-					observer.OnToolCallUpdate(toolCallID, update.name, update.delta)
-				}
-			}
-		}
-		// Clear pending updates
-		pendingUpdates = make(map[string]*pendingUpdate)
-	}
-
 	for {
-		select {
-		case <-updateTicker.C:
-			sendPendingUpdates()
-		default:
-			// Continue with normal processing
-		}
 		if !stream.Next() {
 			break
 		}
@@ -137,7 +112,6 @@ func (p *ClaudeProvider) StreamAgentStep(
 					observer.OnToolCallStart(toolUse.ID, toolUse.Name)
 				}
 
-				p.Logger.Debugf("[StreamChat] Tool use started: %s (%s)", toolUse.Name, toolUse.ID)
 			}
 
 		case "content_block_delta":
@@ -155,44 +129,41 @@ func (p *ClaudeProvider) StreamAgentStep(
 				inputDelta := delta.Delta.AsInputJSONDelta()
 
 				if currentToolCallID != "" {
-					// Add to pending updates
-					if observer != nil {
-						if pending, exists := pendingUpdates[currentToolCallID]; exists {
-							// Accumulate delta
-							pending.delta += inputDelta.PartialJSON
-						} else {
-							// Create new pending update
-							pendingUpdates[currentToolCallID] = &pendingUpdate{
-								toolCallID: currentToolCallID,
-								name:       toolCallsMap[currentToolCallID].Function.Name,
-								delta:      inputDelta.PartialJSON,
-							}
-							// Start/reset timer for this group
-							updateTicker.Reset(100 * time.Millisecond)
+					// Update the tool call arguments immediately
+					if toolCall, exists := toolCallsMap[currentToolCallID]; exists {
+						toolCall.Function.Arguments += inputDelta.PartialJSON
+						// Send update to observer immediately
+						if observer != nil {
+							observer.OnToolCallUpdate(currentToolCallID, toolCall.Function.Name, inputDelta.PartialJSON)
 						}
+					} else {
+						p.Logger.Errorf("[StreamChat] Tool call not found in map for ID: %s", currentToolCallID)
 					}
+				} else {
+					p.Logger.Errorf("[StreamChat] No current tool call ID found for delta: %s", inputDelta.PartialJSON)
 				}
+			} else {
 			}
 
 		case "message_delta":
 			// Message delta event - could contain tool calls completion
 			delta := event.AsMessageDelta()
 			if delta.Delta.StopReason == "tool_use" {
-				p.Logger.Debugf("[StreamChat] Tool use detected in message delta")
 			}
 
 		case "message_stop":
 			// Message is complete
+			p.Logger.Debugf("[StreamChat] Message stop event received")
 			break
+
+		default:
+			p.Logger.Debugf("[StreamChat] Unhandled event type: %s", event.Type)
 		}
 	}
 
 	if stream.Err() != nil {
 		return nil, nil, nil, stream.Err()
 	}
-
-	// Send any remaining pending updates
-	sendPendingUpdates()
 
 	// Convert tool calls map to slice
 	var aiToolCalls []AIToolCall

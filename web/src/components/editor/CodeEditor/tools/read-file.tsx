@@ -36,8 +36,8 @@ export const ReadFileUpdate = ({ event, accumulatedArgs, copyToClipboard }: Read
 	const path = useMemo(() => accumulatedArgs.target_file || '', [accumulatedArgs.target_file])
 	const explanation = useMemo(() => accumulatedArgs.explanation || '', [accumulatedArgs.explanation])
 	const shouldReadEntireFile = useMemo(() => accumulatedArgs.should_read_entire_file ?? true, [accumulatedArgs.should_read_entire_file])
-	const startLine = useMemo(() => accumulatedArgs.start_line_one_indexed, [accumulatedArgs.start_line_one_indexed])
-	const endLine = useMemo(() => accumulatedArgs.end_line_one_indexed, [accumulatedArgs.end_line_one_indexed])
+	const startLine = useMemo(() => accumulatedArgs.start_line, [accumulatedArgs.start_line])
+	const endLine = useMemo(() => accumulatedArgs.end_line, [accumulatedArgs.end_line])
 
 	const handleCopyDelta = async () => {
 		await copyToClipboard(JSON.stringify(accumulatedArgs, null, 2))
@@ -93,8 +93,8 @@ export const ReadFileResult = ({ event, copyToClipboard, copiedCode }: ReadFileR
 	const path = useMemo(() => resultArgs.target_file || '', [resultArgs.target_file])
 	const explanation = useMemo(() => resultArgs.explanation || '', [resultArgs.explanation])
 	const shouldReadEntireFile = useMemo(() => resultArgs.should_read_entire_file ?? true, [resultArgs.should_read_entire_file])
-	const startLine = useMemo(() => resultArgs.start_line_one_indexed, [resultArgs.start_line_one_indexed])
-	const endLine = useMemo(() => resultArgs.end_line_one_indexed, [resultArgs.end_line_one_indexed])
+	const startLine = useMemo(() => resultArgs.start_line, [resultArgs.start_line])
+	const endLine = useMemo(() => resultArgs.end_line, [resultArgs.end_line])
 
 	const getReadingDescription = () => {
 		if (shouldReadEntireFile) {

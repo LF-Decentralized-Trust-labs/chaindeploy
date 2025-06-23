@@ -301,7 +301,7 @@ func (s *AIChatService) getProjectStructurePrompt(projectRoot string, toolSchema
 	return sb.String()
 }
 
-const maxAgentSteps = 10
+const maxAgentSteps = 25
 
 // StreamChat uses a multi-step tool execution loop with AI function-calling.
 func (s *AIChatService) StreamChat(
@@ -764,7 +764,7 @@ func (s *AIChatService) GetExtendedToolSchemas(projectRoot string) []ToolSchema 
 	allTools := []ToolSchema{
 		{
 			Name:        "read_file",
-			Description: "Read the contents of a file. the output of this tool call will be the 1-indexed file contents from start_line_one_indexed to end_line_one_indexed_inclusive, together with a summary of the lines outside start_line_one_indexed and end_line_one_indexed_inclusive.\nNote that this call can view at most 250 lines at a time.\n\nWhen using this tool to gather information, it's your responsibility to ensure you have the COMPLETE context. Specifically, each time you call this command you should:\n1) Assess if the contents you viewed are sufficient to proceed with your task.\n2) Take note of where there are lines not shown.\n3) If the file contents you have viewed are insufficient, and you suspect they may be in lines not shown, proactively call the tool again to view those lines.\n4) When in doubt, call this tool again to gather more information. Remember that partial file views may miss critical dependencies, imports, or functionality.\n\nIn some cases, if reading a range of lines is not enough, you may choose to read the entire file.\nReading entire files is often wasteful and slow, especially for large files (i.e. more than a few hundred lines). So you should use this option sparingly.\nReading the entire file is not allowed in most cases. You are only allowed to read the entire file if it has been edited or manually attached to the conversation by the user.",
+			Description: "Read the contents of a file. This tool reads the entire file content.",
 			Parameters: map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
@@ -772,35 +772,27 @@ func (s *AIChatService) GetExtendedToolSchemas(projectRoot string) []ToolSchema 
 						"type":        "string",
 						"description": "The path of the file to read (relative to project root).",
 					},
+					"start_line": map[string]interface{}{
+						"type":        "integer",
+						"description": "The starting line number to read from (1-based). If not provided, reads from the beginning.",
+					},
+					"end_line": map[string]interface{}{
+						"type":        "integer",
+						"description": "The ending line number to read to (inclusive, 1-based). If not provided, reads to the end.",
+					},
 					"explanation": map[string]interface{}{
 						"type":        "string",
 						"description": "One sentence explanation as to why this tool is being used, and how it contributes to the goal.",
 					},
-					"should_read_entire_file": map[string]interface{}{
-						"type":        "boolean",
-						"description": "Whether to read the entire file or just a portion",
-					},
-					"start_line_one_indexed": map[string]interface{}{
-						"type":        "number",
-						"description": "The line number to start reading from (1-indexed)",
-					},
-					"end_line_one_indexed": map[string]interface{}{
-						"type":        "number",
-						"description": "The line number to end reading at (inclusive, 1-indexed)",
-					},
 				},
 				"required": []string{
 					"target_file",
-					"should_read_entire_file",
-					"start_line_one_indexed",
-					"end_line_one_indexed",
 				},
 			},
 			Handler: func(toolName string, args map[string]interface{}) (interface{}, error) {
 				targetFile, _ := args["target_file"].(string)
-				shouldReadEntireFile, _ := args["should_read_entire_file"].(bool)
-				startLine, _ := args["start_line_one_indexed"].(float64)
-				endLine, _ := args["end_line_one_indexed"].(float64)
+				startLine, hasStart := args["start_line"].(float64)
+				endLine, hasEnd := args["end_line"].(float64)
 
 				absPath := filepath.Join(projectRoot, targetFile)
 
@@ -812,38 +804,44 @@ func (s *AIChatService) GetExtendedToolSchemas(projectRoot string) []ToolSchema 
 				lines := strings.Split(string(data), "\n")
 				totalLines := len(lines)
 
-				if shouldReadEntireFile {
-					return map[string]interface{}{
-						"content":     string(data),
-						"total_lines": totalLines,
-						"file_path":   targetFile,
-					}, nil
+				// Determine the range of lines to return
+				start := 0
+				end := totalLines
+
+				if hasStart {
+					start = int(startLine) - 1 // Convert to 0-based index
+					if start < 0 {
+						start = 0
+					}
 				}
 
-				start := int(startLine) - 1
-				end := int(endLine)
-				if start < 0 {
-					start = 0
-				}
-				if end > totalLines {
-					end = totalLines
+				if hasEnd {
+					end = int(endLine) // Convert to 0-based index, but keep inclusive
+					if end > totalLines {
+						end = totalLines
+					}
 				}
 
-				selectedLines := lines[start:end]
-				content := strings.Join(selectedLines, "\n")
+				// Extract the specified range of lines
+				var content string
+				if start < end {
+					content = strings.Join(lines[start:end], "\n")
+				} else {
+					content = ""
+				}
 
 				return map[string]interface{}{
 					"content":     content,
-					"start_line":  int(startLine),
-					"end_line":    int(endLine),
 					"total_lines": totalLines,
 					"file_path":   targetFile,
+					"start_line":  start + 1, // Return 1-based line numbers
+					"end_line":    end,
 				}, nil
 			},
 		},
 		{
 			Name:        "write_file",
-			Description: "Write content to a file at the specified path. This tool creates the file if it doesn't exist, or overwrites it if it does. The tool will skip writing if the content is empty.",
+			Description: "Write content to a file at the specified path. This tool creates the file if it doesn't exist, or overwrites it if it does.",
 			Parameters: map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
@@ -1000,6 +998,212 @@ func (s *AIChatService) GetExtendedToolSchemas(projectRoot string) []ToolSchema 
 				return result, nil
 			},
 		},
+		{
+			Name: "edit_file",
+			Description: `Edit the contents of a file using SEARCH/REPLACE blocks. You must provide the file's URI as well as a SINGLE string of SEARCH/REPLACE block(s) that will be used to apply the edit.
+
+Your SEARCH/REPLACE blocks string must be formatted as follows:
+<<<<<<< ORIGINAL
+// ... original code goes here
+=======
+// ... final code goes here
+>>>>>>> UPDATED
+
+<<<<<<< ORIGINAL
+// ... original code goes here
+=======
+// ... final code goes here
+>>>>>>> UPDATED
+
+## Guidelines:
+
+1. You may output multiple search replace blocks if needed.
+
+2. The ORIGINAL code in each SEARCH/REPLACE block must EXACTLY match lines in the original file. Do not add or remove any whitespace or comments from the original code.
+
+3. Each ORIGINAL text must be large enough to uniquely identify the change. However, bias towards writing as little as possible.
+
+4. Each ORIGINAL text must be DISJOINT from all other ORIGINAL text.
+
+5. This field is a STRING (not an array).
+
+## Handling New Content (No Original to Replace):
+
+When adding completely new content (functions, classes, imports, etc.) that doesn't replace existing code:
+
+1. For new content at the end of a file, use an empty ORIGINAL section:
+<<<<<<< ORIGINAL
+=======
+// Your new content here
+>>>>>>> UPDATED
+
+2. For new content between existing code, use a minimal ORIGINAL that identifies the insertion point:
+<<<<<<< ORIGINAL
+// ... existing code ...
+=======
+// ... existing code ...
+// Your new content here
+// ... existing code ...
+>>>>>>> UPDATED
+
+3. For new imports at the top of a file, use:
+<<<<<<< ORIGINAL
+package main
+=======
+package main
+
+import (
+    "your/new/import"
+)
+>>>>>>> UPDATED
+
+4. For new functions/methods, find a suitable location and use:
+<<<<<<< ORIGINAL
+// ... existing code ...
+=======
+// ... existing code ...
+
+// Your new function
+func newFunction() {
+    // implementation
+}
+
+// ... existing code ...
+>>>>>>> UPDATED
+
+## Important Notes:
+
+- ALWAYS include the >>>>>>> UPDATED tag at the end of each block, even for new content
+- When adding new content, the ORIGINAL section should be minimal but sufficient to identify the insertion point
+- For completely new files, use the write_file tool instead
+- Ensure proper indentation and formatting in the FINAL section`,
+			Parameters: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"target_file": map[string]interface{}{
+						"type":        "string",
+						"description": "The target file to modify (relative to project root).",
+					},
+					"instructions": map[string]interface{}{
+						"type":        "string",
+						"description": "Instructions for the edit. This will be used to guide the edit.",
+					},
+					"search_replace_blocks": map[string]interface{}{
+						"type":        "string",
+						"description": "A string of SEARCH/REPLACE block(s) formatted according to the tool description above.",
+					},
+				},
+				"required": []string{"target_file", "search_replace_blocks"},
+			},
+			Handler: func(toolName string, args map[string]interface{}) (interface{}, error) {
+				targetFile, _ := args["target_file"].(string)
+				searchReplaceBlocks, _ := args["search_replace_blocks"].(string)
+
+				// Check if content is empty and return early
+				if strings.TrimSpace(searchReplaceBlocks) == "" {
+					return map[string]interface{}{
+						"result":    "No changes made - content is empty",
+						"file_path": targetFile,
+						"skipped":   true,
+					}, nil
+				}
+
+				absPath := filepath.Join(projectRoot, targetFile)
+
+				_, err := os.Stat(absPath)
+				fileExists := err == nil
+
+				// If file doesn't exist, create it with the new content
+				if !fileExists {
+					return nil, fmt.Errorf("file does not exist: %s", absPath)
+				}
+
+				// File exists, use search/replace functionality
+				// Read the existing file content
+				existingContent, err := os.ReadFile(absPath)
+				if err != nil {
+					return nil, fmt.Errorf("failed to read existing file: %w", err)
+				}
+
+				// Use the search/replace functionality to apply the edit
+				opts := SearchReplaceOptions{
+					From:         "edit_file_tool",
+					ApplyStr:     searchReplaceBlocks,
+					OriginalCode: string(existingContent),
+					URI:          absPath,
+				}
+
+				result, err := InitializeSearchAndReplaceStream(opts)
+				if err != nil {
+					return nil, fmt.Errorf("search/replace operation failed: %w", err)
+				}
+
+				if !result.Success {
+					return nil, fmt.Errorf("search/replace operation failed: %v", result.Error)
+				}
+
+				// Write the modified content back to the file
+				if err := os.WriteFile(absPath, []byte(result.FinalCode), 0644); err != nil {
+					return nil, fmt.Errorf("failed to write modified file: %w", err)
+				}
+				sessionchanges.RegisterChange(absPath)
+
+				return map[string]interface{}{
+					"result":         "File edited successfully using search/replace",
+					"file_path":      targetFile,
+					"blocks_applied": len(result.Blocks),
+					"ai_used":        false,
+				}, nil
+			},
+		},
+		{
+			Name:        "rewrite_file",
+			Description: "Edits a file, deleting all the old contents and replacing them with your new contents. Use this tool if you want to edit a file you just created.",
+			Parameters: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"file": map[string]interface{}{
+						"type":        "string",
+						"description": "Path to the file (relative to project root)",
+					},
+					"new_content": map[string]interface{}{
+						"type":        "string",
+						"description": "The new contents of the file. Must be a string.",
+					},
+					"explanation": map[string]interface{}{
+						"type":        "string",
+						"description": "One sentence explanation as to why this tool is being used, and how it contributes to the goal.",
+					},
+				},
+				"required": []string{"file", "new_content"},
+			},
+			Handler: func(toolName string, args map[string]interface{}) (interface{}, error) {
+				filePath, _ := args["file"].(string)
+				newContent, _ := args["new_content"].(string)
+
+				absPath := filepath.Join(projectRoot, filePath)
+
+				// Ensure directory exists
+				dir := filepath.Dir(absPath)
+				if err := os.MkdirAll(dir, 0755); err != nil {
+					return nil, fmt.Errorf("failed to create directory: %w", err)
+				}
+
+				// Write the new content to the file (this will overwrite existing content)
+				if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil {
+					return nil, fmt.Errorf("failed to write file: %w", err)
+				}
+
+				// Register the change with the session tracker
+				sessionchanges.RegisterChange(absPath)
+
+				return map[string]interface{}{
+					"result":    "File rewritten successfully",
+					"file_path": filePath,
+					"size":      len(newContent),
+				}, nil
+			},
+		},
 	}
 
 	return allTools
@@ -1140,8 +1344,12 @@ Please assist the user with their query.`
 		details = append(details, "ALWAYS use tools (edit, terminal, etc) to take actions and implement changes. For example, if you would like to edit a file, you MUST use a tool.")
 		details = append(details, "Prioritize taking as many steps as you need to complete your request over stopping early.")
 		details = append(details, "You will OFTEN need to gather context before making a change. Do not immediately make a change unless you have ALL relevant context.")
+		details = append(details, "ALWAYS read files before modifying them to understand their current structure and content.")
+		details = append(details, "Before reading a file, be certain about what you are about to change. Read the file to load it in memory fully and then make the needed changes in as fewest steps as possible.")
 		details = append(details, "ALWAYS have maximal certainty in a change BEFORE you make it. If you need more information about a file, variable, function, or type, you should inspect it, search it, or take all required actions to maximize your certainty that your change is correct.")
 		details = append(details, "NEVER modify a file outside the user's workspace without permission from the user.")
+		details = append(details, "After modifying or rewriting any file, ALWAYS use the run_terminal_cmd tool to ensure the project compiles. For Go projects, run commands like 'go build', 'go mod tidy', or 'go vet'. For other project types, use the appropriate build/compile commands. Fix any compilation errors immediately.")
+		details = append(details, "When reading files, always try to read them entirely. Only read files by chunks when the file has more than 1500 lines of code.")
 	}
 
 	if params.ChatMode == ChatModeGather {
@@ -1161,6 +1369,35 @@ Please assist the user with their query.`
 Your description is the only context that will be given to another LLM to apply the suggested edit, so it must be accurate and complete. \
 Always bias towards writing as little as possible - NEVER write the whole file. Use comments like "// ... existing code ..." to condense your writing.`)
 	}
+
+	// Add edit_file tool format instructions
+	details = append(details, `When using the edit_file tool, you MUST follow the SEARCH/REPLACE block format exactly:
+
+Your SEARCH/REPLACE blocks string must be formatted as follows:
+<<<<<<< ORIGINAL
+// ... original code goes here
+=======
+// ... final code goes here
+>>>>>>> UPDATED
+
+Guidelines:
+1. You may output multiple search replace blocks if needed.
+2. The ORIGINAL code in each SEARCH/REPLACE block must EXACTLY match lines in the original file. Do not add or remove any whitespace or comments from the original code.
+3. Each ORIGINAL text must be large enough to uniquely identify the change. However, bias towards writing as little as possible.
+4. Each ORIGINAL text must be DISJOINT from all other ORIGINAL text.
+5. This field is a STRING (not an array).
+
+Handling New Content (No Original to Replace):
+- For new content at the end of a file, use an empty ORIGINAL section
+- For new content between existing code, use a minimal ORIGINAL that identifies the insertion point
+- For new imports at the top of a file, use the package line as the ORIGINAL
+- For new functions/methods, find a suitable location and use existing code as the insertion point
+
+Important Notes:
+- ALWAYS include the >>>>>>> UPDATED tag at the end of each block, even for new content
+- When adding new content, the ORIGINAL section should be minimal but sufficient to identify the insertion point
+- For completely new files, use the write_file tool instead
+- Ensure proper indentation and formatting in the FINAL section`)
 
 	details = append(details, "Do not make things up or use information not provided in the system information, tools, or user queries.")
 	details = append(details, "Always use MARKDOWN to format lists, bullet points, etc. Do NOT write tables.")

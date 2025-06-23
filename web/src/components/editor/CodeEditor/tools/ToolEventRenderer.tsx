@@ -68,7 +68,7 @@ export const ToolEventRenderer = React.memo(({ event }: ToolEventProps) => {
 	// Function to parse delta JSON without updating state
 	const parseDelta = useCallback((deltaString: string) => {
 		try {
-			const parsed = JSON.parse(deltaString)
+			const parsed = JSON.parse(jsonrepair(deltaString))
 			return parsed
 		} catch (e) {
 			try {
@@ -127,7 +127,7 @@ export const ToolEventRenderer = React.memo(({ event }: ToolEventProps) => {
 						previousDeltaRef.current = parsed
 						accumulatedArgs = parsed
 					}
-					// If parsing failed, keep using previousDeltaRef.current (accumulatedArgs already set above)
+					// If parsing failed, accumulatedArgs already contains previousDeltaRef.current
 				}
 
 				return <UpdateComponent event={event} accumulatedArgs={accumulatedArgs} copyToClipboard={copyToClipboard} />
@@ -142,7 +142,7 @@ export const ToolEventRenderer = React.memo(({ event }: ToolEventProps) => {
 					previousDeltaRef.current = parsed
 					accumulatedArgs = parsed
 				}
-				// If parsing failed, keep using previousDeltaRef.current (accumulatedArgs already set above)
+				// If parsing failed, accumulatedArgs already contains previousDeltaRef.current
 			}
 			return <DefaultUpdateComponent event={event} accumulatedArgs={accumulatedArgs} copyToClipboard={copyToClipboard} />
 		}

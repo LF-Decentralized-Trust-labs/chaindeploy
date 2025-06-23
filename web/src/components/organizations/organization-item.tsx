@@ -6,6 +6,7 @@ import { TimeAgo } from '@/components/ui/time-ago'
 import { Building2, Key, MoreVertical, Trash } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Checkbox } from '@/components/ui/checkbox'
+import { useCallback } from 'react'
 
 interface OrganizationItemProps {
 	organization: GetOrganizationsByIdResponse
@@ -15,21 +16,17 @@ interface OrganizationItemProps {
 }
 
 export function OrganizationItem({ organization, onDelete, checked, onCheckedChange }: OrganizationItemProps) {
-	// Handle dropdown click without triggering the card click
-	const handleDropdownClick = (e: React.MouseEvent) => {
+	const handleDropdownClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
 		e.preventDefault()
 		e.stopPropagation()
-	}
+	}, [])
 
 	return (
 		<div className="flex items-center gap-4 p-4 rounded-lg border bg-card text-card-foreground shadow-sm hover:shadow transition-all duration-200 hover:border-primary/50">
 			<div className="flex items-center">
 				<Checkbox checked={checked} onCheckedChange={onCheckedChange} className="shrink-0" />
 			</div>
-			<Link
-				to={`/organizations/${organization.id}`} 
-				className="flex-1"
-			>
+			<Link to={`/organizations/${organization.id}`} className="flex-1">
 				<div className="flex items-center justify-between h-full">
 					<div className="flex items-center gap-4">
 						<div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">

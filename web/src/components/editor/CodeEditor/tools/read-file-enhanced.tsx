@@ -126,7 +126,7 @@ export const ReadFileEnhancedResult = ({ event, copyToClipboard, copiedCode }: R
 								{copiedCode === content ? <span className="text-green-500">✓</span> : <Copy className="w-4 h-4" />}
 							</button>
 						</div>
-						<ScrollArea className="max-h-[400px]">
+						<ScrollArea className="max-h-[400px] overflow-auto">
 							<SyntaxHighlighterComp
 								language={language}
 								style={vscDarkPlus}
