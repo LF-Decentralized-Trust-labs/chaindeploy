@@ -144,7 +144,7 @@ func (v *FabricPeerValue) GetValue(ctx context.Context, spec ptypes.ParameterSpe
 
 		// Define the TLS cert path inside the container
 		tlsCertPath := fmt.Sprintf("/etc/chainlaunch/peers/%d/tls/cert.pem", peerID)
-
+		tlsCACertPath := fmt.Sprintf("/etc/chainlaunch/peers/%d/tls/ca.pem", peerID)
 		details = append(details, &FabricPeerDetails{
 			ID:               peerID,
 			Name:             peer.Name,
@@ -153,6 +153,7 @@ func (v *FabricPeerValue) GetValue(ctx context.Context, spec ptypes.ParameterSpe
 			MspID:            peer.FabricPeer.MSPID,
 			OrgID:            peer.FabricPeer.OrganizationID,
 			TLSCertPath:      tlsCertPath,
+			TLSCACertPath:    tlsCACertPath,
 		})
 	}
 
@@ -192,8 +193,13 @@ func (v *FabricPeerValue) GetVolumeMounts(ctx context.Context) ([]VolumeMount, e
 		}
 
 		certPath := filepath.Join(tempDir, "cert.pem")
-		if err := os.WriteFile(certPath, []byte(peer.FabricPeer.TLSCACert), 0644); err != nil {
+		if err := os.WriteFile(certPath, []byte(peer.FabricPeer.TLSCert), 0644); err != nil {
 			return nil, fmt.Errorf("failed to write TLS cert: %w", err)
+		}
+
+		caCertPath := filepath.Join(tempDir, "ca.pem")
+		if err := os.WriteFile(caCertPath, []byte(peer.FabricPeer.TLSCACert), 0644); err != nil {
+			return nil, fmt.Errorf("failed to write TLS CA cert: %w", err)
 		}
 
 		// Add volume mount for the TLS cert
@@ -203,6 +209,13 @@ func (v *FabricPeerValue) GetVolumeMounts(ctx context.Context) ([]VolumeMount, e
 			Type:        "bind",
 			ReadOnly:    true,
 			Description: fmt.Sprintf("TLS certificate for peer %s", peer.Name),
+		})
+		mounts = append(mounts, VolumeMount{
+			Source:      caCertPath,
+			Target:      fmt.Sprintf("/etc/chainlaunch/peers/%d/tls/ca.pem", peerID),
+			Type:        "bind",
+			ReadOnly:    true,
+			Description: fmt.Sprintf("TLS CA certificate for peer %s", peer.Name),
 		})
 	}
 
@@ -218,4 +231,5 @@ type FabricPeerDetails struct {
 	MspID            string
 	OrgID            int64
 	TLSCertPath      string // Path inside the container
+	TLSCACertPath    string // Path inside the container
 }

@@ -926,8 +926,8 @@ For example:
 	// Add new flags
 	cmd.Flags().StringVar(&serveCmd.openaiKey, "openai-key", os.Getenv("OPENAI_API_KEY"), "OpenAI API key (or set OPENAI_API_KEY env var)")
 	cmd.Flags().StringVar(&serveCmd.anthropicKey, "anthropic-key", os.Getenv("ANTHROPIC_API_KEY"), "Anthropic API key (or set ANTHROPIC_API_KEY env var)")
-	cmd.Flags().StringVar(&serveCmd.aiProvider, "ai-provider", "openai", "AI provider to use: openai or anthropic")
-	cmd.Flags().StringVar(&serveCmd.aiModel, "ai-model", "gpt-4o", "AI model to use (e.g. gpt-4o, claude-3-opus-20240229)")
+	cmd.Flags().StringVar(&serveCmd.aiProvider, "ai-provider", "", "AI provider to use: openai or anthropic")
+	cmd.Flags().StringVar(&serveCmd.aiModel, "ai-model", "", "AI model to use (e.g. gpt-4o, claude-3-opus-20240229)")
 
 	return cmd
 }
