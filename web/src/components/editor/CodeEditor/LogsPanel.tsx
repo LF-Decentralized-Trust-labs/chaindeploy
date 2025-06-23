@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ResizablePanel } from '@/components/ui/resizable'
 import type { LogsPanelProps } from './types'
-import { ScrollArea } from '@/components/ui/scroll-area'
 
 export function LogsPanel({ projectId, reloadKey }: LogsPanelProps & { reloadKey?: string | number }) {
 	const [logs, setLogs] = useState<string[]>([])
@@ -73,7 +71,7 @@ export function LogsPanel({ projectId, reloadKey }: LogsPanelProps & { reloadKey
 			<div className="flex items-center justify-between px-4 py-2 bg-muted border-b border-border">
 				<h3 className="text-sm font-medium text-muted-foreground">Logs</h3>
 			</div>
-			<div className="flex flex-col md:flex-row gap-8 h-full w-full max-h-[70vh] overflow-y-auto flex-1 overflow-auto p-2 space-y-2">
+			<div className="flex flex-col md:flex-row gap-8 h-full max-h-[70vh] overflow-y-auto flex-1 overflow-auto p-2 space-y-2">
 				{/* Playground form (left) */}
 				<div className="flex-1  border rounded bg-background shadow-sm my-4">
 					<div className="p-4 font-mono text-sm">
@@ -81,7 +79,7 @@ export function LogsPanel({ projectId, reloadKey }: LogsPanelProps & { reloadKey
 							<div className="text-muted-foreground">Waiting for logs...</div>
 						) : (
 							logs.map((log, index) => (
-								<div key={index} className="text-popover-foreground whitespace-pre-wrap">
+								<div key={index} className="text-popover-foreground whitespace-pre-wrap break-all overflow-hidden w-full">
 									{log}
 								</div>
 							))

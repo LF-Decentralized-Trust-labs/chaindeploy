@@ -227,7 +227,7 @@ export function CodeEditor({ mode = 'editor', projectId, chaincodeProject }: Cod
 							</ResizablePanel>
 							<ResizableHandle />
 							<ResizablePanel defaultSize={20} minSize={10} maxSize={50}>
-								<div className="bg-background text-foreground h-full">
+								<div className="bg-background text-foreground h-full ">
 									<LogsPanel projectId={projectId} />
 								</div>
 							</ResizablePanel>
@@ -241,7 +241,7 @@ export function CodeEditor({ mode = 'editor', projectId, chaincodeProject }: Cod
 							</ResizablePanel>
 							<ResizableHandle />
 							<ResizablePanel defaultSize={20} minSize={10} maxSize={50}>
-								<div className="bg-background text-foreground h-full">
+							<div className="bg-background text-foreground h-full">
 									<LogsPanel projectId={projectId} />
 								</div>
 							</ResizablePanel>

@@ -476,7 +476,7 @@ export function ChatPanel({ projectId = 1, handleToolResult, handleChatComplete 
 
 	const messagesContent = useMemo(
 		() => (
-			<div className="flex-1 overflow-auto p-2 space-y-2">
+			<div className="flex-1 overflow-auto p-2 space-y-4">
 				{messages.map((msg, i) => (
 					<Message key={i} message={msg} />
 				))}
@@ -823,7 +823,7 @@ const Message = React.memo(({ message }: MessageProps) => {
 	const messageContent = useMemo(
 		() => (
 			<div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} relative group`}>
-				<div className={`max-w-[80%] rounded-lg p-3 ${message.role === 'user' ? 'bg-muted' : 'bg-muted'} relative`}>
+				<div className={`max-w-[80%] rounded-lg p-3 ${message.role === 'user' ? 'bg-muted' : 'bg-muted'} relative space-y-2`}>
 					{/* Copy button - positioned at top right */}
 					<button
 						onClick={handleCopyMessage}

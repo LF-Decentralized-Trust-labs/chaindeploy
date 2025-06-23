@@ -242,9 +242,10 @@ func (p *OpenAIProvider) StreamAgentStep(
 
 	// Create the single assistant message with all tool calls linked to it
 	assistantMsg := &AIMessage{
-		Role:      "assistant",
-		Content:   content,
-		ToolCalls: aiToolCalls, // All tool calls are linked to this single assistant message
+		Role:       "assistant",
+		Content:    content,
+		ToolCalls:  aiToolCalls, // All tool calls are linked to this single assistant message
+		ToolCallID: "",
 	}
 
 	return assistantMsg, aiToolCalls, toolCallResults, nil

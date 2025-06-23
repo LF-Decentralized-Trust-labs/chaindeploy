@@ -202,9 +202,10 @@ func (p *ClaudeProvider) StreamAgentStep(
 
 	// Create the final AI message
 	aiMessage := &AIMessage{
-		Role:      "assistant",
-		Content:   contentBuilder.String(),
-		ToolCalls: aiToolCalls,
+		Role:       "assistant",
+		Content:    contentBuilder.String(),
+		ToolCalls:  aiToolCalls,
+		ToolCallID: "",
 	}
 
 	// Execute tool calls if any

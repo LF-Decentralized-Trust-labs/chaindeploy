@@ -54,9 +54,10 @@ type AIProviderInterface interface {
 
 // AIMessage represents a generic AI message
 type AIMessage struct {
-	Role      string
-	Content   string
-	ToolCalls []AIToolCall
+	Role       string
+	Content    string
+	ToolCalls  []AIToolCall
+	ToolCallID string // For tool response messages
 }
 
 // AIToolCall represents a generic AI tool call
@@ -167,9 +168,10 @@ func openAIMessageToAIMessage(msg openai.ChatCompletionMessage) AIMessage {
 	}
 
 	return AIMessage{
-		Role:      msg.Role,
-		Content:   msg.Content,
-		ToolCalls: toolCalls,
+		Role:       msg.Role,
+		Content:    msg.Content,
+		ToolCalls:  toolCalls,
+		ToolCallID: msg.ToolCallID,
 	}
 }
 
@@ -187,11 +189,12 @@ func aiMessageToOpenAIMessage(msg AIMessage) openai.ChatCompletionMessage {
 	}
 
 	chatCompletionMessage := openai.ChatCompletionMessage{
-		Role:      msg.Role,
-		Content:   msg.Content,
-		ToolCalls: toolCalls,
+		Role:       msg.Role,
+		Content:    msg.Content,
+		ToolCalls:  toolCalls,
+		ToolCallID: msg.ToolCallID,
 	}
-	if len(msg.ToolCalls) > 0 {
+	if len(msg.ToolCalls) > 0 && msg.ToolCallID == "" {
 		chatCompletionMessage.ToolCallID = msg.ToolCalls[0].ID
 	}
 	return chatCompletionMessage
@@ -256,8 +259,7 @@ func (s *AIChatService) getProjectStructurePrompt(projectRoot string, toolSchema
 
 	// Create parameters for chatSystemMessage
 	params := ChatSystemMessageParams{
-		WorkspaceFolders:          []string{projectRoot}, // Use project root as workspace folder
-		ChatMode:                  ChatModeAgent,         // Default to agent mode for project-based interactions
+		ChatMode:                  ChatModeAgent, // Default to agent mode for project-based interactions
 		McpTools:                  mcpTools,
 		IncludeXMLToolDefinitions: true,
 		OS:                        "Linux", // Default OS, could be made configurable
@@ -269,6 +271,9 @@ func (s *AIChatService) getProjectStructurePrompt(projectRoot string, toolSchema
 	// Add project-specific information
 	var sb strings.Builder
 	sb.WriteString(systemMsg)
+	sb.WriteString("\n\n")
+	sb.WriteString(directoryBuilder.String())
+	sb.WriteString("\n\n")
 
 	// Add network information if available
 	if project.NetworkID.Valid {
@@ -361,8 +366,9 @@ func (s *AIChatService) StreamChat(
 	s.Logger.Debugf("[StreamChat] projectRoot: %s", projectRoot)
 	s.Logger.Debugf("[StreamChat] systemPrompt: %s", systemPrompt)
 	chatMsgs = append(chatMsgs, AIMessage{
-		Role:    "system",
-		Content: systemPrompt,
+		Role:       "system",
+		Content:    systemPrompt,
+		ToolCallID: "",
 	})
 
 	// Add user and assistant messages, but filter out tool messages from previous iterations
@@ -393,8 +399,9 @@ func (s *AIChatService) StreamChat(
 
 		// Create the message
 		aiMsg := AIMessage{
-			Role:    role,
-			Content: m.Content,
+			Role:       role,
+			Content:    m.Content,
+			ToolCallID: "",
 		}
 
 		// If this is an assistant message, check if it has tool calls and add tool response messages
@@ -425,8 +432,9 @@ func (s *AIChatService) StreamChat(
 
 				// Add tool response message
 				chatMsgs = append(chatMsgs, AIMessage{
-					Role:    "tool",
-					Content: toolResult,
+					Role:       "tool",
+					Content:    toolResult,
+					ToolCallID: fmt.Sprintf("call_%d", tc.ID),
 				})
 			}
 		}
@@ -468,9 +476,10 @@ func (s *AIChatService) StreamChat(
 		// Always create one assistant message per step, even if empty
 		if msg == nil {
 			msg = &AIMessage{
-				Role:      "assistant",
-				Content:   "",
-				ToolCalls: []AIToolCall{},
+				Role:       "assistant",
+				Content:    "",
+				ToolCalls:  []AIToolCall{},
+				ToolCallID: "",
 			}
 		}
 
@@ -554,6 +563,22 @@ func (s *AIChatService) StreamChat(
 				s.Logger.Debugf("[StreamChat] Failed to persist tool call: %v", err)
 			}
 
+			// Add tool response message to chat context for the next iteration
+			// This ensures that each tool call is followed by its response message
+			toolResponseContent := resultStr
+			if errStr != nil {
+				toolResponseContent = fmt.Sprintf("Tool call failed: %s", *errStr)
+			}
+
+			// Add tool response message to chatMsgs with the tool call ID
+			chatMsgs = append(chatMsgs, AIMessage{
+				Role:       "tool",
+				Content:    toolResponseContent,
+				ToolCallID: toolCall.ID,
+			})
+
+			s.Logger.Debugf("[StreamChat] Added tool response message for tool call %s: %s", toolCall.ID, toolResponseContent)
+
 			// If validation failed, add a user message to trigger the AI to fix the errors
 			var validationRequired bool
 			var validationMessage string
@@ -579,8 +604,9 @@ func (s *AIChatService) StreamChat(
 				}
 				// Add the validation message to chatMsgs for the next step
 				chatMsgs = append(chatMsgs, AIMessage{
-					Role:    "user",
-					Content: validationMessage,
+					Role:       "user",
+					Content:    validationMessage,
+					ToolCallID: "",
 				})
 				s.Logger.Debugf("[StreamChat] Added validation message: %s", validationMessage)
 			}
@@ -608,9 +634,10 @@ func (s *AIChatService) StreamChat(
 	// Create final assistant message
 	if msg == nil {
 		msg = &AIMessage{
-			Role:      "assistant",
-			Content:   "",
-			ToolCalls: []AIToolCall{},
+			Role:       "assistant",
+			Content:    "",
+			ToolCalls:  []AIToolCall{},
+			ToolCallID: "",
 		}
 	}
 
@@ -1041,7 +1068,6 @@ type InternalToolInfo struct {
 
 // ChatSystemMessageParams contains all parameters needed to generate a system message
 type ChatSystemMessageParams struct {
-	WorkspaceFolders          []string
 	ChatMode                  ChatMode
 	McpTools                  []InternalToolInfo
 	IncludeXMLToolDefinitions bool
@@ -1081,16 +1107,6 @@ Please assist the user with their query.`
 	sb.WriteString("Here is the user's system information:\n")
 	sb.WriteString("<system_info>\n")
 	sb.WriteString(fmt.Sprintf("- %s\n\n", params.OS))
-
-	// Workspace folders
-	sb.WriteString("- The user's workspace contains these folders:\n")
-	if len(params.WorkspaceFolders) > 0 {
-		for _, folder := range params.WorkspaceFolders {
-			sb.WriteString(fmt.Sprintf("%s\n", folder))
-		}
-	} else {
-		sb.WriteString("NO FOLDERS OPEN\n")
-	}
 
 	sb.WriteString("\n</system_info>")
 	sb.WriteString("\n\n\n")
