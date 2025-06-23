@@ -2,24 +2,34 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { ChevronRight, Settings, Shield, Users, Network, Server } from 'lucide-react'
+import { ChevronRight, Settings, Shield, Users, Network, Server, FileText, Lock, Hash, Clock, ListChecks } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useState } from 'react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { PolicyCard } from '@/components/networks/PolicyCard'
+import { CertificateViewer } from '@/components/networks/certificate-viewer'
 
 interface ChannelConfigCardProps {
-	config: any // We'll use any for now, but you should define a proper type
+	config: any
 }
 
 export function ChannelConfigCard({ config }: ChannelConfigCardProps) {
 	const [openSections, setOpenSections] = useState<string[]>([])
-
 	const toggleSection = (section: string) => {
 		setOpenSections((prev) => (prev.includes(section) ? prev.filter((s) => s !== section) : [...prev, section]))
 	}
+
 	const channelGroup = config?.data?.data?.[0]?.payload?.data?.config?.channel_group
 	const consensusType = channelGroup?.groups?.Orderer?.values?.ConsensusType?.value
 	const batchSize = channelGroup?.groups?.Orderer?.values?.BatchSize?.value
 	const batchTimeout = channelGroup?.groups?.Orderer?.values?.BatchTimeout?.value
+	const capabilities = channelGroup?.values?.Capabilities?.value?.capabilities
+	const appCapabilities = channelGroup?.groups?.Application?.values?.Capabilities?.value?.capabilities
+	const ordererCapabilities = channelGroup?.groups?.Orderer?.values?.Capabilities?.value?.capabilities
+	const hashingAlgorithm = channelGroup?.values?.HashingAlgorithm?.value
+	const blockDataHashing = channelGroup?.values?.BlockDataHashingStructure?.value
+	const acls = channelGroup?.groups?.Application?.values?.ACLs?.value?.acls
 
 	if (!channelGroup) return null
 
@@ -31,11 +41,31 @@ export function ChannelConfigCard({ config }: ChannelConfigCardProps) {
 						<Shield className="h-4 w-4 text-muted-foreground" />
 						<span className="font-medium">{name}</span>
 					</div>
-					<Badge variant="outline">{policy.policy?.type === 1 ? 'Signature' : policy.policy?.type === 3 ? 'ImplicitMeta' : 'Unknown'}</Badge>
+					<div className="flex items-center gap-2">
+						<Badge variant="outline">{policy.policy?.type === 1 ? 'Signature' : policy.policy?.type === 3 ? 'ImplicitMeta' : 'Unknown'}</Badge>
+						<Dialog>
+							<DialogTrigger asChild>
+								<Button variant="ghost" size="sm" className="h-6 px-2">
+									<FileText className="h-4 w-4" />
+								</Button>
+							</DialogTrigger>
+							<DialogContent className="max-w-2xl">
+								<DialogHeader>
+									<DialogTitle>Policy Details: {name}</DialogTitle>
+								</DialogHeader>
+								<PolicyCard name={name} policy={policy.policy} modPolicy={policy.mod_policy} />
+							</DialogContent>
+						</Dialog>
+					</div>
 				</div>
 				{policy.policy?.type === 3 && (
 					<div className="text-sm text-muted-foreground pl-6">
 						Rule: {policy.policy.value.rule} of {policy.policy.value.sub_policy}
+					</div>
+				)}
+				{policy.policy?.type === 1 && (
+					<div className="text-sm text-muted-foreground pl-6">
+						Rule: {policy.policy.value.rule.n_out_of.n} out of {policy.policy.value.rule.n_out_of.rules.length} signatures required
 					</div>
 				)}
 			</div>
@@ -68,17 +98,32 @@ export function ChannelConfigCard({ config }: ChannelConfigCardProps) {
 		)
 	}
 
-	const renderAnchorPeers = (anchorPeers: any[]) => {
-		return (
-			<div className="space-y-2 pl-6">
-				{anchorPeers.map((peer, index) => (
-					<div key={index} className="flex items-center gap-2 text-sm text-muted-foreground">
-						<Users className="h-4 w-4" />
-						<span>{`${peer.host}:${peer.port}`}</span>
-					</div>
-				))}
+	const renderACLs = (acls: any) => {
+		return Object.entries(acls || {}).map(([name, acl]: [string, any]) => (
+			<div key={name} className="flex items-center justify-between py-1">
+				<div className="flex items-center gap-2">
+					<Lock className="h-4 w-4 text-muted-foreground" />
+					<span className="font-medium">{name}</span>
+				</div>
+				<Badge variant="outline">{acl.policy_ref}</Badge>
 			</div>
-		)
+		))
+	}
+
+	const decodeBase64Certificate = (base64Cert: string) => {
+		try {
+			const decoded = atob(base64Cert)
+			return decoded
+		} catch (error) {
+			console.error('Error decoding certificate:', error)
+			return 'Error decoding certificate'
+		}
+	}
+
+	const formatCertificate = (cert: string) => {
+		const decoded = decodeBase64Certificate(cert)
+		const lines = decoded.split('\n')
+		return lines.join('\n')
 	}
 
 	const renderOrganizations = (organizations: any) => {
@@ -104,7 +149,65 @@ export function ChannelConfigCard({ config }: ChannelConfigCardProps) {
 						{org.values?.AnchorPeers && (
 							<div>
 								<h4 className="text-sm font-medium mb-2">Anchor Peers</h4>
-								{renderAnchorPeers(org.values.AnchorPeers.value.anchor_peers)}
+								<div className="space-y-2 pl-6">
+									{org.values.AnchorPeers.value.anchor_peers.map((peer: any, index: number) => (
+										<div key={index} className="flex items-center gap-2 text-sm text-muted-foreground">
+											<Network className="h-4 w-4" />
+											<span>{`${peer.host}:${peer.port}`}</span>
+										</div>
+									))}
+								</div>
+							</div>
+						)}
+						{org.values?.MSP && (
+							<div>
+								<h4 className="text-sm font-medium mb-2">MSP Configuration</h4>
+								<div className="space-y-2">
+									<div className="flex items-center gap-2">
+										<FileText className="h-4 w-4 text-muted-foreground" />
+										<span className="text-sm">Name: {org.values.MSP.value.config.name}</span>
+									</div>
+									<Dialog>
+										<DialogTrigger asChild>
+											<Button variant="outline" size="sm" className="w-full">
+												View Certificates
+											</Button>
+										</DialogTrigger>
+										<DialogContent className="max-w-3xl">
+											<DialogHeader>
+												<DialogTitle>MSP Certificates</DialogTitle>
+											</DialogHeader>
+											<div className="space-y-4">
+												<div>
+													<h4 className="text-sm font-medium mb-2">Root Certificates</h4>
+													<div className="space-y-2">
+														{org.values.MSP.value.config.root_certs.map((cert: string, index: number) => (
+															<div key={index} className="space-y-2">
+																<div className="flex justify-between items-center">
+																	<span className="text-xs font-medium">Certificate {index + 1}</span>
+																</div>
+																<CertificateViewer title={`Root Certificate ${index + 1}`} certificate={decodeBase64Certificate(cert)} />
+															</div>
+														))}
+													</div>
+												</div>
+												<div>
+													<h4 className="text-sm font-medium mb-2">TLS Root Certificates</h4>
+													<div className="space-y-2">
+														{org.values.MSP.value.config.tls_root_certs.map((cert: string, index: number) => (
+															<div key={index} className="space-y-2">
+																<div className="flex justify-between items-center">
+																	<span className="text-xs font-medium">TLS Certificate {index + 1}</span>
+																</div>
+																<CertificateViewer title={`TLS Root Certificate ${index + 1}`} certificate={decodeBase64Certificate(cert)} />
+															</div>
+														))}
+													</div>
+												</div>
+											</div>
+										</DialogContent>
+									</Dialog>
+								</div>
 							</div>
 						)}
 					</div>
@@ -125,66 +228,168 @@ export function ChannelConfigCard({ config }: ChannelConfigCardProps) {
 				</div>
 			</div>
 
-			<ScrollArea className="h-[400px] pr-4">
+			<ScrollArea className="h-[600px] pr-4">
 				<div className="space-y-6">
-					{consensusType && (
-						<div>
-							<h3 className="text-sm font-medium mb-3">Consensus Configuration</h3>
-							<div className="space-y-3">
+					{/* Channel Level Configuration */}
+					<div>
+						<h3 className="text-sm font-medium mb-3">Channel Level Configuration</h3>
+						<div className="space-y-4">
+							{capabilities && (
 								<div className="space-y-2">
-									<div className="text-sm">Type: {consensusType.type}</div>
-									<div className="text-sm">State: {consensusType.state}</div>
-									{consensusType.metadata?.options && (
-										<div className="space-y-1">
-											<div className="text-sm font-medium">Options:</div>
-											<div className="pl-4 space-y-1 text-sm text-muted-foreground">
-												<div>Election Tick: {consensusType.metadata.options.election_tick}</div>
-												<div>Heartbeat Tick: {consensusType.metadata.options.heartbeat_tick}</div>
-												<div>Max Inflight Blocks: {consensusType.metadata.options.max_inflight_blocks}</div>
-												<div>Tick Interval: {consensusType.metadata.options.tick_interval}</div>
-											</div>
-										</div>
-									)}
-									{consensusType.metadata?.consenters && (
-										<div>
-											<div className="text-sm font-medium mb-2">Consenters:</div>
-											{renderConsenters(consensusType.metadata.consenters)}
-										</div>
-									)}
+									<div className="flex items-center gap-2">
+										<ListChecks className="h-4 w-4 text-muted-foreground" />
+										<span className="font-medium">Capabilities</span>
+									</div>
+									<div className="pl-6">
+										{Object.keys(capabilities).map((cap) => (
+											<Badge key={cap} variant="secondary" className="mr-2">
+												{cap}
+											</Badge>
+										))}
+									</div>
 								</div>
-								{batchSize && (
-									<div className="space-y-1">
-										<div className="text-sm font-medium">Batch Size:</div>
-										<div className="pl-4 space-y-1 text-sm text-muted-foreground">
-											<div>Max Message Count: {batchSize.max_message_count}</div>
-											<div>Absolute Max Bytes: {batchSize.absolute_max_bytes}</div>
-											<div>Preferred Max Bytes: {batchSize.preferred_max_bytes}</div>
-										</div>
+							)}
+							{hashingAlgorithm && (
+								<div className="space-y-2">
+									<div className="flex items-center gap-2">
+										<Hash className="h-4 w-4 text-muted-foreground" />
+										<span className="font-medium">Hashing Algorithm</span>
 									</div>
-								)}
-								{batchTimeout && (
-									<div className="space-y-1">
-										<div className="text-sm font-medium">Batch Timeout:</div>
-										<div className="pl-4 text-sm text-muted-foreground">{batchTimeout.timeout}</div>
+									<div className="pl-6 text-sm text-muted-foreground">{hashingAlgorithm.name}</div>
+								</div>
+							)}
+							{blockDataHashing && (
+								<div className="space-y-2">
+									<div className="flex items-center gap-2">
+										<Hash className="h-4 w-4 text-muted-foreground" />
+										<span className="font-medium">Block Data Hashing Structure</span>
 									</div>
-								)}
-							</div>
+									<div className="pl-6 text-sm text-muted-foreground">Width: {blockDataHashing.width}</div>
+								</div>
+							)}
 						</div>
-					)}
-
-					<div>
-						<h3 className="text-sm font-medium mb-3">Application Organizations</h3>
-						<div className="space-y-2">{renderOrganizations(channelGroup?.groups?.Application?.groups)}</div>
 					</div>
 
-					<div>
-						<h3 className="text-sm font-medium mb-3">Orderer Organizations</h3>
-						<div className="space-y-2">{renderOrganizations(channelGroup?.groups?.Orderer?.groups)}</div>
-					</div>
-
+					{/* Channel Policies */}
 					<div>
 						<h3 className="text-sm font-medium mb-3">Channel Policies</h3>
 						<div className="space-y-3">{renderPolicies(channelGroup?.policies)}</div>
+					</div>
+
+					{/* Application Section */}
+					<div>
+						<h3 className="text-sm font-medium mb-3">Application Configuration</h3>
+						<div className="space-y-4">
+							{appCapabilities && (
+								<div className="space-y-2">
+									<div className="flex items-center gap-2">
+										<ListChecks className="h-4 w-4 text-muted-foreground" />
+										<span className="font-medium">Capabilities</span>
+									</div>
+									<div className="pl-6">
+										{Object.keys(appCapabilities).map((cap) => (
+											<Badge key={cap} variant="secondary" className="mr-2">
+												{cap}
+											</Badge>
+										))}
+									</div>
+								</div>
+							)}
+							{acls && (
+								<div>
+									<h4 className="text-sm font-medium mb-2">ACLs</h4>
+									<div className="space-y-2">{renderACLs(acls)}</div>
+								</div>
+							)}
+							<div>
+								<h4 className="text-sm font-medium mb-2">Application Policies</h4>
+								<div className="space-y-3">{renderPolicies(channelGroup?.groups?.Application?.policies)}</div>
+							</div>
+							<div>
+								<h4 className="text-sm font-medium mb-2">Application Organizations</h4>
+								<div className="space-y-2">{renderOrganizations(channelGroup?.groups?.Application?.groups)}</div>
+							</div>
+						</div>
+					</div>
+
+					{/* Orderer Section */}
+					<div>
+						<h3 className="text-sm font-medium mb-3">Orderer Configuration</h3>
+						<div className="space-y-4">
+							{ordererCapabilities && (
+								<div className="space-y-2">
+									<div className="flex items-center gap-2">
+										<ListChecks className="h-4 w-4 text-muted-foreground" />
+										<span className="font-medium">Capabilities</span>
+									</div>
+									<div className="pl-6">
+										{Object.keys(ordererCapabilities).map((cap) => (
+											<Badge key={cap} variant="secondary" className="mr-2">
+												{cap}
+											</Badge>
+										))}
+									</div>
+								</div>
+							)}
+							{consensusType && (
+								<div>
+									<h4 className="text-sm font-medium mb-2">Consensus Configuration</h4>
+									<div className="space-y-3">
+										<div className="space-y-2">
+											<div className="flex items-center gap-2">
+												<Clock className="h-4 w-4 text-muted-foreground" />
+												<span className="font-medium">Type: {consensusType.type}</span>
+											</div>
+											<div className="flex items-center gap-2">
+												<Clock className="h-4 w-4 text-muted-foreground" />
+												<span className="font-medium">State: {consensusType.state}</span>
+											</div>
+											{consensusType.metadata?.options && (
+												<div className="space-y-1 pl-6">
+													<div className="text-sm font-medium">Options:</div>
+													<div className="space-y-1 text-sm text-muted-foreground">
+														<div>Election Tick: {consensusType.metadata.options.election_tick}</div>
+														<div>Heartbeat Tick: {consensusType.metadata.options.heartbeat_tick}</div>
+														<div>Max Inflight Blocks: {consensusType.metadata.options.max_inflight_blocks}</div>
+														<div>Tick Interval: {consensusType.metadata.options.tick_interval}</div>
+													</div>
+												</div>
+											)}
+											{consensusType.metadata?.consenters && (
+												<div>
+													<div className="text-sm font-medium mb-2">Consenters:</div>
+													{renderConsenters(consensusType.metadata.consenters)}
+												</div>
+											)}
+										</div>
+									</div>
+								</div>
+							)}
+							{batchSize && (
+								<div>
+									<h4 className="text-sm font-medium mb-2">Batch Size</h4>
+									<div className="space-y-1 pl-6">
+										<div className="text-sm text-muted-foreground">Max Message Count: {batchSize.max_message_count}</div>
+										<div className="text-sm text-muted-foreground">Absolute Max Bytes: {batchSize.absolute_max_bytes}</div>
+										<div className="text-sm text-muted-foreground">Preferred Max Bytes: {batchSize.preferred_max_bytes}</div>
+									</div>
+								</div>
+							)}
+							{batchTimeout && (
+								<div>
+									<h4 className="text-sm font-medium mb-2">Batch Timeout</h4>
+									<div className="pl-6 text-sm text-muted-foreground">{batchTimeout.timeout}</div>
+								</div>
+							)}
+							<div>
+								<h4 className="text-sm font-medium mb-2">Orderer Policies</h4>
+								<div className="space-y-3">{renderPolicies(channelGroup?.groups?.Orderer?.policies)}</div>
+							</div>
+							<div>
+								<h4 className="text-sm font-medium mb-2">Orderer Organizations</h4>
+								<div className="space-y-2">{renderOrganizations(channelGroup?.groups?.Orderer?.groups)}</div>
+							</div>
+						</div>
 					</div>
 				</div>
 			</ScrollArea>
