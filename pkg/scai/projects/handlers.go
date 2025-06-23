@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"path/filepath"
 	"strconv"
 
 	"github.com/chainlaunch/chainlaunch/pkg/errors"
@@ -444,7 +443,10 @@ func (h *ProjectsHandler) GetProjectCommits(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	projectDir := filepath.Join(h.Service.ProjectsDir, proj.Slug)
+	projectDir, err := h.Service.GetProjectDirectory(proj)
+	if err != nil {
+		return errors.NewInternalError("failed to get safe project directory", err, nil)
+	}
 	maxCommits := page * pageSize
 	commits, err := versionmanagement.ListCommitsWithFileChanges(r.Context(), projectDir, maxCommits)
 	if err != nil {
@@ -508,7 +510,10 @@ func (h *ProjectsHandler) GetProjectCommitDetail(w http.ResponseWriter, r *http.
 		return errors.NewInternalError("failed to get project", err, nil)
 	}
 
-	projectDir := filepath.Join(h.Service.ProjectsDir, proj.Slug)
+	projectDir, err := h.Service.GetProjectDirectory(proj)
+	if err != nil {
+		return errors.NewInternalError("failed to get safe project directory", err, nil)
+	}
 	commits, err := versionmanagement.ListCommitsWithFileChanges(r.Context(), projectDir, 1000)
 	if err != nil {
 		return errors.NewInternalError("failed to get commits", err, nil)
@@ -571,7 +576,10 @@ func (h *ProjectsHandler) GetProjectFileDiff(w http.ResponseWriter, r *http.Requ
 		return errors.NewInternalError("failed to get project", err, nil)
 	}
 
-	projectDir := filepath.Join(h.Service.ProjectsDir, proj.Slug)
+	projectDir, err := h.Service.GetProjectDirectory(proj)
+	if err != nil {
+		return errors.NewInternalError("failed to get safe project directory", err, nil)
+	}
 	diff, err := versionmanagement.GetFileDiffBetweenCommits(r.Context(), projectDir, file, from, to)
 	if err != nil {
 		return errors.NewInternalError("failed to get diff", err, nil)
@@ -620,7 +628,10 @@ func (h *ProjectsHandler) GetProjectFileAtCommit(w http.ResponseWriter, r *http.
 		return errors.NewInternalError("failed to get project", err, nil)
 	}
 
-	projectDir := filepath.Join(h.Service.ProjectsDir, proj.Slug)
+	projectDir, err := h.Service.GetProjectDirectory(proj)
+	if err != nil {
+		return errors.NewInternalError("failed to get safe project directory", err, nil)
+	}
 	content, err := versionmanagement.GetFileAtCommit(r.Context(), projectDir, file, commit)
 	if err != nil {
 		return errors.NewInternalError("failed to get file at commit", err, nil)

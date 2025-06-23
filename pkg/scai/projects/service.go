@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sync"
 	"time"
 
@@ -176,7 +177,11 @@ func (s *ProjectsService) CreateProject(ctx context.Context, name, description, 
 
 	// Download boilerplate if specified
 	if boilerplate != "" {
-		projectDir := filepath.Join(s.ProjectsDir, slug)
+		projectDir, err := s.safeJoinPath(slug)
+		if err != nil {
+			zap.L().Error("failed to build safe project path for boilerplate", zap.String("slug", slug), zap.Error(err))
+			return Project{}, err
+		}
 		if err := s.BoilerplateService.DownloadBoilerplate(ctx, boilerplate, projectDir); err != nil {
 			zap.L().Error("failed to download boilerplate", zap.String("boilerplate", boilerplate), zap.Error(err))
 			return Project{}, err
@@ -254,10 +259,15 @@ func (s *ProjectsService) DeleteProject(ctx context.Context, id int64) error {
 	}
 
 	// Clean up project files
-	projectDir := filepath.Join(s.ProjectsDir, proj.Slug)
-	if err := os.RemoveAll(projectDir); err != nil {
-		zap.L().Warn("failed to remove project directory", zap.Int64("id", id), zap.String("slug", proj.Slug), zap.Error(err))
-		// Continue even if file cleanup fails
+	projectDir, err := s.safeJoinPath(proj.Slug)
+	if err != nil {
+		zap.L().Warn("failed to build safe project path for cleanup", zap.Int64("id", id), zap.String("slug", proj.Slug), zap.Error(err))
+		// Continue with deletion even if path validation fails
+	} else {
+		if err := os.RemoveAll(projectDir); err != nil {
+			zap.L().Warn("failed to remove project directory", zap.Int64("id", id), zap.String("slug", proj.Slug), zap.Error(err))
+			// Continue even if file cleanup fails
+		}
 	}
 
 	zap.L().Info("deleted project", zap.Int64("id", id), zap.String("name", proj.Name), zap.String("slug", proj.Slug), zap.String("request_id", getReqID(ctx)))
@@ -462,9 +472,9 @@ func (s *ProjectsService) StartProjectServer(ctx context.Context, projectID int6
 		return fmt.Errorf("failed to get boilerplate runner: %w", err)
 	}
 
-	projectDir, err := filepath.Abs(filepath.Join(s.ProjectsDir, project.Slug))
+	projectDir, err := s.safeJoinPath(project.Slug)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to build safe project path: %w", err)
 	}
 
 	// Get the host IP for smart contract deployment
@@ -652,8 +662,11 @@ func (s *ProjectsService) DownloadProjectAsZip(ctx context.Context, projectID in
 		return fmt.Errorf("failed to get project: %w", err)
 	}
 
-	// Build project directory path
-	projectDir := filepath.Join(s.ProjectsDir, project.Slug)
+	// Build project directory path safely
+	projectDir, err := s.safeJoinPath(project.Slug)
+	if err != nil {
+		return fmt.Errorf("failed to build safe project path: %w", err)
+	}
 
 	// Check if project directory exists
 	if _, err := os.Stat(projectDir); os.IsNotExist(err) {
@@ -758,4 +771,69 @@ func (s *ProjectsService) DownloadProjectAsZip(ctx context.Context, projectID in
 	}
 
 	return nil
+}
+
+// validateSlug ensures a slug is safe for use in file paths
+// It checks that the slug only contains lowercase letters, numbers, and hyphens
+// and doesn't contain any path traversal characters
+func validateSlug(slug string) error {
+	if slug == "" {
+		return fmt.Errorf("slug cannot be empty")
+	}
+
+	// Check for path traversal characters
+	if strings.Contains(slug, "..") || strings.Contains(slug, "/") || strings.Contains(slug, "\\") {
+		return fmt.Errorf("slug contains invalid path characters")
+	}
+
+	// Validate slug format: lowercase letters, numbers, and hyphens only
+	validSlugRegex := regexp.MustCompile(`^[a-z0-9-]+$`)
+	if !validSlugRegex.MatchString(slug) {
+		return fmt.Errorf("slug contains invalid characters, only lowercase letters, numbers, and hyphens are allowed")
+	}
+
+	// Ensure slug doesn't start or end with hyphen
+	if strings.HasPrefix(slug, "-") || strings.HasSuffix(slug, "-") {
+		return fmt.Errorf("slug cannot start or end with hyphen")
+	}
+
+	return nil
+}
+
+// safeJoinPath safely joins the projects directory with a validated slug
+func (s *ProjectsService) safeJoinPath(slug string) (string, error) {
+	if err := validateSlug(slug); err != nil {
+		return "", fmt.Errorf("invalid slug: %w", err)
+	}
+
+	// Use filepath.Join and then validate the result is within the projects directory
+	projectPath := filepath.Join(s.ProjectsDir, slug)
+
+	// Ensure the resulting path is within the projects directory (prevents path traversal)
+	absProjectsDir, err := filepath.Abs(s.ProjectsDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute path for projects directory: %w", err)
+	}
+
+	absProjectPath, err := filepath.Abs(projectPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute path for project: %w", err)
+	}
+
+	// Check if the project path is within the projects directory
+	if !strings.HasPrefix(absProjectPath, absProjectsDir) {
+		return "", fmt.Errorf("project path is outside projects directory")
+	}
+
+	return projectPath, nil
+}
+
+// GetProjectDirectory returns the safe project directory path for a given project
+func (s *ProjectsService) GetProjectDirectory(project Project) (string, error) {
+	return s.safeJoinPath(project.Slug)
+}
+
+// GetProjectDirectoryBySlug returns the safe project directory path for a given slug
+func (s *ProjectsService) GetProjectDirectoryBySlug(slug string) (string, error) {
+	return s.safeJoinPath(slug)
 }

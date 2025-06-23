@@ -90,8 +90,79 @@ func (s *BoilerplateService) loadConfigs() error {
 	return nil
 }
 
+// validateTargetPath ensures the target directory is safe and within allowed bounds
+func (s *BoilerplateService) validateTargetPath(targetDir string) (string, error) {
+	if targetDir == "" {
+		return "", fmt.Errorf("target directory cannot be empty")
+	}
+
+	// Get absolute path of target directory
+	absTargetDir, err := filepath.Abs(targetDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute path for target directory: %w", err)
+	}
+
+	// Check for path traversal attempts
+	if strings.Contains(targetDir, "..") || strings.Contains(targetDir, "~") {
+		return "", fmt.Errorf("target directory contains invalid path traversal characters")
+	}
+
+	// Additional validation: ensure the path doesn't contain suspicious patterns
+	suspiciousPatterns := []string{"../", "..\\", "~", "/etc/", "/var/", "/usr/", "/root/", "/home/"}
+	for _, pattern := range suspiciousPatterns {
+		if strings.Contains(strings.ToLower(absTargetDir), pattern) {
+			return "", fmt.Errorf("target directory contains suspicious path pattern: %s", pattern)
+		}
+	}
+
+	return absTargetDir, nil
+}
+
+// sanitizeArchivePath ensures the archive entry path is safe and doesn't contain path traversal
+func (s *BoilerplateService) sanitizeArchivePath(archivePath, targetDir string) (string, error) {
+	// Clean the path to remove any ".." or "." components
+	cleanPath := filepath.Clean(archivePath)
+
+	// Check for path traversal attempts
+	if strings.Contains(cleanPath, "..") {
+		return "", fmt.Errorf("archive path contains path traversal attempt: %s", archivePath)
+	}
+
+	// Ensure the path doesn't start with a slash (absolute path)
+	if filepath.IsAbs(cleanPath) {
+		return "", fmt.Errorf("archive path is absolute, which is not allowed: %s", archivePath)
+	}
+
+	// Join with target directory and validate the result
+	fullPath := filepath.Join(targetDir, cleanPath)
+
+	// Ensure the resulting path is within the target directory
+	absTargetDir, err := filepath.Abs(targetDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute target directory: %w", err)
+	}
+
+	absFullPath, err := filepath.Abs(fullPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute full path: %w", err)
+	}
+
+	// Check if the full path is within the target directory
+	if !strings.HasPrefix(absFullPath, absTargetDir) {
+		return "", fmt.Errorf("archive path would escape target directory: %s", archivePath)
+	}
+
+	return fullPath, nil
+}
+
 // downloadContents recursively downloads files and directories from GitHub
 func (s *BoilerplateService) downloadContents(url string, targetDir string) error {
+	// Validate target directory
+	absTargetDir, err := s.validateTargetPath(targetDir)
+	if err != nil {
+		return fmt.Errorf("invalid target directory: %w", err)
+	}
+
 	// Make the request to GitHub API
 	resp, err := http.Get(url)
 	if err != nil {
@@ -122,7 +193,11 @@ func (s *BoilerplateService) downloadContents(url string, targetDir string) erro
 
 	// Process each item
 	for _, item := range contents {
-		targetPath := filepath.Join(targetDir, item.Name)
+		// Sanitize the target path
+		targetPath, err := s.sanitizeArchivePath(item.Name, absTargetDir)
+		if err != nil {
+			return fmt.Errorf("failed to sanitize path for %s: %w", item.Name, err)
+		}
 
 		if item.Type == "dir" {
 			// Create directory and recursively download its contents
@@ -173,8 +248,14 @@ func (s *BoilerplateService) DownloadBoilerplate(ctx context.Context, name, targ
 		return err
 	}
 
+	// Validate and sanitize the target directory
+	absTargetDir, err := s.validateTargetPath(targetDir)
+	if err != nil {
+		return fmt.Errorf("invalid target directory: %w", err)
+	}
+
 	// Create the target directory if it doesn't exist
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
+	if err := os.MkdirAll(absTargetDir, 0755); err != nil {
 		return fmt.Errorf("failed to create target directory: %w", err)
 	}
 
@@ -226,8 +307,13 @@ func (s *BoilerplateService) DownloadBoilerplate(ctx context.Context, name, targ
 		}
 
 		// Remove the root directory prefix
-		targetPath := strings.TrimPrefix(header.Name, fmt.Sprintf("%s-main/", config.RepoName))
-		targetPath = filepath.Join(targetDir, targetPath)
+		relativePath := strings.TrimPrefix(header.Name, fmt.Sprintf("%s-main/", config.RepoName))
+
+		// Sanitize the archive path to prevent zip slip
+		targetPath, err := s.sanitizeArchivePath(relativePath, absTargetDir)
+		if err != nil {
+			return fmt.Errorf("failed to sanitize archive path %s: %w", header.Name, err)
+		}
 
 		switch header.Typeflag {
 		case tar.TypeDir:

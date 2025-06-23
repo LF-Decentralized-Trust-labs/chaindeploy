@@ -82,6 +82,12 @@ func (d *BinaryDownloader) GetBinaryPath(binaryType BinaryType, version string) 
 
 // downloadAndExtractBinaries downloads and extracts the Fabric binaries
 func (d *BinaryDownloader) downloadAndExtractBinaries(version, destDir string) error {
+	// Validate destination directory
+	absDestDir, err := filepath.Abs(destDir)
+	if err != nil {
+		return fmt.Errorf("failed to get absolute path for destination directory: %w", err)
+	}
+
 	// Construct download URL
 	arch := runtime.GOARCH
 	runtimeOs := runtime.GOOS
@@ -142,27 +148,19 @@ func (d *BinaryDownloader) downloadAndExtractBinaries(version, destDir string) e
 			continue
 		}
 
-		// Check for directory traversal
-		if strings.Contains(header.Name, "..") {
-			return fmt.Errorf("invalid file path in tar: %s", header.Name)
-		}
-
-		// Get the target path
-		targetPath := filepath.Join(destDir, header.Name)
-		cleanTargetPath := filepath.Clean(targetPath)
-
-		// Ensure the target path is within the destination directory
-		if !strings.HasPrefix(cleanTargetPath, filepath.Clean(destDir)+string(os.PathSeparator)) {
-			return fmt.Errorf("invalid file path in tar: %s", header.Name)
+		// Sanitize the archive path to prevent zip slip
+		targetPath, err := d.sanitizeArchivePath(header.Name, absDestDir)
+		if err != nil {
+			return fmt.Errorf("failed to sanitize archive path %s: %w", header.Name, err)
 		}
 
 		// Create directory structure
-		if err := os.MkdirAll(filepath.Dir(cleanTargetPath), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
 			return fmt.Errorf("failed to create directory structure: %w", err)
 		}
 
 		// Create file
-		f, err := os.OpenFile(cleanTargetPath, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
+		f, err := os.OpenFile(targetPath, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
 		if err != nil {
 			return fmt.Errorf("failed to create file: %w", err)
 		}
@@ -176,11 +174,48 @@ func (d *BinaryDownloader) downloadAndExtractBinaries(version, destDir string) e
 
 		// Make binary executable if in bin directory
 		if strings.HasPrefix(header.Name, "bin/") {
-			if err := os.Chmod(cleanTargetPath, 0755); err != nil {
+			if err := os.Chmod(targetPath, 0755); err != nil {
 				return fmt.Errorf("failed to make binary executable: %w", err)
 			}
 		}
 	}
 
 	return nil
+}
+
+// sanitizeArchivePath ensures the archive entry path is safe and doesn't contain path traversal
+func (d *BinaryDownloader) sanitizeArchivePath(archivePath, targetDir string) (string, error) {
+	// Clean the path to remove any ".." or "." components
+	cleanPath := filepath.Clean(archivePath)
+
+	// Check for path traversal attempts
+	if strings.Contains(cleanPath, "..") {
+		return "", fmt.Errorf("archive path contains path traversal attempt: %s", archivePath)
+	}
+
+	// Ensure the path doesn't start with a slash (absolute path)
+	if filepath.IsAbs(cleanPath) {
+		return "", fmt.Errorf("archive path is absolute, which is not allowed: %s", archivePath)
+	}
+
+	// Join with target directory and validate the result
+	fullPath := filepath.Join(targetDir, cleanPath)
+
+	// Ensure the resulting path is within the target directory
+	absTargetDir, err := filepath.Abs(targetDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute target directory: %w", err)
+	}
+
+	absFullPath, err := filepath.Abs(fullPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute full path: %w", err)
+	}
+
+	// Check if the full path is within the target directory
+	if !strings.HasPrefix(absFullPath, absTargetDir) {
+		return "", fmt.Errorf("archive path would escape target directory: %s", archivePath)
+	}
+
+	return fullPath, nil
 }

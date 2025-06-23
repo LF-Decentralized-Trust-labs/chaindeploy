@@ -105,7 +105,7 @@ func (h *FilesHandler) getProjectRoot(r *http.Request) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("project not found: %w", err)
 	}
-	return filepath.Join(h.ProjectsService.ProjectsDir, proj.Slug), nil
+	return h.ProjectsService.GetProjectDirectory(proj)
 }
 
 // ListFiles godoc

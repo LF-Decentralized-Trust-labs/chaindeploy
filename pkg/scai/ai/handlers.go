@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -566,9 +565,13 @@ func (h *AIHandler) Chat(w http.ResponseWriter, r *http.Request) error {
 		// Get project directory from projectID
 		proj, err := h.Projects.GetProject(ctx, projectID)
 		if err == nil {
-			projectDir := filepath.Join(h.Projects.ProjectsDir, proj.Slug)
-			if err := vm.CommitChange(ctx, projectDir, msg); err != nil {
-				fmt.Printf("Failed to commit session changes: %v\n", err)
+			projectDir, err := h.Projects.GetProjectDirectory(proj)
+			if err != nil {
+				fmt.Printf("Failed to get safe project directory: %v\n", err)
+			} else {
+				if err := vm.CommitChange(ctx, projectDir, msg); err != nil {
+					fmt.Printf("Failed to commit session changes: %v\n", err)
+				}
 			}
 		}
 	}
