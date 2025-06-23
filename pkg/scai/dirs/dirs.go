@@ -53,8 +53,18 @@ func (s *DirsService) CreateDir(project, dir string) error {
 	if dir == "" {
 		return errors.New("dir is required")
 	}
-	base := filepath.Join(project, dir)
-	return os.MkdirAll(base, 0755)
+	// Normalize and validate the directory name
+	cleanDir := filepath.Clean(dir)
+	if strings.Contains(cleanDir, "..") || strings.Contains(cleanDir, "/") || strings.Contains(cleanDir, "\\") {
+		return errors.New("invalid directory name")
+	}
+	// Ensure the resolved path is within the project directory
+	base := filepath.Join(project, cleanDir)
+	absBase, err := filepath.Abs(base)
+	if err != nil || !strings.HasPrefix(absBase, filepath.Clean(project)) {
+		return errors.New("directory path is outside the project scope")
+	}
+	return os.MkdirAll(absBase, 0755)
 }
 
 func (s *DirsService) DeleteDir(project, dir string) error {
