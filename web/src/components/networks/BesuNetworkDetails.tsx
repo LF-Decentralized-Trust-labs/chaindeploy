@@ -113,17 +113,17 @@ export function BesuNetworkDetails({ network }: BesuNetworkDetailsProps) {
 									<Activity className="h-3 w-3" />
 									{network.status}
 								</Badge>
+								<Badge variant="outline" className="text-sm flex items-center gap-1">
+									<BesuIcon className="h-3 w-3" />
+									{network.platform}
+								</Badge>
 							</div>
 							<p className="text-muted-foreground">
 								Created <TimeAgo date={network.createdAt!} />
 							</p>
 						</div>
 
-						<div className="flex items-center gap-2">
-							<Badge variant="outline" className="text-sm">
-								{network.platform}
-							</Badge>
-						</div>
+						<div className="flex items-center gap-2"> </div>
 					</div>
 				</div>
 
