@@ -11,6 +11,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"net"
 	"os"
@@ -972,6 +973,9 @@ func (s *OrganizationService) ListKeys(ctx context.Context, orgID int64) (map[st
 
 // GetKey returns a specific key by ID
 func (s *OrganizationService) GetKey(ctx context.Context, keyID int64) (*models.KeyResponse, error) {
+	if keyID < math.MinInt32 || keyID > math.MaxInt32 {
+		return nil, fmt.Errorf("key ID %d is out of range for int type", keyID)
+	}
 	key, err := s.keyManagement.GetKey(ctx, int(keyID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get key: %w", err)
@@ -981,6 +985,9 @@ func (s *OrganizationService) GetKey(ctx context.Context, keyID int64) (*models.
 
 // DeleteKey deletes a key and its associated certificate
 func (s *OrganizationService) DeleteKey(ctx context.Context, keyID int64) error {
+	if keyID < math.MinInt32 || keyID > math.MaxInt32 {
+		return fmt.Errorf("key ID %d is out of range for int type", keyID)
+	}
 	err := s.keyManagement.DeleteKey(ctx, int(keyID))
 	if err != nil {
 		return fmt.Errorf("failed to delete key: %w", err)
