@@ -784,7 +784,7 @@ export default function FabricNetworkDetails({ network }: FabricNetworkDetailsPr
 	const NetworkIcon = network.platform === 'FABRIC' ? FabricIcon : BesuIcon
 	return (
 		<div className="flex-1 p-8">
-			<div className="max-w-4xl mx-auto">
+			<div className="max-w-6xl mx-auto">
 				<div className="flex items-center gap-2 text-muted-foreground mb-8">
 					<Button variant="ghost" size="sm" asChild>
 						<Link to="/networks">
