@@ -8,4 +8,9 @@ export default defineConfig({
 		title: 'ChainLaunch',
 		favicon: './public/favicon.png',
 	},
+	performance: {
+		bundleAnalyze: {
+			openAnalyzer: true,
+		},
+	},
 })

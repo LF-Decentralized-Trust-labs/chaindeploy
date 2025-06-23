@@ -210,11 +210,9 @@ export default function NodeDetailPage() {
 	const renewCertificates = useMutation({
 		...postNodesByIdCertificatesRenewMutation(),
 		onSuccess: () => {
-			toast.success('Certificates renewed successfully')
+			refetchEvents()
 			refetch()
-		},
-		onError: (error: any) => {
-			toast.error(`Failed to renew certificates: ${(error as any).error.message}`)
+			setShowRenewCertDialog(false)
 		},
 	})
 
@@ -256,10 +254,11 @@ export default function NodeDetailPage() {
 	const handleRenewCertificates = async () => {
 		if (!node) return
 		try {
-			await renewCertificates.mutateAsync({ path: { id: node.id! } })
-			refetchEvents()
-			refetch()
-			setShowRenewCertDialog(false)
+			await toast.promise(renewCertificates.mutateAsync({ path: { id: node.id! } }), {
+				loading: 'Renewing certificates...',
+				success: 'Certificates renewed successfully',
+				error: (e) => `Failed to renew certificates: ${e.message}`,
+			})
 		} catch (error) {
 			// Error handling is done in the mutation callbacks
 		}

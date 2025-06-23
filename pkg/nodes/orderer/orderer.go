@@ -1302,7 +1302,7 @@ func (o *LocalOrderer) RenewCertificates(ordererDeploymentConfig *types.FabricOr
 
 	// Renew signing certificate
 	validFor := kmodels.Duration(time.Hour * 24 * 365) // 1 year validity
-	_, err = o.keyService.RenewCertificate(ctx, int(ordererDeploymentConfig.SignKeyID), kmodels.CertificateRequest{
+	renewedSignKeyDB, err := o.keyService.RenewCertificate(ctx, int(ordererDeploymentConfig.SignKeyID), kmodels.CertificateRequest{
 		CommonName:         o.opts.ID,
 		Organization:       []string{org.MspID},
 		OrganizationalUnit: []string{"orderer"},
@@ -1310,7 +1310,7 @@ func (o *LocalOrderer) RenewCertificates(ordererDeploymentConfig *types.FabricOr
 		IsCA:               false,
 		ValidFor:           validFor,
 		KeyUsage:           x509.KeyUsageCertSign,
-		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		ExtKeyUsage:        []x509.ExtKeyUsage{},
 	})
 	if err != nil {
 		return fmt.Errorf("failed to renew signing certificate: %w", err)
@@ -1348,7 +1348,7 @@ func (o *LocalOrderer) RenewCertificates(ordererDeploymentConfig *types.FabricOr
 		ipAddresses = append(ipAddresses, net.ParseIP("127.0.0.1"))
 	}
 
-	_, err = o.keyService.RenewCertificate(ctx, int(ordererDeploymentConfig.TLSKeyID), kmodels.CertificateRequest{
+	renewedTlsKeyDB, err := o.keyService.RenewCertificate(ctx, int(ordererDeploymentConfig.TLSKeyID), kmodels.CertificateRequest{
 		CommonName:         o.opts.ID,
 		Organization:       []string{org.MspID},
 		OrganizationalUnit: []string{"orderer"},
@@ -1356,8 +1356,8 @@ func (o *LocalOrderer) RenewCertificates(ordererDeploymentConfig *types.FabricOr
 		IPAddresses:        ipAddresses,
 		IsCA:               false,
 		ValidFor:           validFor,
-		KeyUsage:           x509.KeyUsageCertSign,
-		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		KeyUsage:           x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature | x509.KeyUsageKeyAgreement,
+		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
 	})
 	if err != nil {
 		return fmt.Errorf("failed to renew TLS certificate: %w", err)
@@ -1381,8 +1381,8 @@ func (o *LocalOrderer) RenewCertificates(ordererDeploymentConfig *types.FabricOr
 
 	err = o.writeCertificatesAndKeys(
 		mspConfigPath,
-		tlsKeyDB,
-		signKeyDB,
+		renewedTlsKeyDB,  // Use the renewed TLS certificate
+		renewedSignKeyDB, // Use the renewed signing certificate
 		tlsKey,
 		signKey,
 		signCAKey,

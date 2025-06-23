@@ -1,4 +1,3 @@
-basePath: /api/v1
 definitions:
   ai.ChatMessage:
     properties:
@@ -1040,6 +1039,36 @@ definitions:
       protocol:
         type: string
     type: object
+  handler.CreateKeyRequest:
+    properties:
+      description:
+        example: New admin key for organization
+        type: string
+      dnsNames:
+        example:
+        - admin.example.com
+        items:
+          type: string
+        type: array
+      ipAddresses:
+        example:
+        - 192.168.1.100
+        items:
+          type: string
+        type: array
+      name:
+        example: new-admin-key
+        type: string
+      role:
+        enum:
+        - admin
+        - client
+        example: admin
+        type: string
+    required:
+    - name
+    - role
+    type: object
   handler.CreateOrganizationRequest:
     properties:
       description:
@@ -1059,6 +1088,51 @@ definitions:
       serialNumber:
         description: Hex string of the serial number
         type: string
+    type: object
+  handler.KeyResponse:
+    properties:
+      algorithm:
+        type: string
+      certificate:
+        type: string
+      createdAt:
+        type: string
+      description:
+        type: string
+      ethereumAddress:
+        type: string
+      expiresAt:
+        type: string
+      id:
+        type: integer
+      lastRotatedAt:
+        type: string
+      name:
+        type: string
+      provider:
+        properties:
+          id:
+            type: integer
+          name:
+            type: string
+        type: object
+      publicKey:
+        type: string
+      sha1Fingerprint:
+        type: string
+      sha256Fingerprint:
+        type: string
+      signingKeyId:
+        type: integer
+      status:
+        type: string
+    type: object
+  handler.ListKeysResponse:
+    properties:
+      keys:
+        additionalProperties:
+          $ref: '#/definitions/handler.KeyResponse'
+        type: object
     type: object
   handler.OrganizationResponse:
     properties:
@@ -1103,6 +1177,44 @@ definitions:
         type: integer
       offset:
         type: integer
+    type: object
+  handler.RenewCertificateRequest:
+    properties:
+      caType:
+        enum:
+        - tls
+        - sign
+        example: sign
+        type: string
+      dnsNames:
+        example:
+        - admin.example.com
+        items:
+          type: string
+        type: array
+      ipAddresses:
+        example:
+        - 192.168.1.100
+        items:
+          type: string
+        type: array
+      keyId:
+        example: 123
+        type: integer
+      role:
+        enum:
+        - admin
+        - client
+        example: admin
+        type: string
+      validFor:
+        description: Duration in Go format (e.g., "8760h" for 1 year)
+        example: 8760h
+        type: string
+    required:
+    - caType
+    - keyId
+    - role
     type: object
   handler.RevokeCertificateByPEMRequest:
     properties:
@@ -3678,20 +3790,8 @@ definitions:
     - KeyUsageCRLSign
     - KeyUsageEncipherOnly
     - KeyUsageDecipherOnly
-host: localhost:8100
 info:
-  contact:
-    email: support@chainlaunch.dev
-    name: API Support
-    url: http://chainlaunch.dev/support
-  description: ChainLaunch API provides services for managing blockchain networks
-    and cryptographic keys
-  license:
-    name: Apache 2.0
-    url: http://www.apache.org/licenses/LICENSE-2.0.html
-  termsOfService: http://swagger.io/terms/
-  title: ChainLaunch API
-  version: "1.0"
+  contact: {}
 paths:
   /ai/{projectId}/chat:
     post:
@@ -8065,6 +8165,220 @@ paths:
       summary: Revoke a certificate using its serial number
       tags:
       - Organizations
+  /organizations/{id}/keys:
+    get:
+      consumes:
+      - application/json
+      description: Get all keys associated with an organization
+      parameters:
+      - description: Organization ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.ListKeysResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List all keys for an organization
+      tags:
+      - Organizations
+    post:
+      consumes:
+      - application/json
+      description: Create a new key with a specific role (admin or client) for an
+        organization
+      parameters:
+      - description: Organization ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Key creation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CreateKeyRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handler.KeyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a new key for an organization
+      tags:
+      - Organizations
+  /organizations/{id}/keys/{keyId}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a key and its associated certificate
+      parameters:
+      - description: Organization ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Key ID
+        in: path
+        name: keyId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete a key
+      tags:
+      - Organizations
+    get:
+      consumes:
+      - application/json
+      description: Get a specific key by its ID
+      parameters:
+      - description: Organization ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Key ID
+        in: path
+        name: keyId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.KeyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get a specific key by ID
+      tags:
+      - Organizations
+  /organizations/{id}/keys/renew:
+    post:
+      consumes:
+      - application/json
+      description: Renew a certificate for a specific key in an organization
+      parameters:
+      - description: Organization ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Certificate renewal request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.RenewCertificateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.KeyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Renew a certificate for a key
+      tags:
+      - Organizations
   /organizations/{id}/revoked-certificates:
     get:
       consumes:
@@ -9810,51 +10124,4 @@ paths:
       summary: Update user role
       tags:
       - Users
-schemes:
-- http
-- https
-securityDefinitions:
-  BasicAuth:
-    type: basic
-  CookieAuth:
-    in: cookie
-    name: session_id
-    type: apiKey
 swagger: "2.0"
-tags:
-- description: Audit management operations
-  name: Audit
-- description: Chaincode project management operations
-  name: Chaincode Projects
-- description: User authentication and authorization operations
-  name: Authentication
-- description: Backup schedule configuration and management
-  name: Backup Schedules
-- description: Backup target location configuration and management
-  name: Backup Targets
-- description: Backup management operations
-  name: Backups
-- description: Hyperledger Besu network management operations
-  name: Besu Networks
-- description: Hyperledger Fabric network management operations
-  name: Fabric Networks
-- description: Cryptographic key management operations
-  name: Keys
-- description: Metrics management operations
-  name: Metrics
-- description: Network node management operations
-  name: Nodes
-- description: System notification configuration and management
-  name: Notifications
-- description: Organization management operations
-  name: Organizations
-- description: Plugin management operations
-  name: Plugins
-- description: Key provider management operations
-  name: Providers
-- description: Settings management operations
-  name: Settings
-- description: Smart contract management operations
-  name: SmartContracts
-- description: User account management operations
-  name: Users

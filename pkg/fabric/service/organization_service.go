@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -229,6 +230,7 @@ func (s *OrganizationService) CreateOrganization(ctx context.Context, params Cre
 		Country:            []string{"US"},
 		Locality:           []string{"San Francisco"},
 		Province:           []string{"California"},
+		KeyUsage:           x509.KeyUsageCertSign,
 	})
 	if err != nil {
 		_ = s.keyManagement.DeleteKey(ctx, signKey.ID)
@@ -260,6 +262,7 @@ func (s *OrganizationService) CreateOrganization(ctx context.Context, params Cre
 		Country:            []string{"US"},
 		Locality:           []string{"San Francisco"},
 		Province:           []string{"California"},
+		KeyUsage:           x509.KeyUsageCertSign,
 	})
 	if err != nil {
 		_ = s.keyManagement.DeleteKey(ctx, signKey.ID)
@@ -322,7 +325,6 @@ func (s *OrganizationService) CreateOrganization(ctx context.Context, params Cre
 		OrganizationalUnit: []string{"admin"},
 		Country:            []string{"US"},
 		Locality:           []string{"San Francisco"},
-		Province:           []string{"California"},
 	})
 	if err != nil {
 		_ = s.keyManagement.DeleteKey(ctx, signKey.ID)
@@ -670,5 +672,318 @@ func (s *OrganizationService) DeleteRevokedCertificate(ctx context.Context, orgI
 		return err
 	}
 
+	return nil
+}
+
+// KeyRole represents the role of a key in the organization
+type KeyRole string
+
+const (
+	KeyRoleAdmin  KeyRole = "admin"
+	KeyRoleClient KeyRole = "client"
+)
+
+// CreateKeyParams represents parameters for creating a new key
+type CreateKeyParams struct {
+	OrganizationID int64   `validate:"required"`
+	Role           KeyRole `validate:"required,oneof=admin client"`
+	Name           string  `validate:"required"`
+	Description    *string
+	DNSNames       []string
+	IPAddresses    []string
+}
+
+// RenewCertificateParams represents parameters for renewing a certificate
+type RenewCertificateParams struct {
+	OrganizationID int64   `validate:"required"`
+	KeyID          int64   `validate:"required"`
+	Role           KeyRole `validate:"required,oneof=admin client"`
+	CAType         string  `validate:"required,oneof=tls sign"`
+	DNSNames       []string
+	IPAddresses    []string
+	ValidFor       *time.Duration
+}
+
+// CreateKey creates a new key with a specific role (admin or client)
+func (s *OrganizationService) CreateKey(ctx context.Context, params CreateKeyParams) (*models.KeyResponse, error) {
+	// Get organization details
+	org, err := s.queries.GetFabricOrganizationWithKeys(ctx, params.OrganizationID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("organization not found")
+		}
+		return nil, fmt.Errorf("failed to get organization: %w", err)
+	}
+
+	// Determine the organizational unit based on the role
+	var organizationalUnit string
+
+	switch params.Role {
+	case KeyRoleAdmin:
+		organizationalUnit = "admin"
+	case KeyRoleClient:
+		organizationalUnit = "client"
+	default:
+		return nil, fmt.Errorf("invalid key role: %s", params.Role)
+	}
+
+	// For now, we'll create both sign and TLS keys
+	// In the future, this could be made configurable
+	keys := make([]*models.KeyResponse, 0, 2)
+
+	// Create sign key
+	signKey, err := s.createKeyWithRole(ctx, org, params, "sign", organizationalUnit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create sign key: %w", err)
+	}
+	keys = append(keys, signKey)
+
+	// Create TLS key
+	tlsKey, err := s.createKeyWithRole(ctx, org, params, "tls", organizationalUnit)
+	if err != nil {
+		// Clean up the sign key if TLS key creation fails
+		_ = s.keyManagement.DeleteKey(ctx, signKey.ID)
+		return nil, fmt.Errorf("failed to create TLS key: %w", err)
+	}
+	keys = append(keys, tlsKey)
+
+	// Return the sign key as the primary result
+	// In the future, we might want to return both keys or a composite result
+	return signKey, nil
+}
+
+// createKeyWithRole is a helper function to create a key with a specific role and type
+func (s *OrganizationService) createKeyWithRole(ctx context.Context, org *db.GetFabricOrganizationWithKeysRow, params CreateKeyParams, keyType, organizationalUnit string) (*models.KeyResponse, error) {
+	// Get the CA key for signing
+	var caKeyID int64
+
+	switch keyType {
+	case "sign":
+		if !org.SignKeyID.Valid {
+			return nil, fmt.Errorf("organization has no sign CA key")
+		}
+		caKeyID = org.SignKeyID.Int64
+	case "tls":
+		if !org.TlsRootKeyID.Valid {
+			return nil, fmt.Errorf("organization has no TLS CA key")
+		}
+		caKeyID = org.TlsRootKeyID.Int64
+	default:
+		return nil, fmt.Errorf("invalid key type: %s", keyType)
+	}
+
+	// Create the key
+	description := params.Name
+	if params.Description != nil {
+		description = *params.Description
+	}
+
+	curve := models.ECCurveP256
+	isCA := 0
+	providerID := int(org.ProviderID.Int64)
+
+	keyReq := models.CreateKeyRequest{
+		Name:        fmt.Sprintf("%s-%s-%s", params.Name, keyType, params.Role),
+		Description: &description,
+		Algorithm:   models.KeyAlgorithmEC,
+		Curve:       &curve,
+		ProviderID:  &providerID,
+		IsCA:        &isCA,
+	}
+
+	key, err := s.keyManagement.CreateKey(ctx, keyReq, providerID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create %s key: %w", keyType, err)
+	}
+
+	// Convert string IP addresses to net.IP
+	var ipAddresses []net.IP
+	for _, ipStr := range params.IPAddresses {
+		if ip := net.ParseIP(ipStr); ip != nil {
+			ipAddresses = append(ipAddresses, ip)
+		}
+	}
+
+	// Sign the key with the CA
+	certReq := models.CertificateRequest{
+		CommonName:         fmt.Sprintf("%s-%s-%s", params.Name, keyType, params.Role),
+		Organization:       []string{org.MspID},
+		OrganizationalUnit: []string{organizationalUnit},
+		DNSNames:           params.DNSNames,
+		IPAddresses:        ipAddresses,
+		IsCA:               false,
+		ValidFor:           models.Duration(24 * 365 * time.Hour), // 1 year
+		KeyUsage:           x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature | x509.KeyUsageKeyAgreement,
+		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+	}
+
+	signedKey, err := s.keyManagement.SignCertificate(ctx, key.ID, int(caKeyID), certReq)
+	if err != nil {
+		// Clean up the key if signing fails
+		_ = s.keyManagement.DeleteKey(ctx, key.ID)
+		return nil, fmt.Errorf("failed to sign %s key: %w", keyType, err)
+	}
+
+	return signedKey, nil
+}
+
+// RenewCertificate renews a certificate for a specific key role
+func (s *OrganizationService) RenewCertificate(ctx context.Context, params RenewCertificateParams) (*models.KeyResponse, error) {
+	// Get organization details
+	org, err := s.queries.GetFabricOrganizationWithKeys(ctx, params.OrganizationID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("organization not found")
+		}
+		return nil, fmt.Errorf("failed to get organization: %w", err)
+	}
+
+	// Verify the key belongs to this organization by checking if it's one of the known keys
+	var isOrgKey bool
+	switch params.Role {
+	case KeyRoleAdmin:
+		if (org.AdminSignKeyID.Valid && org.AdminSignKeyID.Int64 == params.KeyID) ||
+			(org.AdminTlsKeyID.Valid && org.AdminTlsKeyID.Int64 == params.KeyID) {
+			isOrgKey = true
+		}
+	case KeyRoleClient:
+		if org.ClientSignKeyID.Valid && org.ClientSignKeyID.Int64 == params.KeyID {
+			isOrgKey = true
+		}
+	}
+
+	if !isOrgKey {
+		return nil, fmt.Errorf("key %d is not a valid %s key for this organization", params.KeyID, params.Role)
+	}
+
+	// Determine the CA key ID based on the CA type
+	switch params.CAType {
+	case "sign":
+		if !org.SignKeyID.Valid {
+			return nil, fmt.Errorf("organization has no sign CA key")
+		}
+	case "tls":
+		if !org.TlsRootKeyID.Valid {
+			return nil, fmt.Errorf("organization has no TLS CA key")
+		}
+	default:
+		return nil, fmt.Errorf("invalid CA type: %s. Must be 'tls' or 'sign'", params.CAType)
+	}
+
+	// Set default validity period if not provided
+	validFor := models.Duration(24 * 365 * time.Hour) // 1 year
+	if params.ValidFor != nil {
+		validFor = models.Duration(*params.ValidFor)
+	}
+
+	// Determine organizational unit based on role
+	var organizationalUnit string
+	switch params.Role {
+	case KeyRoleAdmin:
+		organizationalUnit = "admin"
+	case KeyRoleClient:
+		organizationalUnit = "client"
+	}
+
+	// Convert string IP addresses to net.IP
+	var ipAddresses []net.IP
+	for _, ipStr := range params.IPAddresses {
+		if ip := net.ParseIP(ipStr); ip != nil {
+			ipAddresses = append(ipAddresses, ip)
+		}
+	}
+
+	// Renew the certificate
+	certReq := models.CertificateRequest{
+		CommonName:         fmt.Sprintf("%s-%s", org.MspID, params.Role),
+		Organization:       []string{org.MspID},
+		OrganizationalUnit: []string{organizationalUnit},
+		DNSNames:           params.DNSNames,
+		IPAddresses:        ipAddresses,
+		IsCA:               false,
+		ValidFor:           validFor,
+		KeyUsage:           x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature | x509.KeyUsageKeyAgreement,
+		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+	}
+
+	renewedKey, err := s.keyManagement.RenewCertificate(ctx, int(params.KeyID), certReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to renew certificate: %w", err)
+	}
+
+	return renewedKey, nil
+}
+
+// ListKeys returns all keys for an organization
+func (s *OrganizationService) ListKeys(ctx context.Context, orgID int64) (map[string]*models.KeyResponse, error) {
+	// Get organization details
+	org, err := s.queries.GetFabricOrganizationWithKeys(ctx, orgID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("organization not found")
+		}
+		return nil, fmt.Errorf("failed to get organization: %w", err)
+	}
+
+	keys := make(map[string]*models.KeyResponse)
+
+	// Get sign CA key
+	if org.SignKeyID.Valid {
+		signCAKey, err := s.keyManagement.GetKey(ctx, int(org.SignKeyID.Int64))
+		if err == nil {
+			keys["sign-ca"] = signCAKey
+		}
+	}
+
+	// Get TLS CA key
+	if org.TlsRootKeyID.Valid {
+		tlsCAKey, err := s.keyManagement.GetKey(ctx, int(org.TlsRootKeyID.Int64))
+		if err == nil {
+			keys["tls-ca"] = tlsCAKey
+		}
+	}
+
+	// Get admin sign key
+	if org.AdminSignKeyID.Valid {
+		adminSignKey, err := s.keyManagement.GetKey(ctx, int(org.AdminSignKeyID.Int64))
+		if err == nil {
+			keys["admin-sign"] = adminSignKey
+		}
+	}
+
+	// Get admin TLS key
+	if org.AdminTlsKeyID.Valid {
+		adminTlsKey, err := s.keyManagement.GetKey(ctx, int(org.AdminTlsKeyID.Int64))
+		if err == nil {
+			keys["admin-tls"] = adminTlsKey
+		}
+	}
+
+	// Get client sign key
+	if org.ClientSignKeyID.Valid {
+		clientSignKey, err := s.keyManagement.GetKey(ctx, int(org.ClientSignKeyID.Int64))
+		if err == nil {
+			keys["client-sign"] = clientSignKey
+		}
+	}
+
+	return keys, nil
+}
+
+// GetKey returns a specific key by ID
+func (s *OrganizationService) GetKey(ctx context.Context, keyID int64) (*models.KeyResponse, error) {
+	key, err := s.keyManagement.GetKey(ctx, int(keyID))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get key: %w", err)
+	}
+	return key, nil
+}
+
+// DeleteKey deletes a key and its associated certificate
+func (s *OrganizationService) DeleteKey(ctx context.Context, keyID int64) error {
+	err := s.keyManagement.DeleteKey(ctx, int(keyID))
+	if err != nil {
+		return fmt.Errorf("failed to delete key: %w", err)
+	}
 	return nil
 }

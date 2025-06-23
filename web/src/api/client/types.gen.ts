@@ -685,6 +685,14 @@ export type GithubComChainlaunchChainlaunchPkgPluginTypesPort = {
     protocol?: string;
 };
 
+export type HandlerCreateKeyRequest = {
+    description?: string;
+    dnsNames?: Array<string>;
+    ipAddresses?: Array<string>;
+    name: string;
+    role: 'admin' | 'client';
+};
+
 export type HandlerCreateOrganizationRequest = {
     description?: string;
     mspId: string;
@@ -697,6 +705,33 @@ export type HandlerDeleteRevokedCertificateRequest = {
      * Hex string of the serial number
      */
     serialNumber?: string;
+};
+
+export type HandlerKeyResponse = {
+    algorithm?: string;
+    certificate?: string;
+    createdAt?: string;
+    description?: string;
+    ethereumAddress?: string;
+    expiresAt?: string;
+    id?: number;
+    lastRotatedAt?: string;
+    name?: string;
+    provider?: {
+        id?: number;
+        name?: string;
+    };
+    publicKey?: string;
+    sha1Fingerprint?: string;
+    sha256Fingerprint?: string;
+    signingKeyId?: number;
+    status?: string;
+};
+
+export type HandlerListKeysResponse = {
+    keys?: {
+        [key: string]: HandlerKeyResponse;
+    };
 };
 
 export type HandlerOrganizationResponse = {
@@ -721,6 +756,18 @@ export type HandlerPaginatedOrganizationsResponse = {
     items?: Array<HandlerOrganizationResponse>;
     limit?: number;
     offset?: number;
+};
+
+export type HandlerRenewCertificateRequest = {
+    caType: 'tls' | 'sign';
+    dnsNames?: Array<string>;
+    ipAddresses?: Array<string>;
+    keyId: number;
+    role: 'admin' | 'client';
+    /**
+     * Duration in Go format (e.g., "8760h" for 1 year)
+     */
+    validFor?: string;
 };
 
 export type HandlerRevokeCertificateByPemRequest = {
@@ -7168,6 +7215,238 @@ export type PostOrganizationsByIdCrlRevokeSerialResponses = {
 };
 
 export type PostOrganizationsByIdCrlRevokeSerialResponse = PostOrganizationsByIdCrlRevokeSerialResponses[keyof PostOrganizationsByIdCrlRevokeSerialResponses];
+
+export type GetOrganizationsByIdKeysData = {
+    body?: never;
+    path: {
+        /**
+         * Organization ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/organizations/{id}/keys';
+};
+
+export type GetOrganizationsByIdKeysErrors = {
+    /**
+     * Bad Request
+     */
+    400: {
+        [key: string]: string;
+    };
+    /**
+     * Not Found
+     */
+    404: {
+        [key: string]: string;
+    };
+    /**
+     * Internal Server Error
+     */
+    500: {
+        [key: string]: string;
+    };
+};
+
+export type GetOrganizationsByIdKeysError = GetOrganizationsByIdKeysErrors[keyof GetOrganizationsByIdKeysErrors];
+
+export type GetOrganizationsByIdKeysResponses = {
+    /**
+     * OK
+     */
+    200: HandlerListKeysResponse;
+};
+
+export type GetOrganizationsByIdKeysResponse = GetOrganizationsByIdKeysResponses[keyof GetOrganizationsByIdKeysResponses];
+
+export type PostOrganizationsByIdKeysData = {
+    /**
+     * Key creation request
+     */
+    body: HandlerCreateKeyRequest;
+    path: {
+        /**
+         * Organization ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/organizations/{id}/keys';
+};
+
+export type PostOrganizationsByIdKeysErrors = {
+    /**
+     * Bad Request
+     */
+    400: {
+        [key: string]: string;
+    };
+    /**
+     * Not Found
+     */
+    404: {
+        [key: string]: string;
+    };
+    /**
+     * Internal Server Error
+     */
+    500: {
+        [key: string]: string;
+    };
+};
+
+export type PostOrganizationsByIdKeysError = PostOrganizationsByIdKeysErrors[keyof PostOrganizationsByIdKeysErrors];
+
+export type PostOrganizationsByIdKeysResponses = {
+    /**
+     * Created
+     */
+    201: HandlerKeyResponse;
+};
+
+export type PostOrganizationsByIdKeysResponse = PostOrganizationsByIdKeysResponses[keyof PostOrganizationsByIdKeysResponses];
+
+export type PostOrganizationsByIdKeysRenewData = {
+    /**
+     * Certificate renewal request
+     */
+    body: HandlerRenewCertificateRequest;
+    path: {
+        /**
+         * Organization ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/organizations/{id}/keys/renew';
+};
+
+export type PostOrganizationsByIdKeysRenewErrors = {
+    /**
+     * Bad Request
+     */
+    400: {
+        [key: string]: string;
+    };
+    /**
+     * Not Found
+     */
+    404: {
+        [key: string]: string;
+    };
+    /**
+     * Internal Server Error
+     */
+    500: {
+        [key: string]: string;
+    };
+};
+
+export type PostOrganizationsByIdKeysRenewError = PostOrganizationsByIdKeysRenewErrors[keyof PostOrganizationsByIdKeysRenewErrors];
+
+export type PostOrganizationsByIdKeysRenewResponses = {
+    /**
+     * OK
+     */
+    200: HandlerKeyResponse;
+};
+
+export type PostOrganizationsByIdKeysRenewResponse = PostOrganizationsByIdKeysRenewResponses[keyof PostOrganizationsByIdKeysRenewResponses];
+
+export type DeleteOrganizationsByIdKeysByKeyIdData = {
+    body?: never;
+    path: {
+        /**
+         * Organization ID
+         */
+        id: number;
+        /**
+         * Key ID
+         */
+        keyId: number;
+    };
+    query?: never;
+    url: '/organizations/{id}/keys/{keyId}';
+};
+
+export type DeleteOrganizationsByIdKeysByKeyIdErrors = {
+    /**
+     * Bad Request
+     */
+    400: {
+        [key: string]: string;
+    };
+    /**
+     * Not Found
+     */
+    404: {
+        [key: string]: string;
+    };
+    /**
+     * Internal Server Error
+     */
+    500: {
+        [key: string]: string;
+    };
+};
+
+export type DeleteOrganizationsByIdKeysByKeyIdError = DeleteOrganizationsByIdKeysByKeyIdErrors[keyof DeleteOrganizationsByIdKeysByKeyIdErrors];
+
+export type DeleteOrganizationsByIdKeysByKeyIdResponses = {
+    /**
+     * No Content
+     */
+    204: unknown;
+};
+
+export type GetOrganizationsByIdKeysByKeyIdData = {
+    body?: never;
+    path: {
+        /**
+         * Organization ID
+         */
+        id: number;
+        /**
+         * Key ID
+         */
+        keyId: number;
+    };
+    query?: never;
+    url: '/organizations/{id}/keys/{keyId}';
+};
+
+export type GetOrganizationsByIdKeysByKeyIdErrors = {
+    /**
+     * Bad Request
+     */
+    400: {
+        [key: string]: string;
+    };
+    /**
+     * Not Found
+     */
+    404: {
+        [key: string]: string;
+    };
+    /**
+     * Internal Server Error
+     */
+    500: {
+        [key: string]: string;
+    };
+};
+
+export type GetOrganizationsByIdKeysByKeyIdError = GetOrganizationsByIdKeysByKeyIdErrors[keyof GetOrganizationsByIdKeysByKeyIdErrors];
+
+export type GetOrganizationsByIdKeysByKeyIdResponses = {
+    /**
+     * OK
+     */
+    200: HandlerKeyResponse;
+};
+
+export type GetOrganizationsByIdKeysByKeyIdResponse = GetOrganizationsByIdKeysByKeyIdResponses[keyof GetOrganizationsByIdKeysByKeyIdResponses];
 
 export type GetOrganizationsByIdRevokedCertificatesData = {
     body?: never;

@@ -823,7 +823,7 @@ orderers:
     url: {{$orderer.URL}}
     tlsCACerts:
       pem: |
-{{$orderer.TLSCert|indent 10}}
+{{$orderer.TLSCACert|indent 10}}
   {{- end}}
 
 peers:
@@ -832,7 +832,7 @@ peers:
     url: {{$peer.URL}}
     tlsCACerts:
       pem: |
-{{$peer.TLSCert|indent 10}}
+{{$peer.TLSCACert|indent 10}}
   {{- end}}
 
 channels:
@@ -863,12 +863,14 @@ type NetworkConfigData struct {
 		Certificate string
 	}
 	Orderers map[string]struct {
-		URL     string
-		TLSCert string
+		URL       string
+		TLSCert   string
+		TLSCACert string
 	}
 	Peers map[string]struct {
-		URL     string
-		TLSCert string
+		URL       string
+		TLSCert   string
+		TLSCACert string
 	}
 }
 
@@ -1697,12 +1699,14 @@ func (d *FabricDeployer) GenerateNetworkConfig(ctx context.Context, networkID in
 			Certificate: string(*adminKey.Certificate),
 		},
 		Orderers: make(map[string]struct {
-			URL     string
-			TLSCert string
+			URL       string
+			TLSCert   string
+			TLSCACert string
 		}),
 		Peers: make(map[string]struct {
-			URL     string
-			TLSCert string
+			URL       string
+			TLSCert   string
+			TLSCACert string
 		}),
 	}
 
@@ -1722,11 +1726,13 @@ func (d *FabricDeployer) GenerateNetworkConfig(ctx context.Context, networkID in
 			}
 
 			data.Peers[nodeDetails.Name] = struct {
-				URL     string
-				TLSCert string
+				URL       string
+				TLSCert   string
+				TLSCACert string
 			}{
-				URL:     fmt.Sprintf("grpcs://%s", peerConfig.ExternalEndpoint),
-				TLSCert: string(*peerTLSKey.Certificate),
+				URL:       fmt.Sprintf("grpcs://%s", peerConfig.ExternalEndpoint),
+				TLSCert:   string(*peerTLSKey.Certificate),
+				TLSCACert: peerConfig.TLSCACert,
 			}
 
 		case nodetypes.NodeTypeFabricOrderer:
@@ -1737,11 +1743,13 @@ func (d *FabricDeployer) GenerateNetworkConfig(ctx context.Context, networkID in
 			}
 
 			data.Orderers[nodeDetails.Name] = struct {
-				URL     string
-				TLSCert string
+				URL       string
+				TLSCert   string
+				TLSCACert string
 			}{
-				URL:     fmt.Sprintf("grpcs://%s", ordererConfig.ExternalEndpoint),
-				TLSCert: string(*ordererTLSKey.Certificate),
+				URL:       fmt.Sprintf("grpcs://%s", ordererConfig.ExternalEndpoint),
+				TLSCert:   string(*ordererTLSKey.Certificate),
+				TLSCACert: ordererConfig.TLSCACert,
 			}
 		}
 	}

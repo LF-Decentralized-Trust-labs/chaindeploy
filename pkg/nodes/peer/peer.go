@@ -18,7 +18,7 @@ import (
 	"time"
 
 	// add sprig/v3
-	"github.com/Masterminds/sprig/v3"
+
 	"github.com/hyperledger/fabric-admin-sdk/pkg/chaincode"
 	"github.com/hyperledger/fabric-admin-sdk/pkg/channel"
 	"github.com/hyperledger/fabric-admin-sdk/pkg/identity"
@@ -1498,7 +1498,7 @@ func (p *LocalPeer) RenewCertificates(peerDeploymentConfig *nodetypes.FabricPeer
 	}
 	// Renew signing certificate
 	validFor := kmodels.Duration(time.Hour * 24 * 365) // 1 year validity
-	_, err = p.keyService.RenewCertificate(ctx, int(peerDeploymentConfig.SignKeyID), kmodels.CertificateRequest{
+	renewedSignKeyDB, err := p.keyService.RenewCertificate(ctx, int(peerDeploymentConfig.SignKeyID), kmodels.CertificateRequest{
 		CommonName:         p.opts.ID,
 		Organization:       []string{org.MspID},
 		OrganizationalUnit: []string{"peer"},
@@ -1506,7 +1506,6 @@ func (p *LocalPeer) RenewCertificates(peerDeploymentConfig *nodetypes.FabricPeer
 		IsCA:               false,
 		ValidFor:           validFor,
 		KeyUsage:           x509.KeyUsageCertSign,
-		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	})
 	if err != nil {
 		return fmt.Errorf("failed to renew signing certificate: %w", err)
@@ -1544,7 +1543,7 @@ func (p *LocalPeer) RenewCertificates(peerDeploymentConfig *nodetypes.FabricPeer
 		ipAddresses = append(ipAddresses, net.ParseIP("127.0.0.1"))
 	}
 
-	_, err = p.keyService.RenewCertificate(ctx, int(peerDeploymentConfig.TLSKeyID), kmodels.CertificateRequest{
+	renewedTlsKeyDB, err := p.keyService.RenewCertificate(ctx, int(peerDeploymentConfig.TLSKeyID), kmodels.CertificateRequest{
 		CommonName:         p.opts.ID,
 		Organization:       []string{org.MspID},
 		OrganizationalUnit: []string{"peer"},
@@ -1552,8 +1551,8 @@ func (p *LocalPeer) RenewCertificates(peerDeploymentConfig *nodetypes.FabricPeer
 		IPAddresses:        ipAddresses,
 		IsCA:               false,
 		ValidFor:           validFor,
-		KeyUsage:           x509.KeyUsageCertSign,
-		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		KeyUsage:           x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature | x509.KeyUsageKeyAgreement,
+		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
 	})
 	if err != nil {
 		return fmt.Errorf("failed to renew TLS certificate: %w", err)
@@ -1576,8 +1575,8 @@ func (p *LocalPeer) RenewCertificates(peerDeploymentConfig *nodetypes.FabricPeer
 
 	err = p.writeCertificatesAndKeys(
 		mspConfigPath,
-		tlsKeyDB,
-		signKeyDB,
+		renewedTlsKeyDB,  // Use the renewed TLS certificate
+		renewedSignKeyDB, // Use the renewed signing certificate
 		tlsKey,
 		signKey,
 		signCAKey,
@@ -1629,174 +1628,6 @@ type Orderer struct {
 	URL       string
 	Name      string
 	TLSCACert string
-}
-
-const tmplGoConfig = `
-name: hlf-network
-version: 1.0.0
-client:
-  organization: "{{ .Organization }}"
-{{- if not .Organizations }}
-organizations: {}
-{{- else }}
-organizations:
-  {{ range $org := .Organizations }}
-  {{ $org.MSPID }}:
-    mspid: {{ $org.MSPID }}
-    cryptoPath: /tmp/cryptopath
-    users: {}
-{{- if not $org.CertAuths }}
-    certificateAuthorities: []
-{{- else }}
-    certificateAuthorities: 
-      {{- range $ca := $org.CertAuths }}
-      - {{ $ca.Name }}
- 	  {{- end }}
-{{- end }}
-{{- if not $org.Peers }}
-    peers: []
-{{- else }}
-    peers:
-      {{- range $peer := $org.Peers }}
-      - {{ $peer }}
- 	  {{- end }}
-{{- end }}
-{{- if not $org.Orderers }}
-    orderers: []
-{{- else }}
-    orderers:
-      {{- range $orderer := $org.Orderers }}
-      - {{ $orderer }}
- 	  {{- end }}
-
-    {{- end }}
-{{- end }}
-{{- end }}
-
-{{- if not .Orderers }}
-{{- else }}
-orderers:
-{{- range $orderer := .Orderers }}
-  {{$orderer.Name}}:
-    url: {{ $orderer.URL }}
-    grpcOptions:
-      allow-insecure: false
-    tlsCACerts:
-      pem: |
-{{ $orderer.TLSCACert | indent 8 }}
-{{- end }}
-{{- end }}
-
-{{- if not .Peers }}
-{{- else }}
-peers:
-  {{- range $peer := .Peers }}
-  {{$peer.Name}}:
-    url: {{ $peer.URL }}
-    tlsCACerts:
-      pem: |
-{{ $peer.TLSCACert | indent 8 }}
-{{- end }}
-{{- end }}
-
-{{- if not .CertAuths }}
-{{- else }}
-certificateAuthorities:
-{{- range $ca := .CertAuths }}
-  {{ $ca.Name }}:
-    url: https://{{ $ca.URL }}
-{{if $ca.EnrollID }}
-    registrar:
-        enrollId: {{ $ca.EnrollID }}
-        enrollSecret: "{{ $ca.EnrollSecret }}"
-{{ end }}
-    caName: {{ $ca.CAName }}
-    tlsCACerts:
-      pem: 
-       - |
-{{ $ca.TLSCert | indent 12 }}
-
-{{- end }}
-{{- end }}
-
-channels:
-  _default:
-{{- if not .Orderers }}
-    orderers: []
-{{- else }}
-    orderers:
-{{- range $orderer := .Orderers }}
-      - {{$orderer.Name}}
-{{- end }}
-{{- end }}
-{{- if not .Peers }}
-    peers: {}
-{{- else }}
-    peers:
-{{- range $peer := .Peers }}
-       {{$peer.Name}}:
-        discover: true
-        endorsingPeer: true
-        chaincodeQuery: true
-        ledgerQuery: true
-        eventSource: true
-{{- end }}
-{{- end }}
-
-`
-
-func (p *LocalPeer) generateNetworkConfigForPeer(
-	peerUrl string, peerMspID string, peerTlsCACert string, ordererUrl string, ordererTlsCACert string) (*NetworkConfigResponse, error) {
-
-	tmpl, err := template.New("networkConfig").Funcs(sprig.HermeticTxtFuncMap()).Parse(tmplGoConfig)
-	if err != nil {
-		return nil, err
-	}
-	var buf bytes.Buffer
-	orgs := []*Org{}
-	var peers []*Peer
-	var certAuths []*CA
-	var ordererNodes []*Orderer
-
-	org := &Org{
-		MSPID:     peerMspID,
-		CertAuths: []string{},
-		Peers:     []string{},
-		Orderers:  []string{},
-	}
-	orgs = append(orgs, org)
-	if peerTlsCACert != "" {
-		peer := &Peer{
-			Name:      "peer0",
-			URL:       peerUrl,
-			TLSCACert: peerTlsCACert,
-		}
-		org.Peers = append(org.Peers, "peer0")
-		peers = append(peers, peer)
-	}
-	if ordererTlsCACert != "" && ordererUrl != "" {
-		orderer := &Orderer{
-			URL:       ordererUrl,
-			Name:      "orderer0",
-			TLSCACert: ordererTlsCACert,
-		}
-		ordererNodes = append(ordererNodes, orderer)
-	}
-	err = tmpl.Execute(&buf, map[string]interface{}{
-		"Peers":         peers,
-		"Orderers":      ordererNodes,
-		"Organizations": orgs,
-		"CertAuths":     certAuths,
-		"Organization":  peerMspID,
-		"Internal":      false,
-	})
-	if err != nil {
-		return nil, err
-	}
-	p.logger.Debugf("Network config: %s", buf.String())
-	return &NetworkConfigResponse{
-		NetworkConfig: buf.String(),
-	}, nil
 }
 
 // JoinChannel joins the peer to a channel
@@ -2058,10 +1889,6 @@ func (p *LocalPeer) writeConfigFiles(mspConfigPath, dataConfigPath string) error
 	}
 
 	return nil
-}
-
-func (p *LocalPeer) getLogPath() string {
-	return p.GetStdOutPath()
 }
 
 // TailLogs tails the logs of the peer service
@@ -2508,7 +2335,11 @@ func (p *LocalPeer) GetMSPID() string {
 	return p.mspID
 }
 func (p *LocalPeer) GetAdminIdentity(ctx context.Context) (identity.SigningIdentity, gwidentity.Sign, error) {
-	adminSignKeyDB, err := p.keyService.GetKey(ctx, int(p.org.AdminSignKeyID.Int64))
+	adminKeyID := int(p.org.AdminSignKeyID.Int64)
+	if adminKeyID == 0 {
+		adminKeyID = int(p.org.AdminTlsKeyID.Int64)
+	}
+	adminSignKeyDB, err := p.keyService.GetKey(ctx, adminKeyID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get TLS CA key: %w", err)
 	}
@@ -2516,7 +2347,7 @@ func (p *LocalPeer) GetAdminIdentity(ctx context.Context) (identity.SigningIdent
 		return nil, nil, fmt.Errorf("TLS CA key is not set")
 	}
 	certificate := *adminSignKeyDB.Certificate
-	privateKey, err := p.keyService.GetDecryptedPrivateKey(int(p.org.AdminSignKeyID.Int64))
+	privateKey, err := p.keyService.GetDecryptedPrivateKey(adminKeyID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get decrypted private key: %w", err)
 	}
@@ -2551,7 +2382,7 @@ func (p *LocalPeer) GetIdentity(ctx context.Context, keyID int64) (identity.Sign
 		return nil, nil, fmt.Errorf("TLS CA key is not set")
 	}
 	certificate := *adminSignKeyDB.Certificate
-	privateKey, err := p.keyService.GetDecryptedPrivateKey(int(p.org.AdminSignKeyID.Int64))
+	privateKey, err := p.keyService.GetDecryptedPrivateKey(int(keyID))
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get decrypted private key: %w", err)
 	}

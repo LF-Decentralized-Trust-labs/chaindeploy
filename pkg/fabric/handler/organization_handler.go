@@ -13,6 +13,7 @@ import (
 	"github.com/chainlaunch/chainlaunch/pkg/errors"
 	"github.com/chainlaunch/chainlaunch/pkg/fabric/service"
 	"github.com/chainlaunch/chainlaunch/pkg/http/response"
+	kmodels "github.com/chainlaunch/chainlaunch/pkg/keymanagement/models"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -77,6 +78,15 @@ func (h *OrganizationHandler) RegisterRoutes(r chi.Router) {
 			r.Get("/", response.Middleware(h.GetCRL))
 		})
 		r.Get("/{id}/revoked-certificates", response.Middleware(h.GetRevokedCertificates))
+
+		// Add key management routes
+		r.Route("/{id}/keys", func(r chi.Router) {
+			r.Post("/", response.Middleware(h.CreateKey))
+			r.Post("/renew", response.Middleware(h.RenewCertificate))
+			r.Get("/", response.Middleware(h.ListKeys))
+			r.Get("/{keyId}", response.Middleware(h.GetKey))
+			r.Delete("/{keyId}", response.Middleware(h.DeleteKey))
+		})
 	})
 }
 
@@ -517,6 +527,282 @@ func (h *OrganizationHandler) DeleteRevokedCertificate(w http.ResponseWriter, r 
 	return response.WriteJSON(w, http.StatusOK, map[string]string{
 		"message": "Certificate successfully removed from revocation list",
 	})
+}
+
+// CreateKeyRequest represents the request to create a new key
+type CreateKeyRequest struct {
+	Role        string   `json:"role" validate:"required,oneof=admin client" example:"admin"`
+	Name        string   `json:"name" validate:"required" example:"new-admin-key"`
+	Description *string  `json:"description,omitempty" example:"New admin key for organization"`
+	DNSNames    []string `json:"dnsNames,omitempty" example:"admin.example.com"`
+	IPAddresses []string `json:"ipAddresses,omitempty" example:"192.168.1.100"`
+}
+
+// RenewCertificateRequest represents the request to renew a certificate
+type RenewCertificateRequest struct {
+	KeyID       int64    `json:"keyId" validate:"required" example:"123"`
+	Role        string   `json:"role" validate:"required,oneof=admin client" example:"admin"`
+	CAType      string   `json:"caType" validate:"required,oneof=tls sign" example:"sign"`
+	DNSNames    []string `json:"dnsNames,omitempty" example:"admin.example.com"`
+	IPAddresses []string `json:"ipAddresses,omitempty" example:"192.168.1.100"`
+	ValidFor    *string  `json:"validFor,omitempty" example:"8760h"` // Duration in Go format (e.g., "8760h" for 1 year)
+}
+
+// KeyResponse represents a key in the HTTP response
+type KeyResponse struct {
+	ID                int        `json:"id"`
+	Name              string     `json:"name"`
+	Description       *string    `json:"description,omitempty"`
+	Algorithm         string     `json:"algorithm"`
+	PublicKey         string     `json:"publicKey"`
+	Certificate       *string    `json:"certificate,omitempty"`
+	Status            string     `json:"status"`
+	CreatedAt         time.Time  `json:"createdAt"`
+	ExpiresAt         *time.Time `json:"expiresAt,omitempty"`
+	LastRotatedAt     *time.Time `json:"lastRotatedAt,omitempty"`
+	SHA256Fingerprint string     `json:"sha256Fingerprint"`
+	SHA1Fingerprint   string     `json:"sha1Fingerprint"`
+	Provider          struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	} `json:"provider"`
+	EthereumAddress string `json:"ethereumAddress"`
+	SigningKeyID    *int   `json:"signingKeyId,omitempty"`
+}
+
+// ListKeysResponse represents the response for listing keys
+type ListKeysResponse struct {
+	Keys map[string]*KeyResponse `json:"keys"`
+}
+
+// @Summary Create a new key for an organization
+// @Description Create a new key with a specific role (admin or client) for an organization
+// @Tags Organizations
+// @Accept json
+// @Produce json
+// @Param id path int true "Organization ID"
+// @Param request body CreateKeyRequest true "Key creation request"
+// @Success 201 {object} KeyResponse
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /organizations/{id}/keys [post]
+func (h *OrganizationHandler) CreateKey(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid organization ID", map[string]interface{}{
+			"detail": err.Error(),
+			"code":   "INVALID_ID_FORMAT",
+		})
+	}
+
+	var req CreateKeyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return errors.NewValidationError("invalid request body", map[string]interface{}{
+			"detail": err.Error(),
+			"code":   "INVALID_REQUEST_BODY",
+		})
+	}
+
+	params := service.CreateKeyParams{
+		OrganizationID: id,
+		Role:           service.KeyRole(req.Role),
+		Name:           req.Name,
+		Description:    req.Description,
+		DNSNames:       req.DNSNames,
+		IPAddresses:    req.IPAddresses,
+	}
+
+	key, err := h.service.CreateKey(r.Context(), params)
+	if err != nil {
+		return errors.NewInternalError("failed to create key", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusCreated, toKeyResponse(key))
+}
+
+// @Summary Renew a certificate for a key
+// @Description Renew a certificate for a specific key in an organization
+// @Tags Organizations
+// @Accept json
+// @Produce json
+// @Param id path int true "Organization ID"
+// @Param request body RenewCertificateRequest true "Certificate renewal request"
+// @Success 200 {object} KeyResponse
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /organizations/{id}/keys/renew [post]
+func (h *OrganizationHandler) RenewCertificate(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid organization ID", map[string]interface{}{
+			"detail": err.Error(),
+			"code":   "INVALID_ID_FORMAT",
+		})
+	}
+
+	var req RenewCertificateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return errors.NewValidationError("invalid request body", map[string]interface{}{
+			"detail": err.Error(),
+			"code":   "INVALID_REQUEST_BODY",
+		})
+	}
+
+	// Parse ValidFor duration if provided
+	var validFor *time.Duration
+	if req.ValidFor != nil {
+		duration, err := time.ParseDuration(*req.ValidFor)
+		if err != nil {
+			return errors.NewValidationError("invalid validFor duration", map[string]interface{}{
+				"detail": err.Error(),
+				"code":   "INVALID_DURATION_FORMAT",
+			})
+		}
+		validFor = &duration
+	}
+
+	params := service.RenewCertificateParams{
+		OrganizationID: id,
+		KeyID:          req.KeyID,
+		Role:           service.KeyRole(req.Role),
+		CAType:         req.CAType,
+		DNSNames:       req.DNSNames,
+		IPAddresses:    req.IPAddresses,
+		ValidFor:       validFor,
+	}
+
+	key, err := h.service.RenewCertificate(r.Context(), params)
+	if err != nil {
+		return errors.NewInternalError("failed to renew certificate", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, toKeyResponse(key))
+}
+
+// @Summary List all keys for an organization
+// @Description Get all keys associated with an organization
+// @Tags Organizations
+// @Accept json
+// @Produce json
+// @Param id path int true "Organization ID"
+// @Success 200 {object} ListKeysResponse
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /organizations/{id}/keys [get]
+func (h *OrganizationHandler) ListKeys(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid organization ID", map[string]interface{}{
+			"detail": err.Error(),
+			"code":   "INVALID_ID_FORMAT",
+		})
+	}
+
+	keys, err := h.service.ListKeys(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to list keys", err, nil)
+	}
+
+	// Convert service keys to response format
+	responseKeys := make(map[string]*KeyResponse)
+	for keyName, key := range keys {
+		responseKeys[keyName] = toKeyResponse(key)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, ListKeysResponse{Keys: responseKeys})
+}
+
+// @Summary Get a specific key by ID
+// @Description Get a specific key by its ID
+// @Tags Organizations
+// @Accept json
+// @Produce json
+// @Param id path int true "Organization ID"
+// @Param keyId path int true "Key ID"
+// @Success 200 {object} KeyResponse
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /organizations/{id}/keys/{keyId} [get]
+func (h *OrganizationHandler) GetKey(w http.ResponseWriter, r *http.Request) error {
+	keyID, err := strconv.ParseInt(chi.URLParam(r, "keyId"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid key ID", map[string]interface{}{
+			"detail": err.Error(),
+			"code":   "INVALID_KEY_ID_FORMAT",
+		})
+	}
+
+	key, err := h.service.GetKey(r.Context(), keyID)
+	if err != nil {
+		return errors.NewNotFoundError("key not found", map[string]interface{}{
+			"code":   "KEY_NOT_FOUND",
+			"detail": err.Error(),
+		})
+	}
+
+	return response.WriteJSON(w, http.StatusOK, toKeyResponse(key))
+}
+
+// @Summary Delete a key
+// @Description Delete a key and its associated certificate
+// @Tags Organizations
+// @Accept json
+// @Produce json
+// @Param id path int true "Organization ID"
+// @Param keyId path int true "Key ID"
+// @Success 204 "No Content"
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /organizations/{id}/keys/{keyId} [delete]
+func (h *OrganizationHandler) DeleteKey(w http.ResponseWriter, r *http.Request) error {
+	keyID, err := strconv.ParseInt(chi.URLParam(r, "keyId"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid key ID", map[string]interface{}{
+			"detail": err.Error(),
+			"code":   "INVALID_KEY_ID_FORMAT",
+		})
+	}
+
+	err = h.service.DeleteKey(r.Context(), keyID)
+	if err != nil {
+		return errors.NewInternalError("failed to delete key", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusNoContent, nil)
+}
+
+// Helper function to convert service key to response format
+func toKeyResponse(key *kmodels.KeyResponse) *KeyResponse {
+	if key == nil {
+		return nil
+	}
+
+	response := &KeyResponse{
+		ID:                key.ID,
+		Name:              key.Name,
+		Description:       key.Description,
+		Algorithm:         string(key.Algorithm),
+		PublicKey:         key.PublicKey,
+		Certificate:       key.Certificate,
+		Status:            key.Status,
+		CreatedAt:         key.CreatedAt,
+		ExpiresAt:         key.ExpiresAt,
+		LastRotatedAt:     key.LastRotatedAt,
+		SHA256Fingerprint: key.SHA256Fingerprint,
+		SHA1Fingerprint:   key.SHA1Fingerprint,
+		EthereumAddress:   key.EthereumAddress,
+		SigningKeyID:      key.SigningKeyID,
+	}
+
+	response.Provider.ID = key.Provider.ID
+	response.Provider.Name = key.Provider.Name
+
+	return response
 }
 
 // RevokedCertificateResponse represents the response for a revoked certificate
