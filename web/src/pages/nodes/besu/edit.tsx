@@ -40,31 +40,27 @@ export default function EditBesuNodePage() {
 	const handleSubmit = async (values: BesuNodeFormValues) => {
 		if (!node) return
 
-		try {
-			await updateNode.mutateAsync({
-				path: { id: parseInt(id!) },
-				body: {
-					name: values.name,
-					blockchainPlatform: values.blockchainPlatform,
-					besuNode: {
-						env: {},
-						networkId: values.networkId,
-						internalIp: values.internalIp,
-						externalIp: values.externalIp,
-						p2pHost: values.p2pHost,
-						p2pPort: values.p2pPort,
-						rpcHost: values.rpcHost,
-						rpcPort: values.rpcPort,
-						bootnodes: values.bootNodes
-							?.split(',')
-							.map((node) => node.trim())
-							.filter(Boolean),
-					},
+		await updateNode.mutate({
+			path: { id: parseInt(id!) },
+			body: {
+				name: values.name,
+				blockchainPlatform: values.blockchainPlatform,
+				besuNode: {
+					env: {},
+					networkId: values.networkId,
+					internalIp: values.internalIp,
+					externalIp: values.externalIp,
+					p2pHost: values.p2pHost,
+					p2pPort: values.p2pPort,
+					rpcHost: values.rpcHost,
+					rpcPort: values.rpcPort,
+					bootnodes: values.bootNodes
+						?.split(',')
+						.map((node) => node.trim())
+						.filter(Boolean),
 				},
-			})
-		} catch (error) {
-			// Error is handled by mutation
-		}
+			},
+		})
 	}
 
 	if (isLoading) {
@@ -107,7 +103,7 @@ export default function EditBesuNodePage() {
 
 				<Card className="p-6">
 					<h1 className="text-2xl font-semibold mb-6">Edit Besu Node</h1>
-					<BesuNodeForm defaultValues={defaultValues} onSubmit={handleSubmit} submitButtonText="Update Node" />
+					<BesuNodeForm defaultValues={defaultValues} onSubmit={handleSubmit} submitButtonText="Update Node" submitButtonLoadingText="Updating..." />
 				</Card>
 			</div>
 		</div>

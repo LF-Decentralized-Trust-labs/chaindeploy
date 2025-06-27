@@ -15,12 +15,20 @@ import { useNavigate } from 'react-router-dom'
 import * as z from 'zod'
 
 const chaincodeFormSchema = z.object({
-	name: z.string().min(1, 'Name is required'),
+	name: z
+		.string()
+		.min(1, 'Name is required')
+		.regex(/^[a-z0-9_-]+$/, 'Name must be lowercase, no spaces, and can only contain letters, numbers, hyphens, or underscores')
+		.transform((val) => val.toLowerCase()),
 	networkId: z.string().min(1, 'Network is required'),
 })
 
 const developChaincodeFormSchema = z.object({
-	name: z.string().min(1, 'Name is required'),
+	name: z
+		.string()
+		.min(1, 'Name is required')
+		.regex(/^[a-z0-9_-]+$/, 'Name must be lowercase, no spaces, and can only contain letters, numbers, hyphens, or underscores')
+		.transform((val) => val.toLowerCase()),
 	networkId: z.string().min(1, 'Network is required'),
 	boilerplate: z.string().min(1, 'Boilerplate is required'),
 	description: z.string().min(1, 'Description is required'),

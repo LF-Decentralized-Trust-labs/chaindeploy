@@ -47,9 +47,10 @@ interface BesuNodeFormProps {
 	onChange?: (values: BesuNodeFormValues) => void
 	networkId?: number
 	submitButtonText?: string
+	submitButtonLoadingText?: string
 }
 
-export function BesuNodeForm({ onSubmit, isSubmitting, hideSubmit, defaultValues, onChange, networkId, submitButtonText = 'Create Node' }: BesuNodeFormProps) {
+export function BesuNodeForm({ onSubmit, isSubmitting, hideSubmit, defaultValues, onChange, networkId, submitButtonText = 'Create Node', submitButtonLoadingText = 'Creating...' }: BesuNodeFormProps) {
 	const form = useForm<BesuNodeFormValues>({
 		resolver: zodResolver(besuNodeFormSchema),
 		defaultValues: {
@@ -332,7 +333,7 @@ export function BesuNodeForm({ onSubmit, isSubmitting, hideSubmit, defaultValues
 
 				{!hideSubmit && (
 					<Button type="submit" disabled={isSubmitting}>
-						{isSubmitting ? 'Creating...' : submitButtonText}
+						{isSubmitting ? submitButtonLoadingText : submitButtonText}
 					</Button>
 				)}
 			</form>

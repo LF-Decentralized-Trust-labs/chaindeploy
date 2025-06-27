@@ -47,8 +47,8 @@ export default function EditFabricNodePage() {
 		onError: (error: any) => {
 			if (error instanceof Error) {
 				toast.error(`Failed to update node: ${error.message}`)
-			} else if (error.error.message) {
-				toast.error(`Failed to update node: ${error.error.message}`)
+			} else if (error.message) {
+				toast.error(`Failed to update node: ${error.message}`)
 			} else {
 				toast.error('An unknown error occurred')
 			}
@@ -197,8 +197,9 @@ export default function EditFabricNodePage() {
 					isSubmitting={updateNode.isPending}
 					organizations={organizations?.items?.map((org) => ({ id: org.id!, name: org.mspId! })) || []}
 					hideNodeType={true}
-					submitText="Update Node"
 					defaultValues={defaultValues}
+					submitText="Update Node"
+					submitButtonLoadingText="Updating..."
 				/>
 			</div>
 		</div>

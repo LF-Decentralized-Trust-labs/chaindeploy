@@ -1,4 +1,5 @@
 import { GetNodesDefaultsFabricOrdererResponse, GetNodesDefaultsFabricPeerResponse } from '@/api/client'
+import { isValidPEMCertificate } from '@/components/../lib/utils'
 import { Button } from '@/components/ui/button'
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
@@ -10,6 +11,10 @@ import { useEffect } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 import * as z from 'zod'
+
+const addressPortRegex = /^[^:]+:\d+$/
+const addressPortMessage = 'Must be in the format address:port (e.g., 0.0.0.0:7051)'
+
 const fabricNodeFormSchema = z.object({
 	name: z.string().min(1, 'Name is required'),
 	fabricProperties: z
@@ -18,19 +23,25 @@ const fabricNodeFormSchema = z.object({
 			mode: z.enum(['docker', 'service']),
 			version: z.string(),
 			organizationId: z.number(),
-			listenAddress: z.string(),
-			operationsListenAddress: z.string(),
-			externalEndpoint: z.string(),
+			listenAddress: z.string().regex(addressPortRegex, { message: addressPortMessage }),
+			operationsListenAddress: z.string().regex(addressPortRegex, { message: addressPortMessage }),
+			externalEndpoint: z.string().regex(addressPortRegex, { message: addressPortMessage }),
 			domains: z.array(z.string()).optional(),
-			chaincodeAddress: z.string().optional(),
-			eventsAddress: z.string().optional(),
-			adminAddress: z.string().optional(),
+			chaincodeAddress: z.string().regex(addressPortRegex, { message: addressPortMessage }).optional(),
+			eventsAddress: z.string().regex(addressPortRegex, { message: addressPortMessage }).optional(),
+			adminAddress: z.string().regex(addressPortRegex, { message: addressPortMessage }).optional(),
 			addressOverrides: z
 				.array(
 					z.object({
-						from: z.string(),
-						to: z.string(),
-						tlsCACert: z.string(),
+						from: z.string().regex(addressPortRegex, { message: addressPortMessage }),
+						to: z.string().regex(addressPortRegex, { message: addressPortMessage }),
+						tlsCACert: z.string().refine(
+							(value) => {
+								if (!value) return true // allow empty, handled elsewhere if required
+								return isValidPEMCertificate(value)
+							},
+							{ message: 'Must be a valid PEM-encoded certificate' }
+						),
 					})
 				)
 				.optional(),
@@ -75,6 +86,7 @@ interface FabricNodeFormProps {
 	defaultValues?: FabricNodeFormValues
 	onChange?: (values: FabricNodeFormValues) => void
 	submitText?: string
+	submitButtonLoadingText?: string
 }
 
 export function FabricNodeForm({
@@ -89,7 +101,8 @@ export function FabricNodeForm({
 	defaultValues,
 	onChange,
 	submitText = 'Create Node',
-}: FabricNodeFormProps) {
+	submitButtonLoadingText = 'Creating...',
+	}: FabricNodeFormProps) {
 	const form = useForm<FabricNodeFormValues>({
 		resolver: zodResolver(fabricNodeFormSchema),
 		defaultValues: defaultValues || {
@@ -376,62 +389,68 @@ export function FabricNodeForm({
 								<FormLabel>Address Overrides</FormLabel>
 								<FormDescription>Configure address overrides for the node</FormDescription>
 								<div className="space-y-4">
-									{field.value?.map((override, index) => (
-										<div key={index} className="flex gap-4 items-start">
-											<div className="flex-1">
-												<FormControl>
-													<Input
-														placeholder="From address"
-														value={override.from}
-														onChange={(e) => {
-															const newOverrides = [...(field.value || [])]
-															newOverrides[index] = { ...override, from: e.target.value }
-															field.onChange(newOverrides)
-														}}
-													/>
-												</FormControl>
+									{field.value?.map((override, index) => {
+										const errors = form.formState.errors.fabricProperties?.addressOverrides?.[index] as any
+										return (
+											<div key={index} className="flex gap-4 items-start">
+												<div className="flex-1">
+													<FormControl>
+														<Input
+															placeholder="From address"
+															value={override.from}
+															onChange={(e) => {
+																const newOverrides = [...(field.value || [])]
+																newOverrides[index] = { ...override, from: e.target.value }
+																field.onChange(newOverrides)
+															}}
+														/>
+													</FormControl>
+													{errors?.from && <p className="text-destructive text-xs mt-1">{errors.from.message}</p>}
+												</div>
+												<div className="flex-1">
+													<FormControl>
+														<Input
+															placeholder="To address"
+															value={override.to}
+															onChange={(e) => {
+																const newOverrides = [...(field.value || [])]
+																newOverrides[index] = { ...override, to: e.target.value }
+																field.onChange(newOverrides)
+															}}
+														/>
+													</FormControl>
+													{errors?.to && <p className="text-destructive text-xs mt-1">{errors.to.message}</p>}
+												</div>
+												<div className="flex-1">
+													<FormControl>
+														<Textarea
+															placeholder="TLS CA Certificate"
+															className="font-mono text-xs"
+															value={override.tlsCACert}
+															onChange={(e) => {
+																const newOverrides = [...(field.value || [])]
+																newOverrides[index] = { ...override, tlsCACert: e.target.value }
+																field.onChange(newOverrides)
+															}}
+														/>
+													</FormControl>
+													{errors?.tlsCACert && <p className="text-destructive text-xs mt-1">{errors.tlsCACert.message}</p>}
+												</div>
+												<Button
+													type="button"
+													variant="destructive"
+													size="icon"
+													onClick={() => {
+														const newOverrides = [...(field.value || [])]
+														newOverrides.splice(index, 1)
+														field.onChange(newOverrides)
+													}}
+												>
+													<Trash2 className="h-4 w-4" />
+												</Button>
 											</div>
-											<div className="flex-1">
-												<FormControl>
-													<Input
-														placeholder="To address"
-														value={override.to}
-														onChange={(e) => {
-															const newOverrides = [...(field.value || [])]
-															newOverrides[index] = { ...override, to: e.target.value }
-															field.onChange(newOverrides)
-														}}
-													/>
-												</FormControl>
-											</div>
-											<div className="flex-1">
-												<FormControl>
-													<Textarea
-														placeholder="TLS CA Certificate"
-														className="font-mono text-xs"
-														value={override.tlsCACert}
-														onChange={(e) => {
-															const newOverrides = [...(field.value || [])]
-															newOverrides[index] = { ...override, tlsCACert: e.target.value }
-															field.onChange(newOverrides)
-														}}
-													/>
-												</FormControl>
-											</div>
-											<Button
-												type="button"
-												variant="destructive"
-												size="icon"
-												onClick={() => {
-													const newOverrides = [...(field.value || [])]
-													newOverrides.splice(index, 1)
-													field.onChange(newOverrides)
-												}}
-											>
-												<Trash2 className="h-4 w-4" />
-											</Button>
-										</div>
-									))}
+										)
+									})}
 									<Button
 										type="button"
 										variant="outline"
@@ -443,7 +462,6 @@ export function FabricNodeForm({
 										Add Address Override
 									</Button>
 								</div>
-								<FormMessage />
 							</FormItem>
 						)}
 					/>
@@ -507,7 +525,7 @@ export function FabricNodeForm({
 
 				{!hideSubmit && (
 					<Button type="submit" disabled={isSubmitting}>
-						{isSubmitting ? 'Creating...' : submitText}
+						{isSubmitting ? submitButtonLoadingText : submitText}
 					</Button>
 				)}
 			</form>

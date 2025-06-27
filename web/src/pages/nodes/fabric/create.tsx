@@ -1,6 +1,5 @@
 import { HttpCreateNodeRequest, TypesFabricOrdererConfig, TypesFabricPeerConfig } from '@/api/client'
 import { getNodesDefaultsFabricOrdererOptions, getNodesDefaultsFabricPeerOptions, getOrganizationsOptions, postNodesMutation } from '@/api/client/@tanstack/react-query.gen'
-// import { createNodeMutation, getAllOrganizationsOptions, nodesControllerGetFabricOrdererDefaultsOptions, nodesControllerGetFabricPeerDefaultsOptions } from '@/api/client/@tanstack/react-query.gen'
 
 import { FabricNodeForm, FabricNodeFormValues } from '@/components/nodes/fabric-node-form'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -108,6 +107,8 @@ export default function CreateFabricNodePage() {
 					organizations={organizations?.items?.map((org) => ({ id: org.id!, name: org.mspId! })) || []}
 					defaults={nodeType === 'FABRIC_PEER' ? peerDefaults : ordererDefaults}
 					onNodeTypeChange={handleNodeTypeChange}
+					submitText="Create Node"
+					submitButtonLoadingText="Creating..."
 				/>
 			</div>
 		</div>

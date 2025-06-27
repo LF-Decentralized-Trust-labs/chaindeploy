@@ -221,16 +221,16 @@ func (s *NodeService) GetFabricPeer(ctx context.Context, id int64) (*peer.LocalP
 
 	// Get deployment config if available
 	if node.DeploymentConfig.Valid {
-		// deploymentConfig, err := utils.DeserializeDeploymentConfig(node.DeploymentConfig.String)
-		// if err != nil {
-		// 	s.logger.Warn("Failed to deserialize deployment config", "error", err)
-		// } else {
-		// 	// // Update config with deployment values
-		// 	// if deployConfig, ok := deploymentConfig.(*types.FabricPeerDeploymentConfig); ok {
-		// 	// 	peerConfig.ExternalEndpoint = deployConfig.ExternalEndpoint
-		// 	// 	// Add any other deployment-specific fields that should be included
-		// 	// }
-		// }
+		deploymentConfig, err := utils.DeserializeDeploymentConfig(node.DeploymentConfig.String)
+		if err != nil {
+			s.logger.Warn("Failed to deserialize deployment config", "error", err)
+		} else {
+			// Update config with deployment values
+			if deployConfig, ok := deploymentConfig.(*types.FabricPeerDeploymentConfig); ok {
+				peerConfig.ExternalEndpoint = deployConfig.ExternalEndpoint
+				// Add any other deployment-specific fields that should be included
+			}
+		}
 	}
 
 	// Get organization
@@ -486,21 +486,27 @@ func (s *NodeService) UpdateFabricPeer(ctx context.Context, opts UpdateFabricPee
 	// Update configuration fields if provided
 	if opts.ExternalEndpoint != "" && opts.ExternalEndpoint != peerConfig.ExternalEndpoint {
 		peerConfig.ExternalEndpoint = opts.ExternalEndpoint
+		deployPeerConfig.ExternalEndpoint = opts.ExternalEndpoint
 	}
 	if opts.ListenAddress != "" && opts.ListenAddress != peerConfig.ListenAddress {
 		peerConfig.ListenAddress = opts.ListenAddress
+		deployPeerConfig.ListenAddress = opts.ListenAddress
 	}
 	if opts.EventsAddress != "" && opts.EventsAddress != peerConfig.EventsAddress {
 		peerConfig.EventsAddress = opts.EventsAddress
+		deployPeerConfig.EventsAddress = opts.EventsAddress
 	}
 	if opts.OperationsListenAddress != "" && opts.OperationsListenAddress != peerConfig.OperationsListenAddress {
 		peerConfig.OperationsListenAddress = opts.OperationsListenAddress
+		deployPeerConfig.OperationsListenAddress = opts.OperationsListenAddress
 	}
 	if opts.ChaincodeAddress != "" && opts.ChaincodeAddress != peerConfig.ChaincodeAddress {
 		peerConfig.ChaincodeAddress = opts.ChaincodeAddress
+		deployPeerConfig.ChaincodeAddress = opts.ChaincodeAddress
 	}
 	if opts.DomainNames != nil {
 		peerConfig.DomainNames = opts.DomainNames
+		deployPeerConfig.DomainNames = opts.DomainNames
 	}
 	if opts.Env != nil {
 		peerConfig.Env = opts.Env
@@ -513,17 +519,24 @@ func (s *NodeService) UpdateFabricPeer(ctx context.Context, opts UpdateFabricPee
 		peerConfig.Version = opts.Version
 		deployPeerConfig.Version = opts.Version
 	}
+	if opts.AddressOverrides != nil {
+		peerConfig.AddressOverrides = opts.AddressOverrides
+		deployPeerConfig.AddressOverrides = opts.AddressOverrides
+	}
 
 	// Validate the updated configuration
 	if err := s.validateFabricPeerConfig(peerConfig); err != nil {
 		return nil, fmt.Errorf("invalid peer configuration: %w", err)
 	}
 
+	// In UpdateFabricPeer, before validation
+	peerConfig.DomainNames = s.ensureExternalEndpointInDomains(peerConfig.ExternalEndpoint, peerConfig.DomainNames)
+
 	configBytes, err := utils.StoreNodeConfig(nodeConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to store node config: %w", err)
 	}
-	node, err = s.db.UpdateNodeConfig(ctx, &db.UpdateNodeConfigParams{
+	_, err = s.db.UpdateNodeConfig(ctx, &db.UpdateNodeConfigParams{
 		ID: opts.NodeID,
 		NodeConfig: sql.NullString{
 			String: string(configBytes),
@@ -533,20 +546,22 @@ func (s *NodeService) UpdateFabricPeer(ctx context.Context, opts UpdateFabricPee
 	if err != nil {
 		return nil, fmt.Errorf("failed to update node config: %w", err)
 	}
-
 	// Update the deployment config in the database
 	deploymentConfigBytes, err := json.Marshal(deployPeerConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal updated deployment config: %w", err)
 	}
 
-	node, err = s.db.UpdateDeploymentConfig(ctx, &db.UpdateDeploymentConfigParams{
+	_, err = s.db.UpdateDeploymentConfig(ctx, &db.UpdateDeploymentConfigParams{
 		ID: opts.NodeID,
 		DeploymentConfig: sql.NullString{
 			String: string(deploymentConfigBytes),
 			Valid:  true,
 		},
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to update deployment config: %w", err)
+	}
 
 	// Synchronize the peer config
 	if err := s.SynchronizePeerConfig(ctx, opts.NodeID); err != nil {
@@ -602,18 +617,23 @@ func (s *NodeService) UpdateFabricOrderer(ctx context.Context, opts UpdateFabric
 	// Update configuration fields if provided
 	if opts.ExternalEndpoint != "" && opts.ExternalEndpoint != ordererConfig.ExternalEndpoint {
 		ordererConfig.ExternalEndpoint = opts.ExternalEndpoint
+		deployOrdererConfig.ExternalEndpoint = opts.ExternalEndpoint
 	}
 	if opts.ListenAddress != "" && opts.ListenAddress != ordererConfig.ListenAddress {
 		ordererConfig.ListenAddress = opts.ListenAddress
+		deployOrdererConfig.ListenAddress = opts.ListenAddress
 	}
 	if opts.AdminAddress != "" && opts.AdminAddress != ordererConfig.AdminAddress {
 		ordererConfig.AdminAddress = opts.AdminAddress
+		deployOrdererConfig.AdminAddress = opts.AdminAddress
 	}
 	if opts.OperationsListenAddress != "" && opts.OperationsListenAddress != ordererConfig.OperationsListenAddress {
 		ordererConfig.OperationsListenAddress = opts.OperationsListenAddress
+		deployOrdererConfig.OperationsListenAddress = opts.OperationsListenAddress
 	}
 	if opts.DomainNames != nil {
 		ordererConfig.DomainNames = opts.DomainNames
+		deployOrdererConfig.DomainNames = opts.DomainNames
 	}
 	if opts.Env != nil {
 		ordererConfig.Env = opts.Env
@@ -627,6 +647,9 @@ func (s *NodeService) UpdateFabricOrderer(ctx context.Context, opts UpdateFabric
 	if err := s.validateFabricOrdererConfig(ordererConfig); err != nil {
 		return nil, fmt.Errorf("invalid orderer configuration: %w", err)
 	}
+
+	// In UpdateFabricOrderer, before validation
+	ordererConfig.DomainNames = s.ensureExternalEndpointInDomains(ordererConfig.ExternalEndpoint, ordererConfig.DomainNames)
 
 	configBytes, err := utils.StoreNodeConfig(nodeConfig)
 	if err != nil {
@@ -1146,4 +1169,21 @@ func (s *NodeService) GetFabricPeerService(ctx context.Context, peerID int64) (*
 	}
 
 	return gateway, peerConn, nil
+}
+
+// ensureExternalEndpointInDomains ensures that the external endpoint is included in the domain names
+func (s *NodeService) ensureExternalEndpointInDomains(externalEndpoint string, domainNames []string) []string {
+	// Split host:port to get just the host part
+	host, _, err := net.SplitHostPort(externalEndpoint)
+	if err != nil {
+		// If SplitHostPort fails, assume the entire string is the host
+		host = externalEndpoint
+	}
+
+	for _, domain := range domainNames {
+		if domain == host {
+			return domainNames
+		}
+	}
+	return append(domainNames, host)
 }

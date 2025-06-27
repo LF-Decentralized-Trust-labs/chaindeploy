@@ -10,6 +10,8 @@ import SyntaxHighlighter, { SyntaxHighlighterProps } from 'react-syntax-highligh
 import { docco } from 'react-syntax-highlighter/dist/esm/styles/hljs'
 import rehypeRaw from 'rehype-raw'
 import { Skeleton } from '../ui/skeleton'
+import { useTheme } from 'next-themes'
+import { atomOneDark } from 'react-syntax-highlighter/dist/esm/styles/hljs'
 const SyntaxHighlighterComp = SyntaxHighlighter as unknown as React.ComponentType<SyntaxHighlighterProps>
 
 // Update the CHAINCODE_INSTRUCTIONS to be a function that takes parameters
@@ -161,6 +163,7 @@ interface ChaincodeManagementProps {
 
 export function ChaincodeManagement({ networkNodes, network, channelConfig }: ChaincodeManagementProps) {
 	const [selectedOrg, setSelectedOrg] = useState<{ id: number; mspId: string } | null>(null)
+	const { theme } = useTheme();
 
 	const { data: fabricOrgs } = useQuery({
 		...getOrganizationsOptions(),
@@ -246,7 +249,7 @@ export function ChaincodeManagement({ networkNodes, network, channelConfig }: Ch
 								return match ? (
 									<div className="relative group">
 										<CopyButton text={content.replace(/\n$/, '')} />
-										<SyntaxHighlighterComp style={docco} language="javascript">
+										<SyntaxHighlighterComp style={theme === 'dark' ? atomOneDark : docco} language="javascript">
 											{content}
 										</SyntaxHighlighterComp>
 									</div>

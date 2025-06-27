@@ -1,6 +1,7 @@
 package service
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/chainlaunch/chainlaunch/pkg/nodes/types"
@@ -342,6 +343,136 @@ func TestValidateBesuNodeConfig(t *testing.T) {
 			err := svc.validateBesuNodeConfig(tt.config)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("validateBesuNodeConfig() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestValidateDomainName(t *testing.T) {
+	tests := []struct {
+		name    string
+		domain  string
+		wantErr bool
+	}{
+		{
+			name:    "valid domain name",
+			domain:  "example.com",
+			wantErr: false,
+		},
+		{
+			name:    "valid subdomain",
+			domain:  "peer0.org1.example.com",
+			wantErr: false,
+		},
+		{
+			name:    "valid domain with numbers",
+			domain:  "peer1-org2.example.com",
+			wantErr: false,
+		},
+		{
+			name:    "empty domain",
+			domain:  "",
+			wantErr: true,
+		},
+		{
+			name:    "single part domain",
+			domain:  "example",
+			wantErr: false,
+		},
+		{
+			name:    "domain starting with hyphen",
+			domain:  "-example.com",
+			wantErr: true,
+		},
+		{
+			name:    "domain ending with hyphen",
+			domain:  "example-.com",
+			wantErr: true,
+		},
+		{
+			name:    "domain with invalid characters",
+			domain:  "example@.com",
+			wantErr: true,
+		},
+		{
+			name:    "domain with uppercase letters",
+			domain:  "Example.com",
+			wantErr: true,
+		},
+		{
+			name:    "domain part too long",
+			domain:  "a" + strings.Repeat("b", 63) + ".com",
+			wantErr: true,
+		},
+	}
+
+	svc := &NodeService{}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := svc.validateDomainName(tt.domain)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateDomainName() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestValidateExternalEndpoint(t *testing.T) {
+	tests := []struct {
+		name     string
+		endpoint string
+		wantErr  bool
+	}{
+		{
+			name:     "valid domain endpoint",
+			endpoint: "peer0.org1.example.com:7051",
+			wantErr:  false,
+		},
+		{
+			name:     "valid IP endpoint",
+			endpoint: "192.168.1.100:7051",
+			wantErr:  false,
+		},
+		{
+			name:     "valid localhost endpoint",
+			endpoint: "localhost:7051",
+			wantErr:  false,
+		},
+		{
+			name:     "missing port",
+			endpoint: "peer0.org1.example.com",
+			wantErr:  true,
+		},
+		{
+			name:     "invalid port number",
+			endpoint: "peer0.org1.example.com:99999",
+			wantErr:  true,
+		},
+		{
+			name:     "port out of range",
+			endpoint: "peer0.org1.example.com:0",
+			wantErr:  true,
+		},
+		{
+			name:     "empty host",
+			endpoint: ":7051",
+			wantErr:  true,
+		},
+		{
+			name:     "invalid domain in endpoint",
+			endpoint: "invalid@domain.com:7051",
+			wantErr:  true,
+		},
+	}
+
+	svc := &NodeService{}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := svc.validateExternalEndpoint(tt.endpoint)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateExternalEndpoint() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

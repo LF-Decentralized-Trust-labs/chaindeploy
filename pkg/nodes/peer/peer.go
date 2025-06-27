@@ -2125,6 +2125,7 @@ func (p *LocalPeer) PrepareAdminCertMSP(mspID string) (string, error) {
 
 // LeaveChannel removes the peer from a channel
 func (p *LocalPeer) LeaveChannel(channelID string) error {
+	// Stop the peer before unjoining
 	err := p.Stop()
 	if err != nil {
 		return fmt.Errorf("failed to stop peer: %w", err)
@@ -2132,32 +2133,115 @@ func (p *LocalPeer) LeaveChannel(channelID string) error {
 
 	p.logger.Info("Removing peer from channel", "peer", p.opts.ID, "channel", channelID)
 
-	// Build peer channel remove command
-	peerBinary, err := p.findPeerBinary()
-	if err != nil {
-		return fmt.Errorf("failed to find peer binary: %w", err)
-	}
-	peerPath := p.getPeerPath()
-	peerConfigPath := filepath.Join(peerPath, "config")
-	cmd := exec.Command(peerBinary, "node", "unjoin", "-c", channelID)
 	listenAddress := strings.Replace(p.opts.ListenAddress, "0.0.0.0", "localhost", 1)
 
-	// Set environment variables
-	cmd.Env = append(os.Environ(),
-		fmt.Sprintf("CORE_PEER_MSPCONFIGPATH=%s", peerConfigPath),
-		fmt.Sprintf("CORE_PEER_ADDRESS=%s", listenAddress),
-		fmt.Sprintf("CORE_PEER_LOCALMSPID=%s", p.mspID),
-		"CORE_PEER_TLS_ENABLED=true",
-		fmt.Sprintf("FABRIC_CFG_PATH=%s", peerConfigPath),
-	)
+	var output []byte
+	if p.mode == "docker" {
+		// containerName, err := p.getContainerName()
+		// if err != nil {
+		// 	return fmt.Errorf("failed to get container name: %w", err)
+		// }
+		cli, err := dockerclient.NewClientWithOpts(
+			dockerclient.FromEnv,
+			dockerclient.WithAPIVersionNegotiation(),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create docker client: %w", err)
+		}
+		defer cli.Close()
 
-	// Execute command
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to remove channel: %w, output: %s", err, string(output))
+		ctx := context.Background()
+		imageName := fmt.Sprintf("hyperledger/fabric-peer:%s", p.opts.Version)
+		mspConfigPath := filepath.Join(p.getPeerPath(), "config")
+		dataConfigPath := filepath.Join(p.getPeerPath(), "data")
+		mounts := []mount.Mount{
+			{
+				Type:   mount.TypeBind,
+				Source: mspConfigPath,
+				Target: "/etc/hyperledger/fabric/msp",
+			},
+			{
+				Type:   mount.TypeBind,
+				Source: dataConfigPath,
+				Target: "/var/hyperledger/production",
+			},
+		}
+		cmd := []string{"/usr/local/bin/peer", "node", "unjoin", "-c", channelID}
+		envVars := []string{
+			"CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/msp",
+			"CORE_PEER_ADDRESS=" + listenAddress,
+			"CORE_PEER_LOCALMSPID=" + p.mspID,
+			"CORE_PEER_TLS_ENABLED=true",
+			"FABRIC_CFG_PATH=/etc/hyperledger/fabric/msp",
+		}
+		containerConfig := &container.Config{
+			Image: imageName,
+			Cmd:   cmd,
+			Env:   envVars,
+		}
+		hostConfig := &container.HostConfig{
+			Mounts: mounts,
+		}
+		// Create ephemeral container
+		resp, err := cli.ContainerCreate(ctx, containerConfig, hostConfig, nil, nil, "peer-unjoin-ephemeral-"+p.opts.ID)
+		if err != nil {
+			return fmt.Errorf("failed to create ephemeral container: %w", err)
+		}
+		// Start container
+		if err := cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
+			_ = cli.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+			return fmt.Errorf("failed to start ephemeral container: %w", err)
+		}
+		// Wait for container to finish
+		statusCh, errCh := cli.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
+		select {
+		case status := <-statusCh:
+			if status.StatusCode != 0 {
+				logs, _ := cli.ContainerLogs(ctx, resp.ID, container.LogsOptions{ShowStdout: true, ShowStderr: true})
+				logBytes, _ := io.ReadAll(logs)
+				_ = cli.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+				return fmt.Errorf("failed to remove channel (docker ephemeral): exit code %d, output: %s", status.StatusCode, string(logBytes))
+			}
+		case err := <-errCh:
+			_ = cli.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+			return fmt.Errorf("failed to wait for ephemeral container: %w", err)
+		}
+		// Get logs for output
+		logs, err := cli.ContainerLogs(ctx, resp.ID, container.LogsOptions{ShowStdout: true, ShowStderr: true})
+		if err != nil {
+			return fmt.Errorf("failed to get logs: %w", err)
+		}
+		output, err = io.ReadAll(logs)
+		if err != nil {
+			return fmt.Errorf("failed to read logs: %w", err)
+		}
+		err = cli.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+		if err != nil {
+			return fmt.Errorf("failed to remove container: %w", err)
+		}
+	} else {
+		peerPath := p.getPeerPath()
+		peerConfigPath := filepath.Join(peerPath, "config")
+		peerBinary, err := p.findPeerBinary()
+		if err != nil {
+			return fmt.Errorf("failed to find peer binary: %w", err)
+		}
+		// Service/systemd/launchd mode (host execution)
+		cmd := exec.Command(peerBinary, "node", "unjoin", "-c", channelID)
+		cmd.Env = append(os.Environ(),
+			fmt.Sprintf("CORE_PEER_MSPCONFIGPATH=%s", peerConfigPath),
+			fmt.Sprintf("CORE_PEER_ADDRESS=%s", listenAddress),
+			fmt.Sprintf("CORE_PEER_LOCALMSPID=%s", p.mspID),
+			"CORE_PEER_TLS_ENABLED=true",
+			fmt.Sprintf("FABRIC_CFG_PATH=%s", peerConfigPath),
+		)
+		output, err = cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("failed to remove channel: %w, output: %s", err, string(output))
+		}
 	}
 
-	p.logger.Info("Successfully removed channel", "peer", p.opts.ID, "channel", channelID)
+	p.logger.Info("Successfully removed channel", "peer", p.opts.ID, "channel", channelID, "output", string(output))
 	_, err = p.Start()
 	if err != nil {
 		return fmt.Errorf("failed to start peer: %w", err)
