@@ -47,14 +47,13 @@ func (s *NodeService) GetBesuNodeDefaults(besuNodes int) ([]BesuNodeDefaults, er
 		return nil, fmt.Errorf("besu node count exceeds maximum supported nodes (15)")
 	}
 
-	// Get external IP for p2p communication
-	externalIP, err := s.GetExternalIP()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get external IP: %w", err)
+	// Fetch default IP from settings
+	defaultIP := "127.0.0.1"
+	if setting, err := s.settingsService.GetSetting(context.Background()); err == nil {
+		if setting.Config.DefaultNodeExposeIP != "" {
+			defaultIP = setting.Config.DefaultNodeExposeIP
+		}
 	}
-
-	// Use localhost for internal IP
-	internalIP := "127.0.0.1"
 
 	// Base ports for Besu nodes with sufficient spacing
 	const (
@@ -97,19 +96,18 @@ func (s *NodeService) GetBesuNodeDefaults(besuNodes int) ([]BesuNodeDefaults, er
 
 		// Create node defaults with unique ports
 		nodeDefaults[i] = BesuNodeDefaults{
-			P2PHost:    externalIP, // Use external IP for p2p host
+			P2PHost:    defaultIP, // Use default IP for p2p host
 			P2PPort:    p2pPort,
-			RPCHost:    "0.0.0.0", // Allow RPC from any interface
+			RPCHost:    defaultIP, // Use default IP for rpc host
 			RPCPort:    rpcPort,
-			ExternalIP: externalIP,
-			InternalIP: internalIP,
+			ExternalIP: defaultIP,
 			Mode:       ModeService,
 			Env: map[string]string{
 				"JAVA_OPTS": "-Xmx4g",
 			},
 			// Set metrics configuration
 			MetricsEnabled:  true,
-			MetricsHost:     "0.0.0.0", // Allow metrics from any interface
+			MetricsHost:     defaultIP, // Use default IP for metrics host
 			MetricsPort:     uint(metricsPorts[0]),
 			MetricsProtocol: "PROMETHEUS",
 		}

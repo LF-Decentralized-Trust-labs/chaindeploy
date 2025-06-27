@@ -24,6 +24,14 @@ import (
 
 // GetFabricPeerDefaults returns default values for a Fabric peer node
 func (s *NodeService) GetFabricPeerDefaults() *NodeDefaults {
+	// Fetch default IP from settings
+	defaultIP := "127.0.0.1"
+	if setting, err := s.settingsService.GetSetting(context.Background()); err == nil {
+		if setting.Config.DefaultNodeExposeIP != "" {
+			defaultIP = setting.Config.DefaultNodeExposeIP
+		}
+	}
+	loopbackAddress := "0.0.0.0"
 	// Get available ports for peer services
 	listen, chaincode, events, operations, err := GetPeerPorts(7051)
 	if err != nil {
@@ -33,11 +41,11 @@ func (s *NodeService) GetFabricPeerDefaults() *NodeDefaults {
 			s.logger.Error("Failed to get available ports for peer", "error", err)
 			// Fall back to default ports if all attempts fail
 			return &NodeDefaults{
-				ListenAddress:           "0.0.0.0:7051",
-				ExternalEndpoint:        "localhost:7051",
-				ChaincodeAddress:        "0.0.0.0:7052",
-				EventsAddress:           "0.0.0.0:7053",
-				OperationsListenAddress: "0.0.0.0:9443",
+				ListenAddress:           fmt.Sprintf("%s:%d", loopbackAddress, 7051),
+				ExternalEndpoint:        fmt.Sprintf("%s:%d", defaultIP, 7051),
+				ChaincodeAddress:        fmt.Sprintf("%s:%d", loopbackAddress, 7052),
+				EventsAddress:           fmt.Sprintf("%s:%d", loopbackAddress, 7053),
+				OperationsListenAddress: fmt.Sprintf("%s:%d", loopbackAddress, 9443),
 				Mode:                    ModeService,
 				ServiceName:             "fabric-peer",
 				LogPath:                 "/var/log/fabric/peer.log",
@@ -47,11 +55,11 @@ func (s *NodeService) GetFabricPeerDefaults() *NodeDefaults {
 	}
 
 	return &NodeDefaults{
-		ListenAddress:           fmt.Sprintf("0.0.0.0:%d", listen),
-		ExternalEndpoint:        fmt.Sprintf("localhost:%d", listen),
-		ChaincodeAddress:        fmt.Sprintf("0.0.0.0:%d", chaincode),
-		EventsAddress:           fmt.Sprintf("0.0.0.0:%d", events),
-		OperationsListenAddress: fmt.Sprintf("0.0.0.0:%d", operations),
+		ListenAddress:           fmt.Sprintf("%s:%d", loopbackAddress, listen),
+		ExternalEndpoint:        fmt.Sprintf("%s:%d", defaultIP, listen),
+		ChaincodeAddress:        fmt.Sprintf("%s:%d", loopbackAddress, chaincode),
+		EventsAddress:           fmt.Sprintf("%s:%d", loopbackAddress, events),
+		OperationsListenAddress: fmt.Sprintf("%s:%d", loopbackAddress, operations),
 		Mode:                    ModeService,
 		ServiceName:             "fabric-peer",
 		LogPath:                 "/var/log/fabric/peer.log",
@@ -61,6 +69,14 @@ func (s *NodeService) GetFabricPeerDefaults() *NodeDefaults {
 
 // GetFabricOrdererDefaults returns default values for a Fabric orderer node
 func (s *NodeService) GetFabricOrdererDefaults() *NodeDefaults {
+	// Fetch default IP from settings
+	defaultIP := "127.0.0.1"
+	if setting, err := s.settingsService.GetSetting(context.Background()); err == nil {
+		if setting.Config.DefaultNodeExposeIP != "" {
+			defaultIP = setting.Config.DefaultNodeExposeIP
+		}
+	}
+	loopbackAddress := "0.0.0.0"
 	// Get available ports for orderer services
 	listen, admin, operations, err := GetOrdererPorts(7050)
 	if err != nil {
@@ -70,10 +86,10 @@ func (s *NodeService) GetFabricOrdererDefaults() *NodeDefaults {
 			s.logger.Error("Failed to get available ports for orderer", "error", err)
 			// Fall back to default ports if all attempts fail
 			return &NodeDefaults{
-				ListenAddress:           "0.0.0.0:7050",
-				ExternalEndpoint:        "localhost:7050",
-				AdminAddress:            "0.0.0.0:7053",
-				OperationsListenAddress: "0.0.0.0:8443",
+				ListenAddress:           fmt.Sprintf("%s:%d", loopbackAddress, 7050),
+				ExternalEndpoint:        fmt.Sprintf("%s:%d", defaultIP, 7050),
+				AdminAddress:            fmt.Sprintf("%s:%d", loopbackAddress, 7053),
+				OperationsListenAddress: fmt.Sprintf("%s:%d", loopbackAddress, 8443),
 				Mode:                    ModeService,
 				ServiceName:             "fabric-orderer",
 				LogPath:                 "/var/log/fabric/orderer.log",
@@ -83,10 +99,10 @@ func (s *NodeService) GetFabricOrdererDefaults() *NodeDefaults {
 	}
 
 	return &NodeDefaults{
-		ListenAddress:           fmt.Sprintf("0.0.0.0:%d", listen),
-		ExternalEndpoint:        fmt.Sprintf("localhost:%d", listen),
-		AdminAddress:            fmt.Sprintf("0.0.0.0:%d", admin),
-		OperationsListenAddress: fmt.Sprintf("0.0.0.0:%d", operations),
+		ListenAddress:           fmt.Sprintf("%s:%d", loopbackAddress, listen),
+		ExternalEndpoint:        fmt.Sprintf("%s:%d", defaultIP, listen),
+		AdminAddress:            fmt.Sprintf("%s:%d", loopbackAddress, admin),
+		OperationsListenAddress: fmt.Sprintf("%s:%d", loopbackAddress, operations),
 		Mode:                    ModeService,
 		ServiceName:             "fabric-orderer",
 		LogPath:                 "/var/log/fabric/orderer.log",
@@ -109,6 +125,14 @@ const (
 
 // GetFabricNodesDefaults returns default values for multiple nodes with guaranteed non-overlapping ports
 func (s *NodeService) GetFabricNodesDefaults(params NodesDefaultsParams) (*NodesDefaultsResult, error) {
+	// Fetch default IP from settings
+	defaultIP := "127.0.0.1"
+	loopbackAddress := "0.0.0.0"
+	if setting, err := s.settingsService.GetSetting(context.Background()); err == nil {
+		if setting.Config.DefaultNodeExposeIP != "" {
+			defaultIP = setting.Config.DefaultNodeExposeIP
+		}
+	}
 	// Validate node counts
 	if params.PeerCount > 15 {
 		return nil, fmt.Errorf("peer count exceeds maximum supported nodes (15)")
@@ -143,11 +167,11 @@ func (s *NodeService) GetFabricNodesDefaults(params NodesDefaultsParams) (*Nodes
 		}
 
 		result.Peers[i] = NodeDefaults{
-			ListenAddress:           fmt.Sprintf("0.0.0.0:%d", listen),
-			ExternalEndpoint:        fmt.Sprintf("localhost:%d", listen),
-			ChaincodeAddress:        fmt.Sprintf("0.0.0.0:%d", chaincode),
-			EventsAddress:           fmt.Sprintf("0.0.0.0:%d", events),
-			OperationsListenAddress: fmt.Sprintf("0.0.0.0:%d", operations),
+			ListenAddress:           fmt.Sprintf("%s:%d", loopbackAddress, listen),
+			ExternalEndpoint:        fmt.Sprintf("%s:%d", defaultIP, listen),
+			ChaincodeAddress:        fmt.Sprintf("%s:%d", loopbackAddress, chaincode),
+			EventsAddress:           fmt.Sprintf("%s:%d", loopbackAddress, events),
+			OperationsListenAddress: fmt.Sprintf("%s:%d", loopbackAddress, operations),
 			Mode:                    params.Mode,
 			ServiceName:             fmt.Sprintf("fabric-peer-%d", i+1),
 			LogPath:                 fmt.Sprintf("/var/log/fabric/peer%d.log", i+1),
@@ -177,10 +201,10 @@ func (s *NodeService) GetFabricNodesDefaults(params NodesDefaultsParams) (*Nodes
 		}
 
 		result.Orderers[i] = NodeDefaults{
-			ListenAddress:           fmt.Sprintf("0.0.0.0:%d", listen),
-			ExternalEndpoint:        fmt.Sprintf("localhost:%d", listen),
-			AdminAddress:            fmt.Sprintf("0.0.0.0:%d", admin),
-			OperationsListenAddress: fmt.Sprintf("0.0.0.0:%d", operations),
+			ListenAddress:           fmt.Sprintf("%s:%d", loopbackAddress, listen),
+			ExternalEndpoint:        fmt.Sprintf("%s:%d", defaultIP, listen),
+			AdminAddress:            fmt.Sprintf("%s:%d", loopbackAddress, admin),
+			OperationsListenAddress: fmt.Sprintf("%s:%d", loopbackAddress, operations),
 			Mode:                    params.Mode,
 			ServiceName:             fmt.Sprintf("fabric-orderer-%d", i+1),
 			LogPath:                 fmt.Sprintf("/var/log/fabric/orderer%d.log", i+1),

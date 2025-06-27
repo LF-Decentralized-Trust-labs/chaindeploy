@@ -951,7 +951,7 @@ func (p *LocalPeer) Init() (nodetypes.NodeDeploymentConfig, error) {
 		DNSNames:           []string{p.opts.ID},
 		IsCA:               true,
 		KeyUsage:           x509.KeyUsageCertSign,
-		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign sign key: %w", err)
@@ -1017,7 +1017,7 @@ func (p *LocalPeer) Init() (nodetypes.NodeDeploymentConfig, error) {
 		IsCA:               true,
 		ValidFor:           validFor,
 		KeyUsage:           x509.KeyUsageCertSign,
-		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign TLS certificate: %w", err)

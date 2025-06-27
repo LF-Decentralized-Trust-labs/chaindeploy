@@ -440,7 +440,7 @@ func (o *LocalOrderer) Init() (interface{}, error) {
 		DNSNames:           []string{o.opts.ID},
 		IsCA:               true,
 		KeyUsage:           x509.KeyUsageCertSign,
-		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign sign key: %w", err)
@@ -506,7 +506,7 @@ func (o *LocalOrderer) Init() (interface{}, error) {
 		IsCA:               true,
 		ValidFor:           validFor,
 		KeyUsage:           x509.KeyUsageCertSign,
-		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign TLS certificate: %w", err)

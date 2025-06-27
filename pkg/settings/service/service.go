@@ -13,9 +13,10 @@ import (
 
 // Default settings configuration
 var defaultConfig = SettingConfig{
-	PeerTemplateCMD:    "{{.Cmd}}",
-	OrdererTemplateCMD: "{{.Cmd}}",
-	BesuTemplateCMD:    "{{.Cmd}}",
+	PeerTemplateCMD:     "{{.Cmd}}",
+	OrdererTemplateCMD:  "{{.Cmd}}",
+	BesuTemplateCMD:     "{{.Cmd}}",
+	DefaultNodeExposeIP: "0.0.0.0", // Default to all interfaces
 }
 
 // Setting represents a setting in the service layer
@@ -27,9 +28,10 @@ type Setting struct {
 }
 
 type SettingConfig struct {
-	PeerTemplateCMD    string `json:"peerTemplateCMD"`
-	OrdererTemplateCMD string `json:"ordererTemplateCMD"`
-	BesuTemplateCMD    string `json:"besuTemplateCMD"`
+	PeerTemplateCMD     string `json:"peerTemplateCMD"`
+	OrdererTemplateCMD  string `json:"ordererTemplateCMD"`
+	BesuTemplateCMD     string `json:"besuTemplateCMD"`
+	DefaultNodeExposeIP string `json:"defaultNodeExposeIP"`
 }
 
 // CreateSettingParams represents the parameters for creating a setting
@@ -70,6 +72,7 @@ func validateTemplates(config SettingConfig) error {
 			return fmt.Errorf("invalid %s: %w", name, err)
 		}
 	}
+	// Optionally, validate DefaultNodeExposeIP is a valid IP (not required, but could be added)
 	return nil
 }
 

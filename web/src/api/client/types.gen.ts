@@ -1922,6 +1922,7 @@ export type ServiceSetting = {
 
 export type ServiceSettingConfig = {
     besuTemplateCMD?: string;
+    defaultNodeExposeIP?: string;
     ordererTemplateCMD?: string;
     peerTemplateCMD?: string;
 };

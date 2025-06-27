@@ -1724,7 +1724,7 @@ export const postPluginsAvailableRefresh = <ThrowOnError extends boolean = false
 
 /**
  * Delete a plugin
- * Delete an existing plugin
+ * Delete a plugin (will stop it first if running)
  */
 export const deletePluginsByName = <ThrowOnError extends boolean = false>(options: Options<DeletePluginsByNameData, ThrowOnError>) => {
     return (options?.client ?? client).delete<unknown, DeletePluginsByNameError, ThrowOnError>({

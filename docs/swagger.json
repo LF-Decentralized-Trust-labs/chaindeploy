@@ -1,8 +1,26 @@
 {
+    "schemes": [
+        "http",
+        "https"
+    ],
     "swagger": "2.0",
     "info": {
-        "contact": {}
+        "description": "ChainLaunch API provides services for managing blockchain networks and cryptographic keys",
+        "title": "ChainLaunch API",
+        "termsOfService": "http://swagger.io/terms/",
+        "contact": {
+            "name": "API Support",
+            "url": "http://chainlaunch.dev/support",
+            "email": "support@chainlaunch.dev"
+        },
+        "license": {
+            "name": "Apache 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+        },
+        "version": "1.0"
     },
+    "host": "localhost:8100",
+    "basePath": "/api/v1",
     "paths": {
         "/ai/boilerplates": {
             "get": {
@@ -7227,7 +7245,7 @@
                 }
             },
             "delete": {
-                "description": "Delete an existing plugin",
+                "description": "Delete a plugin (will stop it first if running)",
                 "consumes": [
                     "application/json"
                 ],
@@ -12548,7 +12566,7 @@
             "properties": {
                 "anchorPeers": {
                     "type": "array",
-                    "minItems": 1,
+                    "minItems": 0,
                     "items": {
                         "$ref": "#/definitions/http.AnchorPeer"
                     }
@@ -14249,6 +14267,9 @@
                 "besuTemplateCMD": {
                     "type": "string"
                 },
+                "defaultNodeExposeIP": {
+                    "type": "string"
+                },
                 "ordererTemplateCMD": {
                     "type": "string"
                 },
@@ -14952,5 +14973,89 @@
                 "KeyUsageDecipherOnly"
             ]
         }
-    }
+    },
+    "securityDefinitions": {
+        "BasicAuth": {
+            "type": "basic"
+        },
+        "CookieAuth": {
+            "type": "apiKey",
+            "name": "session_id",
+            "in": "cookie"
+        }
+    },
+    "tags": [
+        {
+            "description": "Audit management operations",
+            "name": "Audit"
+        },
+        {
+            "description": "Chaincode project management operations",
+            "name": "Chaincode Projects"
+        },
+        {
+            "description": "User authentication and authorization operations",
+            "name": "Authentication"
+        },
+        {
+            "description": "Backup schedule configuration and management",
+            "name": "Backup Schedules"
+        },
+        {
+            "description": "Backup target location configuration and management",
+            "name": "Backup Targets"
+        },
+        {
+            "description": "Backup management operations",
+            "name": "Backups"
+        },
+        {
+            "description": "Hyperledger Besu network management operations",
+            "name": "Besu Networks"
+        },
+        {
+            "description": "Hyperledger Fabric network management operations",
+            "name": "Fabric Networks"
+        },
+        {
+            "description": "Cryptographic key management operations",
+            "name": "Keys"
+        },
+        {
+            "description": "Metrics management operations",
+            "name": "Metrics"
+        },
+        {
+            "description": "Network node management operations",
+            "name": "Nodes"
+        },
+        {
+            "description": "System notification configuration and management",
+            "name": "Notifications"
+        },
+        {
+            "description": "Organization management operations",
+            "name": "Organizations"
+        },
+        {
+            "description": "Plugin management operations",
+            "name": "Plugins"
+        },
+        {
+            "description": "Key provider management operations",
+            "name": "Providers"
+        },
+        {
+            "description": "Settings management operations",
+            "name": "Settings"
+        },
+        {
+            "description": "Smart contract management operations",
+            "name": "SmartContracts"
+        },
+        {
+            "description": "User account management operations",
+            "name": "Users"
+        }
+    ]
 }
