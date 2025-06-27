@@ -1,6 +1,3 @@
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Copy, Replace } from 'lucide-react'
 import { useMemo } from 'react'
 import { ToolEvent } from './ToolEventRenderer'
@@ -76,7 +73,7 @@ export const SearchReplaceResult = ({ event }: SearchReplaceResultProps) => {
 		const args = event.arguments && typeof event.arguments === 'string' ? JSON.parse(event.arguments) : {}
 		return args
 	}, [event.arguments])
-	
+
 	const filePath = resultArgs.file_path || ''
 	const oldString = resultArgs.old_string || ''
 	const newString = resultArgs.new_string || ''
@@ -87,9 +84,7 @@ export const SearchReplaceResult = ({ event }: SearchReplaceResultProps) => {
 		<ToolSummaryCard event={event}>
 			<div className="space-y-3">
 				{/* Summary Section */}
-				<div className="text-sm text-muted-foreground mb-3">
-					{summary}
-				</div>
+				<div className="text-sm text-muted-foreground mb-3">{summary}</div>
 
 				{/* File Path */}
 				<div className="bg-background/50 p-3 rounded border border-border">

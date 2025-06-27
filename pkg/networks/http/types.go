@@ -99,7 +99,7 @@ type AnchorPeer struct {
 // SetAnchorPeersRequest represents the request to set anchor peers for an organization
 type SetAnchorPeersRequest struct {
 	OrganizationID int64        `json:"organizationId" validate:"required"`
-	AnchorPeers    []AnchorPeer `json:"anchorPeers" validate:"required,min=1"`
+	AnchorPeers    []AnchorPeer `json:"anchorPeers" validate:"required,min=0"`
 }
 
 // SetAnchorPeersResponse represents the response after setting anchor peers

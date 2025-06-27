@@ -10,5 +10,7 @@ type RepoMetadata struct {
 // DownloaderInterface defines the methods for downloading and caching repositories.
 type DownloaderInterface interface {
 	DownloadRepo(url string) (string, *RepoMetadata, error)
+	ClearExpiredCache() error
+	GetCacheStats() (totalFiles, validFiles, expiredFiles int, err error)
 	// Add more methods as needed
 }

@@ -221,16 +221,16 @@ func (s *NodeService) GetFabricPeer(ctx context.Context, id int64) (*peer.LocalP
 
 	// Get deployment config if available
 	if node.DeploymentConfig.Valid {
-		deploymentConfig, err := utils.DeserializeDeploymentConfig(node.DeploymentConfig.String)
-		if err != nil {
-			s.logger.Warn("Failed to deserialize deployment config", "error", err)
-		} else {
-			// Update config with deployment values
-			if deployConfig, ok := deploymentConfig.(*types.FabricPeerDeploymentConfig); ok {
-				peerConfig.ExternalEndpoint = deployConfig.ExternalEndpoint
-				// Add any other deployment-specific fields that should be included
-			}
-		}
+		// deploymentConfig, err := utils.DeserializeDeploymentConfig(node.DeploymentConfig.String)
+		// if err != nil {
+		// 	s.logger.Warn("Failed to deserialize deployment config", "error", err)
+		// } else {
+		// 	// // Update config with deployment values
+		// 	// if deployConfig, ok := deploymentConfig.(*types.FabricPeerDeploymentConfig); ok {
+		// 	// 	peerConfig.ExternalEndpoint = deployConfig.ExternalEndpoint
+		// 	// 	// Add any other deployment-specific fields that should be included
+		// 	// }
+		// }
 	}
 
 	// Get organization
@@ -488,27 +488,15 @@ func (s *NodeService) UpdateFabricPeer(ctx context.Context, opts UpdateFabricPee
 		peerConfig.ExternalEndpoint = opts.ExternalEndpoint
 	}
 	if opts.ListenAddress != "" && opts.ListenAddress != peerConfig.ListenAddress {
-		if err := s.validateAddress(opts.ListenAddress); err != nil {
-			return nil, fmt.Errorf("invalid listen address: %w", err)
-		}
 		peerConfig.ListenAddress = opts.ListenAddress
 	}
 	if opts.EventsAddress != "" && opts.EventsAddress != peerConfig.EventsAddress {
-		if err := s.validateAddress(opts.EventsAddress); err != nil {
-			return nil, fmt.Errorf("invalid events address: %w", err)
-		}
 		peerConfig.EventsAddress = opts.EventsAddress
 	}
 	if opts.OperationsListenAddress != "" && opts.OperationsListenAddress != peerConfig.OperationsListenAddress {
-		if err := s.validateAddress(opts.OperationsListenAddress); err != nil {
-			return nil, fmt.Errorf("invalid operations listen address: %w", err)
-		}
 		peerConfig.OperationsListenAddress = opts.OperationsListenAddress
 	}
 	if opts.ChaincodeAddress != "" && opts.ChaincodeAddress != peerConfig.ChaincodeAddress {
-		if err := s.validateAddress(opts.ChaincodeAddress); err != nil {
-			return nil, fmt.Errorf("invalid chaincode address: %w", err)
-		}
 		peerConfig.ChaincodeAddress = opts.ChaincodeAddress
 	}
 	if opts.DomainNames != nil {
@@ -526,9 +514,9 @@ func (s *NodeService) UpdateFabricPeer(ctx context.Context, opts UpdateFabricPee
 		deployPeerConfig.Version = opts.Version
 	}
 
-	// Validate all addresses together for port conflicts
-	if err := s.validateFabricPeerAddresses(peerConfig); err != nil {
-		return nil, err
+	// Validate the updated configuration
+	if err := s.validateFabricPeerConfig(peerConfig); err != nil {
+		return nil, fmt.Errorf("invalid peer configuration: %w", err)
 	}
 
 	configBytes, err := utils.StoreNodeConfig(nodeConfig)
@@ -616,21 +604,12 @@ func (s *NodeService) UpdateFabricOrderer(ctx context.Context, opts UpdateFabric
 		ordererConfig.ExternalEndpoint = opts.ExternalEndpoint
 	}
 	if opts.ListenAddress != "" && opts.ListenAddress != ordererConfig.ListenAddress {
-		if err := s.validateAddress(opts.ListenAddress); err != nil {
-			return nil, fmt.Errorf("invalid listen address: %w", err)
-		}
 		ordererConfig.ListenAddress = opts.ListenAddress
 	}
 	if opts.AdminAddress != "" && opts.AdminAddress != ordererConfig.AdminAddress {
-		if err := s.validateAddress(opts.AdminAddress); err != nil {
-			return nil, fmt.Errorf("invalid admin address: %w", err)
-		}
 		ordererConfig.AdminAddress = opts.AdminAddress
 	}
 	if opts.OperationsListenAddress != "" && opts.OperationsListenAddress != ordererConfig.OperationsListenAddress {
-		if err := s.validateAddress(opts.OperationsListenAddress); err != nil {
-			return nil, fmt.Errorf("invalid operations listen address: %w", err)
-		}
 		ordererConfig.OperationsListenAddress = opts.OperationsListenAddress
 	}
 	if opts.DomainNames != nil {
@@ -642,6 +621,11 @@ func (s *NodeService) UpdateFabricOrderer(ctx context.Context, opts UpdateFabric
 	if opts.Version != "" {
 		ordererConfig.Version = opts.Version
 		deployOrdererConfig.Version = opts.Version
+	}
+
+	// Validate the updated configuration
+	if err := s.validateFabricOrdererConfig(ordererConfig); err != nil {
+		return nil, fmt.Errorf("invalid orderer configuration: %w", err)
 	}
 
 	configBytes, err := utils.StoreNodeConfig(nodeConfig)

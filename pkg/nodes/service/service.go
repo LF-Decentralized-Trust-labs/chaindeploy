@@ -87,12 +87,265 @@ func (s *NodeService) validateCreateNodeRequest(req CreateNodeRequest) error {
 		if req.FabricPeer != nil && req.FabricOrderer != nil {
 			return fmt.Errorf("cannot specify both peer and orderer configurations")
 		}
+
+		// // Validate Fabric peer configuration
+		// if req.FabricPeer != nil {
+		// 	if err := s.validateFabricPeerConfig(req.FabricPeer); err != nil {
+		// 		return fmt.Errorf("invalid fabric peer configuration: %w", err)
+		// 	}
+		// }
+
+		// // Validate Fabric orderer configuration
+		// if req.FabricOrderer != nil {
+		// 	if err := s.validateFabricOrdererConfig(req.FabricOrderer); err != nil {
+		// 		return fmt.Errorf("invalid fabric orderer configuration: %w", err)
+		// 	}
+		// }
+
 	case types.PlatformBesu:
 		if req.BesuNode == nil {
 			return fmt.Errorf("besu configuration is required")
 		}
+		if err := s.validateBesuNodeConfig(req.BesuNode); err != nil {
+			return fmt.Errorf("invalid besu configuration: %w", err)
+		}
 	default:
 		return fmt.Errorf("unsupported blockchain platform: %s", req.BlockchainPlatform)
+	}
+
+	return nil
+}
+
+// validateFabricPeerConfig validates Fabric peer configuration
+func (s *NodeService) validateFabricPeerConfig(config *types.FabricPeerConfig) error {
+	// Validate required fields
+	if config.Name == "" {
+		return fmt.Errorf("name is required")
+	}
+	if config.OrganizationID == 0 {
+		return fmt.Errorf("organization ID is required")
+	}
+	if config.MSPID == "" {
+		return fmt.Errorf("MSP ID is required")
+	}
+
+	// Validate address formats
+	addresses := map[string]string{
+		"listen address":            config.ListenAddress,
+		"chaincode address":         config.ChaincodeAddress,
+		"events address":            config.EventsAddress,
+		"operations listen address": config.OperationsListenAddress,
+		"external endpoint":         config.ExternalEndpoint,
+	}
+
+	for addrType, addr := range addresses {
+		if addr == "" {
+			return fmt.Errorf("%s is required", addrType)
+		}
+		if err := s.validateAddressFormat(addr); err != nil {
+			return fmt.Errorf("invalid %s format: %w", addrType, err)
+		}
+	}
+
+	// Validate domain names
+	if len(config.DomainNames) == 0 {
+		return fmt.Errorf("at least one domain name is required")
+	}
+
+	// Validate deployment mode
+	if config.Mode != "service" && config.Mode != "docker" {
+		return fmt.Errorf("invalid deployment mode: %s (must be 'service' or 'docker')", config.Mode)
+	}
+
+	// Check for port conflicts between addresses
+	if err := s.validatePeerAddressConflicts(config); err != nil {
+		return fmt.Errorf("address conflicts: %w", err)
+	}
+
+	return nil
+}
+
+// validateFabricOrdererConfig validates Fabric orderer configuration
+func (s *NodeService) validateFabricOrdererConfig(config *types.FabricOrdererConfig) error {
+	// Validate required fields
+	if config.Name == "" {
+		return fmt.Errorf("name is required")
+	}
+	if config.OrganizationID == 0 {
+		return fmt.Errorf("organization ID is required")
+	}
+	if config.MSPID == "" {
+		return fmt.Errorf("MSP ID is required")
+	}
+
+	// Validate address formats
+	addresses := map[string]string{
+		"listen address":            config.ListenAddress,
+		"admin address":             config.AdminAddress,
+		"operations listen address": config.OperationsListenAddress,
+		"external endpoint":         config.ExternalEndpoint,
+	}
+
+	for addrType, addr := range addresses {
+		if addr == "" {
+			return fmt.Errorf("%s is required", addrType)
+		}
+		if err := s.validateAddressFormat(addr); err != nil {
+			return fmt.Errorf("invalid %s format: %w", addrType, err)
+		}
+	}
+
+	// Validate domain names
+	if len(config.DomainNames) == 0 {
+		return fmt.Errorf("at least one domain name is required")
+	}
+
+	// Validate deployment mode
+	if config.Mode != "service" && config.Mode != "docker" {
+		return fmt.Errorf("invalid deployment mode: %s (must be 'service' or 'docker')", config.Mode)
+	}
+
+	// Check for port conflicts between addresses
+	if err := s.validateOrdererAddressConflicts(config); err != nil {
+		return fmt.Errorf("address conflicts: %w", err)
+	}
+
+	return nil
+}
+
+// validateBesuNodeConfig validates Besu node configuration
+func (s *NodeService) validateBesuNodeConfig(config *types.BesuNodeConfig) error {
+	// Validate required fields
+	if config.NetworkID == 0 {
+		return fmt.Errorf("network ID is required")
+	}
+	if config.KeyID == 0 {
+		return fmt.Errorf("key ID is required")
+	}
+	if config.P2PPort == 0 {
+		return fmt.Errorf("P2P port is required")
+	}
+	if config.RPCPort == 0 {
+		return fmt.Errorf("RPC port is required")
+	}
+	if config.P2PHost == "" {
+		return fmt.Errorf("P2P host is required")
+	}
+	if config.RPCHost == "" {
+		return fmt.Errorf("RPC host is required")
+	}
+	if config.ExternalIP == "" {
+		return fmt.Errorf("external IP is required")
+	}
+	if config.InternalIP == "" {
+		return fmt.Errorf("internal IP is required")
+	}
+
+	// Validate port ranges
+	if config.P2PPort < 1024 || config.P2PPort > 65535 {
+		return fmt.Errorf("P2P port must be between 1024 and 65535")
+	}
+	if config.RPCPort < 1024 || config.RPCPort > 65535 {
+		return fmt.Errorf("RPC port must be between 1024 and 65535")
+	}
+
+	// Validate IP addresses
+	if err := s.validateIPAddress(config.ExternalIP); err != nil {
+		return fmt.Errorf("invalid external IP: %w", err)
+	}
+	if err := s.validateIPAddress(config.InternalIP); err != nil {
+		return fmt.Errorf("invalid internal IP: %w", err)
+	}
+
+	// Validate deployment mode
+	if config.Mode != "service" && config.Mode != "docker" {
+		return fmt.Errorf("invalid deployment mode: %s (must be 'service' or 'docker')", config.Mode)
+	}
+
+	// Check for port conflicts
+	if config.P2PPort == config.RPCPort {
+		return fmt.Errorf("P2P port and RPC port cannot be the same")
+	}
+
+	return nil
+}
+
+// validateAddressFormat validates that an address has the correct host:port format
+func (s *NodeService) validateAddressFormat(address string) error {
+	host, portStr, err := net.SplitHostPort(address)
+	if err != nil {
+		return fmt.Errorf("invalid address format %s: %w", address, err)
+	}
+
+	// Validate host is not empty
+	if host == "" {
+		return fmt.Errorf("host cannot be empty in address: %s", address)
+	}
+
+	// Validate port
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return fmt.Errorf("invalid port number %s: %w", portStr, err)
+	}
+	if port < 1 || port > 65535 {
+		return fmt.Errorf("port number %d out of range (1-65535)", port)
+	}
+
+	return nil
+}
+
+// validateIPAddress validates that a string is a valid IP address
+func (s *NodeService) validateIPAddress(ip string) error {
+	if net.ParseIP(ip) == nil {
+		return fmt.Errorf("invalid IP address: %s", ip)
+	}
+	return nil
+}
+
+// validatePeerAddressConflicts checks for port conflicts in peer addresses
+func (s *NodeService) validatePeerAddressConflicts(config *types.FabricPeerConfig) error {
+	addresses := map[string]string{
+		"listen":     config.ListenAddress,
+		"chaincode":  config.ChaincodeAddress,
+		"events":     config.EventsAddress,
+		"operations": config.OperationsListenAddress,
+	}
+
+	usedPorts := make(map[string]string)
+	for addrType, addr := range addresses {
+		_, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			return fmt.Errorf("invalid %s address format: %w", addrType, err)
+		}
+
+		if existingType, exists := usedPorts[port]; exists {
+			return fmt.Errorf("port conflict: %s and %s addresses use the same port %s", existingType, addrType, port)
+		}
+		usedPorts[port] = addrType
+	}
+
+	return nil
+}
+
+// validateOrdererAddressConflicts checks for port conflicts in orderer addresses
+func (s *NodeService) validateOrdererAddressConflicts(config *types.FabricOrdererConfig) error {
+	addresses := map[string]string{
+		"listen":     config.ListenAddress,
+		"admin":      config.AdminAddress,
+		"operations": config.OperationsListenAddress,
+	}
+
+	usedPorts := make(map[string]string)
+	for addrType, addr := range addresses {
+		_, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			return fmt.Errorf("invalid %s address format: %w", addrType, err)
+		}
+
+		if existingType, exists := usedPorts[port]; exists {
+			return fmt.Errorf("port conflict: %s and %s addresses use the same port %s", existingType, addrType, port)
+		}
+		usedPorts[port] = addrType
 	}
 
 	return nil

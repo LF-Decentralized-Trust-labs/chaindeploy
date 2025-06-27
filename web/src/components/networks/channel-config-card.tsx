@@ -34,7 +34,8 @@ export function ChannelConfigCard({ config }: ChannelConfigCardProps) {
 	if (!channelGroup) return null
 
 	const renderPolicies = (policies: any) => {
-		return Object.entries(policies || {}).map(([name, policy]: [string, any]) => (
+		if (!policies) return null
+		return Object.entries(policies).map(([name, policy]: [string, any]) => (
 			<div key={name} className="space-y-1">
 				<div className="flex items-center justify-between">
 					<div className="flex items-center gap-2">
@@ -42,7 +43,7 @@ export function ChannelConfigCard({ config }: ChannelConfigCardProps) {
 						<span className="font-medium">{name}</span>
 					</div>
 					<div className="flex items-center gap-2">
-						<Badge variant="outline">{policy.policy?.type === 1 ? 'Signature' : policy.policy?.type === 3 ? 'ImplicitMeta' : 'Unknown'}</Badge>
+						<Badge variant="outline">{policy?.policy?.type === 1 ? 'Signature' : policy?.policy?.type === 3 ? 'ImplicitMeta' : 'Unknown'}</Badge>
 						<Dialog>
 							<DialogTrigger asChild>
 								<Button variant="ghost" size="sm" className="h-6 px-2">
@@ -53,19 +54,19 @@ export function ChannelConfigCard({ config }: ChannelConfigCardProps) {
 								<DialogHeader>
 									<DialogTitle>Policy Details: {name}</DialogTitle>
 								</DialogHeader>
-								<PolicyCard name={name} policy={policy.policy} modPolicy={policy.mod_policy} />
+								<PolicyCard name={name} policy={policy?.policy} modPolicy={policy?.mod_policy} />
 							</DialogContent>
 						</Dialog>
 					</div>
 				</div>
-				{policy.policy?.type === 3 && (
+				{policy?.policy?.type === 3 && (
 					<div className="text-sm text-muted-foreground pl-6">
-						Rule: {policy.policy.value.rule} of {policy.policy.value.sub_policy}
+						Rule: {policy.policy.value?.rule} of {policy.policy.value?.sub_policy}
 					</div>
 				)}
-				{policy.policy?.type === 1 && (
+				{policy?.policy?.type === 1 && (
 					<div className="text-sm text-muted-foreground pl-6">
-						Rule: {policy.policy.value.rule.n_out_of.n} out of {policy.policy.value.rule.n_out_of.rules.length} signatures required
+						Rule: {policy.policy.value?.rule?.n_out_of?.n} out of {policy.policy.value?.rule?.n_out_of?.rules?.length || 0} signatures required
 					</div>
 				)}
 			</div>
@@ -73,6 +74,7 @@ export function ChannelConfigCard({ config }: ChannelConfigCardProps) {
 	}
 
 	const renderEndpoints = (endpoints: string[]) => {
+		if (!endpoints || !Array.isArray(endpoints)) return null
 		return (
 			<div className="space-y-2 pl-6">
 				{endpoints.map((endpoint, index) => (
@@ -86,12 +88,13 @@ export function ChannelConfigCard({ config }: ChannelConfigCardProps) {
 	}
 
 	const renderConsenters = (consenters: any[]) => {
+		if (!consenters || !Array.isArray(consenters)) return null
 		return (
 			<div className="space-y-2 pl-6">
 				{consenters.map((consenter, index) => (
 					<div key={index} className="flex items-center gap-2 text-sm text-muted-foreground">
 						<Network className="h-4 w-4" />
-						<span>{`${consenter.host}:${consenter.port}`}</span>
+						<span>{`${consenter?.host || 'unknown'}:${consenter?.port || 'unknown'}`}</span>
 					</div>
 				))}
 			</div>
@@ -99,18 +102,20 @@ export function ChannelConfigCard({ config }: ChannelConfigCardProps) {
 	}
 
 	const renderACLs = (acls: any) => {
-		return Object.entries(acls || {}).map(([name, acl]: [string, any]) => (
+		if (!acls) return null
+		return Object.entries(acls).map(([name, acl]: [string, any]) => (
 			<div key={name} className="flex items-center justify-between py-1">
 				<div className="flex items-center gap-2">
 					<Lock className="h-4 w-4 text-muted-foreground" />
 					<span className="font-medium">{name}</span>
 				</div>
-				<Badge variant="outline">{acl.policy_ref}</Badge>
+				<Badge variant="outline">{acl?.policy_ref || 'Unknown'}</Badge>
 			</div>
 		))
 	}
 
 	const decodeBase64Certificate = (base64Cert: string) => {
+		if (!base64Cert) return 'No certificate provided'
 		try {
 			const decoded = atob(base64Cert)
 			return decoded
@@ -121,13 +126,15 @@ export function ChannelConfigCard({ config }: ChannelConfigCardProps) {
 	}
 
 	const formatCertificate = (cert: string) => {
+		if (!cert) return ''
 		const decoded = decodeBase64Certificate(cert)
 		const lines = decoded.split('\n')
 		return lines.join('\n')
 	}
 
 	const renderOrganizations = (organizations: any) => {
-		return Object.entries(organizations || {}).map(([mspId, org]: [string, any]) => (
+		if (!organizations) return null
+		return Object.entries(organizations).map(([mspId, org]: [string, any]) => (
 			<Collapsible key={mspId} open={openSections.includes(mspId)} onOpenChange={() => toggleSection(mspId)}>
 				<CollapsibleTrigger className="flex items-center gap-2 w-full hover:bg-muted/50 p-2 rounded-md">
 					<ChevronRight className={cn('h-4 w-4 transition-transform', openSections.includes(mspId) && 'transform rotate-90')} />
@@ -138,34 +145,34 @@ export function ChannelConfigCard({ config }: ChannelConfigCardProps) {
 					<div className="space-y-4 pt-2">
 						<div>
 							<h4 className="text-sm font-medium mb-2">Policies</h4>
-							<div className="space-y-3">{renderPolicies(org.policies)}</div>
+							<div className="space-y-3">{renderPolicies(org?.policies)}</div>
 						</div>
-						{org.values?.Endpoints && (
+						{org?.values?.Endpoints && (
 							<div>
 								<h4 className="text-sm font-medium mb-2">Endpoints</h4>
-								{renderEndpoints(org.values.Endpoints.value.addresses)}
+								{renderEndpoints(org.values.Endpoints.value?.addresses)}
 							</div>
 						)}
-						{org.values?.AnchorPeers && (
+						{org?.values?.AnchorPeers && (
 							<div>
 								<h4 className="text-sm font-medium mb-2">Anchor Peers</h4>
 								<div className="space-y-2 pl-6">
-									{org.values.AnchorPeers.value.anchor_peers.map((peer: any, index: number) => (
+									{org.values.AnchorPeers.value?.anchor_peers?.map((peer: any, index: number) => (
 										<div key={index} className="flex items-center gap-2 text-sm text-muted-foreground">
 											<Network className="h-4 w-4" />
-											<span>{`${peer.host}:${peer.port}`}</span>
+											<span>{`${peer?.host || 'unknown'}:${peer?.port || 'unknown'}`}</span>
 										</div>
 									))}
 								</div>
 							</div>
 						)}
-						{org.values?.MSP && (
+						{org?.values?.MSP && (
 							<div>
 								<h4 className="text-sm font-medium mb-2">MSP Configuration</h4>
 								<div className="space-y-2">
 									<div className="flex items-center gap-2">
 										<FileText className="h-4 w-4 text-muted-foreground" />
-										<span className="text-sm">Name: {org.values.MSP.value.config.name}</span>
+										<span className="text-sm">Name: {org.values.MSP.value?.config?.name || 'Unknown'}</span>
 									</div>
 									<Dialog>
 										<DialogTrigger asChild>
@@ -181,7 +188,7 @@ export function ChannelConfigCard({ config }: ChannelConfigCardProps) {
 												<div>
 													<h4 className="text-sm font-medium mb-2">Root Certificates</h4>
 													<div className="space-y-2">
-														{org.values.MSP.value.config.root_certs.map((cert: string, index: number) => (
+														{org.values.MSP.value?.config?.root_certs?.map((cert: string, index: number) => (
 															<div key={index} className="space-y-2">
 																<div className="flex justify-between items-center">
 																	<span className="text-xs font-medium">Certificate {index + 1}</span>
@@ -194,7 +201,7 @@ export function ChannelConfigCard({ config }: ChannelConfigCardProps) {
 												<div>
 													<h4 className="text-sm font-medium mb-2">TLS Root Certificates</h4>
 													<div className="space-y-2">
-														{org.values.MSP.value.config.tls_root_certs.map((cert: string, index: number) => (
+														{org.values.MSP.value?.config?.tls_root_certs?.map((cert: string, index: number) => (
 															<div key={index} className="space-y-2">
 																<div className="flex justify-between items-center">
 																	<span className="text-xs font-medium">TLS Certificate {index + 1}</span>

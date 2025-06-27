@@ -382,6 +382,11 @@ func (s *NodeService) UpdateBesuNode(ctx context.Context, nodeID int64, req Upda
 		deployBesuConfig.Env = req.Env
 	}
 
+	// Validate the updated configuration
+	if err := s.validateBesuNodeConfig(besuConfig); err != nil {
+		return nil, fmt.Errorf("invalid besu configuration: %w", err)
+	}
+
 	// Get the key to update the enodeURL
 	key, err := s.keymanagementService.GetKey(ctx, int(besuConfig.KeyID))
 	if err != nil {
