@@ -10,6 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
+import { useMutation } from '@tanstack/react-query'
+import { postPluginsMutation } from '@/api/client/@tanstack/react-query.gen'
 
 const defaultYaml = `apiVersion: dev.chainlaunch/v1
 kind: Plugin
@@ -70,17 +72,29 @@ export default function NewPluginPage() {
 			yaml: defaultYaml,
 		},
 	})
-
+	const createPlugin = useMutation({
+		...postPluginsMutation(),
+		onSuccess: (data) => {
+			toast.success('Plugin created successfully')
+			navigate(`/plugins/${data.metadata.name}`)
+		},
+		onError: (error: any) => {
+			if (error?.data?.detail) {
+				toast.error(error.data.detail)
+			} else if (error.message) {
+				toast.error(error.message)
+			} else {
+				toast.error('Failed to create plugin. Please check your YAML format and try again.')
+			}
+		},
+	})
 	async function onSubmit(data: FormValues) {
 		try {
 			const pluginData = parse(data.yaml)
-			await postPlugins({
+			createPlugin.mutate({
 				body: pluginData,
 			})
-
-			toast.success('Plugin created successfully')
-			navigate(`/plugins/${pluginData.metadata.name}`)
-		} catch (error) {
+		} catch (error: any) {
 			toast.error('Failed to create plugin. Please check your YAML format and try again.')
 		}
 	}

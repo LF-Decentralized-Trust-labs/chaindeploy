@@ -51,6 +51,15 @@ export default function EditPluginPage() {
 			toast.success('Plugin updated successfully')
 			navigate(`/plugins/${name}`)
 		},
+		onError: (error: any) => {
+			if (error?.data?.detail) {
+				toast.error(error.data.detail)
+			} else if (error.message) {
+				toast.error(error.message)
+			} else {
+				toast.error('Failed to update plugin. Please check your YAML format and try again.')
+			}
+		},
 	})
 
 	const form = useForm<FormValues>({
@@ -118,4 +127,4 @@ export default function EditPluginPage() {
 			</Card>
 		</div>
 	)
-} 
+}
