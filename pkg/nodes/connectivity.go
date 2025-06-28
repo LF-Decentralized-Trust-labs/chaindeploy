@@ -21,7 +21,7 @@ type ConnectivityCheckResult struct {
 // CheckNodeConnectivity checks TCP connectivity to host:port, optionally with TLS handshake
 // If useTLS is true, tlsConfig may be nil (in which case default config is used)
 func CheckNodeConnectivity(host string, port int, useTLS bool, tlsConfig *tls.Config) ConnectivityCheckResult {
-	address := fmt.Sprintf("%s:%d", host, port)
+	address := net.JoinHostPort(host, fmt.Sprintf("%d", port))
 	start := time.Now()
 	var result ConnectivityCheckResult
 

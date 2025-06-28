@@ -4,6 +4,7 @@ import {
 	getNetworksFabricByIdChannelConfigOptions,
 	getNetworksFabricByIdCurrentChannelConfigOptions,
 	getNetworksFabricByIdNodesOptions,
+	getNodesByIdChannelsByChannelIdChaincodesOptions,
 	getNodesOptions,
 	getOrganizationsByIdRevokedCertificatesOptions,
 	getOrganizationsOptions,
@@ -13,7 +14,6 @@ import {
 	postNetworksFabricByIdPeersByPeerIdJoinMutation,
 	postOrganizationsByIdCrlRevokePemMutation,
 	postOrganizationsByIdCrlRevokeSerialMutation,
-	getNodesByIdChannelsByChannelIdChaincodesOptions,
 } from '@/api/client/@tanstack/react-query.gen'
 import { BesuIcon } from '@/components/icons/besu-icon'
 import { FabricIcon } from '@/components/icons/fabric-icon'
@@ -41,11 +41,8 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { Activity, AlertTriangle, Anchor, ArrowLeft, ArrowUpToLine, Blocks, Check, Code, Copy, Loader2, Network, Plus, Settings, ShieldAlert, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import ReactMarkdown from 'react-markdown'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import SyntaxHighlighter, { SyntaxHighlighterProps } from 'react-syntax-highlighter'
-import { docco } from 'react-syntax-highlighter/dist/esm/styles/hljs'
-import rehypeRaw from 'rehype-raw'
 import { toast } from 'sonner'
 import * as z from 'zod'
 import { ChannelUpdateForm } from '../nodes/ChannelUpdateForm'
@@ -712,6 +709,8 @@ export default function FabricNetworkDetails({ network }: FabricNetworkDetailsPr
 			?.filter((node) => !networkNodes?.nodes?.find((networkNode) => networkNode.node?.id === node.id)!!)
 			.map((node) => ({
 				id: node.id!,
+				mspId: node.fabricPeer?.mspId || node.fabricOrderer?.mspId || '',
+				externalEndpoint: node.fabricPeer?.externalEndpoint || node.fabricOrderer?.externalEndpoint || '',
 				name: node.name!,
 				nodeType: node.nodeType!,
 			})) ?? []

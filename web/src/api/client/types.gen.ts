@@ -1408,6 +1408,7 @@ export type HttpUpdateBesuNodeRequest = {
     internalIp?: string;
     metricsEnabled?: boolean;
     metricsPort?: number;
+    mode?: string;
     networkId: number;
     p2pHost: string;
     p2pPort: number;
@@ -1444,6 +1445,7 @@ export type HttpUpdateFabricOrdererRequest = {
     };
     externalEndpoint?: string;
     listenAddress?: string;
+    mode?: string;
     operationsListenAddress?: string;
     version?: string;
 };
@@ -1458,6 +1460,7 @@ export type HttpUpdateFabricPeerRequest = {
     eventsAddress?: string;
     externalEndpoint?: string;
     listenAddress?: string;
+    mode?: string;
     operationsListenAddress?: string;
     version?: string;
 };

@@ -2249,6 +2249,8 @@ definitions:
         type: boolean
       metricsPort:
         type: integer
+      mode:
+        type: string
       networkId:
         type: integer
       p2pHost:
@@ -2341,6 +2343,8 @@ definitions:
         type: string
       listenAddress:
         type: string
+      mode:
+        type: string
       operationsListenAddress:
         type: string
       version:
@@ -2367,6 +2371,8 @@ definitions:
       externalEndpoint:
         type: string
       listenAddress:
+        type: string
+      mode:
         type: string
       operationsListenAddress:
         type: string

@@ -507,6 +507,24 @@ func (s *NodeService) UpdateFabricPeer(ctx context.Context, opts UpdateFabricPee
 		return nil, fmt.Errorf("invalid deployment config type")
 	}
 
+	// --- MODE CHANGE LOGIC ---
+	modeChanged := false
+	var newMode string
+	if opts.Mode != "" {
+		if opts.Mode != peerConfig.Mode {
+			modeChanged = true
+			newMode = opts.Mode
+		}
+	}
+	// If mode is changing, stop the node first
+	if modeChanged {
+		if err := s.stopFabricPeer(ctx, node); err != nil {
+			s.logger.Warn("Failed to stop peer before mode change", "error", err)
+		}
+		peerConfig.Mode = newMode
+		deployPeerConfig.Mode = newMode
+	}
+
 	// Update configuration fields if provided
 	if opts.ExternalEndpoint != "" && opts.ExternalEndpoint != peerConfig.ExternalEndpoint {
 		peerConfig.ExternalEndpoint = opts.ExternalEndpoint
@@ -592,6 +610,13 @@ func (s *NodeService) UpdateFabricPeer(ctx context.Context, opts UpdateFabricPee
 		return nil, fmt.Errorf("failed to synchronize peer config: %w", err)
 	}
 
+	// If mode changed, start the node with the new mode
+	if modeChanged {
+		if err := s.startFabricPeer(ctx, node); err != nil {
+			s.logger.Warn("Failed to start peer after mode change", "error", err)
+		}
+	}
+
 	// Return updated node response
 	_, nodeResponse := s.mapDBNodeToServiceNode(node)
 	return nodeResponse, nil
@@ -636,6 +661,23 @@ func (s *NodeService) UpdateFabricOrderer(ctx context.Context, opts UpdateFabric
 		if !ok {
 			return nil, fmt.Errorf("invalid orderer deployment config type")
 		}
+	}
+
+	// --- MODE CHANGE LOGIC ---
+	modeChanged := false
+	var newMode string
+	if opts.Mode != "" {
+		if opts.Mode != ordererConfig.Mode {
+			modeChanged = true
+			newMode = opts.Mode
+		}
+	}
+	if modeChanged {
+		if err := s.stopFabricOrderer(ctx, node); err != nil {
+			s.logger.Warn("Failed to stop orderer before mode change", "error", err)
+		}
+		ordererConfig.Mode = newMode
+		deployOrdererConfig.Mode = newMode
 	}
 
 	// Update configuration fields if provided
@@ -703,6 +745,13 @@ func (s *NodeService) UpdateFabricOrderer(ctx context.Context, opts UpdateFabric
 			Valid:  true,
 		},
 	})
+
+	// If mode changed, start the node with the new mode
+	if modeChanged {
+		if err := s.startFabricOrderer(ctx, node); err != nil {
+			s.logger.Warn("Failed to start orderer after mode change", "error", err)
+		}
+	}
 
 	// Return updated node response
 	_, nodeResponse := s.mapDBNodeToServiceNode(node)

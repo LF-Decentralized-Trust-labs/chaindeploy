@@ -387,6 +387,24 @@ export default function NodeDetailPage() {
 									<TimeAgo date={node.updatedAt} />
 								</div>
 							)}
+							{node.fabricPeer ? (
+								<div>
+									<p className="text-sm font-medium text-muted-foreground">Mode</p>
+									<p>{node.fabricPeer.mode || 'N/A'}</p>
+								</div>
+							) : null}
+							{node.fabricOrderer ? (
+								<div>
+									<p className="text-sm font-medium text-muted-foreground">Mode</p>
+									<p>{node.fabricOrderer.mode || 'N/A'}</p>
+								</div>
+							) : null}
+							{node.besuNode ? (
+								<div>
+									<p className="text-sm font-medium text-muted-foreground">Mode</p>
+									<p>{node.besuNode.mode || 'N/A'}</p>
+								</div>
+							) : null}
 						</div>
 					</CardContent>
 				</Card>

@@ -820,6 +820,7 @@ func (h *NodeHandler) updateBesuNode(w http.ResponseWriter, r *http.Request, nod
 		ExternalIP: req.ExternalIP,
 		InternalIP: req.InternalIP,
 		Env:        req.Env,
+		Mode:       req.Mode,
 	}
 
 	// Call service layer to update the Besu node
@@ -873,6 +874,7 @@ func (h *NodeHandler) updateFabricPeer(w http.ResponseWriter, r *http.Request, n
 	if req.Version != nil {
 		opts.Version = *req.Version
 	}
+	opts.Mode = req.Mode
 
 	updatedNode, err := h.service.UpdateFabricPeer(r.Context(), opts)
 	if err != nil {
@@ -909,6 +911,7 @@ func (h *NodeHandler) updateFabricOrderer(w http.ResponseWriter, r *http.Request
 	if req.Version != nil {
 		opts.Version = *req.Version
 	}
+	opts.Mode = req.Mode
 
 	updatedNode, err := h.service.UpdateFabricOrderer(r.Context(), opts)
 	if err != nil {

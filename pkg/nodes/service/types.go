@@ -6,6 +6,7 @@ import (
 
 // UpdateFabricPeerOpts represents the options for updating a Fabric peer node
 type UpdateFabricPeerOpts struct {
+	Mode                    string
 	NodeID                  int64
 	ExternalEndpoint        string
 	ListenAddress           string
@@ -20,6 +21,7 @@ type UpdateFabricPeerOpts struct {
 
 // UpdateFabricOrdererOpts represents the options for updating a Fabric orderer node
 type UpdateFabricOrdererOpts struct {
+	Mode                    string
 	NodeID                  int64
 	ExternalEndpoint        string
 	ListenAddress           string

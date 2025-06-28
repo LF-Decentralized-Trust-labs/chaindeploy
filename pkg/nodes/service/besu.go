@@ -290,6 +290,7 @@ func (s *NodeService) startBesuNode(ctx context.Context, dbNode *db.Node) error 
 // UpdateBesuNodeOpts contains the options for updating a Besu node
 type UpdateBesuNodeRequest struct {
 	NetworkID  uint              `json:"networkId" validate:"required"`
+	Mode       string            `json:"mode,omitempty"`
 	P2PHost    string            `json:"p2pHost" validate:"required"`
 	P2PPort    uint              `json:"p2pPort" validate:"required"`
 	RPCHost    string            `json:"rpcHost" validate:"required"`
@@ -342,6 +343,23 @@ func (s *NodeService) UpdateBesuNode(ctx context.Context, nodeID int64, req Upda
 		if !ok {
 			return nil, fmt.Errorf("invalid besu deployment config type")
 		}
+	}
+
+	// --- MODE CHANGE LOGIC ---
+	modeChanged := false
+	var newMode string
+	if req.Mode != "" {
+		if req.Mode != string(besuConfig.Mode) {
+			modeChanged = true
+			newMode = req.Mode
+		}
+	}
+	if modeChanged {
+		if err := s.stopBesuNode(ctx, node); err != nil {
+			s.logger.Warn("Failed to stop Besu node before mode change", "error", err)
+		}
+		besuConfig.Mode = newMode
+		deployBesuConfig.Mode = newMode
 	}
 
 	// Update configuration fields
@@ -429,6 +447,13 @@ func (s *NodeService) UpdateBesuNode(ctx context.Context, nodeID int64, req Upda
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to update deployment config: %w", err)
+	}
+
+	// If mode changed, start the node with the new mode
+	if modeChanged {
+		if err := s.startBesuNode(ctx, node); err != nil {
+			s.logger.Warn("Failed to start Besu node after mode change", "error", err)
+		}
 	}
 
 	// Return updated node

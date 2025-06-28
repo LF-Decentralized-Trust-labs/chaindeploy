@@ -12755,6 +12755,9 @@
                 "metricsPort": {
                     "type": "integer"
                 },
+                "mode": {
+                    "type": "string"
+                },
                 "networkId": {
                     "type": "integer"
                 },
@@ -12877,6 +12880,9 @@
                 "listenAddress": {
                     "type": "string"
                 },
+                "mode": {
+                    "type": "string"
+                },
                 "operationsListenAddress": {
                     "type": "string"
                 },
@@ -12916,6 +12922,9 @@
                     "type": "string"
                 },
                 "listenAddress": {
+                    "type": "string"
+                },
+                "mode": {
                     "type": "string"
                 },
                 "operationsListenAddress": {
