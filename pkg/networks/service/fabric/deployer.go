@@ -1224,6 +1224,29 @@ func (d *FabricDeployer) GetCurrentChannelConfig(networkID int64) ([]byte, error
 	return blockBytes, nil
 }
 
+func (d *FabricDeployer) GetCurrentChannelConfigTX(networkID int64) (*configtx.ConfigTx, error) {
+	ctx := context.Background()
+	configBlock, err := d.FetchCurrentChannelConfig(ctx, networkID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current channel config: %w", err)
+	}
+
+	block := &cb.Block{}
+	err = proto.Unmarshal(configBlock, block)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal block: %w", err)
+	}
+
+	cmnConfig, err := ExtractConfigFromBlock(block)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract config from block: %w", err)
+	}
+
+	cfgtx := configtx.New(cmnConfig)
+
+	return &cfgtx, nil
+}
+
 func (d *FabricDeployer) GetCurrentChannelConfigAsMap(networkID int64) (map[string]interface{}, error) {
 	ctx := context.Background()
 	configBlock, err := d.FetchCurrentChannelConfig(ctx, networkID)

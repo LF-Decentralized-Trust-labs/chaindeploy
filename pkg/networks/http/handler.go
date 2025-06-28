@@ -69,6 +69,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Get("/{id}/info", h.GetChainInfo)
 		r.Get("/{id}/transactions/{txId}", h.FabricGetTransaction)
 		r.Post("/{id}/organization-crl", h.UpdateOrganizationCRL)
+		r.Get("/{id}/map", h.NetworkMap)
 	})
 
 	// Besu network routes with resource middleware
@@ -81,6 +82,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Post("/import", h.ImportBesuNetwork)
 		r.Get("/{id}", h.BesuNetworkGet)
 		r.Delete("/{id}", h.BesuNetworkDelete)
+		r.Get("/{id}/map", h.NetworkMap)
 	})
 }
 
@@ -1881,4 +1883,39 @@ type ChainInfoResponse struct {
 	Height            uint64 `json:"height"`
 	CurrentBlockHash  string `json:"currentBlockHash"`
 	PreviousBlockHash string `json:"previousBlockHash"`
+}
+
+// @Summary Get network map
+// @Description Get a map of all nodes (peers/orderers/validators) for a network, including endpoints and optionally health status.
+// @Tags Fabric Networks, Besu Networks
+// @Produce json
+// @Param id path int true "Network ID"
+// @Param checkHealth query bool false "Check node health (default: false)"
+// @Success 200 {object} service.NetworkMap
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /networks/fabric/{id}/map [get]
+// @Router /networks/besu/{id}/map [get]
+func (h *Handler) NetworkMap(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	if idStr == "" {
+		writeError(w, http.StatusBadRequest, "invalid_network_id", "Missing network ID")
+		return
+	}
+	networkID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_network_id", "Invalid network ID")
+		return
+	}
+	checkHealth := false
+	if v := r.URL.Query().Get("checkHealth"); v != "" {
+		checkHealth, _ = strconv.ParseBool(v)
+	}
+	result, err := h.networkService.GetNetworkMap(r.Context(), networkID, checkHealth)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "get_network_map_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }

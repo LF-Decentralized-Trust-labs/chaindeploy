@@ -1867,6 +1867,12 @@ export type ServiceFabricPeerProperties = {
 
 export type ServiceMode = 'service' | 'docker';
 
+export type ServiceNetworkMap = {
+    networkId?: number;
+    nodes?: Array<ServiceNodeMapInfo>;
+    platform?: string;
+};
+
 export type ServiceNetworkNode = {
     createdAt?: string;
     id?: number;
@@ -1890,6 +1896,38 @@ export type ServiceNodeDefaults = {
     mode?: ServiceMode;
     operationsListenAddress?: string;
     serviceName?: string;
+};
+
+export type ServiceNodeMapInfo = {
+    error?: string;
+    healthy?: boolean;
+    host?: string;
+    /**
+     * host:port by default
+     */
+    id?: string;
+    /**
+     * e.g., "1.2ms"
+     */
+    latency?: string;
+    /**
+     * e.g., 1
+     */
+    latencyMs?: number;
+    mine?: boolean;
+    /**
+     * Only for fabric and if mine
+     */
+    mspId?: string;
+    /**
+     * Only if mine
+     */
+    nodeId?: number;
+    port?: number;
+    /**
+     * peer, orderer, validator, etc.
+     */
+    role?: string;
 };
 
 export type ServiceNodeResponse = {
@@ -4934,6 +4972,49 @@ export type GetNetworksBesuByIdResponses = {
 
 export type GetNetworksBesuByIdResponse = GetNetworksBesuByIdResponses[keyof GetNetworksBesuByIdResponses];
 
+export type GetNetworksBesuByIdMapData = {
+    body?: never;
+    path: {
+        /**
+         * Network ID
+         */
+        id: number;
+    };
+    query?: {
+        /**
+         * Check node health (default: false)
+         */
+        checkHealth?: boolean;
+    };
+    url: '/networks/besu/{id}/map';
+};
+
+export type GetNetworksBesuByIdMapErrors = {
+    /**
+     * Bad Request
+     */
+    400: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Not Found
+     */
+    404: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+};
+
+export type GetNetworksBesuByIdMapError = GetNetworksBesuByIdMapErrors[keyof GetNetworksBesuByIdMapErrors];
+
+export type GetNetworksBesuByIdMapResponses = {
+    /**
+     * OK
+     */
+    200: ServiceNetworkMap;
+};
+
+export type GetNetworksBesuByIdMapResponse = GetNetworksBesuByIdMapResponses[keyof GetNetworksBesuByIdMapResponses];
+
 export type GetNetworksFabricData = {
     body?: never;
     path?: never;
@@ -5415,6 +5496,49 @@ export type GetNetworksFabricByIdInfoResponses = {
 };
 
 export type GetNetworksFabricByIdInfoResponse = GetNetworksFabricByIdInfoResponses[keyof GetNetworksFabricByIdInfoResponses];
+
+export type GetNetworksFabricByIdMapData = {
+    body?: never;
+    path: {
+        /**
+         * Network ID
+         */
+        id: number;
+    };
+    query?: {
+        /**
+         * Check node health (default: false)
+         */
+        checkHealth?: boolean;
+    };
+    url: '/networks/fabric/{id}/map';
+};
+
+export type GetNetworksFabricByIdMapErrors = {
+    /**
+     * Bad Request
+     */
+    400: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Not Found
+     */
+    404: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+};
+
+export type GetNetworksFabricByIdMapError = GetNetworksFabricByIdMapErrors[keyof GetNetworksFabricByIdMapErrors];
+
+export type GetNetworksFabricByIdMapResponses = {
+    /**
+     * OK
+     */
+    200: ServiceNetworkMap;
+};
+
+export type GetNetworksFabricByIdMapResponse = GetNetworksFabricByIdMapResponses[keyof GetNetworksFabricByIdMapResponses];
 
 export type GetNetworksFabricByIdNodesData = {
     body?: never;

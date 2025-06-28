@@ -14,6 +14,7 @@ import {
 	postNetworksFabricByIdPeersByPeerIdJoinMutation,
 	postOrganizationsByIdCrlRevokePemMutation,
 	postOrganizationsByIdCrlRevokeSerialMutation,
+	getNetworksFabricByIdMapOptions,
 } from '@/api/client/@tanstack/react-query.gen'
 import { BesuIcon } from '@/components/icons/besu-icon'
 import { FabricIcon } from '@/components/icons/fabric-icon'
@@ -49,6 +50,7 @@ import { ChannelUpdateForm } from '../nodes/ChannelUpdateForm'
 import { AddMultipleNodesDialog } from './add-multiple-nodes-dialog'
 import { BlockExplorer } from './block-explorer'
 import { ChaincodeManagement } from './chaincode-management'
+import { NetworkMap } from './NetworkMap'
 
 const SyntaxHighlighterComp = SyntaxHighlighter as unknown as React.ComponentType<SyntaxHighlighterProps>
 interface FabricNetworkDetailsProps {
@@ -735,6 +737,11 @@ export default function FabricNetworkDetails({ network }: FabricNetworkDetailsPr
 		}
 	}, [peerOrgs, networkNodes, selectedOrg])
 
+	const { data: networkMap, isLoading: networkMapLoading } = useQuery({
+		...getNetworksFabricByIdMapOptions({ path: { id: Number(id) }, query: { checkHealth: true } }),
+		enabled: !!id,
+	})
+
 	if (fabricOrgsLoading || channelConfigLoading || currentChannelConfigLoading || nodesLoading || networkNodesLoading) {
 		return (
 			<div className="flex-1 p-8">
@@ -1003,6 +1010,7 @@ export default function FabricNetworkDetails({ network }: FabricNetworkDetailsPr
 								)}
 							</div>
 						}
+						map={<NetworkMap map={networkMap} isLoading={networkMapLoading} />}
 						channelUpdate={
 							<div className="space-y-6">
 								<ChannelUpdateForm

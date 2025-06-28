@@ -3184,6 +3184,17 @@ definitions:
     x-enum-varnames:
     - ModeService
     - ModeDocker
+  service.NetworkMap:
+    properties:
+      networkId:
+        type: integer
+      nodes:
+        items:
+          $ref: '#/definitions/service.NodeMapInfo'
+        type: array
+      platform:
+        type: string
+    type: object
   service.NetworkNode:
     properties:
       createdAt:
@@ -3226,6 +3237,37 @@ definitions:
       operationsListenAddress:
         type: string
       serviceName:
+        type: string
+    type: object
+  service.NodeMapInfo:
+    properties:
+      error:
+        type: string
+      healthy:
+        type: boolean
+      host:
+        type: string
+      id:
+        description: host:port by default
+        type: string
+      latency:
+        description: e.g., "1.2ms"
+        type: string
+      latencyMs:
+        description: e.g., 1
+        type: integer
+      mine:
+        type: boolean
+      mspId:
+        description: Only for fabric and if mine
+        type: string
+      nodeId:
+        description: Only if mine
+        type: integer
+      port:
+        type: integer
+      role:
+        description: peer, orderer, validator, etc.
         type: string
     type: object
   service.NodeResponse:
@@ -6152,6 +6194,43 @@ paths:
       summary: Get a Besu network by ID
       tags:
       - Besu Networks
+  /networks/besu/{id}/map:
+    get:
+      description: Get a map of all nodes (peers/orderers/validators) for a network,
+        including endpoints and optionally health status.
+      parameters:
+      - description: Network ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 'Check node health (default: false)'
+        in: query
+        name: checkHealth
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/service.NetworkMap'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+      summary: Get network map
+      tags:
+      - Fabric Networks
+      - Besu Networks
   /networks/besu/import:
     post:
       consumes:
@@ -6502,6 +6581,43 @@ paths:
       summary: Get Fabric chain information
       tags:
       - Fabric Networks
+  /networks/fabric/{id}/map:
+    get:
+      description: Get a map of all nodes (peers/orderers/validators) for a network,
+        including endpoints and optionally health status.
+      parameters:
+      - description: Network ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 'Check node health (default: false)'
+        in: query
+        name: checkHealth
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/service.NetworkMap'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+      summary: Get network map
+      tags:
+      - Fabric Networks
+      - Besu Networks
   /networks/fabric/{id}/nodes:
     get:
       description: Get all nodes associated with a network

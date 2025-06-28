@@ -6,6 +6,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/chainlaunch/chainlaunch/pkg/db"
@@ -13,9 +16,11 @@ import (
 	keymanagement "github.com/chainlaunch/chainlaunch/pkg/keymanagement/service"
 	"github.com/chainlaunch/chainlaunch/pkg/logger"
 	"github.com/chainlaunch/chainlaunch/pkg/networks/service/types"
+	"github.com/chainlaunch/chainlaunch/pkg/nodes"
 	nodeservice "github.com/chainlaunch/chainlaunch/pkg/nodes/service"
 	nodetypes "github.com/chainlaunch/chainlaunch/pkg/nodes/types"
 	"github.com/google/uuid"
+	"github.com/hyperledger/fabric-config/configtx"
 )
 
 // BlockchainType represents the type of blockchain network
@@ -94,6 +99,29 @@ type ProposalSignature struct {
 	MSPID    string    `json:"msp_id"`
 	SignedBy string    `json:"signed_by"`
 	SignedAt time.Time `json:"signed_at"`
+}
+
+// NodeMapInfo represents a node in the network map with health info
+// This is generic for all network types
+// Extend as needed for more node types/fields
+type NodeMapInfo struct {
+	ID        string  `json:"id"`               // host:port by default
+	NodeID    *int64  `json:"nodeId,omitempty"` // Only if mine
+	MSPID     *string `json:"mspId,omitempty"`  // Only for fabric and if mine
+	Host      string  `json:"host"`
+	Port      int     `json:"port"`
+	Role      string  `json:"role"` // peer, orderer, validator, etc.
+	Healthy   bool    `json:"healthy"`
+	Latency   string  `json:"latency"`   // e.g., "1.2ms"
+	LatencyMs int64   `json:"latencyMs"` // e.g., 1
+	Error     string  `json:"error,omitempty"`
+	Mine      bool    `json:"mine"`
+}
+
+type NetworkMap struct {
+	NetworkID int64         `json:"networkId"`
+	Platform  string        `json:"platform"`
+	Nodes     []NodeMapInfo `json:"nodes"`
 }
 
 // FabricNetworkService handles network operations
@@ -438,4 +466,181 @@ func (s *NetworkService) ImportNetwork(ctx context.Context, params ImportNetwork
 	default:
 		return nil, fmt.Errorf("unsupported network type: %s", params.NetworkType)
 	}
+}
+
+// GetNetworkMap returns a map of the network (nodes + health) for the given networkID
+// If checkHealth is true, performs connectivity checks in parallel; otherwise, skips health checks.
+func (s *NetworkService) GetNetworkMap(ctx context.Context, networkID int64, checkHealth bool) (*NetworkMap, error) {
+	network, err := s.GetNetwork(ctx, networkID)
+	if err != nil {
+		return nil, err
+	}
+	var nodesToCheck []NodeMapInfo
+	platform := network.Platform
+	switch platform {
+	case "fabric":
+		// Get latest config block
+		config, err := s.GetFabricNetworkConfigTX(networkID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get fabric config: %w", err)
+		}
+		nodesToCheck = extractFabricNodesFromConfig(config)
+	case "besu":
+		// For Besu, try to extract nodes from config (if available)
+		nodesToCheck = extractBesuNodesFromConfig(network.Config)
+	default:
+		// TODO: Add support for more platforms
+		return nil, fmt.Errorf("unsupported platform: %s", network.Platform)
+	}
+
+	// Set ID to host:port by default
+	for i := range nodesToCheck {
+		nodesToCheck[i].ID = fmt.Sprintf("%s:%d", nodesToCheck[i].Host, nodesToCheck[i].Port)
+	}
+
+	results := make([]NodeMapInfo, len(nodesToCheck))
+	if checkHealth {
+		// Check connectivity in parallel
+		var wg sync.WaitGroup
+		for i, node := range nodesToCheck {
+			wg.Add(1)
+			go func(i int, node NodeMapInfo) {
+				defer wg.Done()
+				// TODO: Use TLS if needed (for now, plain TCP)
+				res := nodes.CheckNodeConnectivity(node.Host, node.Port, false, nil)
+				results[i] = node
+				results[i].Healthy = res.Success
+				results[i].Latency = res.Latency.String()
+				results[i].LatencyMs = res.Latency.Milliseconds()
+				if res.Error != nil {
+					results[i].Error = res.Error.Error()
+				}
+			}(i, node)
+		}
+		wg.Wait()
+	} else {
+		// Just return node info, no health check
+		copy(results, nodesToCheck)
+	}
+
+	// Determine which nodes are "mine" by host/port, and set NodeID/MSPID if so
+	if s.nodeService != nil {
+		allNodes, err := s.nodeService.GetAllNodes(ctx)
+		if err == nil && allNodes != nil {
+			myEndpoints := make(map[string]struct {
+				NodeID int64
+				MSPID  *string
+			})
+			for _, n := range allNodes.Items {
+				host, portStr, err := net.SplitHostPort(n.Endpoint)
+				if err != nil {
+					continue
+				}
+				key := host + ":" + portStr
+				var mspid *string
+				if n.FabricPeer != nil && n.FabricPeer.MSPID != "" {
+					mspid = &n.FabricPeer.MSPID
+				} else if n.FabricOrderer != nil && n.FabricOrderer.MSPID != "" {
+					mspid = &n.FabricOrderer.MSPID
+				}
+				myEndpoints[key] = struct {
+					NodeID int64
+					MSPID  *string
+				}{NodeID: n.ID, MSPID: mspid}
+			}
+			for i, node := range results {
+				key := fmt.Sprintf("%s:%d", node.Host, node.Port)
+				if info, ok := myEndpoints[key]; ok {
+					results[i].Mine = true
+					results[i].NodeID = &info.NodeID
+					if platform == "fabric" && info.MSPID != nil {
+						results[i].MSPID = info.MSPID
+					}
+				}
+			}
+		}
+	}
+
+	return &NetworkMap{
+		NetworkID: networkID,
+		Platform:  network.Platform,
+		Nodes:     results,
+	}, nil
+}
+
+// extractFabricNodesFromConfig uses configtx.ConfigTx to extract all peer and orderer endpoints
+func extractFabricNodesFromConfig(c *configtx.ConfigTx) []NodeMapInfo {
+	var nodes []NodeMapInfo
+	app, err := c.Application().Configuration()
+	if err != nil {
+		return nil
+	}
+	// --- Peers ---
+	peerOrgs := app.Organizations
+	for _, org := range peerOrgs {
+		endpoints := org.AnchorPeers
+		for _, addr := range endpoints {
+			nodes = append(nodes, NodeMapInfo{
+				ID:   org.MSP.Name,
+				Host: addr.Host,
+				Port: addr.Port,
+				Role: "peer",
+			})
+		}
+	}
+
+	// --- Orderers ---
+	ordererConf, err := c.Orderer().Configuration()
+	if err != nil {
+		return nil
+	}
+	ordererOrgs := ordererConf.Organizations
+	for _, org := range ordererOrgs {
+		endpoints := org.OrdererEndpoints
+		for _, addr := range endpoints {
+			host, port := splitHostPort(addr)
+			nodes = append(nodes, NodeMapInfo{
+				ID:   org.MSP.Name,
+				Host: host,
+				Port: port,
+				Role: "orderer",
+			})
+		}
+	}
+
+	// --- Global orderer addresses ---
+	ordererConf, err = c.Orderer().Configuration()
+	if err != nil {
+		return nil
+	}
+	for _, addr := range ordererConf.EtcdRaft.Consenters {
+		nodes = append(nodes, NodeMapInfo{
+			Host: addr.Address.Host,
+			Port: addr.Address.Port,
+			Role: "orderer",
+		})
+	}
+
+	return nodes
+}
+
+// splitHostPort splits "host:port" into host and port (int). If port missing or invalid, returns 0.
+func splitHostPort(addr string) (string, int) {
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr, 0
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return host, 0
+	}
+	return host, port
+}
+
+// extractBesuNodesFromConfig parses the Besu config and returns all nodes as NodeMapInfo
+func extractBesuNodesFromConfig(configRaw json.RawMessage) []NodeMapInfo {
+	var nodes []NodeMapInfo
+	// TODO: Implement parsing for Besu config if possible
+	// For now, return empty
+	return nodes
 }
