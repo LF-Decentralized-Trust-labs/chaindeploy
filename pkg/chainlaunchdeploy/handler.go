@@ -12,6 +12,7 @@ import (
 	"github.com/chainlaunch/chainlaunch/pkg/errors"
 	"github.com/chainlaunch/chainlaunch/pkg/http/response"
 	"github.com/chainlaunch/chainlaunch/pkg/logger"
+	networkService "github.com/chainlaunch/chainlaunch/pkg/networks/service"
 	nodeService "github.com/chainlaunch/chainlaunch/pkg/nodes/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -25,11 +26,12 @@ type Handler struct {
 	besuDeployer     DeployerWithAudit
 	validate         *validator.Validate
 	nodeService      *nodeService.NodeService
+	networkService   *networkService.NetworkService
 	chaincodeService *ChaincodeService
 }
 
 // NewHandler creates a new smart contract deploy handler
-func NewHandler(auditService *audit.AuditService, logger *logger.Logger, besuDeployer DeployerWithAudit, nodeService *nodeService.NodeService, chaincodeService *ChaincodeService) *Handler {
+func NewHandler(auditService *audit.AuditService, logger *logger.Logger, besuDeployer DeployerWithAudit, nodeService *nodeService.NodeService, chaincodeService *ChaincodeService, networkService *networkService.NetworkService) *Handler {
 	SetFabricAuditService(auditService)
 	if besuDeployer != nil {
 		besuDeployer.SetAuditService(auditService)
@@ -40,6 +42,7 @@ func NewHandler(auditService *audit.AuditService, logger *logger.Logger, besuDep
 		besuDeployer:     besuDeployer,
 		validate:         validator.New(),
 		nodeService:      nodeService,
+		networkService:   networkService,
 		chaincodeService: chaincodeService,
 	}
 }
@@ -54,6 +57,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Get("/peer/{peerId}/chaincode/sequence", response.Middleware(h.GetFabricChaincodeSequence))
 		r.Get("/chaincodes", response.Middleware(h.ListFabricChaincodes))
 		r.Get("/chaincodes/{id}", response.Middleware(h.GetFabricChaincodeDetailByID))
+		r.Get("/chaincodes/{chaincodeId}/metadata", response.Middleware(h.GetChaincodeMetadata))
 
 		r.Post("/chaincodes", response.Middleware(h.CreateChaincode))
 		r.Post("/chaincodes/{chaincodeId}/definitions", response.Middleware(h.CreateChaincodeDefinition))
@@ -1261,6 +1265,82 @@ func (h *Handler) QueryChaincode(w http.ResponseWriter, r *http.Request) error {
 		Status:  "success",
 		Message: "Chaincode queried successfully",
 		Result:  result,
+	}
+	return response.WriteJSON(w, http.StatusOK, resp)
+}
+
+type ChaincodeMetadataResponse struct {
+	Status  string      `json:"status"`
+	Message string      `json:"message"`
+	Result  interface{} `json:"result"`
+}
+
+// @Summary Get chaincode metadata
+// @Description Get metadata for a specific chaincode by executing org.hyperledger.fabric:GetMetadata
+// @Tags Chaincode
+// @Accept json
+// @Produce json
+// @Param chaincodeId path int true "Chaincode ID"
+// @Success 200 {object} ChaincodeMetadataResponse
+// @Failure 400 {object} response.Response
+// @Failure 500 {object} response.Response
+// @Router /sc/fabric/chaincodes/{chaincodeId}/metadata [get]
+func (h *Handler) GetChaincodeMetadata(w http.ResponseWriter, r *http.Request) error {
+	chaincodeIdStr := chi.URLParam(r, "chaincodeId")
+	chaincodeId, err := strconv.ParseInt(chaincodeIdStr, 10, 64)
+	if err != nil {
+		h.logger.Error("Invalid chaincode ID", "chaincodeId", chaincodeIdStr)
+		return errors.NewValidationError("invalid chaincode ID", map[string]interface{}{"detail": "Invalid chaincode ID"})
+	}
+
+	// Use the chaincode's network name as the channel
+	cc, err := h.chaincodeService.GetChaincode(r.Context(), chaincodeId)
+	if err != nil {
+		h.logger.Error("Failed to get chaincode", "error", err)
+		return errors.NewInternalError("failed to get chaincode", err, nil)
+	}
+	if cc == nil {
+		return response.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "Chaincode not found"})
+	}
+	channelName := cc.NetworkName
+
+	// Get all nodes for the network and select a peer
+	networkNodeResp, err := h.networkService.GetNetworkNodes(r.Context(), cc.NetworkID)
+	if err != nil {
+		h.logger.Error("Failed to get nodes for network", "error", err)
+		return errors.NewInternalError("failed to get nodes for network", err, nil)
+	}
+	var keyID int64
+	foundPeer := false
+	for _, node := range networkNodeResp {
+		if node.Node.NodeType == "FABRIC_PEER" && node.Node.Platform == "FABRIC" && node.Node.FabricPeer != nil {
+			orgID := node.Node.FabricPeer.OrganizationID
+			keyID, err = h.nodeService.GetFabricClientIdentityForOrganization(r.Context(), orgID)
+			if err != nil {
+				h.logger.Error("Failed to get organization", "error", err)
+				return errors.NewInternalError("failed to get organization", err, nil)
+			}
+			foundPeer = true
+			break
+		}
+	}
+	if !foundPeer {
+		return response.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "No peer found for network"})
+	}
+
+	// Prepare the query for org.hyperledger.fabric:GetMetadata
+	function := "org.hyperledger.fabric:GetMetadata"
+	args := []string{}
+	// Use the service layer to invoke the system chaincode method with the selected keyID
+	metadata, err := h.chaincodeService.QueryChaincode(r.Context(), chaincodeId, function, args, channelName, nil, keyID)
+	if err != nil {
+		h.logger.Error("Failed to get chaincode metadata", "error", err)
+		return errors.NewInternalError("failed to get chaincode metadata", err, nil)
+	}
+	resp := ChaincodeMetadataResponse{
+		Status:  "success",
+		Message: "Chaincode metadata retrieved successfully",
+		Result:  metadata,
 	}
 	return response.WriteJSON(w, http.StatusOK, resp)
 }

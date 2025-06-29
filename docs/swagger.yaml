@@ -536,6 +536,14 @@ definitions:
       status:
         type: string
     type: object
+  chainlaunchdeploy.ChaincodeMetadataResponse:
+    properties:
+      message:
+        type: string
+      result: {}
+      status:
+        type: string
+    type: object
   chainlaunchdeploy.ChaincodeQueryRequest:
     properties:
       args:
@@ -9669,6 +9677,35 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       summary: Invoke a chaincode
+      tags:
+      - Chaincode
+  /sc/fabric/chaincodes/{chaincodeId}/metadata:
+    get:
+      consumes:
+      - application/json
+      description: Get metadata for a specific chaincode by executing org.hyperledger.fabric:GetMetadata
+      parameters:
+      - description: Chaincode ID
+        in: path
+        name: chaincodeId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/chainlaunchdeploy.ChaincodeMetadataResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: Get chaincode metadata
       tags:
       - Chaincode
   /sc/fabric/chaincodes/{chaincodeId}/query:

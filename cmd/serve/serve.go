@@ -480,7 +480,7 @@ func (c *serveCmd) setupServer(queries *db.Queries, authService *auth.AuthServic
 	// Import the EVM deployer constructor
 	besuDeployer := chainlaunchdeploy.NewDeployerWithAudit(auditService)
 	chaincodeService := chainlaunchdeploy.NewChaincodeService(queries, logger, nodesService)
-	scHandler := chainlaunchdeploy.NewHandler(auditService, logger, besuDeployer, nodesService, chaincodeService)
+	scHandler := chainlaunchdeploy.NewHandler(auditService, logger, besuDeployer, nodesService, chaincodeService, networksService)
 
 	// Initialize handlers
 	keyManagementHandler := handler.NewKeyManagementHandler(keyManagementService)

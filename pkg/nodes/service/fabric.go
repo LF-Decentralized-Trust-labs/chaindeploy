@@ -1176,6 +1176,15 @@ func (s *NodeService) GetFabricPeerGateway(ctx context.Context, peerID int64) (*
 	return gateway, peerConn, nil
 }
 
+func (s *NodeService) GetFabricClientIdentityForOrganization(ctx context.Context, orgID int64) (int64, error) {
+	org, err := s.orgService.GetOrganization(ctx, orgID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get organization: %w", err)
+	}
+
+	return org.ClientSignKeyID.Int64, nil
+}
+
 // GetPeerGateway returns a chaincode.Gateway for a peer
 func (s *NodeService) GetFabricPeerClientGateway(ctx context.Context, peerID int64, keyID int64) (*client.Gateway, *grpc.ClientConn, error) {
 	// Get the peer node from database

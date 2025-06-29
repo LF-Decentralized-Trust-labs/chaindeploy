@@ -17,7 +17,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation } from '@tanstack/react-query'
 import { MoreVertical } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import * as z from 'zod'
@@ -44,6 +44,7 @@ interface ChaincodeDefinitionCardProps {
 	DefinitionTimelineComponent?: React.ComponentType<{ definitionId: number }>
 	availablePeers: ServiceNetworkNode[]
 	onSuccess?: () => void
+	refetch?: () => void
 }
 
 const LIFECYCLE_ACTIONS = ['install', 'approve', 'deploy', 'commit', 'undeploy'] as const
@@ -56,7 +57,7 @@ const actionLabels: Record<LifecycleAction, string> = {
 	undeploy: 'Undeploy',
 }
 
-export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineComponent = DefinitionTimeline, availablePeers = [], onSuccess }: ChaincodeDefinitionCardProps) {
+export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineComponent = DefinitionTimeline, availablePeers = [], onSuccess, refetch }: ChaincodeDefinitionCardProps) {
 	// Edit dialog state
 	const [editOpen, setEditOpen] = useState(false)
 	const [timelineKey, setTimelineKey] = useState(0)
@@ -81,10 +82,9 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 
 	// Undeploy dialog state
 	const [undeployOpen, setUndeployOpen] = useState(false)
-	const [undeployError, setUndeployError] = useState<string | null>(null)
 
 	// Docker status helpers
-	const dockerState = v.docker_info?.state || v.docker_info?.status || v.docker_info?.docker_status || ''
+	const dockerState = useMemo(() => v.docker_info?.state || v.docker_info?.status || v.docker_info?.docker_status || '', [v.docker_info])
 	const isDockerRunning = useMemo(() => dockerState.toLowerCase() === 'running', [dockerState])
 	const dockerStatusLabel = useMemo(() => (dockerState ? dockerState.charAt(0).toUpperCase() + dockerState.slice(1) : 'Not running'), [dockerState])
 	const dockerBadgeVariant = isDockerRunning ? 'success' : dockerState ? 'secondary' : 'outline'
@@ -93,7 +93,6 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 	const editMutation = useMutation({
 		...putScFabricDefinitionsByDefinitionIdMutation(),
 		onSuccess: () => {
-			toast.success('Chaincode definition updated successfully')
 			setEditOpen(false)
 			setTimelineKey((prev) => prev + 1)
 			onSuccess?.()
@@ -113,18 +112,9 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 	const deployMutation = useMutation({
 		...postScFabricDefinitionsByDefinitionIdDeployMutation(),
 		onSuccess: () => {
-			toast.success('Chaincode deployed successfully')
 			setTimelineKey((prev) => prev + 1)
 			onSuccess?.()
-		},
-		onError: (error: any) => {
-			let message = 'Failed to deploy chaincode.'
-			if (error?.response?.data?.message) {
-				message = error.response.data.message
-			} else if (error?.message) {
-				message = error.message
-			}
-			toast.error(message)
+			refetch?.()
 		},
 	})
 
@@ -132,26 +122,16 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 	const undeployMutation = useMutation({
 		...postScFabricDefinitionsByDefinitionIdUndeployMutation(),
 		onSuccess: () => {
-			toast.success('Chaincode undeployed successfully')
 			setTimelineKey((prev) => prev + 1)
 			setUndeployOpen(false)
 			onSuccess?.()
-		},
-		onError: (error: any) => {
-			let message = 'Failed to undeploy chaincode.'
-			if (error?.response?.data?.message) {
-				message = error.response.data.message
-			} else if (error?.message) {
-				message = error.message
-			}
-			setUndeployError(message)
-			toast.error(message)
+			refetch?.()
 		},
 	})
 
 	// Handlers
-	const handleEdit = () => setEditOpen(true)
-	const handleEditDialogOpenChange = (open: boolean) => setEditOpen(open)
+	const handleEdit = useCallback(() => setEditOpen(true), [])
+	const handleEditDialogOpenChange = useCallback((open: boolean) => setEditOpen(open), [])
 	const handleEditSubmit = async (data: VersionFormValues) => {
 		try {
 			await toast.promise(
@@ -182,26 +162,25 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 			onSuccess?.()
 		},
 	})
-	const handleDelete = () => {
+	const handleDelete = useCallback(() => {
 		toast.promise(deleteMutation.mutateAsync({ path: { definitionId: v.id } }), {
 			loading: 'Deleting chaincode definition...',
 			success: 'Chaincode definition deleted successfully',
 			error: (err) => `Failed to delete chaincode definition: ${err.message || 'Unknown error'}`,
 		})
-	}
-	const handleDeleteDialogOpenChange = (open: boolean) => setDeleteOpen(open)
+	}, [deleteMutation, v.id])
+	const handleDeleteDialogOpenChange = useCallback((open: boolean) => setDeleteOpen(open), [])
 
-	const handleUndeploy = async () => {
-		setUndeployError(null)
+	const handleUndeploy = useCallback(async () => {
 		await toast.promise(undeployMutation.mutateAsync({ path: { definitionId: v.id } }), {
 			loading: 'Undeploying chaincode...',
 			success: 'Chaincode undeployed successfully',
 			error: (err) => `Failed to undeploy chaincode: ${err.message || 'Unknown error'}`,
 		})
-	}
+	}, [undeployMutation, v.id])
 
 	// Lifecycle action handler
-	const handleLifecycleAction = async (action: string) => {
+	const handleLifecycleAction = useCallback(async (action: string) => {
 		if (action === 'install') {
 			setInstallDialogOpen(true)
 		} else if (action === 'approve') {
@@ -227,7 +206,7 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 		} else if (action === 'undeploy') {
 			setUndeployOpen(true)
 		}
-	}
+	}, [deployMutation, undeployMutation, v.id])
 
 	return (
 		<Card key={v.id} className="p-4 mb-4">
@@ -282,7 +261,7 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 								Are you sure you want to undeploy this chaincode definition? This will stop the running chaincode container but keep the definition.
 							</AlertDialogDescription>
 						</AlertDialogHeader>
-						{undeployError && <div className="text-red-500 text-sm mb-2">{undeployError}</div>}
+						{undeployMutation.error && <div className="text-red-500 text-sm mb-2">{undeployMutation.error.message}</div>}
 						<AlertDialogFooter>
 							<AlertDialogCancel onClick={() => setUndeployOpen(false)}>Cancel</AlertDialogCancel>
 							<AlertDialogAction disabled={undeployMutation.isPending} onClick={handleUndeploy}>

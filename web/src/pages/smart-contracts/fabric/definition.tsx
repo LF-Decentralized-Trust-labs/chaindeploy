@@ -222,7 +222,9 @@ export default function FabricChaincodeDefinitionDetail() {
 			</Button>
 			{def?.id && (
 				<Link to={`/smart-contracts/fabric/${def.id}/playground`}>
-					<Button variant="secondary" className="mb-4 ml-2">Open Playground</Button>
+					<Button variant="secondary" className="mb-4 ml-2">
+						Open Playground
+					</Button>
 				</Link>
 			)}
 			<Card className="p-6 mb-6">
@@ -325,7 +327,7 @@ export default function FabricChaincodeDefinitionDetail() {
 			{versions.length === 0 ? (
 				<Card className="p-6 text-center text-muted-foreground">No chaincode definitions yet.</Card>
 			) : (
-				versions.map((v, idx) => <ChaincodeDefinitionCard key={v.id} definition={v} availablePeers={availablePeers} />)
+				versions.map((v, idx) => <ChaincodeDefinitionCard key={v.id} definition={v} availablePeers={availablePeers} refetch={refetch} />)
 			)}
 		</div>
 	)

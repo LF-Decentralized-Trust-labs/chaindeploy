@@ -327,6 +327,12 @@ export type ChainlaunchdeployChaincodeInvokeResponse = {
     status?: string;
 };
 
+export type ChainlaunchdeployChaincodeMetadataResponse = {
+    message?: string;
+    result?: unknown;
+    status?: string;
+};
+
 export type ChainlaunchdeployChaincodeQueryRequest = {
     /**
      * Arguments to pass to the chaincode function
@@ -8813,6 +8819,40 @@ export type PostScFabricChaincodesByChaincodeIdInvokeResponses = {
 };
 
 export type PostScFabricChaincodesByChaincodeIdInvokeResponse = PostScFabricChaincodesByChaincodeIdInvokeResponses[keyof PostScFabricChaincodesByChaincodeIdInvokeResponses];
+
+export type GetScFabricChaincodesByChaincodeIdMetadataData = {
+    body?: never;
+    path: {
+        /**
+         * Chaincode ID
+         */
+        chaincodeId: number;
+    };
+    query?: never;
+    url: '/sc/fabric/chaincodes/{chaincodeId}/metadata';
+};
+
+export type GetScFabricChaincodesByChaincodeIdMetadataErrors = {
+    /**
+     * Bad Request
+     */
+    400: ResponseResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ResponseResponse;
+};
+
+export type GetScFabricChaincodesByChaincodeIdMetadataError = GetScFabricChaincodesByChaincodeIdMetadataErrors[keyof GetScFabricChaincodesByChaincodeIdMetadataErrors];
+
+export type GetScFabricChaincodesByChaincodeIdMetadataResponses = {
+    /**
+     * OK
+     */
+    200: ChainlaunchdeployChaincodeMetadataResponse;
+};
+
+export type GetScFabricChaincodesByChaincodeIdMetadataResponse = GetScFabricChaincodesByChaincodeIdMetadataResponses[keyof GetScFabricChaincodesByChaincodeIdMetadataResponses];
 
 export type PostScFabricChaincodesByChaincodeIdQueryData = {
     /**

@@ -7,6 +7,8 @@ import { PlayCircle, RotateCcw, Search, X, Loader2, Clipboard, Check } from 'luc
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Card } from '@/components/ui/card'
+import { MetadataForm } from '@/pages/smart-contracts/fabric/[id]/MetadataPlaygroundForm'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 interface PlaygroundProps {
 	projectId: number
@@ -85,8 +87,20 @@ export function PlaygroundCore({
 	restoreOnly,
 	sortedResponses,
 	networkId,
-}: PlaygroundCoreProps) {
+	mode: parentMode,
+	metadata,
+	onMetadataSubmit,
+}: PlaygroundCoreProps & {
+	mode?: 'manual' | 'metadata',
+	metadata?: any,
+	onMetadataSubmit?: (txName: string, args: any) => void,
+}) {
 	const [copied, setCopied] = useState<{ [timestamp: number]: boolean }>({})
+	// Internal mode state if metadata is present
+	const [mode, setMode] = useState<'manual' | 'metadata'>(metadata ? 'metadata' : 'manual')
+
+	// If metadata is present, show tabs to switch modes
+	const showTabs = !!metadata
 
 	return (
 		<div className="w-full max-w-full mx-auto py-8">
@@ -96,30 +110,57 @@ export function PlaygroundCore({
 					<h2 className="text-xl font-bold mb-4 flex items-center gap-2">
 						<PlayCircle className="h-5 w-5" /> Playground
 					</h2>
-					<div className="space-y-4 mb-4">
-						<div>
-							<Label>Key & Organization</Label>
-							<FabricKeySelect value={selectedKey} onChange={setSelectedKey} />
-						</div>
-						<div>
-							<Label htmlFor="fn">Function name</Label>
-							<Input id="fn" value={fn} onChange={(e) => setFn(e.target.value)} placeholder="e.g. queryAsset" />
-						</div>
-						<div>
-							<Label htmlFor="args">Arguments (comma separated)</Label>
-							<Input id="args" value={args} onChange={(e) => setArgs(e.target.value)} placeholder="e.g. asset1, 100" />
-						</div>
-					</div>
-					<div className="flex gap-2 mt-2">
-						<Button className="flex-1" onClick={() => handleInvoke(fn, args, selectedKey)} disabled={loadingInvoke || !fn || !selectedKey}>
-							{loadingInvoke ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <PlayCircle className="h-4 w-4 mr-2" />}
-							Invoke
-						</Button>
-						<Button className="flex-1" onClick={() => handleQuery(fn, args, selectedKey)} disabled={loadingQuery || !fn || !selectedKey} variant="secondary">
-							{loadingQuery ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
-							Query
-						</Button>
-					</div>
+					{showTabs && (
+						<Tabs value={mode} onValueChange={v => setMode(v as 'manual' | 'metadata')} className="mb-6">
+							<TabsList>
+								<TabsTrigger value="metadata">From Metadata</TabsTrigger>
+								<TabsTrigger value="manual">Manual</TabsTrigger>
+							</TabsList>
+						</Tabs>
+					)}
+					{mode === 'manual' && (
+						<>
+							<div className="space-y-4 mb-4">
+								<div>
+									<Label>Key & Organization</Label>
+									<FabricKeySelect value={selectedKey} onChange={setSelectedKey} />
+								</div>
+								<div>
+									<Label htmlFor="fn">Function name</Label>
+									<Input id="fn" value={fn} onChange={(e) => setFn(e.target.value)} placeholder="e.g. queryAsset" />
+								</div>
+								<div>
+									<Label htmlFor="args">Arguments (comma separated)</Label>
+									<Input id="args" value={args} onChange={(e) => setArgs(e.target.value)} placeholder="e.g. asset1, 100" />
+								</div>
+							</div>
+							<div className="flex gap-2 mt-2">
+								<Button className="flex-1" onClick={() => handleInvoke(fn, args, selectedKey)} disabled={loadingInvoke || !fn || !selectedKey}>
+									{loadingInvoke ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <PlayCircle className="h-4 w-4 mr-2" />}
+									Invoke
+								</Button>
+								<Button className="flex-1" onClick={() => handleQuery(fn, args, selectedKey)} disabled={loadingQuery || !fn || !selectedKey} variant="secondary">
+									{loadingQuery ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
+									Query
+								</Button>
+							</div>
+						</>
+					)}
+					{mode === 'metadata' && metadata && (
+						<MetadataForm
+							selectedKey={selectedKey}
+							setSelectedKey={setSelectedKey}
+							metadata={metadata}
+							onSubmit={(txName, args, type) => {
+								if (type === 'invoke') {
+									handleInvoke(txName, JSON.stringify(args), selectedKey)
+								} else {
+									handleQuery(txName, JSON.stringify(args), selectedKey)
+								}
+							}}
+							loading={loadingInvoke || loadingQuery}
+						/>
+					)}
 				</div>
 
 				{/* Responses (right) */}

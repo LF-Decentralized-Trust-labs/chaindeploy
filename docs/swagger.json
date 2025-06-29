@@ -8633,6 +8633,50 @@
                 }
             }
         },
+        "/sc/fabric/chaincodes/{chaincodeId}/metadata": {
+            "get": {
+                "description": "Get metadata for a specific chaincode by executing org.hyperledger.fabric:GetMetadata",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chaincode"
+                ],
+                "summary": "Get chaincode metadata",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Chaincode ID",
+                        "name": "chaincodeId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/chainlaunchdeploy.ChaincodeMetadataResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/sc/fabric/chaincodes/{chaincodeId}/query": {
             "post": {
                 "description": "Query a specific chaincode",
@@ -10655,6 +10699,18 @@
             }
         },
         "chainlaunchdeploy.ChaincodeInvokeResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "result": {},
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "chainlaunchdeploy.ChaincodeMetadataResponse": {
             "type": "object",
             "properties": {
                 "message": {
