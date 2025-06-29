@@ -504,6 +504,70 @@ definitions:
       version:
         type: string
     type: object
+  chainlaunchdeploy.ChaincodeInvokeRequest:
+    properties:
+      args:
+        description: Arguments to pass to the chaincode function
+        items:
+          type: string
+        type: array
+      channel:
+        description: 'Optional: Channel name'
+        type: string
+      function:
+        description: Function name to invoke
+        type: string
+      key_id:
+        description: KeyID to use for signing
+        type: string
+      transient:
+        additionalProperties:
+          items:
+            type: integer
+          type: array
+        description: 'Optional: Transient data'
+        type: object
+    type: object
+  chainlaunchdeploy.ChaincodeInvokeResponse:
+    properties:
+      message:
+        type: string
+      result: {}
+      status:
+        type: string
+    type: object
+  chainlaunchdeploy.ChaincodeQueryRequest:
+    properties:
+      args:
+        description: Arguments to pass to the chaincode function
+        items:
+          type: string
+        type: array
+      channel:
+        description: 'Optional: Channel name'
+        type: string
+      function:
+        description: Function name to query
+        type: string
+      key_id:
+        description: KeyID to use for signing/query
+        type: string
+      transient:
+        additionalProperties:
+          items:
+            type: integer
+          type: array
+        description: 'Optional: Transient data'
+        type: object
+    type: object
+  chainlaunchdeploy.ChaincodeQueryResponse:
+    properties:
+      message:
+        type: string
+      result: {}
+      status:
+        type: string
+    type: object
   chainlaunchdeploy.ChaincodeResponse:
     properties:
       created_at:
@@ -9570,6 +9634,76 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       summary: Get chaincode definition details by ID
+      tags:
+      - Chaincode
+  /sc/fabric/chaincodes/{chaincodeId}/invoke:
+    post:
+      consumes:
+      - application/json
+      description: Invoke a transaction on a specific chaincode
+      parameters:
+      - description: Chaincode ID
+        in: path
+        name: chaincodeId
+        required: true
+        type: integer
+      - description: Invoke parameters
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/chainlaunchdeploy.ChaincodeInvokeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/chainlaunchdeploy.ChaincodeInvokeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: Invoke a chaincode
+      tags:
+      - Chaincode
+  /sc/fabric/chaincodes/{chaincodeId}/query:
+    post:
+      consumes:
+      - application/json
+      description: Query a specific chaincode
+      parameters:
+      - description: Chaincode ID
+        in: path
+        name: chaincodeId
+        required: true
+        type: integer
+      - description: Query parameters
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/chainlaunchdeploy.ChaincodeQueryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/chainlaunchdeploy.ChaincodeQueryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: Query a chaincode
       tags:
       - Chaincode
   /sc/fabric/chaincodes/{id}:

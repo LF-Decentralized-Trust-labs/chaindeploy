@@ -3,9 +3,10 @@ import { FabricKeySelect } from '@/components/FabricKeySelect'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { PlayCircle, RotateCcw, Search, X } from 'lucide-react'
+import { PlayCircle, RotateCcw, Search, X, Loader2, Clipboard, Check } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { Card } from '@/components/ui/card'
 
 interface PlaygroundProps {
 	projectId: number
@@ -26,6 +27,7 @@ type Response = {
 	timestamp: number
 	type: 'invoke' | 'query'
 	selectedKey?: { orgId: number; keyId: number }
+	error?: string
 }
 function isValidResponse(r: any): r is { type: 'invoke' | 'query'; response: any; error?: string; timestamp: number } {
 	return r && (r.type === 'invoke' || r.type === 'query') && typeof r.timestamp === 'number'
@@ -49,6 +51,172 @@ function renderResponseContent(content: any) {
 	}
 }
 
+interface PlaygroundCoreProps {
+	fn: string
+	setFn: (fn: string) => void
+	args: string
+	setArgs: (args: string) => void
+	selectedKey: { orgId: number; keyId: number } | undefined
+	setSelectedKey: (key: { orgId: number; keyId: number } | undefined) => void
+	responses: Response[]
+	loadingInvoke: boolean
+	loadingQuery: boolean
+	handleInvoke: (fn: string, args: string, selectedKey: { orgId: number; keyId: number } | undefined) => void
+	handleQuery: (fn: string, args: string, selectedKey: { orgId: number; keyId: number } | undefined) => void
+	handleDeleteResponse: (timestamp: number) => void
+	restoreOnly: (resp: { fn: string; args: string; selectedKey?: { orgId: number; keyId: number } }) => void
+	sortedResponses: Response[]
+	networkId: number
+}
+
+export function PlaygroundCore({
+	fn,
+	setFn,
+	args,
+	setArgs,
+	selectedKey,
+	setSelectedKey,
+	responses,
+	loadingInvoke,
+	loadingQuery,
+	handleInvoke,
+	handleQuery,
+	handleDeleteResponse,
+	restoreOnly,
+	sortedResponses,
+	networkId,
+}: PlaygroundCoreProps) {
+	const [copied, setCopied] = useState<{ [timestamp: number]: boolean }>({})
+
+	return (
+		<div className="w-full max-w-full mx-auto py-8">
+			<div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+				{/* Playground form (left) */}
+				<div className="border rounded bg-background shadow-sm p-6 flex flex-col h-fit">
+					<h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+						<PlayCircle className="h-5 w-5" /> Playground
+					</h2>
+					<div className="space-y-4 mb-4">
+						<div>
+							<Label>Key & Organization</Label>
+							<FabricKeySelect value={selectedKey} onChange={setSelectedKey} />
+						</div>
+						<div>
+							<Label htmlFor="fn">Function name</Label>
+							<Input id="fn" value={fn} onChange={(e) => setFn(e.target.value)} placeholder="e.g. queryAsset" />
+						</div>
+						<div>
+							<Label htmlFor="args">Arguments (comma separated)</Label>
+							<Input id="args" value={args} onChange={(e) => setArgs(e.target.value)} placeholder="e.g. asset1, 100" />
+						</div>
+					</div>
+					<div className="flex gap-2 mt-2">
+						<Button className="flex-1" onClick={() => handleInvoke(fn, args, selectedKey)} disabled={loadingInvoke || !fn || !selectedKey}>
+							{loadingInvoke ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <PlayCircle className="h-4 w-4 mr-2" />}
+							Invoke
+						</Button>
+						<Button className="flex-1" onClick={() => handleQuery(fn, args, selectedKey)} disabled={loadingQuery || !fn || !selectedKey} variant="secondary">
+							{loadingQuery ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
+							Query
+						</Button>
+					</div>
+				</div>
+
+				{/* Responses (right) */}
+				<div className="flex flex-col h-full">
+					<h3 className="text-lg font-semibold mb-4">Responses</h3>
+					{responses.length === 0 ? (
+						<div className="text-muted-foreground text-center py-12">No responses yet</div>
+					) : (
+						<div className="flex flex-col gap-4 overflow-y-auto max-h-[70vh] pr-2">
+							{sortedResponses.map((response) => (
+								<Card key={response.timestamp} className="p-4 bg-muted/60 border border-border rounded-lg w-full relative">
+									<div className="flex items-center justify-between mb-1">
+										<span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{response.type === 'invoke' ? 'Invoke' : 'Query'}</span>
+										<span className="text-xs text-muted-foreground">{new Date(response.timestamp).toLocaleTimeString()}</span>
+									</div>
+									<div className="text-xs text-muted-foreground mb-1">
+										fn: <span className="font-semibold">{response.fn}</span> &nbsp; args: <span className="font-mono">{response.args}</span>
+									</div>
+									<div className="absolute top-2 right-2 flex gap-1">
+										<Button size="icon" variant="ghost" onClick={() => restoreOnly(response)} className="rounded-full" title="Restore">
+											<RotateCcw className="h-4 w-4" />
+										</Button>
+										<Button size="icon" variant="secondary" onClick={() => handleInvoke(response.fn, response.args, selectedKey)} title="Restore & Invoke" disabled={!selectedKey}>
+											<PlayCircle className="h-4 w-4" />
+										</Button>
+										<Button size="icon" variant="secondary" onClick={() => handleQuery(response.fn, response.args, selectedKey)} title="Restore & Query" disabled={!selectedKey}>
+											<Search className="h-4 w-4" />
+										</Button>
+										<Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDeleteResponse(response.timestamp)} title="Delete">
+											<X className="h-4 w-4" />
+										</Button>
+									</div>
+									<div className="text-sm whitespace-pre-wrap break-all mt-6 relative">
+										{response.error ? (
+											<div className="relative bg-destructive/10 border border-destructive rounded p-4 text-destructive font-semibold flex items-start">
+												<span className="flex-1">Error: {response.error}</span>
+												<Button
+													size="icon"
+													variant="ghost"
+													className="ml-2"
+													onClick={() => {
+														navigator.clipboard.writeText(response.error)
+														setCopied((prev) => ({ ...prev, [response.timestamp]: true }))
+														setTimeout(() => {
+															setCopied((prev) => ({ ...prev, [response.timestamp]: false }))
+														}, 1500)
+													}}
+													title="Copy error"
+												>
+													{copied[response.timestamp] ? <Check className="h-4 w-4 text-green-500" /> : <Clipboard className="h-4 w-4" />}
+												</Button>
+											</div>
+										) : (
+											<>
+												<div className="max-h-64 overflow-auto overflow-x-auto pr-10">
+													{renderResponseContent(response.result?.result ?? response.result)}
+												</div>
+												<Button
+													size="icon"
+													variant="ghost"
+													className="absolute top-2 right-2 z-10"
+													onClick={() => {
+														const content = response.result?.result ?? response.result
+														const text = typeof content === 'string' ? content : JSON.stringify(content, null, 2)
+														navigator.clipboard.writeText(text)
+														setCopied((prev) => ({ ...prev, [response.timestamp]: true }))
+														setTimeout(() => {
+															setCopied((prev) => ({ ...prev, [response.timestamp]: false }))
+														}, 1500)
+													}}
+													title="Copy result"
+												>
+													{copied[response.timestamp] ? <Check className="h-4 w-4 text-green-500" /> : <Clipboard className="h-4 w-4" />}
+												</Button>
+												{networkId && response.result && !!response.result.blockNumber && !!response.result.transactionId && (
+													<a
+														href={`/networks/${networkId}/blocks/${response.result.blockNumber}`}
+														className="inline-block mt-2 text-primary underline text-xs hover:text-primary/80"
+														target="_blank"
+														rel="noopener noreferrer"
+													>
+														View Block #{response.result.blockNumber}
+													</a>
+												)}
+											</>
+										)}
+									</div>
+								</Card>
+							))}
+						</div>
+					)}
+				</div>
+			</div>
+		</div>
+	)
+}
+
 export function Playground({ projectId, networkId }: PlaygroundProps) {
 	const [fn, setFn] = useState('')
 	const [args, setArgs] = useState('')
@@ -58,9 +226,11 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 	const [loadingQuery, setLoadingQuery] = useState(false)
 	const didMount = useRef(false)
 
+	const STORAGE_KEY = `playground-state-${projectId}`
+
 	// Load state from localStorage on mount
 	useEffect(() => {
-		const saved = localStorage.getItem(`playground-state-${projectId}`)
+		const saved = localStorage.getItem(STORAGE_KEY)
 		if (saved) {
 			try {
 				const parsed = JSON.parse(saved)
@@ -70,54 +240,24 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 				setResponses(parsed.responses || [])
 			} catch {}
 		}
-	}, [projectId])
+	}, [STORAGE_KEY])
 
-	const saveToLocalStorage = useCallback(
-		(
-			nextState: Partial<{
-				fn: string
-				args: string
-				selectedKey: { orgId: number; keyId: number } | undefined
-				responses: Response[]
-			}> = {}
-		) => {
-			try {
-				localStorage.setItem(
-					`playground-state-${projectId}`,
-					JSON.stringify({
-						fn,
-						args,
-						selectedKey,
-						...nextState,
-						responses: (nextState.responses || responses).slice(-10),
-					})
-				)
-			} catch (e: any) {
-				if (e && (e.name === 'QuotaExceededError' || e.code === 22)) {
-					// Try trimming responses and saving again
-					const trimmedResponses = (nextState.responses || responses).slice(-10)
-					try {
-						localStorage.setItem(
-							`playground-state-${projectId}`,
-							JSON.stringify({
-								fn,
-								args,
-								selectedKey,
-								...nextState,
-								responses: trimmedResponses,
-							})
-						)
-						toast.error('Local storage was full. Oldest responses were removed to save new ones.')
-					} catch {
-						toast.error('Local storage is full. Unable to save playground state.')
-					}
-				} else {
-					throw e
-				}
-			}
-		},
-		[projectId, fn, args, selectedKey, responses]
-	)
+	// Save state to localStorage on change
+	useEffect(() => {
+		try {
+			localStorage.setItem(
+				STORAGE_KEY,
+				JSON.stringify({
+					fn,
+					args,
+					selectedKey,
+					responses: responses.slice(0, 10),
+				})
+			)
+		} catch {}
+	}, [fn, args, selectedKey, responses, STORAGE_KEY])
+
+	const sortedResponses = useMemo(() => responses.slice().sort((a, b) => b.timestamp - a.timestamp), [responses])
 
 	const handleInvoke = useCallback(
 		async (fnParam: string, argsParam: string, selectedKeyParam: { orgId: number; keyId: number } | undefined) => {
@@ -137,24 +277,31 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 				toast.dismiss(toastId)
 				let nextResponses
 				if (res.error) {
-					nextResponses = [...responses, { type: 'invoke', result: res.error.message, timestamp: Date.now(), fn: fnParam, args: argsParam, selectedKey: selectedKeyParam }]
+					nextResponses = [
+						{ type: 'invoke', result: res.error.message, timestamp: Date.now(), fn: fnParam, args: argsParam, selectedKey: selectedKeyParam },
+						...responses,
+					]
 					setResponses(nextResponses)
 				} else {
-					nextResponses = [...responses, { type: 'invoke', result: res.data, timestamp: Date.now(), fn: fnParam, args: argsParam, selectedKey: selectedKeyParam }]
+					nextResponses = [
+						{ type: 'invoke', result: res.data, timestamp: Date.now(), fn: fnParam, args: argsParam, selectedKey: selectedKeyParam },
+						...responses,
+					]
 					setResponses(nextResponses)
 				}
-				saveToLocalStorage({ responses: nextResponses })
 			} catch (err: any) {
 				toast.dismiss(toastId)
 				const msg = err?.response?.data?.message || err?.message || 'Unknown error'
-				const nextResponses = [...responses, { type: 'invoke', result: msg, timestamp: Date.now(), fn: fnParam, args: argsParam } as Response]
+				const nextResponses = [
+					{ type: 'invoke', result: msg, timestamp: Date.now(), fn: fnParam, args: argsParam } as Response,
+					...responses,
+				]
 				setResponses(nextResponses)
-				saveToLocalStorage({ responses: nextResponses })
 			} finally {
 				setLoadingInvoke(false)
 			}
 		},
-		[projectId, responses, saveToLocalStorage]
+		[projectId, responses]
 	)
 
 	const handleQuery = useCallback(
@@ -175,24 +322,31 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 				toast.dismiss(toastId)
 				let nextResponses
 				if (res.error) {
-					nextResponses = [...responses, { type: 'query', result: res.error.message, timestamp: Date.now(), fn: fnParam, args: argsParam, selectedKey: selectedKeyParam }]
+					nextResponses = [
+						{ type: 'query', result: res.error.message, timestamp: Date.now(), fn: fnParam, args: argsParam, selectedKey: selectedKeyParam },
+						...responses,
+					]
 					setResponses(nextResponses)
 				} else {
-					nextResponses = [...responses, { type: 'query', result: res.data, timestamp: Date.now(), fn: fnParam, args: argsParam, selectedKey: selectedKeyParam }]
+					nextResponses = [
+						{ type: 'query', result: res.data, timestamp: Date.now(), fn: fnParam, args: argsParam, selectedKey: selectedKeyParam },
+						...responses,
+					]
 					setResponses(nextResponses)
 				}
-				saveToLocalStorage({ responses: nextResponses })
 			} catch (err: any) {
 				toast.dismiss(toastId)
 				const msg = err?.response?.data?.message || err?.message || 'Unknown error'
-				const nextResponses = [...responses, { type: 'query', result: msg, timestamp: Date.now(), fn: fnParam, args: argsParam } as Response]
+				const nextResponses = [
+					{ type: 'query', result: msg, timestamp: Date.now(), fn: fnParam, args: argsParam } as Response,
+					...responses,
+				]
 				setResponses(nextResponses)
-				saveToLocalStorage({ responses: nextResponses })
 			} finally {
 				setLoadingQuery(false)
 			}
 		},
-		[projectId, responses, saveToLocalStorage]
+		[projectId, responses]
 	)
 
 	const restoreOnly = useCallback(
@@ -202,115 +356,34 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 			if (resp.selectedKey) {
 				setSelectedKey(resp.selectedKey)
 			}
-			saveToLocalStorage({ fn: resp.fn, args: resp.args, selectedKey: resp.selectedKey || selectedKey })
 		},
-		[setFn, setArgs, setSelectedKey, saveToLocalStorage, selectedKey]
+		[]
 	)
 
-	const sortedResponses = useMemo(() => responses.sort((a, b) => b.timestamp - a.timestamp), [responses])
-
-	// Persist fn and args only after initial mount and if both have value
-	useEffect(() => {
-		if (didMount.current) {
-			if (fn && args) {
-				saveToLocalStorage({ fn, args })
-			}
-		} else {
-			didMount.current = true
-		}
-	}, [fn, args])
-
-	// Add a function to delete an operation
 	const handleDeleteResponse = useCallback(
 		(timestamp: number) => {
-			setResponses((prev) => {
-				const next = prev.filter((op) => op.timestamp !== timestamp)
-				saveToLocalStorage({ responses: next })
-				return next
-			})
+			setResponses((prev) => prev.filter((op) => op.timestamp !== timestamp))
 		},
-		[saveToLocalStorage]
+		[]
 	)
 
 	return (
-		<div className="grid grid-cols-1 md:grid-cols-6 gap-8 h-[90%] my-8 mx-4">
-			{/* Playground form (left) */}
-			<div className="md:col-span-2 min-w-[320px] max-w-[480px] border rounded bg-background shadow-sm h-full overflow-y-auto">
-				<div className="px-4 py-4 grid gap-4 h-full">
-					<h2 className="text-xl font-bold mb-2 grid grid-flow-col auto-cols-max items-center gap-2">
-						<PlayCircle className="h-5 w-5" /> Playground
-					</h2>
-					<div className="grid gap-1">
-						<Label>Key & Organization</Label>
-						<FabricKeySelect value={selectedKey} onChange={setSelectedKey} />
-					</div>
-					<div className="grid gap-1">
-						<Label htmlFor="fn">Function name</Label>
-						<Input id="fn" value={fn} onChange={(e) => setFn(e.target.value)} placeholder="e.g. queryAsset" />
-					</div>
-					<div className="grid gap-1">
-						<Label htmlFor="args">Arguments (comma separated)</Label>
-						<Input id="args" value={args} onChange={(e) => setArgs(e.target.value)} placeholder="e.g. asset1, 100" />
-					</div>
-					<div className="grid grid-flow-col auto-cols-max gap-2 mt-2">
-						<Button onClick={() => handleInvoke(fn, args, selectedKey)} disabled={loadingInvoke || !fn || !selectedKey}>
-							<PlayCircle className="h-4 w-4 mr-2" />
-							Invoke
-						</Button>
-						<Button onClick={() => handleQuery(fn, args, selectedKey)} disabled={loadingQuery || !fn || !selectedKey} variant="secondary">
-							<Search className="h-4 w-4 mr-2" />
-							Query
-						</Button>
-					</div>
-				</div>
-			</div>
-			{/* Responses (right) */}
-			<div className="md:col-span-4 border rounded bg-muted/30 p-2 h-full overflow-y-auto">
-				{responses.length === 0 ? (
-					<div className="text-muted-foreground text-center py-8">No responses yet</div>
-				) : (
-					<div className="grid gap-2">
-						{sortedResponses.map((response) => (
-							<div key={response.timestamp} className="p-3 border-b border-muted bg-background rounded relative">
-								<div className="grid grid-flow-col auto-cols-max items-center gap-2 mb-1">
-									<span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{response.type === 'invoke' ? 'Invoke' : 'Query'}</span>
-									<span className="text-xs text-muted-foreground">{new Date(response.timestamp).toLocaleTimeString()}</span>
-								</div>
-								<div className="text-xs text-muted-foreground mb-1">
-									fn: <span className="font-semibold">{response.fn}</span> &nbsp; args: <span className="font-mono">{response.args}</span>
-								</div>
-								<div className="absolute top-2 right-2 flex gap-1">
-									<Button size="icon" variant="ghost" onClick={() => restoreOnly(response)} className="rounded-full" title="Restore">
-										<RotateCcw className="h-4 w-4" />
-									</Button>
-									<Button size="icon" variant="secondary" onClick={() => handleInvoke(response.fn, response.args, selectedKey)} title="Restore & Invoke" disabled={!selectedKey}>
-										<PlayCircle className="h-4 w-4" />
-									</Button>
-									<Button size="icon" variant="secondary" onClick={() => handleQuery(response.fn, response.args, selectedKey)} title="Restore & Query" disabled={!selectedKey}>
-										<Search className="h-4 w-4" />
-									</Button>
-									<Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDeleteResponse(response.timestamp)} title="Delete">
-										<X className="h-4 w-4" />
-									</Button>
-								</div>
-								<div className="text-sm whitespace-pre-wrap break-all mt-6">
-									<div className="max-h-64 overflow-auto overflow-x-auto">{renderResponseContent(response.result?.result ?? response.result)}</div>
-									{networkId && response.result && !!response.result.blockNumber && !!response.result.transactionId && (
-										<a
-											href={`/networks/${networkId}/blocks/${response.result.blockNumber}`}
-											className="inline-block mt-2 text-primary underline text-xs hover:text-primary/80"
-											target="_blank"
-											rel="noopener noreferrer"
-										>
-											View Block #{response.result.blockNumber}
-										</a>
-									)}
-								</div>
-							</div>
-						))}
-					</div>
-				)}
-			</div>
-		</div>
+		<PlaygroundCore
+			fn={fn}
+			setFn={setFn}
+			args={args}
+			setArgs={setArgs}
+			selectedKey={selectedKey}
+			setSelectedKey={setSelectedKey}
+			responses={responses}
+			loadingInvoke={loadingInvoke}
+			loadingQuery={loadingQuery}
+			handleInvoke={handleInvoke}
+			handleQuery={handleQuery}
+			handleDeleteResponse={handleDeleteResponse}
+			restoreOnly={restoreOnly}
+			sortedResponses={sortedResponses}
+			networkId={networkId}
+		/>
 	)
 }

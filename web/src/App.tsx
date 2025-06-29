@@ -64,6 +64,7 @@ const BesuContractsPage = lazy(() => import('./pages/smart-contracts/besu'))
 const FabricChaincodeDefinitionDetail = lazy(() => import('./pages/smart-contracts/fabric/definition'))
 const ChaincodeProjectDetailPage = lazy(() => import('./pages/smart-contracts/fabric/[id]'))
 const ChaincodeProjectEditorPage = lazy(() => import('./pages/smart-contracts/fabric/[id]/editor'))
+const ChaincodePlaygroundPage = lazy(() => import('./pages/smart-contracts/fabric/[id]/playground'))
 
 import { Toaster } from './components/ui/sonner'
 import { AlertCircle, CheckCircle, Loader2, X } from 'lucide-react'
@@ -151,6 +152,7 @@ const App2 = () => {
 													<Route path="sc/fabric/chaincodes/:id" element={<FabricChaincodeDefinitionDetail />} />
 													<Route path="sc/fabric/projects/chaincodes/:id" element={<ChaincodeProjectDetailPage />} />
 													<Route path="sc/fabric/projects/chaincodes/:id/editor" element={<ChaincodeProjectEditorPage />} />
+													<Route path="smart-contracts/fabric/:id/playground" element={<ChaincodePlaygroundPage />} />
 												</Route>
 												<Route path="*" element={<NotFoundPage />} />
 											</Routes>
@@ -243,6 +245,7 @@ const App = () => {
 														<Route path="sc/fabric/chaincodes/:id" element={<FabricChaincodeDefinitionDetail />} />
 														<Route path="sc/fabric/projects/chaincodes/:id" element={<ChaincodeProjectDetailPage />} />
 														<Route path="sc/fabric/projects/chaincodes/:id/editor" element={<ChaincodeProjectEditorPage />} />
+														<Route path="smart-contracts/fabric/:id/playground" element={<ChaincodePlaygroundPage />} />
 													</Route>
 													<Route path="*" element={<NotFoundPage />} />
 												</Routes>

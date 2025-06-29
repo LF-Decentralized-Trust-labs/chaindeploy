@@ -1015,3 +1015,108 @@ func (s *ChaincodeService) RemoveDeploymentByDefinition(ctx context.Context, def
 	_ = s.AddChaincodeDefinitionEvent(ctx, definitionID, "undeploy", eventData)
 	return nil
 }
+
+// Helper to get Fabric peers for a network
+func getFabricPeersForNetwork(nodeService *service.NodeService, ctx context.Context, networkID int64) ([]int64, error) {
+	nodes, err := nodeService.GetAllNodes(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var peerIDs []int64
+	for _, node := range nodes.Items {
+		if node.NodeType == "FABRIC_PEER" && node.Platform == "FABRIC" {
+			// NodeResponse has NetworkID in FabricPeer
+			if node.FabricPeer != nil && node.FabricPeer.OrganizationID != 0 {
+				// We don't have networkID directly, but we can check if the chaincode's networkID matches node.FabricPeer.OrganizationID
+				// This is a limitation, so for now, just collect all Fabric peers
+				peerIDs = append(peerIDs, node.ID)
+			}
+		}
+	}
+	return peerIDs, nil
+}
+
+// InvokeChaincode submits a transaction to a chaincode
+func (s *ChaincodeService) InvokeChaincode(ctx context.Context, chaincodeId int64, function string, args []string, channel string, transient map[string][]byte, keyID int64) (interface{}, error) {
+	cc, err := s.GetChaincode(ctx, chaincodeId)
+	if err != nil {
+		return nil, err
+	}
+	if cc == nil {
+		return nil, fmt.Errorf("chaincode not found")
+	}
+	networkName := channel
+	if networkName == "" {
+		networkName = cc.NetworkName
+	}
+	peerIDs, err := getFabricPeersForNetwork(s.nodeService, ctx, cc.NetworkID)
+	if err != nil || len(peerIDs) == 0 {
+		return nil, fmt.Errorf("no peers found for network: %w", err)
+	}
+	peerID := peerIDs[0]
+
+	gateway, conn, err := s.nodeService.GetFabricPeerClientGateway(ctx, peerID, keyID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get peer gateway: %w", err)
+	}
+	defer conn.Close()
+	network := gateway.GetNetwork(networkName)
+	contract := network.GetContract(cc.Name)
+	var result []byte
+	var commit *fabricclient.Commit
+	if transient != nil && len(transient) > 0 {
+		result, commit, err = contract.SubmitAsync(function, fabricclient.WithArguments(args...), fabricclient.WithTransient(transient))
+	} else {
+		result, commit, err = contract.SubmitAsync(function, fabricclient.WithArguments(args...))
+	}
+	if err != nil {
+		return nil, err
+	}
+	txStatus, err := commit.Status()
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{
+		"result":        string(result),
+		"blockNumber":   txStatus.BlockNumber,
+		"transactionId": txStatus.TransactionID,
+		"code":          txStatus.Code,
+	}, nil
+}
+
+// QueryChaincode evaluates a transaction on a chaincode
+func (s *ChaincodeService) QueryChaincode(ctx context.Context, chaincodeId int64, function string, args []string, channel string, transient map[string][]byte, keyID int64) (interface{}, error) {
+	cc, err := s.GetChaincode(ctx, chaincodeId)
+	if err != nil {
+		return nil, err
+	}
+	if cc == nil {
+		return nil, fmt.Errorf("chaincode not found")
+	}
+	networkName := channel
+	if networkName == "" {
+		networkName = cc.NetworkName
+	}
+	peerIDs, err := getFabricPeersForNetwork(s.nodeService, ctx, cc.NetworkID)
+	if err != nil || len(peerIDs) == 0 {
+		return nil, fmt.Errorf("no peers found for network: %w", err)
+	}
+	peerID := peerIDs[0]
+	gateway, conn, err := s.nodeService.GetFabricPeerClientGateway(ctx, peerID, keyID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get peer gateway: %w", err)
+	}
+	defer conn.Close()
+	network := gateway.GetNetwork(networkName)
+	contract := network.GetContract(cc.Name)
+	var result []byte
+	if transient != nil && len(transient) > 0 {
+		result, err = contract.EvaluateTransaction(function, args...)
+	} else {
+		result, err = contract.EvaluateTransaction(function, args...)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return string(result), nil
+}

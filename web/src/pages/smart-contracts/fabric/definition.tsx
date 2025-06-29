@@ -13,7 +13,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import * as z from 'zod'
 
@@ -220,6 +220,11 @@ export default function FabricChaincodeDefinitionDetail() {
 			<Button variant="link" onClick={() => navigate(-1)} className="mb-4">
 				Back
 			</Button>
+			{def?.id && (
+				<Link to={`/smart-contracts/fabric/${def.id}/playground`}>
+					<Button variant="secondary" className="mb-4 ml-2">Open Playground</Button>
+				</Link>
+			)}
 			<Card className="p-6 mb-6">
 				<div className="font-semibold text-lg mb-2">{def.name}</div>
 				<div className="text-sm text-muted-foreground mb-1">Network Name: {def.network_name}</div>

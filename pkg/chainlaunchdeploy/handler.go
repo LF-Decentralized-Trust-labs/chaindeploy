@@ -59,6 +59,8 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Post("/chaincodes/{chaincodeId}/definitions", response.Middleware(h.CreateChaincodeDefinition))
 		r.Get("/chaincodes/{chaincodeId}/definitions", response.Middleware(h.ListChaincodeDefinitions))
 		r.Get("/chaincodes/{chaincodeId}/definitions/{definitionId}", response.Middleware(h.GetChaincodeDefinitionDetailByID))
+		r.Post("/chaincodes/{chaincodeId}/invoke", response.Middleware(h.InvokeChaincode))
+		r.Post("/chaincodes/{chaincodeId}/query", response.Middleware(h.QueryChaincode))
 	})
 
 	r.Route("/sc/fabric/definitions", func(r chi.Router) {
@@ -1138,4 +1140,127 @@ func (h *Handler) RemoveDeploymentByDefinition(w http.ResponseWriter, r *http.Re
 		return errors.NewInternalError("failed to remove deployment by definition", err, nil)
 	}
 	return response.WriteJSON(w, http.StatusOK, map[string]string{"status": "undeploy success", "definitionId": definitionIdStr})
+}
+
+// --- Invoke/Query HTTP structs ---
+
+type ChaincodeInvokeRequest struct {
+	// Arguments to pass to the chaincode function
+	Args []string `json:"args"`
+	// Function name to invoke
+	Function string `json:"function"`
+	// Optional: Channel name
+	Channel string `json:"channel"`
+	// Optional: Transient data
+	Transient map[string][]byte `json:"transient"`
+	// KeyID to use for signing
+	KeyID string `json:"key_id"`
+}
+
+type ChaincodeInvokeResponse struct {
+	Status  string      `json:"status"`
+	Message string      `json:"message"`
+	Result  interface{} `json:"result"`
+}
+
+type ChaincodeQueryRequest struct {
+	// Arguments to pass to the chaincode function
+	Args []string `json:"args"`
+	// Function name to query
+	Function string `json:"function"`
+	// Optional: Channel name
+	Channel string `json:"channel"`
+	// Optional: Transient data
+	Transient map[string][]byte `json:"transient"`
+	// KeyID to use for signing/query
+	KeyID string `json:"key_id"`
+}
+
+type ChaincodeQueryResponse struct {
+	Status  string      `json:"status"`
+	Message string      `json:"message"`
+	Result  interface{} `json:"result"`
+}
+
+// @Summary Invoke a chaincode
+// @Description Invoke a transaction on a specific chaincode
+// @Tags Chaincode
+// @Accept json
+// @Produce json
+// @Param chaincodeId path int true "Chaincode ID"
+// @Param request body ChaincodeInvokeRequest true "Invoke parameters"
+// @Success 200 {object} ChaincodeInvokeResponse
+// @Failure 400 {object} response.Response
+// @Failure 500 {object} response.Response
+// @Router /sc/fabric/chaincodes/{chaincodeId}/invoke [post]
+func (h *Handler) InvokeChaincode(w http.ResponseWriter, r *http.Request) error {
+	chaincodeIdStr := chi.URLParam(r, "chaincodeId")
+	chaincodeId, err := strconv.ParseInt(chaincodeIdStr, 10, 64)
+	if err != nil {
+		h.logger.Error("Invalid chaincode ID", "chaincodeId", chaincodeIdStr)
+		return errors.NewValidationError("invalid chaincode ID", map[string]interface{}{"detail": "Invalid chaincode ID"})
+	}
+	var req ChaincodeInvokeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.Error("Invalid invoke chaincode request body", "error", err)
+		return errors.NewValidationError("invalid request body", map[string]interface{}{"detail": err.Error()})
+	}
+	keyID, err := strconv.ParseInt(req.KeyID, 10, 64)
+	if err != nil {
+		h.logger.Error("Invalid key ID", "keyID", req.KeyID)
+		return errors.NewValidationError("invalid key ID", map[string]interface{}{"detail": "Invalid key ID"})
+	}
+	result, err := h.chaincodeService.InvokeChaincode(r.Context(), chaincodeId, req.Function, req.Args, req.Channel, req.Transient, keyID)
+	if err != nil {
+		h.logger.Error("Failed to invoke chaincode", "error", err)
+		return errors.NewInternalError("failed to invoke chaincode", err, nil)
+	}
+	resp := ChaincodeInvokeResponse{
+		Status:  "success",
+		Message: "Chaincode invoked successfully",
+		Result:  result,
+	}
+	return response.WriteJSON(w, http.StatusOK, resp)
+}
+
+// @Summary Query a chaincode
+// @Description Query a specific chaincode
+// @Tags Chaincode
+// @Accept json
+// @Produce json
+// @Param chaincodeId path int true "Chaincode ID"
+// @Param request body ChaincodeQueryRequest true "Query parameters"
+// @Success 200 {object} ChaincodeQueryResponse
+// @Failure 400 {object} response.Response
+// @Failure 500 {object} response.Response
+// @Router /sc/fabric/chaincodes/{chaincodeId}/query [post]
+func (h *Handler) QueryChaincode(w http.ResponseWriter, r *http.Request) error {
+	chaincodeIdStr := chi.URLParam(r, "chaincodeId")
+	chaincodeId, err := strconv.ParseInt(chaincodeIdStr, 10, 64)
+	if err != nil {
+		h.logger.Error("Invalid chaincode ID", "chaincodeId", chaincodeIdStr)
+		return errors.NewValidationError("invalid chaincode ID", map[string]interface{}{"detail": "Invalid chaincode ID"})
+	}
+	var req ChaincodeQueryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.Error("Invalid query chaincode request body", "error", err)
+		return errors.NewValidationError("invalid request body", map[string]interface{}{"detail": err.Error()})
+	}
+	// TODO: Pass req.KeyID to service layer when supported
+	keyID, err := strconv.ParseInt(req.KeyID, 10, 64)
+	if err != nil {
+		h.logger.Error("Invalid key ID", "keyID", req.KeyID)
+		return errors.NewValidationError("invalid key ID", map[string]interface{}{"detail": "Invalid key ID"})
+	}
+	result, err := h.chaincodeService.QueryChaincode(r.Context(), chaincodeId, req.Function, req.Args, req.Channel, req.Transient, keyID)
+	if err != nil {
+		h.logger.Error("Failed to query chaincode", "error", err)
+		return errors.NewInternalError("failed to query chaincode", err, nil)
+	}
+	resp := ChaincodeQueryResponse{
+		Status:  "success",
+		Message: "Chaincode queried successfully",
+		Result:  result,
+	}
+	return response.WriteJSON(w, http.StatusOK, resp)
 }

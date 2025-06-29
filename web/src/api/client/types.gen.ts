@@ -296,6 +296,68 @@ export type ChainlaunchdeployChaincodeDefinitionResponse = {
     version?: string;
 };
 
+export type ChainlaunchdeployChaincodeInvokeRequest = {
+    /**
+     * Arguments to pass to the chaincode function
+     */
+    args?: Array<string>;
+    /**
+     * Optional: Channel name
+     */
+    channel?: string;
+    /**
+     * Function name to invoke
+     */
+    function?: string;
+    /**
+     * KeyID to use for signing
+     */
+    key_id?: string;
+    /**
+     * Optional: Transient data
+     */
+    transient?: {
+        [key: string]: Array<number>;
+    };
+};
+
+export type ChainlaunchdeployChaincodeInvokeResponse = {
+    message?: string;
+    result?: unknown;
+    status?: string;
+};
+
+export type ChainlaunchdeployChaincodeQueryRequest = {
+    /**
+     * Arguments to pass to the chaincode function
+     */
+    args?: Array<string>;
+    /**
+     * Optional: Channel name
+     */
+    channel?: string;
+    /**
+     * Function name to query
+     */
+    function?: string;
+    /**
+     * KeyID to use for signing/query
+     */
+    key_id?: string;
+    /**
+     * Optional: Transient data
+     */
+    transient?: {
+        [key: string]: Array<number>;
+    };
+};
+
+export type ChainlaunchdeployChaincodeQueryResponse = {
+    message?: string;
+    result?: unknown;
+    status?: string;
+};
+
 export type ChainlaunchdeployChaincodeResponse = {
     created_at?: string;
     id?: number;
@@ -8714,6 +8776,80 @@ export type GetScFabricChaincodesByChaincodeIdDefinitionsByDefinitionIdResponses
 };
 
 export type GetScFabricChaincodesByChaincodeIdDefinitionsByDefinitionIdResponse = GetScFabricChaincodesByChaincodeIdDefinitionsByDefinitionIdResponses[keyof GetScFabricChaincodesByChaincodeIdDefinitionsByDefinitionIdResponses];
+
+export type PostScFabricChaincodesByChaincodeIdInvokeData = {
+    /**
+     * Invoke parameters
+     */
+    body: ChainlaunchdeployChaincodeInvokeRequest;
+    path: {
+        /**
+         * Chaincode ID
+         */
+        chaincodeId: number;
+    };
+    query?: never;
+    url: '/sc/fabric/chaincodes/{chaincodeId}/invoke';
+};
+
+export type PostScFabricChaincodesByChaincodeIdInvokeErrors = {
+    /**
+     * Bad Request
+     */
+    400: ResponseResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ResponseResponse;
+};
+
+export type PostScFabricChaincodesByChaincodeIdInvokeError = PostScFabricChaincodesByChaincodeIdInvokeErrors[keyof PostScFabricChaincodesByChaincodeIdInvokeErrors];
+
+export type PostScFabricChaincodesByChaincodeIdInvokeResponses = {
+    /**
+     * OK
+     */
+    200: ChainlaunchdeployChaincodeInvokeResponse;
+};
+
+export type PostScFabricChaincodesByChaincodeIdInvokeResponse = PostScFabricChaincodesByChaincodeIdInvokeResponses[keyof PostScFabricChaincodesByChaincodeIdInvokeResponses];
+
+export type PostScFabricChaincodesByChaincodeIdQueryData = {
+    /**
+     * Query parameters
+     */
+    body: ChainlaunchdeployChaincodeQueryRequest;
+    path: {
+        /**
+         * Chaincode ID
+         */
+        chaincodeId: number;
+    };
+    query?: never;
+    url: '/sc/fabric/chaincodes/{chaincodeId}/query';
+};
+
+export type PostScFabricChaincodesByChaincodeIdQueryErrors = {
+    /**
+     * Bad Request
+     */
+    400: ResponseResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ResponseResponse;
+};
+
+export type PostScFabricChaincodesByChaincodeIdQueryError = PostScFabricChaincodesByChaincodeIdQueryErrors[keyof PostScFabricChaincodesByChaincodeIdQueryErrors];
+
+export type PostScFabricChaincodesByChaincodeIdQueryResponses = {
+    /**
+     * OK
+     */
+    200: ChainlaunchdeployChaincodeQueryResponse;
+};
+
+export type PostScFabricChaincodesByChaincodeIdQueryResponse = PostScFabricChaincodesByChaincodeIdQueryResponses[keyof PostScFabricChaincodesByChaincodeIdQueryResponses];
 
 export type GetScFabricChaincodesByIdData = {
     body?: never;
