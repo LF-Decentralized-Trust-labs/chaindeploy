@@ -15,12 +15,14 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/chainlaunch/chainlaunch/pkg/common/ports"
 	"github.com/chainlaunch/chainlaunch/pkg/db"
 	"github.com/chainlaunch/chainlaunch/pkg/logger"
 	"github.com/chainlaunch/chainlaunch/pkg/nodes/service"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 	"github.com/hyperledger/fabric-admin-sdk/pkg/chaincode"
 	fabricclient "github.com/hyperledger/fabric-gateway/pkg/client"
@@ -40,15 +42,16 @@ type Chaincode struct {
 }
 
 type ChaincodeDefinition struct {
-	ID                int64        `json:"id"`
-	ChaincodeID       int64        `json:"chaincode_id"`
-	Version           string       `json:"version"`
-	Sequence          int64        `json:"sequence"`
-	DockerImage       string       `json:"docker_image"`
-	EndorsementPolicy string       `json:"endorsement_policy"`
-	ChaincodeAddress  string       `json:"chaincode_address"`
-	CreatedAt         string       `json:"created_at"` // ISO8601
-	PeerStatuses      []PeerStatus `json:"peer_statuses"`
+	ID                int64                `json:"id"`
+	ChaincodeID       int64                `json:"chaincode_id"`
+	Version           string               `json:"version"`
+	Sequence          int64                `json:"sequence"`
+	DockerImage       string               `json:"docker_image"`
+	EndorsementPolicy string               `json:"endorsement_policy"`
+	ChaincodeAddress  string               `json:"chaincode_address"`
+	CreatedAt         string               `json:"created_at"` // ISO8601
+	PeerStatuses      []PeerStatus         `json:"peer_statuses"`
+	DockerInfo        *DockerContainerInfo `json:"docker_info,omitempty"`
 }
 
 type PeerStatus struct {
@@ -184,32 +187,8 @@ func (s *ChaincodeService) CreateChaincodeDefinition(ctx context.Context, chainc
 	}, nil
 }
 
-func (s *ChaincodeService) ListChaincodeDefinitions(ctx context.Context, chaincodeID int64) ([]*ChaincodeDefinition, error) {
-	defs, err := s.queries.ListChaincodeDefinitions(ctx, chaincodeID)
-	if err != nil {
-		return nil, err
-	}
-	var result []*ChaincodeDefinition
-	for _, def := range defs {
-		result = append(result, &ChaincodeDefinition{
-			ID:                def.ID,
-			ChaincodeID:       def.ChaincodeID,
-			Version:           def.Version,
-			Sequence:          def.Sequence,
-			DockerImage:       def.DockerImage,
-			EndorsementPolicy: nullStringToString(def.EndorsementPolicy),
-			CreatedAt:         nullTimeToString(def.CreatedAt),
-			ChaincodeAddress:  nullStringToString(def.ChaincodeAddress),
-		})
-	}
-	return result, nil
-}
-
-func (s *ChaincodeService) GetChaincodeDefinition(ctx context.Context, id int64) (*ChaincodeDefinition, error) {
-	def, err := s.queries.GetChaincodeDefinition(ctx, id)
-	if err != nil {
-		return nil, err
-	}
+// Helper to convert db.FabricChaincodeDefinition to ChaincodeDefinition (without DockerInfo)
+func dbDefToSvcDef(def db.FabricChaincodeDefinition) *ChaincodeDefinition {
 	return &ChaincodeDefinition{
 		ID:                def.ID,
 		ChaincodeID:       def.ChaincodeID,
@@ -219,7 +198,55 @@ func (s *ChaincodeService) GetChaincodeDefinition(ctx context.Context, id int64)
 		EndorsementPolicy: nullStringToString(def.EndorsementPolicy),
 		CreatedAt:         nullTimeToString(def.CreatedAt),
 		ChaincodeAddress:  nullStringToString(def.ChaincodeAddress),
-	}, nil
+	}
+}
+
+func (s *ChaincodeService) ListChaincodeDefinitions(ctx context.Context, chaincodeID int64) ([]*ChaincodeDefinition, error) {
+	defs, err := s.queries.ListChaincodeDefinitions(ctx, chaincodeID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a slice to hold the results
+	result := make([]*ChaincodeDefinition, len(defs))
+
+	// Create a WaitGroup to wait for all goroutines to complete
+	var wg sync.WaitGroup
+
+	// Process each definition concurrently
+	for i, def := range defs {
+		wg.Add(1)
+		go func(index int, definition *db.FabricChaincodeDefinition) {
+			defer wg.Done()
+
+			defSvc := dbDefToSvcDef(*definition)
+			dockerInfo, err := getDockerInfoForDefinition(ctx, defSvc)
+			if err != nil {
+				s.logger.Error("Failed to get docker info for definition", "error", err)
+				// Still add the definition without docker info
+				result[index] = defSvc
+				return
+			}
+			defSvc.DockerInfo = dockerInfo
+			result[index] = defSvc
+		}(i, def)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	return result, nil
+}
+
+func (s *ChaincodeService) GetChaincodeDefinition(ctx context.Context, id int64) (*ChaincodeDefinition, error) {
+	def, err := s.queries.GetChaincodeDefinition(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	defSvc := dbDefToSvcDef(*def)
+	dockerInfo, _ := getDockerInfoForDefinition(ctx, defSvc)
+	defSvc.DockerInfo = dockerInfo
+	return defSvc, nil
 }
 
 func (s *ChaincodeService) UpdateChaincodeDefinition(ctx context.Context, id int64, version string, sequence int64, dockerImage, endorsementPolicy, chaincodeAddress string) (*ChaincodeDefinition, error) {
@@ -308,20 +335,20 @@ func nullStringToString(ns sql.NullString) string {
 // DockerContainerInfo holds Docker container metadata for a chaincode
 // Exported for use in HTTP and service layers
 type DockerContainerInfo struct {
-	ID      string   `json:"id"`
-	Name    string   `json:"name"`
-	Image   string   `json:"image"`
-	State   string   `json:"state"`
-	Status  string   `json:"status"`
-	Ports   []string `json:"ports"`
-	Created int64    `json:"created"`
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Image        string   `json:"image"`
+	State        string   `json:"state"`
+	Status       string   `json:"status"`
+	DockerStatus string   `json:"docker_status"` // direct from Docker inspect
+	Ports        []string `json:"ports"`
+	Created      int64    `json:"created"`
 }
 
 // FabricChaincodeDetail provides a full view of a chaincode, its definitions, and Docker info (if deployed)
 type FabricChaincodeDetail struct {
 	Chaincode   *Chaincode             `json:"chaincode"`
 	Definitions []*ChaincodeDefinition `json:"definitions"`
-	DockerInfo  *DockerContainerInfo   `json:"docker_info,omitempty"`
 }
 
 // GetChaincodeDetail returns a FabricChaincodeDetail for the given chaincode ID, including definitions and Docker info if deployed.
@@ -337,52 +364,54 @@ func (s *ChaincodeService) GetChaincodeDetail(ctx context.Context, id int64) (*F
 	if err != nil {
 		return nil, err
 	}
-	// Get Docker info if deployed
-	dockerInfo, err := getDockerInfoForChaincode(ctx, cc)
-	if err != nil {
-		// Log but do not fail the whole request if Docker info is unavailable
-		s.logger.Warnf("Could not get Docker info for chaincode %d: %v", id, err)
-		dockerInfo = nil
-	}
+	// Remove old DockerInfo field from FabricChaincodeDetail (now per-definition)
 	return &FabricChaincodeDetail{
 		Chaincode:   cc,
 		Definitions: defs,
-		DockerInfo:  dockerInfo,
 	}, nil
 }
 
-// getDockerInfoForChaincode returns DockerContainerInfo for a chaincode if deployed, or nil if not found
-func getDockerInfoForChaincode(ctx context.Context, cc *Chaincode) (*DockerContainerInfo, error) {
+// getDockerInfoForDefinition returns DockerContainerInfo for a chaincode definition if deployed, or nil if not found
+func getDockerInfoForDefinition(ctx context.Context, def *ChaincodeDefinition) (*DockerContainerInfo, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, err
 	}
 	defer cli.Close()
-	containerName := fmt.Sprintf("/chaincode-%d", cc.ID)
-	containers, err := cli.ContainerList(ctx, container.ListOptions{All: true})
+	label := fmt.Sprintf("chainlaunch.chaincode.definition_id=%d", def.ID)
+	filterArgs := filters.NewArgs()
+	filterArgs.Add("label", label)
+	containers, err := cli.ContainerList(ctx, container.ListOptions{Filters: filterArgs})
 	if err != nil {
 		return nil, err
 	}
-	for _, c := range containers {
-		for _, name := range c.Names {
-			if name == containerName {
-				ports := []string{}
-				for _, p := range c.Ports {
-					ports = append(ports, fmt.Sprintf("%s:%d->%d/%s", p.IP, p.PublicPort, p.PrivatePort, p.Type))
-				}
-				return &DockerContainerInfo{
-					ID:      c.ID,
-					Name:    name,
-					Image:   c.Image,
-					State:   c.State,
-					Status:  c.Status,
-					Ports:   ports,
-					Created: c.Created,
-				}, nil
-			}
+	if len(containers) == 0 {
+		return nil, nil
+	}
+	c := containers[0]
+	ports := []string{}
+	for _, p := range c.Ports {
+		ports = append(ports, fmt.Sprintf("%s:%d->%d/%s", p.IP, p.PublicPort, p.PrivatePort, p.Type))
+	}
+	inspect, err := cli.ContainerInspect(ctx, c.ID)
+	dockerStatus := ""
+	if err == nil {
+		dockerStatus = inspect.State.Status
+		if inspect.State.Health != nil {
+			dockerStatus += ", health: " + inspect.State.Health.Status
 		}
 	}
-	return nil, nil // Not deployed
+	result := &DockerContainerInfo{
+		ID:           c.ID,
+		Name:         c.Names[0],
+		Image:        c.Image,
+		State:        c.State,
+		Status:       c.Status,
+		DockerStatus: dockerStatus,
+		Ports:        ports,
+		Created:      c.Created,
+	}
+	return result, nil
 }
 
 // Event data structs for chaincode definition events
@@ -948,4 +977,41 @@ func (s *ChaincodeService) ensureChaincodeAddress(ctx context.Context, definitio
 		}
 	}
 	return chaincodeAddress, exposedPort, nil
+}
+
+// RemoveDeploymentByDefinition removes the Docker deployment for a chaincode definition
+func (s *ChaincodeService) RemoveDeploymentByDefinition(ctx context.Context, definitionID int64) error {
+	definition, err := s.GetChaincodeDefinition(ctx, definitionID)
+	if err != nil {
+		eventData := DeployChaincodeEventData{HostPort: "", ContainerPort: "", Result: "failure", ErrorMessage: err.Error()}
+		_ = s.AddChaincodeDefinitionEvent(ctx, definitionID, "undeploy", eventData)
+		return err
+	}
+	// chaincodeDB is not needed for removal
+	deployer := NewDockerChaincodeDeployer()
+	if deployer == nil {
+		err := fmt.Errorf("failed to create DockerChaincodeDeployer")
+		eventData := DeployChaincodeEventData{HostPort: "", ContainerPort: "", Result: "failure", ErrorMessage: err.Error()}
+		_ = s.AddChaincodeDefinitionEvent(ctx, definitionID, "undeploy", eventData)
+		return err
+	}
+	// Remove containers by label
+	filterArgs := filters.NewArgs()
+	filterArgs.Add("label", fmt.Sprintf("chainlaunch.chaincode.definition_id=%d", definitionID))
+	containers, err := deployer.client.ContainerList(ctx, container.ListOptions{All: true, Filters: filterArgs})
+	if err != nil {
+		eventData := DeployChaincodeEventData{HostPort: "", ContainerPort: "", Result: "failure", ErrorMessage: err.Error()}
+		_ = s.AddChaincodeDefinitionEvent(ctx, definitionID, "undeploy", eventData)
+		return err
+	}
+	for _, c := range containers {
+		if err := deployer.client.ContainerRemove(ctx, c.ID, container.RemoveOptions{Force: true}); err != nil {
+			eventData := DeployChaincodeEventData{HostPort: "", ContainerPort: "", Result: "failure", ErrorMessage: err.Error()}
+			_ = s.AddChaincodeDefinitionEvent(ctx, definitionID, "undeploy", eventData)
+			return err
+		}
+	}
+	eventData := DeployChaincodeEventData{HostPort: definition.ChaincodeAddress, ContainerPort: "7052", Result: "success", ErrorMessage: ""}
+	_ = s.AddChaincodeDefinitionEvent(ctx, definitionID, "undeploy", eventData)
+	return nil
 }

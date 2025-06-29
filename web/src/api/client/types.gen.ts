@@ -264,6 +264,7 @@ export type ChainlaunchdeployChaincodeDefinition = {
      */
     created_at?: string;
     docker_image?: string;
+    docker_info?: ChainlaunchdeployDockerContainerInfo;
     endorsement_policy?: string;
     id?: number;
     peer_statuses?: Array<ChainlaunchdeployPeerStatus>;
@@ -388,6 +389,10 @@ export type ChainlaunchdeployDeploymentResult = {
 
 export type ChainlaunchdeployDockerContainerInfo = {
     created?: number;
+    /**
+     * direct from Docker inspect
+     */
+    docker_status?: string;
     id?: string;
     image?: string;
     name?: string;
@@ -444,7 +449,6 @@ export type ChainlaunchdeployFabricChaincodeCommitParams = {
 export type ChainlaunchdeployFabricChaincodeDetail = {
     chaincode?: ChainlaunchdeployChaincode;
     definitions?: Array<ChainlaunchdeployChaincodeDefinition>;
-    docker_info?: ChainlaunchdeployDockerContainerInfo;
 };
 
 export type ChainlaunchdeployFabricChaincodeInstallParams = {
@@ -9011,6 +9015,42 @@ export type GetScFabricDefinitionsByDefinitionIdTimelineResponses = {
 };
 
 export type GetScFabricDefinitionsByDefinitionIdTimelineResponse = GetScFabricDefinitionsByDefinitionIdTimelineResponses[keyof GetScFabricDefinitionsByDefinitionIdTimelineResponses];
+
+export type PostScFabricDefinitionsByDefinitionIdUndeployData = {
+    body?: never;
+    path: {
+        /**
+         * Chaincode Definition ID
+         */
+        definitionId: number;
+    };
+    query?: never;
+    url: '/sc/fabric/definitions/{definitionId}/undeploy';
+};
+
+export type PostScFabricDefinitionsByDefinitionIdUndeployErrors = {
+    /**
+     * Bad Request
+     */
+    400: ResponseResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ResponseResponse;
+};
+
+export type PostScFabricDefinitionsByDefinitionIdUndeployError = PostScFabricDefinitionsByDefinitionIdUndeployErrors[keyof PostScFabricDefinitionsByDefinitionIdUndeployErrors];
+
+export type PostScFabricDefinitionsByDefinitionIdUndeployResponses = {
+    /**
+     * OK
+     */
+    200: {
+        [key: string]: string;
+    };
+};
+
+export type PostScFabricDefinitionsByDefinitionIdUndeployResponse = PostScFabricDefinitionsByDefinitionIdUndeployResponses[keyof PostScFabricDefinitionsByDefinitionIdUndeployResponses];
 
 export type PostScFabricDeployData = {
     /**

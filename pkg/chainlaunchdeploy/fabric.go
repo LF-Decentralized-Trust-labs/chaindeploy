@@ -494,6 +494,7 @@ func (d *DockerChaincodeDeployer) Deploy(params DockerDeployParams, reporter Dep
 	config := &container.Config{
 		Image:        params.DockerImage,
 		Env:          env,
+		Labels:       params.Labels,
 		ExposedPorts: nat.PortSet{exposedPort: struct{}{}},
 		Cmd:          []string{},
 	}

@@ -8999,6 +8999,53 @@
                 }
             }
         },
+        "/sc/fabric/definitions/{definitionId}/undeploy": {
+            "post": {
+                "description": "Remove the deployment (e.g., Docker container) for a given chaincode definition",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chaincode"
+                ],
+                "summary": "Remove deployment for a chaincode definition",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Chaincode Definition ID",
+                        "name": "definitionId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/sc/fabric/deploy": {
             "post": {
                 "description": "Deploy a chaincode to a Fabric network (install, approve, commit)",
@@ -10383,6 +10430,9 @@
                 "docker_image": {
                     "type": "string"
                 },
+                "docker_info": {
+                    "$ref": "#/definitions/chainlaunchdeploy.DockerContainerInfo"
+                },
                 "endorsement_policy": {
                     "type": "string"
                 },
@@ -10587,6 +10637,10 @@
                 "created": {
                     "type": "integer"
                 },
+                "docker_status": {
+                    "description": "direct from Docker inspect",
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -10730,9 +10784,6 @@
                     "items": {
                         "$ref": "#/definitions/chainlaunchdeploy.ChaincodeDefinition"
                     }
-                },
-                "docker_info": {
-                    "$ref": "#/definitions/chainlaunchdeploy.DockerContainerInfo"
                 }
             }
         },

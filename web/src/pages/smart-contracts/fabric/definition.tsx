@@ -8,7 +8,12 @@ import {
 	postScFabricDefinitionsByDefinitionIdInstallMutation,
 	putScFabricDefinitionsByDefinitionIdMutation,
 } from '@/api/client/@tanstack/react-query.gen'
-import { deleteScFabricDefinitionsByDefinitionId, postScFabricChaincodesByChaincodeIdDefinitions, getScFabricPeerByPeerIdChaincodeSequence } from '@/api/client/sdk.gen'
+import {
+	deleteScFabricDefinitionsByDefinitionId,
+	getScFabricPeerByPeerIdChaincodeSequence,
+	postScFabricChaincodesByChaincodeIdDefinitions,
+	postScFabricDefinitionsByDefinitionIdUndeploy,
+} from '@/api/client/sdk.gen'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -21,13 +26,14 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { MoreVertical, Plus, Check, X as XIcon } from 'lucide-react'
+import { Check, MoreVertical, Plus, X as XIcon } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import * as z from 'zod'
 import * as timeago from 'timeago.js'
+import * as z from 'zod'
+import { Skeleton } from '@/components/ui/skeleton'
 
 const versionFormSchema = z.object({
 	endorsementPolicy: z.string().min(1, 'Endorsement policy is required'),
@@ -116,23 +122,18 @@ export default function FabricChaincodeDefinitionDetail() {
 	const [installDialogOpen, setInstallDialogOpen] = useState(false)
 	const [selectedVersionIdx, setSelectedVersionIdx] = useState<number | null>(null)
 	const [selectedPeers, setSelectedPeers] = useState<Set<string>>(new Set())
-	const [formError, setFormError] = useState<string | null>(null)
-	const [editFormError, setEditFormError] = useState<string | null>(null)
 	const [deleteError, setDeleteError] = useState<string | null>(null)
 	const [deletingId, setDeletingId] = useState<number | null>(null)
 	const [confirmDeleteIdx, setConfirmDeleteIdx] = useState<number | null>(null)
 	const [installError, setInstallError] = useState<string | null>(null)
-	const [installLoading, setInstallLoading] = useState(false)
 	const [approveDialogOpen, setApproveDialogOpen] = useState(false)
 	const [commitDialogOpen, setCommitDialogOpen] = useState(false)
 	const [selectedPeerId, setSelectedPeerId] = useState<string | null>(null)
 	const [approveError, setApproveError] = useState<string | null>(null)
 	const [commitError, setCommitError] = useState<string | null>(null)
-	const [deployError, setDeployError] = useState<string | null>(null)
-	const [deployLoading, setDeployLoading] = useState(false)
-	const [expandedTimelines, setExpandedTimelines] = useState<Set<number>>(new Set())
 	const [sequenceLoading, setSequenceLoading] = useState(false)
 	const [sequenceError, setSequenceError] = useState<string | null>(null)
+	const [undeployLoadingId, setUndeployLoadingId] = useState<number | null>(null)
 
 	// Fetch chaincode details
 	const {
@@ -197,7 +198,6 @@ export default function FabricChaincodeDefinitionDetail() {
 			refetch()
 			setIsAddDialogOpen(false)
 			form.reset()
-			setFormError(null)
 		},
 		onError: (error: any) => {
 			let message = 'Failed to create chaincode definition.'
@@ -206,7 +206,7 @@ export default function FabricChaincodeDefinitionDetail() {
 			} else if (error?.message) {
 				message = error.message
 			}
-			setFormError(message)
+			toast.error(message)
 		},
 	})
 
@@ -215,7 +215,6 @@ export default function FabricChaincodeDefinitionDetail() {
 		onSuccess: () => {
 			refetch()
 			setEditIdx(null)
-			setEditFormError(null)
 		},
 		onError: (error: any) => {
 			let message = 'Failed to update chaincode definition.'
@@ -224,7 +223,7 @@ export default function FabricChaincodeDefinitionDetail() {
 			} else if (error?.message) {
 				message = error.message
 			}
-			setEditFormError(message)
+			toast.error(message)
 		},
 	})
 
@@ -251,8 +250,11 @@ export default function FabricChaincodeDefinitionDetail() {
 	})
 
 	const onSubmit = async (data: VersionFormValues) => {
-		setFormError(null)
-		await createDefinitionMutation.mutateAsync(data)
+		toast.promise(createDefinitionMutation.mutateAsync(data), {
+			loading: 'Creating chaincode definition...',
+			success: 'Chaincode definition created successfully',
+			error: (e) => e.message,
+		})
 	}
 
 	const installMutation = useMutation({
@@ -321,9 +323,6 @@ export default function FabricChaincodeDefinitionDetail() {
 	const deployMutation = useMutation({
 		...postScFabricDefinitionsByDefinitionIdDeployMutation(),
 		onSuccess: (_, variables) => {
-			toast.success('Chaincode deployed successfully')
-			setDeployLoading(false)
-			setDeployError(null)
 			refetch()
 			refreshTimeline(variables.path.definitionId)
 		},
@@ -334,8 +333,7 @@ export default function FabricChaincodeDefinitionDetail() {
 			} else if (error?.message) {
 				message = error.message
 			}
-			setDeployError(message)
-			setDeployLoading(false)
+			toast.error(message)
 			refreshTimeline(variables.path.definitionId)
 		},
 	})
@@ -364,17 +362,23 @@ export default function FabricChaincodeDefinitionDetail() {
 
 	const onEditSubmit = async (data: VersionFormValues) => {
 		if (editIdx === null) return
-		setEditFormError(null)
-		await editDefinitionMutation.mutateAsync({
-			path: { definitionId: versions[editIdx].id },
-			body: {
-				docker_image: data.dockerImage,
-				endorsement_policy: data.endorsementPolicy,
-				version: data.version,
-				sequence: data.sequence,
-				chaincode_address: data.chaincodeAddress,
-			},
-		})
+		toast.promise(
+			editDefinitionMutation.mutateAsync({
+				path: { definitionId: versions[editIdx].id },
+				body: {
+					docker_image: data.dockerImage,
+					endorsement_policy: data.endorsementPolicy,
+					version: data.version,
+					sequence: data.sequence,
+					chaincode_address: data.chaincodeAddress,
+				},
+			}),
+			{
+				loading: 'Updating chaincode definition...',
+				success: 'Chaincode definition updated successfully',
+				error: (e) => e.message,
+			}
+		)
 	}
 
 	const refreshTimeline = (definitionId: number) => {
@@ -418,7 +422,64 @@ export default function FabricChaincodeDefinitionDetail() {
 	}
 
 	if (isLoading) {
-		return <Card className="p-6">Loading chaincode details...</Card>
+		return (
+			<Card className="p-6">
+				<div className="flex flex-col gap-4">
+					{[...Array(2)].map((_, i) => (
+						<div key={i} className="p-4 mb-4 border rounded-lg bg-background">
+							<div className="flex items-center gap-4 mb-2">
+								<div className="w-20 h-6">
+									<Skeleton className="w-full h-full" />
+								</div>
+								<div className="w-24 h-6">
+									<Skeleton className="w-full h-full" />
+								</div>
+							</div>
+							<div className="mb-1 text-sm w-1/2">
+								<Skeleton className="h-4 w-full" />
+							</div>
+							<div className="mb-1 text-sm w-1/3">
+								<Skeleton className="h-4 w-full" />
+							</div>
+							<div className="mb-1 text-sm w-1/3">
+								<Skeleton className="h-4 w-full" />
+							</div>
+							<div className="mb-2">
+								<div className="font-medium text-sm mb-1">Docker Status</div>
+								<div className="flex flex-col gap-1 text-sm">
+									<div className="flex items-center gap-2">
+										<div className="w-32 h-4">
+											<Skeleton className="w-full h-full" />
+										</div>
+										<div className="w-16 h-4">
+											<Skeleton className="w-full h-full" />
+										</div>
+									</div>
+									<div className="w-1/3 h-4">
+										<Skeleton className="w-full h-full" />
+									</div>
+									<div className="w-1/4 h-4">
+										<Skeleton className="w-full h-full" />
+									</div>
+								</div>
+							</div>
+							<div className="mt-4">
+								<div className="text-sm font-medium mb-2">Timeline</div>
+								<div className="flex flex-col gap-2">
+									{[...Array(2)].map((_, j) => (
+										<div key={j} className="flex items-center gap-2">
+											<Skeleton className="w-6 h-6 rounded-full" />
+											<Skeleton className="h-4 w-32" />
+											<Skeleton className="h-4 w-24" />
+										</div>
+									))}
+								</div>
+							</div>
+						</div>
+					))}
+				</div>
+			</Card>
+		)
 	}
 	if (error || !def) {
 		return (
@@ -549,6 +610,24 @@ export default function FabricChaincodeDefinitionDetail() {
 								</DropdownMenuTrigger>
 								<DropdownMenuContent>
 									<DropdownMenuItem onClick={() => handleEdit(idx)}>Edit</DropdownMenuItem>
+									{v.docker_info && (
+										<DropdownMenuItem
+											className="text-destructive"
+											disabled={undeployLoadingId === v.id}
+											onClick={async () => {
+												setUndeployLoadingId(v.id)
+												await toast.promise(postScFabricDefinitionsByDefinitionIdUndeploy({ path: { definitionId: v.id } }), {
+													loading: 'Undeploying chaincode...',
+													success: 'Chaincode undeployed successfully',
+													error: (err) => err?.message || 'Failed to undeploy chaincode',
+												})
+												setUndeployLoadingId(null)
+												refetch()
+											}}
+										>
+											{undeployLoadingId === v.id ? 'Undeploying...' : 'Undeploy'}
+										</DropdownMenuItem>
+									)}
 									<DropdownMenuItem onClick={() => setConfirmDeleteIdx(idx)} disabled={deletingId === v.id}>
 										{deletingId === v.id ? 'Deleting...' : 'Delete'}
 									</DropdownMenuItem>
@@ -585,6 +664,36 @@ export default function FabricChaincodeDefinitionDetail() {
 						<div className="mb-1 text-sm">
 							<span className="font-medium">Chaincode Address:</span> {v.chaincode_address}
 						</div>
+						<div className="mb-2">
+							<div className="font-medium text-sm mb-1">Docker Status</div>
+							{v.docker_info ? (
+								<div className="flex flex-col gap-1 text-sm">
+									<div className="flex items-center gap-2">
+										<span className="font-medium">Container:</span> {v.docker_info.name}
+										{v.docker_info.state === 'running' ? (
+											<Badge className="bg-green-100 text-green-800 border-green-200">Running</Badge>
+										) : v.docker_info.state === 'exited' ? (
+											<Badge className="bg-red-100 text-red-800 border-red-200">Exited</Badge>
+										) : (
+											<Badge className="bg-gray-100 text-gray-800 border-gray-200 capitalize">{v.docker_info.state || 'Unknown'}</Badge>
+										)}
+									</div>
+									<div>
+										<span className="font-medium">Image:</span> {v.docker_info.image}
+									</div>
+									<div>
+										<span className="font-medium">Status:</span> {v.docker_info.status}
+									</div>
+									{v.docker_info.ports && v.docker_info.ports.length > 0 && (
+										<div>
+											<span className="font-medium">Ports:</span> {v.docker_info.ports.join(', ')}
+										</div>
+									)}
+								</div>
+							) : (
+								<div className="text-muted-foreground text-xs">No Docker info available</div>
+							)}
+						</div>
 						<div className="mt-2 flex gap-2">
 							<Button size="sm" variant="outline" onClick={() => handleEdit(idx)}>
 								Edit
@@ -594,7 +703,13 @@ export default function FabricChaincodeDefinitionDetail() {
 									key={action}
 									size="sm"
 									variant="default"
-									onClick={() => {
+									disabled={
+										(action === 'deploy' && deployMutation.isPending) ||
+										(action === 'install' && installMutation.isPending) ||
+										(action === 'approve' && approveMutation.isPending) ||
+										(action === 'commit' && commitMutation.isPending)
+									}
+									onClick={async () => {
 										if (action === 'install') {
 											setSelectedVersionIdx(idx)
 											setInstallDialogOpen(true)
@@ -605,7 +720,15 @@ export default function FabricChaincodeDefinitionDetail() {
 											setSelectedVersionIdx(idx)
 											setCommitDialogOpen(true)
 										} else if (action === 'deploy') {
-											deployMutation.mutate({ path: { definitionId: v.id }, body: {} })
+											try {
+												await toast.promise(deployMutation.mutateAsync({ path: { definitionId: v.id }, body: {} }), {
+													loading: 'Deploying chaincode...',
+													success: 'Chaincode deployed successfully',
+													error: (e) => e.message,
+												})
+											} finally {
+												refetch()
+											}
 										}
 									}}
 								>

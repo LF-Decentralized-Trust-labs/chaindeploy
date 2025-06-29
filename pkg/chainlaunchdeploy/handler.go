@@ -66,6 +66,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Post("/{definitionId}/approve", response.Middleware(h.ApproveChaincodeByDefinition))
 		r.Post("/{definitionId}/commit", response.Middleware(h.CommitChaincodeByDefinition))
 		r.Post("/{definitionId}/deploy", response.Middleware(h.DeployChaincodeByDefinition))
+		r.Post("/{definitionId}/undeploy", response.Middleware(h.RemoveDeploymentByDefinition))
 		r.Put("/{definitionId}", response.Middleware(h.UpdateChaincodeDefinition))
 		r.Get("/{definitionId}/timeline", response.Middleware(h.GetChaincodeDefinitionTimeline))
 		r.Delete("/{definitionId}", response.Middleware(h.DeleteChaincodeDefinition))
@@ -635,7 +636,6 @@ func (h *Handler) GetFabricChaincodeDetailByID(w http.ResponseWriter, r *http.Re
 	resp := FabricChaincodeDetail{
 		Chaincode:   detail.Chaincode,
 		Definitions: detail.Definitions,
-		DockerInfo:  detail.DockerInfo,
 	}
 	return response.WriteJSON(w, http.StatusOK, resp)
 }
@@ -1113,4 +1113,29 @@ func (h *Handler) GetChaincodeDefinitionDetailByID(w http.ResponseWriter, r *htt
 	}
 
 	return response.WriteJSON(w, http.StatusOK, resp)
+}
+
+// @Summary Remove deployment for a chaincode definition
+// @Description Remove the deployment (e.g., Docker container) for a given chaincode definition
+// @Tags Chaincode
+// @Accept json
+// @Produce json
+// @Param definitionId path int true "Chaincode Definition ID"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} response.Response
+// @Failure 500 {object} response.Response
+// @Router /sc/fabric/definitions/{definitionId}/undeploy [post]
+func (h *Handler) RemoveDeploymentByDefinition(w http.ResponseWriter, r *http.Request) error {
+	definitionIdStr := chi.URLParam(r, "definitionId")
+	definitionId, err := strconv.ParseInt(definitionIdStr, 10, 64)
+	if err != nil {
+		h.logger.Error("Invalid definition ID", "definitionId", definitionIdStr)
+		return errors.NewValidationError("invalid definition ID", map[string]interface{}{"detail": "Invalid definition ID"})
+	}
+	err = h.chaincodeService.RemoveDeploymentByDefinition(r.Context(), definitionId)
+	if err != nil {
+		h.logger.Error("Failed to remove deployment by definition", "error", err)
+		return errors.NewInternalError("failed to remove deployment by definition", err, nil)
+	}
+	return response.WriteJSON(w, http.StatusOK, map[string]string{"status": "undeploy success", "definitionId": definitionIdStr})
 }
