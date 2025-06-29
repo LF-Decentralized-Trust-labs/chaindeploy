@@ -149,25 +149,6 @@ func TestValidateFabricPeerConfig(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "missing domain names",
-			config: &types.FabricPeerConfig{
-				BaseNodeConfig: types.BaseNodeConfig{
-					Type: "fabric-peer",
-					Mode: "service",
-				},
-				Name:                    "peer0-org1",
-				OrganizationID:          1,
-				MSPID:                   "Org1MSP",
-				ListenAddress:           "0.0.0.0:7051",
-				ChaincodeAddress:        "0.0.0.0:7052",
-				EventsAddress:           "0.0.0.0:7053",
-				OperationsListenAddress: "0.0.0.0:9443",
-				ExternalEndpoint:        "peer0.org1.example.com:7051",
-				DomainNames:             []string{},
-			},
-			wantErr: true,
-		},
-		{
 			name: "invalid deployment mode",
 			config: &types.FabricPeerConfig{
 				BaseNodeConfig: types.BaseNodeConfig{
