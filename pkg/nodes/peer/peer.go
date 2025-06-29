@@ -2181,6 +2181,9 @@ func (p *LocalPeer) LeaveChannel(channelID string) error {
 		}
 		hostConfig := &container.HostConfig{
 			Mounts: mounts,
+			RestartPolicy: container.RestartPolicy{
+				Name: container.RestartPolicyUnlessStopped,
+			},
 		}
 		// Create ephemeral container
 		resp, err := cli.ContainerCreate(ctx, containerConfig, hostConfig, nil, nil, "peer-unjoin-ephemeral-"+p.opts.ID)

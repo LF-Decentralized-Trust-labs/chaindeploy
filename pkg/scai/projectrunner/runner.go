@@ -69,6 +69,9 @@ func (r *Runner) Start(ctx context.Context, projectID string, projectDir string,
 				},
 			},
 		},
+		RestartPolicy: container.RestartPolicy{
+			Name: container.RestartPolicyUnlessStopped,
+		},
 		Mounts: []mount.Mount{
 			{
 				Type:   mount.TypeBind,

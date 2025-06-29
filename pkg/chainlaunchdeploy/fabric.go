@@ -53,6 +53,14 @@ func logFabricAuditEvent(ctx context.Context, eventType string, outcome audit.Ev
 	_ = fabricAuditService.LogEvent(ctx, event)
 }
 
+func GetCurrentChaincodeSequence(ctx context.Context, gateway *chaincode.Gateway, channelID string, name string) (int64, error) {
+	chaincodeDef, err := gateway.QueryCommittedWithName(ctx, channelID, name)
+	if err != nil {
+		return 0, nil
+	}
+	return chaincodeDef.GetSequence(), nil
+}
+
 // InstallChaincode installs a chaincode package on a Fabric peer, reporting status at each stage.
 func InstallChaincode(params FabricChaincodeInstallParams, reporter DeploymentStatusReporter) (DeploymentResult, error) {
 	ctx := context.Background()
@@ -492,6 +500,9 @@ func (d *DockerChaincodeDeployer) Deploy(params DockerDeployParams, reporter Dep
 	hostConfig := &container.HostConfig{
 		PortBindings: nat.PortMap{
 			exposedPort: []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: hostPort}},
+		},
+		RestartPolicy: container.RestartPolicy{
+			Name: container.RestartPolicyUnlessStopped,
 		},
 	}
 

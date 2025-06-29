@@ -497,6 +497,14 @@ export type ChainlaunchdeployFabricInstallResponse = {
     status?: string;
 };
 
+export type ChainlaunchdeployFabricSequenceResponse = {
+    chaincode_name?: string;
+    channel_name?: string;
+    message?: string;
+    sequence?: number;
+    status?: string;
+};
+
 export type ChainlaunchdeployInstallChaincodeByDefinitionRequest = {
     /**
      * Peer IDs to install the chaincode on
@@ -9146,6 +9154,49 @@ export type PostScFabricPeerByPeerIdChaincodeInstallResponses = {
 };
 
 export type PostScFabricPeerByPeerIdChaincodeInstallResponse = PostScFabricPeerByPeerIdChaincodeInstallResponses[keyof PostScFabricPeerByPeerIdChaincodeInstallResponses];
+
+export type GetScFabricPeerByPeerIdChaincodeSequenceData = {
+    body?: never;
+    path: {
+        /**
+         * Peer ID
+         */
+        peerId: string;
+    };
+    query: {
+        /**
+         * Chaincode name
+         */
+        chaincodeName: string;
+        /**
+         * Channel name
+         */
+        channelName: string;
+    };
+    url: '/sc/fabric/peer/{peerId}/chaincode/sequence';
+};
+
+export type GetScFabricPeerByPeerIdChaincodeSequenceErrors = {
+    /**
+     * Bad Request
+     */
+    400: ResponseResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ResponseResponse;
+};
+
+export type GetScFabricPeerByPeerIdChaincodeSequenceError = GetScFabricPeerByPeerIdChaincodeSequenceErrors[keyof GetScFabricPeerByPeerIdChaincodeSequenceErrors];
+
+export type GetScFabricPeerByPeerIdChaincodeSequenceResponses = {
+    /**
+     * OK
+     */
+    200: ChainlaunchdeployFabricSequenceResponse;
+};
+
+export type GetScFabricPeerByPeerIdChaincodeSequenceResponse = GetScFabricPeerByPeerIdChaincodeSequenceResponses[keyof GetScFabricPeerByPeerIdChaincodeSequenceResponses];
 
 export type GetSettingsData = {
     body?: never;

@@ -51,6 +51,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Post("/peer/{peerId}/chaincode/install", response.Middleware(h.InstallFabricChaincode))
 		r.Post("/peer/{peerId}/chaincode/approve", response.Middleware(h.ApproveFabricChaincode))
 		r.Post("/peer/{peerId}/chaincode/commit", response.Middleware(h.CommitFabricChaincode))
+		r.Get("/peer/{peerId}/chaincode/sequence", response.Middleware(h.GetFabricChaincodeSequence))
 		r.Get("/chaincodes", response.Middleware(h.ListFabricChaincodes))
 		r.Get("/chaincodes/{id}", response.Middleware(h.GetFabricChaincodeDetailByID))
 
@@ -96,6 +97,13 @@ type FabricInstallResponse struct {
 	Status  string           `json:"status"`
 	Message string           `json:"message"`
 	Result  DeploymentResult `json:"result"`
+}
+type FabricSequenceResponse struct {
+	Status        string `json:"status"`
+	Message       string `json:"message"`
+	ChaincodeName string `json:"chaincode_name"`
+	ChannelName   string `json:"channel_name"`
+	Sequence      int64  `json:"sequence"`
 }
 
 // FabricApproveRequest represents the request body for Fabric chaincode approve
@@ -297,6 +305,74 @@ func (h *Handler) InstallFabricChaincode(w http.ResponseWriter, r *http.Request)
 		Status:  "success",
 		Message: "Chaincode installed successfully",
 		Result:  result,
+	}
+	return response.WriteJSON(w, http.StatusOK, resp)
+}
+
+// GetFabricChaincodeSequence handles Fabric chaincode sequence requests
+// @Summary Get Fabric chaincode sequence
+// @Description Get the current sequence number for a chaincode
+// @Tags SmartContracts
+// @Accept json
+// @Produce json
+// @Param peerId path string true "Peer ID"
+// @Param chaincodeName query string true "Chaincode name"
+// @Param channelName query string true "Channel name"
+// @Success 200 {object} FabricSequenceResponse
+// @Failure 400 {object} response.Response
+// @Failure 500 {object} response.Response
+// @Router /sc/fabric/peer/{peerId}/chaincode/sequence [get]
+func (h *Handler) GetFabricChaincodeSequence(w http.ResponseWriter, r *http.Request) error {
+	peerId := chi.URLParam(r, "peerId")
+	peerIdInt, err := strconv.ParseInt(peerId, 10, 64)
+	if err != nil {
+		h.logger.Error("Invalid peer ID", "peerId", peerId)
+		return errors.NewValidationError("invalid peer ID", map[string]interface{}{
+			"detail": "Invalid peer ID",
+			"code":   "INVALID_PEER_ID",
+		})
+	}
+
+	chaincodeName := r.URL.Query().Get("chaincodeName")
+	if chaincodeName == "" {
+		h.logger.Error("Missing chaincode name")
+		return errors.NewValidationError("missing chaincode name", map[string]interface{}{
+			"detail": "Chaincode name is required",
+			"code":   "MISSING_CHAINCODE_NAME",
+		})
+	}
+
+	channelName := r.URL.Query().Get("channelName")
+	if channelName == "" {
+		h.logger.Error("Missing channel name")
+		return errors.NewValidationError("missing channel name", map[string]interface{}{
+			"detail": "Channel name is required",
+			"code":   "MISSING_CHANNEL_NAME",
+		})
+	}
+
+	peerGateway, peerConn, err := h.nodeService.GetFabricPeerGateway(r.Context(), peerIdInt)
+	if err != nil {
+		h.logger.Error("Node not found", "peerId", peerId)
+		return errors.NewValidationError("node not found", map[string]interface{}{
+			"detail": "Node not found",
+			"code":   "NODE_NOT_FOUND",
+		})
+	}
+	defer peerConn.Close()
+
+	result, err := GetCurrentChaincodeSequence(r.Context(), peerGateway, channelName, chaincodeName)
+	if err != nil {
+		h.logger.Error("Fabric chaincode sequence retrieval failed", "error", err)
+		return errors.NewInternalError("sequence retrieval failed", err, nil)
+	}
+
+	resp := FabricSequenceResponse{
+		Status:        "success",
+		Message:       "Chaincode sequence retrieved successfully",
+		ChaincodeName: chaincodeName,
+		ChannelName:   channelName,
+		Sequence:      result,
 	}
 	return response.WriteJSON(w, http.StatusOK, resp)
 }

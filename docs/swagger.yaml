@@ -774,6 +774,19 @@ definitions:
       status:
         type: string
     type: object
+  chainlaunchdeploy.FabricSequenceResponse:
+    properties:
+      chaincode_name:
+        type: string
+      channel_name:
+        type: string
+      message:
+        type: string
+      sequence:
+        type: integer
+      status:
+        type: string
+    type: object
   chainlaunchdeploy.InstallChaincodeByDefinitionRequest:
     properties:
       peer_ids:
@@ -9968,6 +9981,45 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       summary: Install Fabric chaincode
+      tags:
+      - SmartContracts
+  /sc/fabric/peer/{peerId}/chaincode/sequence:
+    get:
+      consumes:
+      - application/json
+      description: Get the current sequence number for a chaincode
+      parameters:
+      - description: Peer ID
+        in: path
+        name: peerId
+        required: true
+        type: string
+      - description: Chaincode name
+        in: query
+        name: chaincodeName
+        required: true
+        type: string
+      - description: Channel name
+        in: query
+        name: channelName
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/chainlaunchdeploy.FabricSequenceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: Get Fabric chaincode sequence
       tags:
       - SmartContracts
   /settings:

@@ -9204,6 +9204,64 @@
                 }
             }
         },
+        "/sc/fabric/peer/{peerId}/chaincode/sequence": {
+            "get": {
+                "description": "Get the current sequence number for a chaincode",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SmartContracts"
+                ],
+                "summary": "Get Fabric chaincode sequence",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Peer ID",
+                        "name": "peerId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chaincode name",
+                        "name": "chaincodeName",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Channel name",
+                        "name": "channelName",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/chainlaunchdeploy.FabricSequenceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/settings": {
             "get": {
                 "description": "Get the default setting's details",
@@ -10788,6 +10846,26 @@
                 },
                 "result": {
                     "$ref": "#/definitions/chainlaunchdeploy.DeploymentResult"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "chainlaunchdeploy.FabricSequenceResponse": {
+            "type": "object",
+            "properties": {
+                "chaincode_name": {
+                    "type": "string"
+                },
+                "channel_name": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "sequence": {
+                    "type": "integer"
                 },
                 "status": {
                     "type": "string"

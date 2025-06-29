@@ -8,7 +8,7 @@ import {
 	postScFabricDefinitionsByDefinitionIdInstallMutation,
 	putScFabricDefinitionsByDefinitionIdMutation,
 } from '@/api/client/@tanstack/react-query.gen'
-import { deleteScFabricDefinitionsByDefinitionId, postScFabricChaincodesByChaincodeIdDefinitions } from '@/api/client/sdk.gen'
+import { deleteScFabricDefinitionsByDefinitionId, postScFabricChaincodesByChaincodeIdDefinitions, getScFabricPeerByPeerIdChaincodeSequence } from '@/api/client/sdk.gen'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -131,6 +131,8 @@ export default function FabricChaincodeDefinitionDetail() {
 	const [deployError, setDeployError] = useState<string | null>(null)
 	const [deployLoading, setDeployLoading] = useState(false)
 	const [expandedTimelines, setExpandedTimelines] = useState<Set<number>>(new Set())
+	const [sequenceLoading, setSequenceLoading] = useState(false)
+	const [sequenceError, setSequenceError] = useState<string | null>(null)
 
 	// Fetch chaincode details
 	const {
@@ -144,7 +146,7 @@ export default function FabricChaincodeDefinitionDetail() {
 	})
 
 	const def = useMemo(() => chaincodeDetail?.chaincode, [chaincodeDetail])
-	const versions = useMemo(() => chaincodeDetail?.definitions || [], [chaincodeDetail?.definitions])
+	const versions = useMemo(() => (chaincodeDetail?.definitions || []).sort((a, b) => b.sequence - a.sequence), [chaincodeDetail?.definitions])
 
 	// Fetch network peers
 	const networkId = useMemo(() => def?.network_id, [def])
@@ -253,14 +255,6 @@ export default function FabricChaincodeDefinitionDetail() {
 		await createDefinitionMutation.mutateAsync(data)
 	}
 
-	const handleAction = (idx: number, action: LifecycleAction) => {
-		if (action === 'install') {
-			setSelectedVersionIdx(idx)
-			setInstallDialogOpen(true)
-			return
-		}
-		// No need to update versions in local state, use only API data for rendering versions
-	}
 	const installMutation = useMutation({
 		...postScFabricDefinitionsByDefinitionIdInstallMutation(),
 		onSuccess: (_, variables) => {
@@ -389,6 +383,40 @@ export default function FabricChaincodeDefinitionDetail() {
 		})
 	}
 
+	const handleAddDialogOpenChange = async (open: boolean) => {
+		setIsAddDialogOpen(open)
+		if (open) {
+			setSequenceLoading(true)
+			setSequenceError(null)
+			try {
+				// Use first available peer
+				const peer = availablePeers[0]
+				if (peer && def?.name && chaincodeDetail?.chaincode.network_name) {
+					const resp = await getScFabricPeerByPeerIdChaincodeSequence({
+						path: { peerId: String(peer.nodeId) },
+						query: { chaincodeName: def.name, channelName: chaincodeDetail.chaincode.network_name },
+					})
+					const seq = resp.data?.sequence
+					if (typeof seq === 'number') {
+						form.reset({
+							...form.getValues(),
+							sequence: seq + 1,
+						})
+					}
+				} else {
+					setSequenceError('No available peer or channel to fetch sequence.')
+				}
+			} catch (err: any) {
+				setSequenceError('Failed to fetch sequence')
+			} finally {
+				setSequenceLoading(false)
+			}
+		} else {
+			form.reset()
+			setSequenceError(null)
+		}
+	}
+
 	if (isLoading) {
 		return <Card className="p-6">Loading chaincode details...</Card>
 	}
@@ -414,7 +442,7 @@ export default function FabricChaincodeDefinitionDetail() {
 			</Card>
 			<div className="flex items-center justify-between mb-4">
 				<div className="font-semibold">Chaincode Definitions</div>
-				<Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+				<Dialog open={isAddDialogOpen} onOpenChange={handleAddDialogOpenChange}>
 					<DialogTrigger asChild>
 						<Button size="sm" variant="secondary">
 							<Plus className="w-4 h-4 mr-2" />
@@ -449,8 +477,10 @@ export default function FabricChaincodeDefinitionDetail() {
 											<FormItem>
 												<FormLabel>Sequence</FormLabel>
 												<FormControl>
-													<Input type="number" {...field} onChange={(e) => field.onChange(parseInt(e.target.value))} />
+													<Input type="number" {...field} onChange={(e) => field.onChange(parseInt(e.target.value))} disabled={sequenceLoading} />
 												</FormControl>
+												{sequenceLoading && <div className="text-xs text-muted-foreground">Loading sequence...</div>}
+												{sequenceError && <div className="text-xs text-red-500">{sequenceError}</div>}
 												<FormMessage />
 											</FormItem>
 										)}

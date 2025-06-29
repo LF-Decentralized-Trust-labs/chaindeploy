@@ -161,10 +161,3 @@ func (h *ProjectsHandler) QueryTransaction(w http.ResponseWriter, r *http.Reques
 	response.JSON(w, http.StatusOK, handlerResp)
 	return nil
 }
-
-// func (h *ChaincodeHandler) RegisterRoutes(r chi.Router) {
-// 	r.Route("/chaincode-projects", func(r chi.Router) {
-// 		r.Post("/{id}/invoke", response.Middleware(h.InvokeTransaction))
-// 		r.Post("/{id}/query", response.Middleware(h.QueryTransaction))
-// 	})
-// }
