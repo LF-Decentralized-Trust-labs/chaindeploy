@@ -177,7 +177,7 @@ func (s *ProjectsService) CreateProject(ctx context.Context, name, description, 
 
 	// Download boilerplate if specified
 	if boilerplate != "" {
-		projectDir, err := s.safeJoinPath(slug)
+		projectDir, err := s.GetProjectDirectoryBySlug(slug)
 		if err != nil {
 			zap.L().Error("failed to build safe project path for boilerplate", zap.String("slug", slug), zap.Error(err))
 			return Project{}, err

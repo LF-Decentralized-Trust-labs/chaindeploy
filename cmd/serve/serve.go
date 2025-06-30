@@ -495,7 +495,12 @@ func (c *serveCmd) setupServer(queries *db.Queries, authService *auth.AuthServic
 	authHandler := auth.NewHandler(authService)
 	auditHandler := audit.NewHandler(auditService, logger)
 	// Initialize AI services if available
-	aiHandler, filesHandler, dirsHandler, err := c.initializeAIServices(queries, logger, projectsDir, organizationService, keyManagementService, networksService)
+	projectDirAbs, err := filepath.Abs(projectsDir)
+	if err != nil {
+		logger.Warnf("Failed to get absolute path for projects directory: %v", err)
+		return nil
+	}
+	aiHandler, filesHandler, dirsHandler, err := c.initializeAIServices(queries, logger, projectDirAbs, organizationService, keyManagementService, networksService)
 	if err != nil {
 		logger.Warnf("Failed to initialize AI services: %v", err)
 		return nil
@@ -505,16 +510,16 @@ func (c *serveCmd) setupServer(queries *db.Queries, authService *auth.AuthServic
 		logger.Info("AI services initialized successfully")
 
 		// Initialize directory and file services
-		dirsService := dirs.NewDirsService(projectsDir)
+		dirsService := dirs.NewDirsService(projectDirAbs)
 		filesService := files.NewFilesService()
 		runner := projectrunner.NewRunner(queries)
-		projectsService, err := projects.NewProjectsService(queries, runner, projectsDir, organizationService, keyManagementService, networksService)
+		projectsService, err := projects.NewProjectsService(queries, runner, projectDirAbs, organizationService, keyManagementService, networksService)
 		if err != nil {
 			logger.Warnf("Failed to create projects service: %v - AI services will not be available", err)
 			return nil
 		}
 		chaincodeProjectInvocationService := projects.NewChaincodeService(queries, logger, projectsService, networksService, nodesService)
-		projectsHandler = projects.NewProjectsHandler(projectsService, projectsDir, chaincodeProjectInvocationService, logger)
+		projectsHandler = projects.NewProjectsHandler(projectsService, projectDirAbs, chaincodeProjectInvocationService, logger)
 		// Create handlers
 		dirsHandler = dirs.NewDirsHandler(dirsService, projectsService)
 		filesHandler = files.NewFilesHandler(filesService, projectsService)

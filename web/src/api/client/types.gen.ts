@@ -3954,6 +3954,44 @@ export type GetChaincodeProjectsByIdLogsStreamResponses = {
 
 export type GetChaincodeProjectsByIdLogsStreamResponse = GetChaincodeProjectsByIdLogsStreamResponses[keyof GetChaincodeProjectsByIdLogsStreamResponses];
 
+export type GetChaincodeProjectsByIdMetadataData = {
+    body?: never;
+    path: {
+        /**
+         * Chaincode Project ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/chaincode-projects/{id}/metadata';
+};
+
+export type GetChaincodeProjectsByIdMetadataErrors = {
+    /**
+     * Invalid request
+     */
+    400: ResponseResponse;
+    /**
+     * Project not found
+     */
+    404: ResponseResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseResponse;
+};
+
+export type GetChaincodeProjectsByIdMetadataError = GetChaincodeProjectsByIdMetadataErrors[keyof GetChaincodeProjectsByIdMetadataErrors];
+
+export type GetChaincodeProjectsByIdMetadataResponses = {
+    /**
+     * Project metadata
+     */
+    200: ProjectsHandlerResponse;
+};
+
+export type GetChaincodeProjectsByIdMetadataResponse = GetChaincodeProjectsByIdMetadataResponses[keyof GetChaincodeProjectsByIdMetadataResponses];
+
 export type PostChaincodeProjectsByIdQueryData = {
     /**
      * Query parameters

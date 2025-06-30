@@ -96,7 +96,7 @@ export default function ChaincodePlaygroundPage() {
 					path: { chaincodeId },
 					body: { function: fn, args: parsedArgs, key_id: selectedKeyParam?.keyId.toString() },
 				})
-				setResponses((prev) => [{ type: 'invoke', fn, args: parsedArgs, selectedKey: selectedKeyParam, result: res.data, timestamp: Date.now(), paramValues }, ...prev])
+				setResponses((prev) => [{ type: 'invoke', fn, args: parsedArgs, selectedKey: selectedKeyParam, result: res.data.result, timestamp: Date.now(), paramValues }, ...prev])
 			} catch (e: any) {
 				toast.error(e?.message || 'Invoke failed')
 				setResponses((prev) => [{ type: 'invoke', fn, args: parsedArgs, selectedKey: selectedKeyParam, error: e?.message || e, timestamp: Date.now(), paramValues }, ...prev])

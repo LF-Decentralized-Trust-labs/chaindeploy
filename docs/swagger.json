@@ -2138,6 +2138,61 @@
                 }
             }
         },
+        "/chaincode-projects/{id}/metadata": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Retrieves metadata for the specified chaincode project",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chaincode Projects"
+                ],
+                "summary": "Get project metadata",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Chaincode Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Project metadata",
+                        "schema": {
+                            "$ref": "#/definitions/projects.HandlerResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Project not found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/chaincode-projects/{id}/query": {
             "post": {
                 "security": [

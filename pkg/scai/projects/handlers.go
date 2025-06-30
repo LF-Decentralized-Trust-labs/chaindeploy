@@ -109,6 +109,7 @@ func (h *ProjectsHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/{id}/file_at_commit", response.Middleware(h.GetProjectFileAtCommit))
 		r.Post("/{id}/invoke", response.Middleware(h.InvokeTransaction))
 		r.Post("/{id}/query", response.Middleware(h.QueryTransaction))
+		r.Get("/{id}/metadata", response.Middleware(h.GetProjectMetadata))
 		r.Put("/{id}/endorsement-policy", response.Middleware(h.UpdateProjectEndorsementPolicy))
 		r.Get("/{id}/download", response.Middleware(h.DownloadProject))
 	})

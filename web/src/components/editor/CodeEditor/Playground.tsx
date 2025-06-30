@@ -1,4 +1,5 @@
-import { postChaincodeProjectsByIdInvoke, postChaincodeProjectsByIdQuery } from '@/api/client'
+import { getChaincodeProjectsByIdMetadata, postChaincodeProjectsByIdInvoke, postChaincodeProjectsByIdQuery } from '@/api/client'
+import { getChaincodeProjectsByIdMetadataOptions } from '@/api/client/@tanstack/react-query.gen'
 import { FabricKeySelect } from '@/components/FabricKeySelect'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -6,8 +7,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { MetadataForm } from '@/pages/smart-contracts/fabric/[id]/MetadataPlaygroundForm'
+import { useQuery } from '@tanstack/react-query'
 import { Check, Clipboard, Loader2, PlayCircle, RotateCcw, Search, X } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 interface PlaygroundProps {
@@ -130,9 +132,9 @@ export function PlaygroundCore({
 	// In PlaygroundCore, track paramValues state for metadata mode
 	return (
 		<div className="w-full max-w-full mx-auto py-8">
-			<div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+			<div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-4">
 				{/* Playground form (left) */}
-				<div className="border rounded bg-background shadow-sm p-6 flex flex-col h-fit">
+				<div className="border rounded bg-background shadow-sm p-6 flex flex-col overflow-auto h-[70vh] ">
 					<h2 className="text-xl font-bold mb-4 flex items-center gap-2">
 						<PlayCircle className="h-5 w-5" /> Playground
 					</h2>
@@ -178,9 +180,9 @@ export function PlaygroundCore({
 							metadata={metadata}
 							onSubmit={(txName, args, type) => {
 								if (type === 'invoke') {
-									handleInvoke(txName, JSON.stringify(args), selectedKey, { ...paramValues })
+									handleInvoke(txName, args as any, selectedKey, { ...paramValues })
 								} else {
-									handleQuery(txName, JSON.stringify(args), selectedKey, { ...paramValues })
+									handleQuery(txName, args as any, selectedKey, { ...paramValues })
 								}
 							}}
 							loading={loadingInvoke || loadingQuery}
@@ -291,9 +293,12 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 	const [responses, setResponses] = useState<Response[]>([])
 	const [loadingInvoke, setLoadingInvoke] = useState(false)
 	const [loadingQuery, setLoadingQuery] = useState(false)
-
+	const [mode, setMode] = useState<'manual' | 'metadata'>('manual')
 	const STORAGE_KEY = `playground-state-${projectId}`
-
+	const metadataQuery = useQuery({
+		...getChaincodeProjectsByIdMetadataOptions({ path: { id: projectId } }),
+	})
+	const metadata = useMemo(() => (metadataQuery.data?.result ? JSON.parse(metadataQuery.data.result as string) : undefined), [metadataQuery.data])
 	// Load state from localStorage on mount
 	useEffect(() => {
 		const saved = localStorage.getItem(STORAGE_KEY)
@@ -330,12 +335,13 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 			if (!selectedKeyParam) return
 			setLoadingInvoke(true)
 			const toastId = toast.loading('Invoking...')
+			const parsedArgs = typeof argsParam === 'string' ? (argsParam.trim() ? argsParam.split(',').map((s: string) => s.trim()) : []) : typeof argsParam === 'object' ? argsParam : []
 			try {
 				const res = await postChaincodeProjectsByIdInvoke({
 					path: { id: projectId },
 					body: {
 						function: fnParam,
-						args: argsParam.split(',').map((a) => a.trim()),
+						args: parsedArgs,
 						keyId: selectedKeyParam.keyId,
 						orgId: selectedKeyParam.orgId,
 					},
@@ -374,11 +380,12 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 			setLoadingQuery(true)
 			const toastId = toast.loading('Querying...')
 			try {
+				const parsedArgs = typeof argsParam === 'string' ? (argsParam.trim() ? argsParam.split(',').map((s: string) => s.trim()) : []) : typeof argsParam === 'object' ? argsParam : []
 				const res = await postChaincodeProjectsByIdQuery({
 					path: { id: projectId },
 					body: {
 						function: fnParam,
-						args: argsParam.split(',').map((a) => a.trim()),
+						args: parsedArgs,
 						keyId: selectedKeyParam.keyId,
 						orgId: selectedKeyParam.orgId,
 					},
@@ -438,6 +445,9 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 			networkId={networkId}
 			paramValues={paramValues}
 			setParamValues={setParamValues}
+			mode={mode}
+			setMode={setMode}
+			metadata={metadata}
 		/>
 	)
 }

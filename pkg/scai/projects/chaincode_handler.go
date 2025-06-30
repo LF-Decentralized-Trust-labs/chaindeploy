@@ -100,6 +100,49 @@ func (h *ProjectsHandler) InvokeTransaction(w http.ResponseWriter, r *http.Reque
 	return nil
 }
 
+// @Summary Get project metadata
+// @Description Retrieves metadata for the specified chaincode project
+// @Tags Chaincode Projects
+// @Accept json
+// @Produce json
+// @Param id path int true "Chaincode Project ID"
+// @Success 200 {object} HandlerResponse "Project metadata"
+// @Failure 400 {object} response.Response "Invalid request"
+// @Failure 404 {object} response.Response "Project not found"
+// @Failure 500 {object} response.Response "Internal server error"
+// @Security ApiKeyAuth
+// @Router /chaincode-projects/{id}/metadata [get]
+func (h *ProjectsHandler) GetProjectMetadata(w http.ResponseWriter, r *http.Request) error {
+	projectIDStr := chi.URLParam(r, "id")
+	projectID, err := strconv.ParseInt(projectIDStr, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid project ID: %w", err)
+	}
+
+	result, err := h.chaincodeService.GetProjectMetadata(r.Context(), projectID)
+	if err != nil {
+		return errors.NewInternalError("failed to get project metadata", err, map[string]interface{}{
+			"error":      err.Error(),
+			"project_id": projectID,
+		})
+	}
+
+	// Convert service response to handler response
+	handlerResp := HandlerResponse{
+		Status:    result.Status,
+		Message:   result.Message,
+		Project:   result.Project,
+		Function:  result.Function,
+		Args:      result.Args,
+		Result:    result.Result,
+		Channel:   result.Channel,
+		Chaincode: result.Chaincode,
+	}
+
+	response.JSON(w, http.StatusOK, handlerResp)
+	return nil
+}
+
 // @Summary Query a chaincode transaction
 // @Description Queries the state of the specified chaincode project
 // @Tags Chaincode Projects

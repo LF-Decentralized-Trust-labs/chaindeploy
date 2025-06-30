@@ -5345,6 +5345,41 @@ paths:
       summary: Stream real-time logs for a project server
       tags:
       - Chaincode Projects
+  /chaincode-projects/{id}/metadata:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves metadata for the specified chaincode project
+      parameters:
+      - description: Chaincode Project ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Project metadata
+          schema:
+            $ref: '#/definitions/projects.HandlerResponse'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "404":
+          description: Project not found
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get project metadata
+      tags:
+      - Chaincode Projects
   /chaincode-projects/{id}/query:
     post:
       consumes:

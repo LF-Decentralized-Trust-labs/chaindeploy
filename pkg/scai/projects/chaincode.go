@@ -253,3 +253,64 @@ func (s *ChaincodeService) QueryTransaction(ctx context.Context, req Transaction
 		Chaincode: project.Name,
 	}, nil
 }
+
+type GetProjectMetadataResponse struct {
+	Status    string `json:"status"`
+	Message   string `json:"message"`
+	ProjectId int64  `json:"projectId"`
+	Metadata  string `json:"metadata"`
+	Channel   string `json:"channel"`
+}
+
+func (s *ChaincodeService) GetProjectMetadata(ctx context.Context, projectID int64) (*QueryTransactionResponse, error) {
+
+	// Use the chaincode's network name as the channel
+	project, err := s.queries.GetProject(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get chaincode: %w", err)
+	}
+	if project == nil {
+		return nil, fmt.Errorf("project not found")
+	}
+	networkID := project.NetworkID
+	if !networkID.Valid {
+		return nil, fmt.Errorf("project has no network ID")
+	}
+	// Get all nodes for the network and select a peer
+	networkNodeResp, err := s.networks.GetNetworkNodes(ctx, networkID.Int64)
+	if err != nil {
+		s.logger.Error("Failed to get nodes for network", "error", err)
+		return nil, fmt.Errorf("failed to get nodes for network: %w", err)
+	}
+	var keyID int64
+	var orgID int64
+	foundPeer := false
+	for _, node := range networkNodeResp {
+		if node.Node.NodeType == "FABRIC_PEER" && node.Node.Platform == "FABRIC" && node.Node.FabricPeer != nil {
+			orgID = node.Node.FabricPeer.OrganizationID
+			keyID, err = s.nodesService.GetFabricClientIdentityForOrganization(ctx, orgID)
+			if err != nil {
+				s.logger.Error("Failed to get organization", "error", err)
+				return nil, fmt.Errorf("failed to get organization: %w", err)
+			}
+			foundPeer = true
+			break
+		}
+	}
+	if !foundPeer {
+		return nil, fmt.Errorf("no peer found for network")
+	}
+	// Get network and contract
+	metadataResult, err := s.QueryTransaction(ctx, TransactionRequest{
+		ProjectID: projectID,
+		Function:  "org.hyperledger.fabric:GetMetadata",
+		Args:      []string{},
+		OrgID:     orgID,
+		KeyID:     keyID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get network: %w", err)
+	}
+
+	return metadataResult, nil
+}

@@ -23,6 +23,7 @@ import { ReapplyResult, ReapplyUpdate, ReapplyExecute } from './reapply'
 import { RunTerminalCmdResult, RunTerminalCmdUpdate, RunTerminalCmdExecute } from './run-terminal-cmd'
 import { SearchReplaceResult, SearchReplaceUpdate, SearchReplaceExecute } from './search-replace'
 import { WriteFileResult, WriteFileUpdate, WriteFileExecute } from './write-file'
+import { RewriteFileExecute, RewriteFileResult, RewriteFileUpdate } from './rewrite-file'
 
 export interface ToolEvent {
 	type: 'start' | 'update' | 'execute' | 'result'
@@ -53,6 +54,7 @@ const toolComponents = {
 	file_search: { update: FileSearchUpdate, result: FileSearchResult, execute: FileSearchExecute },
 	delete_file: { update: DeleteFileUpdate, result: DeleteFileResult, execute: DeleteFileExecute },
 	reapply: { update: ReapplyUpdate, result: ReapplyResult, execute: ReapplyExecute },
+	rewrite_file: { update:	 RewriteFileUpdate, result: RewriteFileResult, execute: RewriteFileExecute },
 }
 
 export const ToolEventRenderer = React.memo(({ event }: ToolEventProps) => {

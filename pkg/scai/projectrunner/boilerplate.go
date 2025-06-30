@@ -20,6 +20,8 @@ var boilerplateRunners = map[string]BoilerplateRunnerConfig{
 		Image: "chaincode-ts:1.0",
 		Prompt: `This is a Hyperledger Fabric TypeScript chaincode project.
 
+When executing commands related to node.js, use NPM and NPX to install dependencies and run commands related to packages.
+
 Key Technologies and Patterns:
 - TypeScript for type-safe chaincode development
 - Hyperledger Fabric SDK for Node.js

@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 function ContractSelect({ contracts, value, onChange }: { contracts: string[]; value: string | undefined; onChange: (v: string) => void }) {
+	const sortedContracts = useMemo(() => [...contracts].sort((a, b) => a.localeCompare(b)), [contracts])
 	return (
 		<div className="mb-4">
 			<Label>Contract</Label>
@@ -13,7 +14,7 @@ function ContractSelect({ contracts, value, onChange }: { contracts: string[]; v
 					<SelectValue placeholder="Select contract" />
 				</SelectTrigger>
 				<SelectContent>
-					{contracts.map((c) => (
+					{sortedContracts.map((c) => (
 						<SelectItem key={c} value={c}>
 							{c}
 						</SelectItem>
@@ -25,6 +26,7 @@ function ContractSelect({ contracts, value, onChange }: { contracts: string[]; v
 }
 
 function TransactionSelect({ transactions, value, onChange }: { transactions: any[]; value: string | undefined; onChange: (v: string) => void }) {
+	const sortedTransactions = useMemo(() => [...transactions].sort((a, b) => a.name.localeCompare(b.name)), [transactions])
 	return (
 		<div className="mb-4">
 			<Label>Transaction</Label>
@@ -33,7 +35,7 @@ function TransactionSelect({ transactions, value, onChange }: { transactions: an
 					<SelectValue placeholder="Select transaction" />
 				</SelectTrigger>
 				<SelectContent>
-					{transactions.map((t) => (
+					{sortedTransactions.map((t) => (
 						<SelectItem key={t.name} value={t.name}>
 							{t.name}
 						</SelectItem>
@@ -86,8 +88,8 @@ export function MetadataForm({
 	const [selectedTx, setSelectedTx] = useState<string | undefined>(transactions[0]?.name)
 	const tx = useMemo(() => transactions.find((t: any) => t.name === selectedTx), [transactions, selectedTx])
 	const [internalParamValues, setInternalParamValues] = useState<Record<string, string>>({})
-	const paramValues = controlledParamValues ?? internalParamValues
-	const setParamValues = controlledSetParamValues ?? setInternalParamValues
+	const paramValues = useMemo(() => controlledParamValues ?? internalParamValues, [controlledParamValues, internalParamValues])
+	const setParamValues = useMemo(() => controlledSetParamValues ?? setInternalParamValues, [controlledSetParamValues, setInternalParamValues])
 
 	// Restore state from restoredOperation
 	useEffect(() => {
@@ -135,7 +137,7 @@ export function MetadataForm({
 		(type: 'invoke' | 'query') => {
 			if (!tx) return
 			const args = (tx.parameters || []).map((p: any) => paramValues[p.name] ?? '')
-			onSubmit(tx.name, args, type)
+			onSubmit(`${contract.name}:${tx.name}`, args, type)
 		},
 		[tx, paramValues, onSubmit]
 	)
