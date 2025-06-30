@@ -72,40 +72,44 @@ export default function ChaincodePlaygroundPage() {
 	const handleInvoke = async (fn: string, args: string, selectedKeyParam?: { orgId: number; keyId: number }) => {
 		if (!chaincodeId) return
 		setLoadingInvoke(true)
+		const toastId = toast.loading('Invoking...')
+		const parsedArgs = typeof args === 'string' ? args.trim() ? JSON.parse(args) : [] : typeof args === 'object' ? args : []
 		try {
-			const parsedArgs = args.trim() ? JSON.parse(args) : []
 			const res = await postScFabricChaincodesByChaincodeIdInvoke({
 				path: { chaincodeId },
 				body: { function: fn, args: parsedArgs, key_id: selectedKeyParam?.keyId.toString() },
 			})
-			setResponses((prev) => [{ type: 'invoke', fn, args, selectedKey: selectedKeyParam, result: res.data, timestamp: Date.now() }, ...prev])
+			setResponses((prev) => [{ type: 'invoke', fn, args: parsedArgs, selectedKey: selectedKeyParam, result: res.data, timestamp: Date.now() }, ...prev])
 		} catch (e: any) {
 			toast.error(e?.message || 'Invoke failed')
-			setResponses((prev) => [{ type: 'invoke', fn, args, selectedKey: selectedKeyParam, error: e?.message || e, timestamp: Date.now() }, ...prev])
+			setResponses((prev) => [{ type: 'invoke', fn, args: parsedArgs, selectedKey: selectedKeyParam, error: e?.message || e, timestamp: Date.now() }, ...prev])
 		} finally {
 			setLoadingInvoke(false)
+			toast.dismiss(toastId)
 		}
 	}
 
 	const handleQuery = async (fn: string, args: string, selectedKeyParam?: { orgId: number; keyId: number }) => {
 		if (!chaincodeId) return
 		setLoadingQuery(true)
+		const toastId = toast.loading('Querying...')
+		const parsedArgs = typeof args === 'string' ? args.trim() ? JSON.parse(args) : [] : typeof args === 'object' ? args : []
 		try {
-			const parsedArgs = args.trim() ? JSON.parse(args) : []
 			const res = await postScFabricChaincodesByChaincodeIdQuery({
 				path: { chaincodeId },
 				body: { function: fn, args: parsedArgs, key_id: selectedKeyParam?.keyId.toString() },
 			})
 			if (res.error) {
-				setResponses((prev) => [{ type: 'query', fn, args, selectedKey: selectedKeyParam, error: res.error.message, timestamp: Date.now() }, ...prev])
+				setResponses((prev) => [{ type: 'query', fn, args: parsedArgs, selectedKey: selectedKeyParam, error: res.error.message, timestamp: Date.now() }, ...prev])
 				return
 			}
-			setResponses((prev) => [{ type: 'query', fn, args, selectedKey: selectedKeyParam, result: res.data, timestamp: Date.now() }, ...prev])
+			setResponses((prev) => [{ type: 'query', fn, args: parsedArgs, selectedKey: selectedKeyParam, result: res.data, timestamp: Date.now() }, ...prev])
 		} catch (e: any) {
 			toast.error(e?.message || 'Query failed')
-			setResponses((prev) => [{ type: 'query', fn, args, selectedKey: selectedKeyParam, error: e?.message || e, timestamp: Date.now() }, ...prev])
+			setResponses((prev) => [{ type: 'query', fn, args: parsedArgs, selectedKey: selectedKeyParam, error: e?.message || e, timestamp: Date.now() }, ...prev])
 		} finally {
 			setLoadingQuery(false)
+			toast.dismiss(toastId)
 		}
 	}
 

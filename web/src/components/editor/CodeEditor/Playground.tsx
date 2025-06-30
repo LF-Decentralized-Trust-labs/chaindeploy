@@ -1,27 +1,20 @@
 import { postChaincodeProjectsByIdInvoke, postChaincodeProjectsByIdQuery } from '@/api/client'
 import { FabricKeySelect } from '@/components/FabricKeySelect'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { PlayCircle, RotateCcw, Search, X, Loader2, Clipboard, Check } from 'lucide-react'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { MetadataForm } from '@/pages/smart-contracts/fabric/[id]/MetadataPlaygroundForm'
+import { Check, Clipboard, Loader2, PlayCircle, RotateCcw, Search, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Card } from '@/components/ui/card'
-import { MetadataForm } from '@/pages/smart-contracts/fabric/[id]/MetadataPlaygroundForm'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 interface PlaygroundProps {
 	projectId: number
 	networkId: number
 }
 
-interface Operation {
-	fn: string
-	args: string
-	selectedKey: { orgId: number; keyId: number } | undefined
-	type: 'invoke' | 'query'
-	timestamp: number
-}
 type Response = {
 	fn: string
 	args: string
@@ -31,9 +24,7 @@ type Response = {
 	selectedKey?: { orgId: number; keyId: number }
 	error?: string
 }
-function isValidResponse(r: any): r is { type: 'invoke' | 'query'; response: any; error?: string; timestamp: number } {
-	return r && (r.type === 'invoke' || r.type === 'query') && typeof r.timestamp === 'number'
-}
+
 function renderResponseContent(content: any) {
 	if (!content) {
 		return <span className="mt-1 italic">Empty response</span>
@@ -87,20 +78,52 @@ export function PlaygroundCore({
 	restoreOnly,
 	sortedResponses,
 	networkId,
-	mode: parentMode,
+	mode,
+	setMode,
 	metadata,
-	onMetadataSubmit,
 }: PlaygroundCoreProps & {
-	mode?: 'manual' | 'metadata',
-	metadata?: any,
-	onMetadataSubmit?: (txName: string, args: any) => void,
+	mode?: 'manual' | 'metadata'
+	setMode?: (mode: 'manual' | 'metadata') => void
+	metadata?: any
+	onMetadataSubmit?: (txName: string, args: any) => void
 }) {
 	const [copied, setCopied] = useState<{ [timestamp: number]: boolean }>({})
-	// Internal mode state if metadata is present
-	const [mode, setMode] = useState<'manual' | 'metadata'>(metadata ? 'metadata' : 'manual')
+	const [internalMode, setInternalMode] = useState<'manual' | 'metadata'>(metadata ? 'metadata' : 'manual')
+	const isControlled = useMemo(() => typeof mode !== 'undefined' && typeof setMode === 'function', [mode, setMode])
+	const currentMode = useMemo(() => (isControlled ? mode : internalMode), [isControlled, mode, internalMode])
+	const handleSetMode = useCallback(
+		(m: 'manual' | 'metadata') => {
+			if (isControlled) setMode(m)
+			else setInternalMode(m)
+		},
+		[isControlled, setMode, setInternalMode]
+	)
+
+	// MetadataForm state management
+	const contracts = useMemo(() => (metadata ? Object.keys(metadata.contracts || {}) : []), [metadata])
+	const [selectedContract, setSelectedContract] = useState<string | undefined>(contracts[0])
+	const contract = useMemo(() => (selectedContract ? metadata?.contracts?.[selectedContract] : undefined), [selectedContract, metadata])
+	const transactions = contract?.transactions || []
+	const [selectedTx, setSelectedTx] = useState<string | undefined>(transactions[0]?.name)
+
+	// Keep contract/tx selection in sync with metadata changes
+	useEffect(() => {
+		if (contracts.length && !selectedContract) setSelectedContract(contracts[0])
+	}, [contracts, selectedContract])
+	useEffect(() => {
+		if (transactions.length && !selectedTx) setSelectedTx(transactions[0]?.name)
+	}, [transactions, selectedTx])
+
+	// Restore logic
+	const restoreOnlyInternal = useCallback(
+		(response: any) => {
+			restoreOnly(response)
+		},
+		[restoreOnly]
+	)
 
 	// If metadata is present, show tabs to switch modes
-	const showTabs = !!metadata
+	const showTabs = useMemo(() => !!metadata, [metadata])
 
 	return (
 		<div className="w-full max-w-full mx-auto py-8">
@@ -110,21 +133,22 @@ export function PlaygroundCore({
 					<h2 className="text-xl font-bold mb-4 flex items-center gap-2">
 						<PlayCircle className="h-5 w-5" /> Playground
 					</h2>
+					{/* Shared Org/Key selector */}
+					<div className="mb-4">
+						<Label>Key & Organization</Label>
+						<FabricKeySelect value={selectedKey} onChange={setSelectedKey} />
+					</div>
 					{showTabs && (
-						<Tabs value={mode} onValueChange={v => setMode(v as 'manual' | 'metadata')} className="mb-6">
+						<Tabs value={currentMode} onValueChange={(v) => handleSetMode(v as 'manual' | 'metadata')} className="mb-6">
 							<TabsList>
 								<TabsTrigger value="metadata">From Metadata</TabsTrigger>
 								<TabsTrigger value="manual">Manual</TabsTrigger>
 							</TabsList>
 						</Tabs>
 					)}
-					{mode === 'manual' && (
+					{currentMode === 'manual' && (
 						<>
 							<div className="space-y-4 mb-4">
-								<div>
-									<Label>Key & Organization</Label>
-									<FabricKeySelect value={selectedKey} onChange={setSelectedKey} />
-								</div>
 								<div>
 									<Label htmlFor="fn">Function name</Label>
 									<Input id="fn" value={fn} onChange={(e) => setFn(e.target.value)} placeholder="e.g. queryAsset" />
@@ -146,10 +170,8 @@ export function PlaygroundCore({
 							</div>
 						</>
 					)}
-					{mode === 'metadata' && metadata && (
+					{currentMode === 'metadata' && metadata && (
 						<MetadataForm
-							selectedKey={selectedKey}
-							setSelectedKey={setSelectedKey}
 							metadata={metadata}
 							onSubmit={(txName, args, type) => {
 								if (type === 'invoke') {
@@ -159,6 +181,7 @@ export function PlaygroundCore({
 								}
 							}}
 							loading={loadingInvoke || loadingQuery}
+							selectedKey={selectedKey}
 						/>
 					)}
 				</div>
@@ -180,7 +203,7 @@ export function PlaygroundCore({
 										fn: <span className="font-semibold">{response.fn}</span> &nbsp; args: <span className="font-mono">{response.args}</span>
 									</div>
 									<div className="absolute top-2 right-2 flex gap-1">
-										<Button size="icon" variant="ghost" onClick={() => restoreOnly(response)} className="rounded-full" title="Restore">
+										<Button size="icon" variant="ghost" onClick={() => restoreOnlyInternal(response)} className="rounded-full" title="Restore">
 											<RotateCcw className="h-4 w-4" />
 										</Button>
 										<Button size="icon" variant="secondary" onClick={() => handleInvoke(response.fn, response.args, selectedKey)} title="Restore & Invoke" disabled={!selectedKey}>
@@ -215,9 +238,7 @@ export function PlaygroundCore({
 											</div>
 										) : (
 											<>
-												<div className="max-h-64 overflow-auto overflow-x-auto pr-10">
-													{renderResponseContent(response.result?.result ?? response.result)}
-												</div>
+												<div className="max-h-64 overflow-auto overflow-x-auto pr-10">{renderResponseContent(response.result?.result ?? response.result)}</div>
 												<Button
 													size="icon"
 													variant="ghost"
@@ -265,7 +286,6 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 	const [responses, setResponses] = useState<Response[]>([])
 	const [loadingInvoke, setLoadingInvoke] = useState(false)
 	const [loadingQuery, setLoadingQuery] = useState(false)
-	const didMount = useRef(false)
 
 	const STORAGE_KEY = `playground-state-${projectId}`
 
@@ -317,26 +337,18 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 				})
 				toast.dismiss(toastId)
 				let nextResponses
+				console.log('res', res)
 				if (res.error) {
-					nextResponses = [
-						{ type: 'invoke', result: res.error.message, timestamp: Date.now(), fn: fnParam, args: argsParam, selectedKey: selectedKeyParam },
-						...responses,
-					]
+					nextResponses = [{ type: 'invoke', result: res.error.message, timestamp: Date.now(), fn: fnParam, args: argsParam, selectedKey: selectedKeyParam }, ...responses]
 					setResponses(nextResponses)
 				} else {
-					nextResponses = [
-						{ type: 'invoke', result: res.data, timestamp: Date.now(), fn: fnParam, args: argsParam, selectedKey: selectedKeyParam },
-						...responses,
-					]
+					nextResponses = [{ type: 'invoke', result: res.data, timestamp: Date.now(), fn: fnParam, args: argsParam, selectedKey: selectedKeyParam }, ...responses]
 					setResponses(nextResponses)
 				}
 			} catch (err: any) {
 				toast.dismiss(toastId)
 				const msg = err?.response?.data?.message || err?.message || 'Unknown error'
-				const nextResponses = [
-					{ type: 'invoke', result: msg, timestamp: Date.now(), fn: fnParam, args: argsParam } as Response,
-					...responses,
-				]
+				const nextResponses = [{ type: 'invoke', result: msg, timestamp: Date.now(), fn: fnParam, args: argsParam } as Response, ...responses]
 				setResponses(nextResponses)
 			} finally {
 				setLoadingInvoke(false)
@@ -362,26 +374,18 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 				})
 				toast.dismiss(toastId)
 				let nextResponses
+				console.log('res', res)
 				if (res.error) {
-					nextResponses = [
-						{ type: 'query', result: res.error.message, timestamp: Date.now(), fn: fnParam, args: argsParam, selectedKey: selectedKeyParam },
-						...responses,
-					]
+					nextResponses = [{ type: 'query', result: res.error.message, timestamp: Date.now(), fn: fnParam, args: argsParam, selectedKey: selectedKeyParam }, ...responses]
 					setResponses(nextResponses)
 				} else {
-					nextResponses = [
-						{ type: 'query', result: res.data, timestamp: Date.now(), fn: fnParam, args: argsParam, selectedKey: selectedKeyParam },
-						...responses,
-					]
+					nextResponses = [{ type: 'query', result: res.data, timestamp: Date.now(), fn: fnParam, args: argsParam, selectedKey: selectedKeyParam }, ...responses]
 					setResponses(nextResponses)
 				}
 			} catch (err: any) {
 				toast.dismiss(toastId)
 				const msg = err?.response?.data?.message || err?.message || 'Unknown error'
-				const nextResponses = [
-					{ type: 'query', result: msg, timestamp: Date.now(), fn: fnParam, args: argsParam } as Response,
-					...responses,
-				]
+				const nextResponses = [{ type: 'query', result: msg, timestamp: Date.now(), fn: fnParam, args: argsParam } as Response, ...responses]
 				setResponses(nextResponses)
 			} finally {
 				setLoadingQuery(false)
@@ -390,23 +394,17 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 		[projectId, responses]
 	)
 
-	const restoreOnly = useCallback(
-		(resp: { fn: string; args: string; selectedKey?: { orgId: number; keyId: number } }) => {
-			setFn(resp.fn)
-			setArgs(resp.args)
-			if (resp.selectedKey) {
-				setSelectedKey(resp.selectedKey)
-			}
-		},
-		[]
-	)
+	const restoreOnly = useCallback((resp: { fn: string; args: string; selectedKey?: { orgId: number; keyId: number } }) => {
+		setFn(resp.fn)
+		setArgs(resp.args)
+		if (resp.selectedKey) {
+			setSelectedKey(resp.selectedKey)
+		}
+	}, [])
 
-	const handleDeleteResponse = useCallback(
-		(timestamp: number) => {
-			setResponses((prev) => prev.filter((op) => op.timestamp !== timestamp))
-		},
-		[]
-	)
+	const handleDeleteResponse = useCallback((timestamp: number) => {
+		setResponses((prev) => prev.filter((op) => op.timestamp !== timestamp))
+	}, [])
 
 	return (
 		<PlaygroundCore
