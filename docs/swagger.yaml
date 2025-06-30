@@ -3341,7 +3341,7 @@ definitions:
       latency:
         description: e.g., "1.2ms"
         type: string
-      latencyMs:
+      latencyNs:
         description: e.g., 1
         type: integer
       mine:

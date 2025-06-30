@@ -67,7 +67,6 @@ export function NetworkTabs({ tab, setTab, networkDetails, anchorPeers, consente
 				{explorer && <TabsTrigger value="explorer">Explorer</TabsTrigger>}
 
 				{crl && <TabsTrigger value="crl">Revocation</TabsTrigger>}
-				{map && <TabsTrigger value="map">Network Map</TabsTrigger>}
 				{proposals && (
 					<TabsTrigger value="proposals" onClick={() => window.open('https://chainlaunch.dev/premium', '_blank')} className="flex items-center gap-2">
 						Proposals

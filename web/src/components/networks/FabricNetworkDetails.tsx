@@ -740,6 +740,7 @@ export default function FabricNetworkDetails({ network }: FabricNetworkDetailsPr
 	const { data: networkMap, isLoading: networkMapLoading } = useQuery({
 		...getNetworksFabricByIdMapOptions({ path: { id: Number(id) }, query: { checkHealth: true } }),
 		enabled: !!id,
+		refetchInterval: 60000,
 	})
 
 	if (fabricOrgsLoading || channelConfigLoading || currentChannelConfigLoading || nodesLoading || networkNodesLoading) {

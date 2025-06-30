@@ -113,7 +113,7 @@ type NodeMapInfo struct {
 	Role      string  `json:"role"` // peer, orderer, validator, etc.
 	Healthy   bool    `json:"healthy"`
 	Latency   string  `json:"latency"`   // e.g., "1.2ms"
-	LatencyMs int64   `json:"latencyMs"` // e.g., 1
+	LatencyNS int64   `json:"latencyNs"` // e.g., 1
 	Error     string  `json:"error,omitempty"`
 	Mine      bool    `json:"mine"`
 }
@@ -511,7 +511,7 @@ func (s *NetworkService) GetNetworkMap(ctx context.Context, networkID int64, che
 				results[i] = node
 				results[i].Healthy = res.Success
 				results[i].Latency = res.Latency.String()
-				results[i].LatencyMs = res.Latency.Milliseconds()
+				results[i].LatencyNS = res.Latency.Nanoseconds()
 				if res.Error != nil {
 					results[i].Error = res.Error.Error()
 				}

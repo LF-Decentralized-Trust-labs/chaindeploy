@@ -1993,7 +1993,7 @@ export type ServiceNodeMapInfo = {
     /**
      * e.g., 1
      */
-    latencyMs?: number;
+    latencyNs?: number;
     mine?: boolean;
     /**
      * Only for fabric and if mine
