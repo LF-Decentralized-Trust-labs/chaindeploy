@@ -1,4 +1,5 @@
 import type { ServiceNetworkMap } from '@/api/client/types.gen'
+import type { ServiceNodeMapInfo } from '@/api/client/types.gen'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -6,6 +7,9 @@ import { BaseEdge, getSmoothStepPath, type EdgeProps } from '@xyflow/react'
 import React, { useCallback, useEffect } from 'react'
 import ReactFlow, { addEdge, Background, Controls, Edge, EdgeLabelRenderer, Handle, MiniMap, Node, Position, useEdgesState, useNodesState } from 'reactflow'
 import 'reactflow/dist/style.css'
+
+// Type alias for node params used in PeerNode/OrdererNode
+export type NetworkMapNodeParams = ServiceNodeMapInfo
 
 interface NetworkMapProps {
 	map: ServiceNetworkMap | undefined
@@ -89,13 +93,14 @@ export function AnimatedSVGEdge({ id, sourceX, sourceY, targetX, targetY, source
 }
 
 // Peer node
-const PeerNode = ({ data }: any) => (
+const PeerNode = ({ data }: { data: NetworkMapNodeParams }) => (
 	<div className="rounded-lg border bg-background shadow p-2 min-w-[120px] max-w-[160px] flex flex-col items-center">
 		<Handle type="target" position={Position.Left} id="peer-in" className="!bg-primary" isConnectable={true} />
 		<div className="font-bold text-sm mb-0.5 truncate w-full text-center">{data.id || data.host}</div>
 		<div className="text-[10px] mb-1 truncate w-full text-center">
 			{data.host}:{data.port}
 		</div>
+		<div className="text-[10px] mb-1 truncate w-full text-center">{data.mspId}</div>
 		<Badge variant="outline" className="mb-0.5 capitalize text-xs px-2 py-0.5">
 			Peer
 		</Badge>
@@ -107,13 +112,14 @@ const PeerNode = ({ data }: any) => (
 )
 
 // Orderer node
-const OrdererNode = ({ data }: any) => (
+const OrdererNode = ({ data }: { data: NetworkMapNodeParams }) => (
 	<div className="rounded-lg border bg-background shadow p-2 min-w-[120px] max-w-[160px] flex flex-col items-center relative">
 		<Handle type="target" position={Position.Left} id="orderer-in" className="!bg-black" isConnectable={true} />
 		<div className="font-bold text-sm mb-0.5 truncate w-full text-center">{data.id || data.host}</div>
 		<div className="text-[10px] mb-1 truncate w-full text-center">
 			{data.host}:{data.port}
 		</div>
+		<div className="text-[10px] mb-1 truncate w-full text-center">{data.mspId}</div>
 		<Badge variant="outline" className="mb-0.5 capitalize text-xs px-2 py-0.5">
 			Orderer
 		</Badge>
@@ -129,7 +135,7 @@ const ChainlaunchNode = () => (
 	<div className="rounded-lg border-2 border-primary bg-background shadow-lg p-4 min-w-[140px] max-w-[180px] flex flex-col items-center relative">
 		<Handle type="target" position={Position.Left} id="chainlaunch-in" className="!bg-primary" isConnectable={true} />
 		<span className="font-bold text-lg text-primary mb-1">Chainlaunch</span>
-		<span className="text-xs text-muted-foreground">Coordinator</span>
+		<span className="text-xs text-muted-foreground">Instance</span>
 		<Handle type="source" position={Position.Right} id="chainlaunch-out" className="!bg-primary" isConnectable={true} />
 	</div>
 )
