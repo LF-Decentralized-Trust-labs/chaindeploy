@@ -68,12 +68,16 @@ export function MetadataForm({
 	loading,
 	selectedKey,
 	restoredOperation,
+	paramValues: controlledParamValues,
+	setParamValues: controlledSetParamValues,
 }: {
 	metadata: any
 	onSubmit: (txName: string, args: string[], type: 'invoke' | 'query') => void
 	loading: boolean
 	selectedKey: any
 	restoredOperation?: any
+	paramValues?: Record<string, string>
+	setParamValues?: (v: Record<string, string>) => void
 }) {
 	const contracts = useMemo(() => Object.keys(metadata.contracts || {}), [metadata])
 	const [selectedContract, setSelectedContract] = useState<string | undefined>(contracts[0])
@@ -81,7 +85,9 @@ export function MetadataForm({
 	const transactions = useMemo(() => contract?.transactions || [], [contract])
 	const [selectedTx, setSelectedTx] = useState<string | undefined>(transactions[0]?.name)
 	const tx = useMemo(() => transactions.find((t: any) => t.name === selectedTx), [transactions, selectedTx])
-	const [paramValues, setParamValues] = useState<Record<string, string>>({})
+	const [internalParamValues, setInternalParamValues] = useState<Record<string, string>>({})
+	const paramValues = controlledParamValues ?? internalParamValues
+	const setParamValues = controlledSetParamValues ?? setInternalParamValues
 
 	// Restore state from restoredOperation
 	useEffect(() => {
@@ -94,14 +100,18 @@ export function MetadataForm({
 				if (tx) {
 					setSelectedContract(contractName)
 					setSelectedTx(tx.name)
-					const argsArr = Array.isArray(restoredOperation.args)
-						? restoredOperation.args
-						: typeof restoredOperation.args === 'string'
-							? restoredOperation.args.split(',').map((s: string) => s.trim())
-							: []
-					const paramObj: Record<string, string> = {}
-					for (const p of tx.parameters || []) {
-						paramObj[p.name] = argsArr[p.name] ?? ''
+					let paramObj: Record<string, string> = {}
+					if (restoredOperation.paramValues) {
+						paramObj = { ...restoredOperation.paramValues }
+					} else {
+						const argsArr = Array.isArray(restoredOperation.args)
+							? restoredOperation.args
+							: typeof restoredOperation.args === 'string'
+								? restoredOperation.args.split(',').map((s: string) => s.trim())
+								: []
+						for (const p of tx.parameters || []) {
+							paramObj[p.name] = argsArr[p.name] ?? ''
+						}
 					}
 					setParamValues(paramObj)
 					found = true
@@ -112,13 +122,13 @@ export function MetadataForm({
 				setParamValues({})
 			}
 		}
-	}, [restoredOperation, metadata])
+	}, [restoredOperation, metadata, setParamValues])
 
 	const handleParamChange = useCallback(
 		(name: string, v: string) => {
 			setParamValues({ ...paramValues, [name]: v })
 		},
-		[paramValues]
+		[paramValues, setParamValues]
 	)
 
 	const handleAction = useCallback(

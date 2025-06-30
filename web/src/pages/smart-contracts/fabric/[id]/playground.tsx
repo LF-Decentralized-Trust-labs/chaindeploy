@@ -4,9 +4,10 @@ import { PlaygroundCore } from '@/components/editor/CodeEditor/Playground'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { useQuery } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export default function ChaincodePlaygroundPage() {
 	const { id } = useParams<{ id: string }>()
@@ -34,6 +35,12 @@ export default function ChaincodePlaygroundPage() {
 	})
 	const metadata = useMemo(() => (metadataQuery.data?.result ? JSON.parse(metadataQuery.data.result as string) : undefined), [metadataQuery.data])
 	const networkId = useMemo(() => data?.chaincode?.network_id || 0, [data])
+	useEffect(() => {
+		if (metadataQuery.data?.result) {
+			setMode('metadata')
+		}
+	}, [metadataQuery.data])
+	const [paramValues, setParamValues] = useState<Record<string, string>>({})
 
 	// Load state from localStorage on mount
 	useEffect(() => {
@@ -44,6 +51,7 @@ export default function ChaincodePlaygroundPage() {
 				setFn(parsed.fn || '')
 				setArgs(parsed.args || '')
 				setSelectedKey(parsed.selectedKey)
+				setParamValues(parsed.paramValues || {})
 				setResponses(parsed.responses || [])
 			} catch {}
 		}
@@ -52,76 +60,91 @@ export default function ChaincodePlaygroundPage() {
 
 	// Save state to localStorage on change
 	useEffect(() => {
-		try {
-			localStorage.setItem(
-				STORAGE_KEY,
-				JSON.stringify({
-					fn,
-					args,
-					selectedKey,
-					responses: responses.slice(0, 10),
-				})
-			)
-		} catch {}
+		const saveToStorage = () => {
+			try {
+				localStorage.setItem(
+					STORAGE_KEY,
+					JSON.stringify({
+						fn,
+						args,
+						selectedKey,
+						responses: responses.slice(0, 10),
+						paramValues,
+					})
+				)
+			} catch {}
+		}
+
+		// Only save if we have actual data (not on initial mount)
+		if (fn || args || selectedKey || responses.length > 0) {
+			saveToStorage()
+		}
 	}, [fn, args, selectedKey, responses, STORAGE_KEY])
 
 	const sortedResponses = useMemo(() => {
 		return responses.slice().sort((a, b) => b.timestamp - a.timestamp)
 	}, [responses])
 
-	const handleInvoke = async (fn: string, args: string, selectedKeyParam?: { orgId: number; keyId: number }) => {
-		if (!chaincodeId) return
-		setLoadingInvoke(true)
-		const toastId = toast.loading('Invoking...')
-		const parsedArgs = typeof args === 'string' ? args.trim() ? JSON.parse(args) : [] : typeof args === 'object' ? args : []
-		try {
-			const res = await postScFabricChaincodesByChaincodeIdInvoke({
-				path: { chaincodeId },
-				body: { function: fn, args: parsedArgs, key_id: selectedKeyParam?.keyId.toString() },
-			})
-			setResponses((prev) => [{ type: 'invoke', fn, args: parsedArgs, selectedKey: selectedKeyParam, result: res.data, timestamp: Date.now() }, ...prev])
-		} catch (e: any) {
-			toast.error(e?.message || 'Invoke failed')
-			setResponses((prev) => [{ type: 'invoke', fn, args: parsedArgs, selectedKey: selectedKeyParam, error: e?.message || e, timestamp: Date.now() }, ...prev])
-		} finally {
-			setLoadingInvoke(false)
-			toast.dismiss(toastId)
-		}
-	}
-
-	const handleQuery = async (fn: string, args: string, selectedKeyParam?: { orgId: number; keyId: number }) => {
-		if (!chaincodeId) return
-		setLoadingQuery(true)
-		const toastId = toast.loading('Querying...')
-		const parsedArgs = typeof args === 'string' ? args.trim() ? JSON.parse(args) : [] : typeof args === 'object' ? args : []
-		try {
-			const res = await postScFabricChaincodesByChaincodeIdQuery({
-				path: { chaincodeId },
-				body: { function: fn, args: parsedArgs, key_id: selectedKeyParam?.keyId.toString() },
-			})
-			if (res.error) {
-				setResponses((prev) => [{ type: 'query', fn, args: parsedArgs, selectedKey: selectedKeyParam, error: res.error.message, timestamp: Date.now() }, ...prev])
-				return
+	const handleInvoke = useCallback(
+		async (fn: string, args: string, selectedKeyParam?: { orgId: number; keyId: number }, paramValues?: Record<string, string>) => {
+			if (!chaincodeId) return
+			setLoadingInvoke(true)
+			const toastId = toast.loading('Invoking...')
+			const parsedArgs = typeof args === 'string' ? (args.trim() ? JSON.parse(args) : []) : typeof args === 'object' ? args : []
+			try {
+				const res = await postScFabricChaincodesByChaincodeIdInvoke({
+					path: { chaincodeId },
+					body: { function: fn, args: parsedArgs, key_id: selectedKeyParam?.keyId.toString() },
+				})
+				setResponses((prev) => [{ type: 'invoke', fn, args: parsedArgs, selectedKey: selectedKeyParam, result: res.data, timestamp: Date.now(), paramValues }, ...prev])
+			} catch (e: any) {
+				toast.error(e?.message || 'Invoke failed')
+				setResponses((prev) => [{ type: 'invoke', fn, args: parsedArgs, selectedKey: selectedKeyParam, error: e?.message || e, timestamp: Date.now(), paramValues }, ...prev])
+			} finally {
+				setLoadingInvoke(false)
+				toast.dismiss(toastId)
 			}
-			setResponses((prev) => [{ type: 'query', fn, args: parsedArgs, selectedKey: selectedKeyParam, result: res.data, timestamp: Date.now() }, ...prev])
-		} catch (e: any) {
-			toast.error(e?.message || 'Query failed')
-			setResponses((prev) => [{ type: 'query', fn, args: parsedArgs, selectedKey: selectedKeyParam, error: e?.message || e, timestamp: Date.now() }, ...prev])
-		} finally {
-			setLoadingQuery(false)
-			toast.dismiss(toastId)
-		}
-	}
+		},
+		[chaincodeId]
+	)
 
-	const handleDeleteResponse = (timestamp: number) => {
+	const handleQuery = useCallback(
+		async (fn: string, args: string, selectedKeyParam?: { orgId: number; keyId: number }, paramValues?: Record<string, string>) => {
+			if (!chaincodeId) return
+			setLoadingQuery(true)
+			const toastId = toast.loading('Querying...')
+			const parsedArgs = typeof args === 'string' ? (args.trim() ? args.split(',').map((s: string) => s.trim()) : []) : typeof args === 'object' ? args : []
+			try {
+				const res = await postScFabricChaincodesByChaincodeIdQuery({
+					path: { chaincodeId },
+					body: { function: fn, args: parsedArgs, key_id: selectedKeyParam?.keyId.toString() },
+				})
+				if (res.error) {
+					setResponses((prev) => [{ type: 'query', fn, args: parsedArgs, selectedKey: selectedKeyParam, error: res.error.message, timestamp: Date.now(), paramValues }, ...prev])
+					return
+				}
+				setResponses((prev) => [{ type: 'query', fn, args: parsedArgs, selectedKey: selectedKeyParam, result: res.data, timestamp: Date.now(), paramValues }, ...prev])
+			} catch (e: any) {
+				toast.error(e?.message || 'Query failed')
+				setResponses((prev) => [{ type: 'query', fn, args: parsedArgs, selectedKey: selectedKeyParam, error: e?.message || e, timestamp: Date.now(), paramValues }, ...prev])
+			} finally {
+				setLoadingQuery(false)
+				toast.dismiss(toastId)
+			}
+		},
+		[chaincodeId]
+	)
+
+	const handleDeleteResponse = useCallback((timestamp: number) => {
 		setResponses((prev) => prev.filter((op) => op.timestamp !== timestamp))
-	}
+	}, [])
 
-	const restoreOnly = (resp: { fn: string; args: string; selectedKey?: { orgId: number; keyId: number } }) => {
+	const restoreOnly = useCallback((resp: { fn: string; args: string; selectedKey?: { orgId: number; keyId: number }; paramValues?: Record<string, string> }) => {
 		setFn(resp.fn)
 		setArgs(resp.args)
+		if (resp.paramValues) setParamValues(resp.paramValues)
 		if (resp.selectedKey) setSelectedKey(resp.selectedKey)
-	}
+	}, [])
 
 	return (
 		<div className="p-8 max-w-full mx-auto">
@@ -129,17 +152,25 @@ export default function ChaincodePlaygroundPage() {
 				Back
 			</Button>
 			<h1 className="text-2xl font-bold mb-2">Chaincode Playground</h1>
-			<div className="mb-4 text-muted-foreground">{data?.chaincode?.name ? `Chaincode: ${data.chaincode.name}` : 'Loading...'}</div>
+			<div className="mb-4 text-muted-foreground">{isLoading ? <Skeleton className="h-6 w-48 mb-2" /> : data?.chaincode?.name ? `Chaincode: ${data.chaincode.name}` : 'Loading...'}</div>
 
-			{metadataQuery.isLoading && <div className="mb-4">Loading metadata...</div>}
-			{metadataQuery.error && mode === 'metadata' && (
+			{(isLoading || metadataQuery.isLoading) && (
+				<div className="space-y-4 mb-4">
+					<Skeleton className="h-8 w-1/3" />
+					<Skeleton className="h-6 w-1/2" />
+					<Skeleton className="h-96 w-full" />
+				</div>
+			)}
+
+			{metadataQuery.error && mode === 'metadata' && !metadataQuery.isLoading && (
 				<Alert variant="destructive" className="mb-4">
 					Metadata unavailable: {metadataQuery.error.message}
 				</Alert>
 			)}
-			{mode === 'metadata' && metadata ? (
+
+			{!(isLoading || metadataQuery.isLoading) && (
 				<PlaygroundCore
-					mode="metadata"
+					mode={mode}
 					metadata={metadata}
 					onMetadataSubmit={(txName, args) => {
 						handleInvoke(txName, JSON.stringify(args), selectedKey)
@@ -155,31 +186,13 @@ export default function ChaincodePlaygroundPage() {
 					restoreOnly={restoreOnly}
 					sortedResponses={sortedResponses}
 					networkId={networkId}
-					fn=""
-					setFn={() => {}}
-					args=""
-					setArgs={() => {}}
-				/>
-			) : null}
-			{mode === 'manual' && (
-				<PlaygroundCore
 					fn={fn}
 					setFn={setFn}
 					args={args}
 					setArgs={setArgs}
-					selectedKey={selectedKey}
-					setSelectedKey={setSelectedKey}
-					responses={responses}
-					loadingInvoke={loadingInvoke}
-					loadingQuery={loadingQuery}
-					handleInvoke={handleInvoke}
-					handleQuery={handleQuery}
-					handleDeleteResponse={handleDeleteResponse}
-					restoreOnly={restoreOnly}
-					sortedResponses={sortedResponses}
-					networkId={networkId}
-					mode="manual"
-					metadata={metadata}
+					setMode={setMode}
+					setParamValues={setParamValues}
+					paramValues={paramValues}
 				/>
 			)}
 		</div>

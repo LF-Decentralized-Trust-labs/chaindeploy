@@ -23,6 +23,7 @@ type Response = {
 	type: 'invoke' | 'query'
 	selectedKey?: { orgId: number; keyId: number }
 	error?: string
+	paramValues?: Record<string, string>
 }
 
 function renderResponseContent(content: any) {
@@ -54,12 +55,14 @@ interface PlaygroundCoreProps {
 	responses: Response[]
 	loadingInvoke: boolean
 	loadingQuery: boolean
-	handleInvoke: (fn: string, args: string, selectedKey: { orgId: number; keyId: number } | undefined) => void
-	handleQuery: (fn: string, args: string, selectedKey: { orgId: number; keyId: number } | undefined) => void
+	handleInvoke: (fn: string, args: string, selectedKey: { orgId: number; keyId: number } | undefined, paramValues?: Record<string, string>) => void
+	handleQuery: (fn: string, args: string, selectedKey: { orgId: number; keyId: number } | undefined, paramValues?: Record<string, string>) => void
 	handleDeleteResponse: (timestamp: number) => void
 	restoreOnly: (resp: { fn: string; args: string; selectedKey?: { orgId: number; keyId: number } }) => void
 	sortedResponses: Response[]
 	networkId: number
+	paramValues?: Record<string, string>
+	setParamValues?: (paramValues: Record<string, string>) => void
 }
 
 export function PlaygroundCore({
@@ -81,6 +84,8 @@ export function PlaygroundCore({
 	mode,
 	setMode,
 	metadata,
+	paramValues,
+	setParamValues,
 }: PlaygroundCoreProps & {
 	mode?: 'manual' | 'metadata'
 	setMode?: (mode: 'manual' | 'metadata') => void
@@ -88,15 +93,12 @@ export function PlaygroundCore({
 	onMetadataSubmit?: (txName: string, args: any) => void
 }) {
 	const [copied, setCopied] = useState<{ [timestamp: number]: boolean }>({})
-	const [internalMode, setInternalMode] = useState<'manual' | 'metadata'>(metadata ? 'metadata' : 'manual')
-	const isControlled = useMemo(() => typeof mode !== 'undefined' && typeof setMode === 'function', [mode, setMode])
-	const currentMode = useMemo(() => (isControlled ? mode : internalMode), [isControlled, mode, internalMode])
+	const currentMode = useMemo(() => (mode ? mode : 'manual'), [mode])
 	const handleSetMode = useCallback(
 		(m: 'manual' | 'metadata') => {
-			if (isControlled) setMode(m)
-			else setInternalMode(m)
+			if (mode) setMode(m)
 		},
-		[isControlled, setMode, setInternalMode]
+		[mode, setMode]
 	)
 
 	// MetadataForm state management
@@ -125,6 +127,7 @@ export function PlaygroundCore({
 	// If metadata is present, show tabs to switch modes
 	const showTabs = useMemo(() => !!metadata, [metadata])
 
+	// In PlaygroundCore, track paramValues state for metadata mode
 	return (
 		<div className="w-full max-w-full mx-auto py-8">
 			<div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -159,11 +162,11 @@ export function PlaygroundCore({
 								</div>
 							</div>
 							<div className="flex gap-2 mt-2">
-								<Button className="flex-1" onClick={() => handleInvoke(fn, args, selectedKey)} disabled={loadingInvoke || !fn || !selectedKey}>
+								<Button className="flex-1" onClick={() => handleInvoke(fn, args, selectedKey, paramValues)} disabled={loadingInvoke || !fn || !selectedKey}>
 									{loadingInvoke ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <PlayCircle className="h-4 w-4 mr-2" />}
 									Invoke
 								</Button>
-								<Button className="flex-1" onClick={() => handleQuery(fn, args, selectedKey)} disabled={loadingQuery || !fn || !selectedKey} variant="secondary">
+								<Button className="flex-1" onClick={() => handleQuery(fn, args, selectedKey, paramValues)} disabled={loadingQuery || !fn || !selectedKey} variant="secondary">
 									{loadingQuery ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
 									Query
 								</Button>
@@ -175,13 +178,15 @@ export function PlaygroundCore({
 							metadata={metadata}
 							onSubmit={(txName, args, type) => {
 								if (type === 'invoke') {
-									handleInvoke(txName, JSON.stringify(args), selectedKey)
+									handleInvoke(txName, JSON.stringify(args), selectedKey, { ...paramValues })
 								} else {
-									handleQuery(txName, JSON.stringify(args), selectedKey)
+									handleQuery(txName, JSON.stringify(args), selectedKey, { ...paramValues })
 								}
 							}}
 							loading={loadingInvoke || loadingQuery}
 							selectedKey={selectedKey}
+							paramValues={paramValues}
+							setParamValues={setParamValues}
 						/>
 					)}
 				</div>
@@ -321,7 +326,7 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 	const sortedResponses = useMemo(() => responses.slice().sort((a, b) => b.timestamp - a.timestamp), [responses])
 
 	const handleInvoke = useCallback(
-		async (fnParam: string, argsParam: string, selectedKeyParam: { orgId: number; keyId: number } | undefined) => {
+		async (fnParam: string, argsParam: string, selectedKeyParam: any, paramValuesObj?: Record<string, string>) => {
 			if (!selectedKeyParam) return
 			setLoadingInvoke(true)
 			const toastId = toast.loading('Invoking...')
@@ -339,16 +344,22 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 				let nextResponses
 				console.log('res', res)
 				if (res.error) {
-					nextResponses = [{ type: 'invoke', result: res.error.message, timestamp: Date.now(), fn: fnParam, args: argsParam, selectedKey: selectedKeyParam }, ...responses]
+					nextResponses = [
+						{ type: 'invoke', result: res.error.message, timestamp: Date.now(), fn: fnParam, args: argsParam, selectedKey: selectedKeyParam, paramValues: paramValuesObj },
+						...responses,
+					]
 					setResponses(nextResponses)
 				} else {
-					nextResponses = [{ type: 'invoke', result: res.data, timestamp: Date.now(), fn: fnParam, args: argsParam, selectedKey: selectedKeyParam }, ...responses]
+					nextResponses = [
+						{ type: 'invoke', result: res.data, timestamp: Date.now(), fn: fnParam, args: argsParam, selectedKey: selectedKeyParam, paramValues: paramValuesObj },
+						...responses,
+					]
 					setResponses(nextResponses)
 				}
 			} catch (err: any) {
 				toast.dismiss(toastId)
 				const msg = err?.response?.data?.message || err?.message || 'Unknown error'
-				const nextResponses = [{ type: 'invoke', result: msg, timestamp: Date.now(), fn: fnParam, args: argsParam } as Response, ...responses]
+				const nextResponses = [{ type: 'invoke', result: msg, timestamp: Date.now(), fn: fnParam, args: argsParam, paramValues: paramValuesObj } as Response, ...responses]
 				setResponses(nextResponses)
 			} finally {
 				setLoadingInvoke(false)
@@ -358,7 +369,7 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 	)
 
 	const handleQuery = useCallback(
-		async (fnParam: string, argsParam: string, selectedKeyParam: { orgId: number; keyId: number } | undefined) => {
+		async (fnParam: string, argsParam: string, selectedKeyParam: any, paramValuesObj?: Record<string, string>) => {
 			if (!selectedKeyParam) return
 			setLoadingQuery(true)
 			const toastId = toast.loading('Querying...')
@@ -374,18 +385,20 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 				})
 				toast.dismiss(toastId)
 				let nextResponses
-				console.log('res', res)
 				if (res.error) {
-					nextResponses = [{ type: 'query', result: res.error.message, timestamp: Date.now(), fn: fnParam, args: argsParam, selectedKey: selectedKeyParam }, ...responses]
+					nextResponses = [
+						{ type: 'query', result: res.error.message, timestamp: Date.now(), fn: fnParam, args: argsParam, selectedKey: selectedKeyParam, paramValues: paramValuesObj },
+						...responses,
+					]
 					setResponses(nextResponses)
 				} else {
-					nextResponses = [{ type: 'query', result: res.data, timestamp: Date.now(), fn: fnParam, args: argsParam, selectedKey: selectedKeyParam }, ...responses]
+					nextResponses = [{ type: 'query', result: res.data, timestamp: Date.now(), fn: fnParam, args: argsParam, selectedKey: selectedKeyParam, paramValues: paramValuesObj }, ...responses]
 					setResponses(nextResponses)
 				}
 			} catch (err: any) {
 				toast.dismiss(toastId)
 				const msg = err?.response?.data?.message || err?.message || 'Unknown error'
-				const nextResponses = [{ type: 'query', result: msg, timestamp: Date.now(), fn: fnParam, args: argsParam } as Response, ...responses]
+				const nextResponses = [{ type: 'query', result: msg, timestamp: Date.now(), fn: fnParam, args: argsParam, paramValues: paramValuesObj } as Response, ...responses]
 				setResponses(nextResponses)
 			} finally {
 				setLoadingQuery(false)
@@ -405,7 +418,7 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 	const handleDeleteResponse = useCallback((timestamp: number) => {
 		setResponses((prev) => prev.filter((op) => op.timestamp !== timestamp))
 	}, [])
-
+	const [paramValues, setParamValues] = useState<Record<string, string>>({})
 	return (
 		<PlaygroundCore
 			fn={fn}
@@ -423,6 +436,8 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 			restoreOnly={restoreOnly}
 			sortedResponses={sortedResponses}
 			networkId={networkId}
+			paramValues={paramValues}
+			setParamValues={setParamValues}
 		/>
 	)
 }

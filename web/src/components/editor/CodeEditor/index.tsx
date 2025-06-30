@@ -2,9 +2,7 @@ import { getChaincodeProjectsByIdCommits, getProjectsByProjectIdFilesEntries, ge
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { useQuery } from '@tanstack/react-query'
 import type { editor } from 'monaco-editor'
-import React, { useCallback, useEffect, useRef, useState } from 'react'
-import type { SyntaxHighlighterProps } from 'react-syntax-highlighter'
-import SyntaxHighlighter from 'react-syntax-highlighter'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { ChatPanel, useStreamingChat } from './ChatPanel'
 import { EditorContent } from './EditorContent'
@@ -13,7 +11,7 @@ import { FileTree } from './FileTree'
 import { LogsPanel } from './LogsPanel'
 import { Playground } from './Playground'
 import type { File } from './types'
-const SyntaxHighlighterComp = SyntaxHighlighter as unknown as React.ComponentType<SyntaxHighlighterProps>
+
 
 interface CodeEditorProps {
 	mode?: 'editor' | 'playground'
