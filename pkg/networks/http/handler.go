@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
+	"github.com/hyperledger/fabric-config/configtx"
 
 	"encoding/base64"
 
@@ -182,14 +183,43 @@ func (h *Handler) FabricNetworkCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Count orderer nodes in external organizations
-	for _, extOrg := range req.Config.ExternalOrdererOrgs {
-		ordererCount += len(extOrg.Consenters)
-	}
-
 	if ordererCount < 3 {
 		writeError(w, http.StatusBadRequest, "insufficient_orderers", "At least 3 orderer nodes are required for a Fabric network")
 		return
+	}
+
+	// Create the Fabric network config
+	// Map HTTP FabricPolicy to configtx.Policy for service layer
+	var appPolicies map[string]configtx.Policy
+	if req.Config.ApplicationPolicies != nil {
+		appPolicies = make(map[string]configtx.Policy)
+		for k, v := range req.Config.ApplicationPolicies {
+			appPolicies[k] = configtx.Policy{
+				Type: v.Type,
+				Rule: v.Rule,
+			}
+		}
+	}
+	var ordererPolicies map[string]configtx.Policy
+	if req.Config.OrdererPolicies != nil {
+		ordererPolicies = make(map[string]configtx.Policy)
+		for k, v := range req.Config.OrdererPolicies {
+			ordererPolicies[k] = configtx.Policy{
+				Type: v.Type,
+				Rule: v.Rule,
+			}
+		}
+	}
+
+	var channelPolicies map[string]configtx.Policy
+	if req.Config.ChannelPolicies != nil {
+		channelPolicies = make(map[string]configtx.Policy)
+		for k, v := range req.Config.ChannelPolicies {
+			channelPolicies[k] = configtx.Policy{
+				Type: v.Type,
+				Rule: v.Rule,
+			}
+		}
 	}
 
 	// Create the Fabric network config
@@ -200,6 +230,9 @@ func (h *Handler) FabricNetworkCreate(w http.ResponseWriter, r *http.Request) {
 		ChannelName:          req.Name,
 		PeerOrganizations:    make([]types.Organization, len(req.Config.PeerOrganizations)),
 		OrdererOrganizations: make([]types.Organization, len(req.Config.OrdererOrganizations)),
+		ApplicationPolicies:  appPolicies,
+		OrdererPolicies:      ordererPolicies,
+		ChannelPolicies:      channelPolicies,
 	}
 
 	// Convert peer organizations
@@ -1221,10 +1254,12 @@ func (h *Handler) ImportBesuNetwork(w http.ResponseWriter, r *http.Request) {
 
 // ConfigUpdateOperationRequest represents a configuration update operation
 // @Description A single configuration update operation
+// ConfigUpdateOperationRequest represents a configuration update operation
+// @Description A single configuration update operation
 type ConfigUpdateOperationRequest struct {
 	// Type is the type of configuration update operation
-	// enum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout
-	Type string `json:"type" validate:"required,oneof=add_org remove_org update_org_msp set_anchor_peers add_consenter remove_consenter update_consenter update_etcd_raft_options update_batch_size update_batch_timeout"`
+	// enum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout,update_application_policy,update_orderer_policy,update_channel_policy,add_orderer_org,remove_orderer_org,update_orderer_org_msp
+	Type string `json:"type" validate:"required,oneof=add_org remove_org update_org_msp set_anchor_peers add_consenter remove_consenter update_consenter update_etcd_raft_options update_batch_size update_batch_timeout update_application_policy update_orderer_policy update_channel_policy update_channel_capability update_orderer_capability update_application_capability add_orderer_org remove_orderer_org update_orderer_org_msp"`
 
 	// Payload contains the operation-specific data
 	// The structure depends on the operation type:
@@ -1238,6 +1273,12 @@ type ConfigUpdateOperationRequest struct {
 	// - update_etcd_raft_options: UpdateEtcdRaftOptionsPayload
 	// - update_batch_size: UpdateBatchSizePayload
 	// - update_batch_timeout: UpdateBatchTimeoutPayload
+	// - update_application_policy: UpdateApplicationPolicyPayload
+	// - update_orderer_policy: UpdateOrdererPolicyPayload
+	// - update_channel_policy: UpdateChannelPolicyPayload
+	// - update_channel_capability: UpdateChannelCapabilityOperation
+	// - update_orderer_capability: UpdateOrdererCapabilityOperation
+	// - update_application_capability: UpdateApplicationCapabilityOperation
 	// @Description The payload for the configuration update operation
 	// @Description Can be one of:
 	// @Description - AddOrgPayload when type is "add_org"
@@ -1250,6 +1291,15 @@ type ConfigUpdateOperationRequest struct {
 	// @Description - UpdateEtcdRaftOptionsPayload when type is "update_etcd_raft_options"
 	// @Description - UpdateBatchSizePayload when type is "update_batch_size"
 	// @Description - UpdateBatchTimeoutPayload when type is "update_batch_timeout"
+	// @Description - UpdateApplicationPolicyPayload when type is "update_application_policy"
+	// @Description - UpdateOrdererPolicyPayload when type is "update_orderer_policy"
+	// @Description - UpdateChannelPolicyPayload when type is "update_channel_policy"
+	// @Description - UpdateChannelCapabilityPayload when type is "update_channel_capability"
+	// @Description - UpdateOrdererCapabilityPayload when type is "update_orderer_capability"
+	// @Description - UpdateApplicationCapabilityPayload when type is "update_application_capability"
+	// @Description - AddOrdererOrgPayload when type is "add_orderer_org"
+	// @Description - RemoveOrdererOrgPayload when type is "remove_orderer_org"
+	// @Description - UpdateOrdererOrgMSPPayload when type is "update_orderer_org_msp"
 	Payload json.RawMessage `json:"payload" validate:"required"`
 }
 
@@ -1411,6 +1461,50 @@ type UpdateBatchTimeoutPayload struct {
 	Timeout string `json:"timeout" validate:"required"` // e.g., "2s"
 }
 
+type UpdateApplicationPolicyPayload struct {
+	PolicyName string       `json:"policy_name" validate:"required"`
+	Policy     FabricPolicy `json:"policy" validate:"required"`
+}
+
+type UpdateOrdererPolicyPayload struct {
+	PolicyName string       `json:"policy_name" validate:"required"`
+	Policy     FabricPolicy `json:"policy" validate:"required"`
+}
+
+type UpdateChannelPolicyPayload struct {
+	PolicyName string       `json:"policy_name" validate:"required"`
+	Policy     FabricPolicy `json:"policy" validate:"required"`
+}
+type UpdateChannelCapabilityOperation struct {
+	Capabilities []string `json:"capability" validate:"min=1"`
+}
+type UpdateOrdererCapabilityOperation struct {
+	Capabilities []string `json:"capability" validate:"min=1"`
+}
+type UpdateApplicationCapabilityOperation struct {
+	Capabilities []string `json:"capability" validate:"min=1"`
+}
+
+// AddOrdererOrgPayload represents the payload for adding a new orderer organization
+type AddOrdererOrgPayload struct {
+	MSPID            string   `json:"msp_id" validate:"required"`
+	TLSRootCerts     []string `json:"tls_root_certs" validate:"required,min=1"`
+	RootCerts        []string `json:"root_certs" validate:"required,min=1"`
+	OrdererEndpoints []string `json:"orderer_endpoints" validate:"required,min=1"`
+}
+
+// RemoveOrdererOrgPayload represents the payload for removing an orderer organization
+type RemoveOrdererOrgPayload struct {
+	MSPID string `json:"msp_id" validate:"required"`
+}
+
+// UpdateOrdererOrgMSPPayload represents the payload for updating an orderer organization's MSP
+type UpdateOrdererOrgMSPPayload struct {
+	MSPID        string   `json:"msp_id" validate:"required"`
+	TLSRootCerts []string `json:"tls_root_certs" validate:"required,min=1"`
+	RootCerts    []string `json:"root_certs" validate:"required,min=1"`
+}
+
 // UpdateFabricNetworkRequest represents a request to update a Fabric network
 type UpdateFabricNetworkRequest struct {
 	Operations []ConfigUpdateOperationRequest `json:"operations" validate:"required,min=1,dive"`
@@ -1433,6 +1527,15 @@ type UpdateFabricNetworkRequest struct {
 // @Success 206 {object} UpdateEtcdRaftOptionsPayload
 // @Success 207 {object} UpdateBatchSizePayload
 // @Success 208 {object} UpdateBatchTimeoutPayload
+// @Success 209 {object} UpdateApplicationPolicyPayload
+// @Success 210 {object} UpdateOrdererPolicyPayload
+// @Success 211 {object} UpdateChannelPolicyPayload
+// @Success 212 {object} UpdateChannelCapabilityOperation
+// @Success 213 {object} UpdateOrdererCapabilityOperation
+// @Success 214 {object} UpdateApplicationCapabilityOperation
+// @Success 215 {object} AddOrdererOrgPayload
+// @Success 216 {object} RemoveOrdererOrgPayload
+// @Success 217 {object} UpdateOrdererOrgMSPPayload
 // @Router /dummy [post]
 func (h *Handler) DummyHandler(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusBadRequest, "dummy_error", "Dummy error")
@@ -1587,6 +1690,96 @@ func (h *Handler) FabricUpdateChannelConfig(w http.ResponseWriter, r *http.Reque
 			// Validate that the timeout is a valid duration
 			if _, err := time.ParseDuration(payload.Timeout); err != nil {
 				writeError(w, http.StatusBadRequest, "validation_error", fmt.Sprintf("Invalid timeout for operation %d: %s", i, err.Error()))
+				return
+			}
+		case "update_application_policy":
+			var payload UpdateApplicationPolicyPayload
+			if err := json.Unmarshal(op.Payload, &payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_payload", fmt.Sprintf("Invalid payload for operation %d: %s", i, err.Error()))
+				return
+			}
+			if err := h.validate.Struct(payload); err != nil {
+				writeError(w, http.StatusBadRequest, "validation_error", fmt.Sprintf("Invalid payload for operation %d: %s", i, err.Error()))
+				return
+			}
+		case "update_orderer_policy":
+			var payload UpdateOrdererPolicyPayload
+			if err := json.Unmarshal(op.Payload, &payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_payload", fmt.Sprintf("Invalid payload for operation %d: %s", i, err.Error()))
+				return
+			}
+			if err := h.validate.Struct(payload); err != nil {
+				writeError(w, http.StatusBadRequest, "validation_error", fmt.Sprintf("Invalid payload for operation %d: %s", i, err.Error()))
+				return
+			}
+		case "update_channel_policy":
+			var payload UpdateChannelPolicyPayload
+			if err := json.Unmarshal(op.Payload, &payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_payload", fmt.Sprintf("Invalid payload for operation %d: %s", i, err.Error()))
+				return
+			}
+			if err := h.validate.Struct(payload); err != nil {
+				writeError(w, http.StatusBadRequest, "validation_error", fmt.Sprintf("Invalid payload for operation %d: %s", i, err.Error()))
+				return
+			}
+		case "update_channel_capability":
+			var payload UpdateChannelCapabilityOperation
+			if err := json.Unmarshal(op.Payload, &payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_payload", fmt.Sprintf("Invalid payload for operation %d: %s", i, err.Error()))
+				return
+			}
+			if err := h.validate.Struct(payload); err != nil {
+				writeError(w, http.StatusBadRequest, "validation_error", fmt.Sprintf("Invalid payload for operation %d: %s", i, err.Error()))
+				return
+			}
+		case "update_orderer_capability":
+			var payload UpdateOrdererCapabilityOperation
+			if err := json.Unmarshal(op.Payload, &payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_payload", fmt.Sprintf("Invalid payload for operation %d: %s", i, err.Error()))
+				return
+			}
+			if err := h.validate.Struct(payload); err != nil {
+				writeError(w, http.StatusBadRequest, "validation_error", fmt.Sprintf("Invalid payload for operation %d: %s", i, err.Error()))
+				return
+			}
+		case "update_application_capability":
+			var payload UpdateApplicationCapabilityOperation
+			if err := json.Unmarshal(op.Payload, &payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_payload", fmt.Sprintf("Invalid payload for operation %d: %s", i, err.Error()))
+				return
+			}
+			if err := h.validate.Struct(payload); err != nil {
+				writeError(w, http.StatusBadRequest, "validation_error", fmt.Sprintf("Invalid payload for operation %d: %s", i, err.Error()))
+				return
+			}
+		case "add_orderer_org":
+			var payload AddOrdererOrgPayload
+			if err := json.Unmarshal(op.Payload, &payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_payload", fmt.Sprintf("Invalid payload for operation %d: %s", i, err.Error()))
+				return
+			}
+			if err := h.validate.Struct(payload); err != nil {
+				writeError(w, http.StatusBadRequest, "validation_error", fmt.Sprintf("Invalid payload for operation %d: %s", i, err.Error()))
+				return
+			}
+		case "remove_orderer_org":
+			var payload RemoveOrdererOrgPayload
+			if err := json.Unmarshal(op.Payload, &payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_payload", fmt.Sprintf("Invalid payload for operation %d: %s", i, err.Error()))
+				return
+			}
+			if err := h.validate.Struct(payload); err != nil {
+				writeError(w, http.StatusBadRequest, "validation_error", fmt.Sprintf("Invalid payload for operation %d: %s", i, err.Error()))
+				return
+			}
+		case "update_orderer_org_msp":
+			var payload UpdateOrdererOrgMSPPayload
+			if err := json.Unmarshal(op.Payload, &payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_payload", fmt.Sprintf("Invalid payload for operation %d: %s", i, err.Error()))
+				return
+			}
+			if err := h.validate.Struct(payload); err != nil {
+				writeError(w, http.StatusBadRequest, "validation_error", fmt.Sprintf("Invalid payload for operation %d: %s", i, err.Error()))
 				return
 			}
 		default:

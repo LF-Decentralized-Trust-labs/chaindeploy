@@ -10,15 +10,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/chainlaunch/chainlaunch/pkg/common/ports"
 	"github.com/chainlaunch/chainlaunch/pkg/db"
+	keymgmtservice "github.com/chainlaunch/chainlaunch/pkg/keymanagement/service"
 	"github.com/chainlaunch/chainlaunch/pkg/logger"
 	"github.com/chainlaunch/chainlaunch/pkg/nodes/service"
 	"github.com/docker/docker/api/types/container"
@@ -64,17 +67,19 @@ type PeerStatus struct {
 
 // ChaincodeService handles chaincode operations
 type ChaincodeService struct {
-	queries     *db.Queries
-	logger      *logger.Logger
-	nodeService *service.NodeService
+	queries              *db.Queries
+	logger               *logger.Logger
+	nodeService          *service.NodeService
+	keyManagementService *keymgmtservice.KeyManagementService
 }
 
 // NewChaincodeService creates a new chaincode service
-func NewChaincodeService(queries *db.Queries, logger *logger.Logger, nodeService *service.NodeService) *ChaincodeService {
+func NewChaincodeService(queries *db.Queries, logger *logger.Logger, nodeService *service.NodeService, keyManagementService *keymgmtservice.KeyManagementService) *ChaincodeService {
 	return &ChaincodeService{
-		queries:     queries,
-		logger:      logger,
-		nodeService: nodeService,
+		queries:              queries,
+		logger:               logger,
+		nodeService:          nodeService,
+		keyManagementService: keyManagementService,
 	}
 }
 
@@ -702,6 +707,11 @@ func (s *ChaincodeService) ApproveChaincodeByDefinition(ctx context.Context, def
 		_ = s.AddChaincodeDefinitionEvent(ctx, definitionID, "approve", eventData)
 		return err
 	}
+	if chaincodeDef.PackageID == "" {
+		eventData := ApproveChaincodeEventData{PeerID: peerID, Result: "failure", ErrorMessage: "package ID is empty"}
+		_ = s.AddChaincodeDefinitionEvent(ctx, definitionID, "approve", eventData)
+		return fmt.Errorf("package ID is empty")
+	}
 	err = peerGateway.Approve(ctx, chaincodeDef)
 	if err != nil {
 		endorseError, ok := err.(*fabricclient.EndorseError)
@@ -1045,21 +1055,49 @@ func (s *ChaincodeService) InvokeChaincode(ctx context.Context, chaincodeId int6
 	if cc == nil {
 		return nil, fmt.Errorf("chaincode not found")
 	}
-	networkName := channel
-	if networkName == "" {
-		networkName = cc.NetworkName
+	// Get MSP ID from key
+	key, err := s.keyManagementService.GetKey(ctx, int(keyID))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get key: %w", err)
 	}
-	peerIDs, err := getFabricPeersForNetwork(s.nodeService, ctx, cc.NetworkID)
-	if err != nil || len(peerIDs) == 0 {
-		return nil, fmt.Errorf("no peers found for network: %w", err)
+	if key.Certificate == nil || *key.Certificate == "" {
+		return nil, fmt.Errorf("key does not have a certificate")
 	}
-	peerID := peerIDs[0]
-
+	cert, err := keymgmtservice.ParseCertificate(*key.Certificate)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse certificate: %w", err)
+	}
+	if len(cert.Subject.Organization) == 0 {
+		return nil, fmt.Errorf("certificate does not contain organization (MSP ID)")
+	}
+	mspID := cert.Subject.Organization[0]
+	// Get all nodes and select a peer with matching MSP ID
+	nodes, err := s.nodeService.GetAllNodes(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get nodes: %w", err)
+	}
+	var matchingPeerIDs []int64
+	for _, node := range nodes.Items {
+		if node.NodeType == "FABRIC_PEER" && node.FabricPeer != nil && node.FabricPeer.MSPID == mspID && node.Platform == "FABRIC" {
+			matchingPeerIDs = append(matchingPeerIDs, node.ID)
+		}
+	}
+	if len(matchingPeerIDs) == 0 {
+		return nil, fmt.Errorf("no peer found for MSP ID: %s", mspID)
+	}
+	// Pick a random peer if more than one
+	rand.Seed(time.Now().UnixNano())
+	peerID := matchingPeerIDs[rand.Intn(len(matchingPeerIDs))]
+	// Use selected peer
 	gateway, conn, err := s.nodeService.GetFabricPeerClientGateway(ctx, peerID, keyID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get peer gateway: %w", err)
 	}
 	defer conn.Close()
+	networkName := channel
+	if networkName == "" {
+		networkName = cc.NetworkName
+	}
 	network := gateway.GetNetwork(networkName)
 	contract := network.GetContract(cc.Name)
 	var result []byte
@@ -1093,30 +1131,83 @@ func (s *ChaincodeService) QueryChaincode(ctx context.Context, chaincodeId int64
 	if cc == nil {
 		return nil, fmt.Errorf("chaincode not found")
 	}
-	networkName := channel
-	if networkName == "" {
-		networkName = cc.NetworkName
+	// Get MSP ID from key
+	key, err := s.keyManagementService.GetKey(ctx, int(keyID))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get key: %w", err)
 	}
-	peerIDs, err := getFabricPeersForNetwork(s.nodeService, ctx, cc.NetworkID)
-	if err != nil || len(peerIDs) == 0 {
-		return nil, fmt.Errorf("no peers found for network: %w", err)
+	if key.Certificate == nil || *key.Certificate == "" {
+		return nil, fmt.Errorf("key does not have a certificate")
 	}
-	peerID := peerIDs[0]
-	gateway, conn, err := s.nodeService.GetFabricPeerClientGateway(ctx, peerID, keyID)
+	cert, err := keymgmtservice.ParseCertificate(*key.Certificate)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse certificate: %w", err)
+	}
+	if len(cert.Subject.Organization) == 0 {
+		return nil, fmt.Errorf("certificate does not contain organization (MSP ID)")
+	}
+	mspID := cert.Subject.Organization[0]
+	// Get all nodes and select a peer with matching MSP ID
+	nodes, err := s.nodeService.GetAllNodes(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get nodes: %w", err)
+	}
+	var matchingPeerIDs []int64
+	for _, node := range nodes.Items {
+		if node.NodeType == "FABRIC_PEER" && node.FabricPeer != nil && node.FabricPeer.MSPID == mspID && node.Platform == "FABRIC" {
+			matchingPeerIDs = append(matchingPeerIDs, node.ID)
+		}
+	}
+	if len(matchingPeerIDs) == 0 {
+		return nil, fmt.Errorf("no peer found for MSP ID: %s", mspID)
+	}
+	// Pick a random peer if more than one
+	rand.Seed(time.Now().UnixNano())
+	peerID := matchingPeerIDs[rand.Intn(len(matchingPeerIDs))]
+	// Use selected peer
+	gatewayFabric, conn, err := s.nodeService.GetFabricPeerClientGateway(ctx, peerID, keyID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get peer gateway: %w", err)
 	}
 	defer conn.Close()
-	network := gateway.GetNetwork(networkName)
-	contract := network.GetContract(cc.Name)
-	var result []byte
-	if transient != nil && len(transient) > 0 {
-		result, err = contract.EvaluateTransaction(function, args...)
-	} else {
-		result, err = contract.EvaluateTransaction(function, args...)
+	networkName := channel
+	if networkName == "" {
+		networkName = cc.NetworkName
 	}
+	network := gatewayFabric.GetNetwork(networkName)
+	contract := network.GetContract(cc.Name)
+	result, err := contract.EvaluateTransaction(function, args...)
 	if err != nil {
-		return nil, err
+		endorseError, ok := err.(*fabricclient.EndorseError)
+		if ok {
+			detailsStr := []string{}
+			for _, detail := range status.Convert(err).Details() {
+				switch detail := detail.(type) {
+				case *gateway.ErrorDetail:
+					detailsStr = append(detailsStr, fmt.Sprintf("- address: %s; mspId: %s; message: %s\n", detail.GetAddress(), detail.GetMspId(), detail.GetMessage()))
+				}
+			}
+			return nil, fmt.Errorf("failed to submit transaction: %s (gRPC status: %s)",
+				endorseError.TransactionError.Error(),
+				strings.Join(detailsStr, "\n"))
+		}
+		statusError := status.Convert(err)
+		if statusError != nil {
+			detailsStr := []string{}
+			for _, detail := range statusError.Details() {
+				switch detail := detail.(type) {
+				case *gateway.ErrorDetail:
+					detailsStr = append(detailsStr, fmt.Sprintf("- address: %s; mspId: %s; message: %s",
+						detail.GetAddress(),
+						detail.GetMspId(),
+						detail.GetMessage()))
+				}
+			}
+			return nil, fmt.Errorf("failed to submit transaction: %s (gRPC status details: %s)",
+				statusError.Message(),
+				strings.Join(detailsStr, "\n"))
+		}
+		return nil, fmt.Errorf("failed to submit transaction: %w", err)
 	}
 	return string(result), nil
 }

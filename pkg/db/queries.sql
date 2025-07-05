@@ -1121,7 +1121,7 @@ VALUES (?, ?)
 RETURNING *;
 
 -- name: ListChaincodes :many
-SELECT * FROM fabric_chaincodes ORDER BY id;
+SELECT * FROM fabric_chaincodes ORDER BY created_at DESC;
 
 -- name: GetChaincode :one
 SELECT fc.*, n.id as network_id, n.name as network_name, n.platform as network_platform

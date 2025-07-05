@@ -1,6 +1,7 @@
 import { getNetworksFabricByIdNodesOptions, getScFabricChaincodesByIdOptions } from '@/api/client/@tanstack/react-query.gen'
 import { getScFabricPeerByPeerIdChaincodeSequence, postScFabricChaincodesByChaincodeIdDefinitions } from '@/api/client/sdk.gen'
 import { ChaincodeDefinitionCard } from '@/components/fabric/ChaincodeDefinitionCard'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
@@ -10,10 +11,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Plus } from 'lucide-react'
+import { Play, Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { useNavigate, useParams, Link } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import * as z from 'zod'
 
@@ -217,25 +218,32 @@ export default function FabricChaincodeDefinitionDetail() {
 
 	return (
 		<div className="flex-1 p-8 w-full">
-			<Button variant="link" onClick={() => navigate(-1)} className="mb-4">
-				Back
-			</Button>
-			{def?.id && (
-				<Link to={`/smart-contracts/fabric/${def.id}/playground`}>
-					<Button variant="secondary" className="mb-4 ml-2">
-						Open Playground
-					</Button>
-				</Link>
-			)}
-			<Card className="p-6 mb-6">
-				<div className="font-semibold text-lg mb-2">{def.name}</div>
-				<div className="text-sm text-muted-foreground mb-1">Network Name: {def.network_name}</div>
-			</Card>
+			{/* Header Section */}
+			<div className="flex items-center justify-between mb-6">
+				<div className="flex items-end gap-2">
+					<div className="font-bold text-2xl">{def.name}</div>
+					<Badge
+						variant="outline"
+						className="text-xs  h-5"
+					>
+						{def.network_name}
+					</Badge>
+				</div>
+				{def?.id && (
+					<Link to={`/smart-contracts/fabric/${def.id}/playground`}>
+						<Button variant="outline">
+							<Play className="w-4 h-4 mr-2" />
+							Playground
+						</Button>
+					</Link>
+				)}
+			</div>
+
 			<div className="flex items-center justify-between mb-4">
 				<div className="font-semibold">Chaincode Definitions</div>
 				<Dialog open={isAddDialogOpen} onOpenChange={handleAddDialogOpenChange}>
 					<DialogTrigger asChild>
-						<Button size="sm" variant="secondary">
+						<Button size="sm">
 							<Plus className="w-4 h-4 mr-2" />
 							Add Definition
 						</Button>

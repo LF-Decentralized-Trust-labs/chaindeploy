@@ -3818,7 +3818,7 @@ func (q *Queries) ListChaincodeDefinitions(ctx context.Context, chaincodeID int6
 }
 
 const ListChaincodes = `-- name: ListChaincodes :many
-SELECT id, name, network_id, created_at FROM fabric_chaincodes ORDER BY id
+SELECT id, name, network_id, created_at FROM fabric_chaincodes ORDER BY created_at DESC
 `
 
 func (q *Queries) ListChaincodes(ctx context.Context) ([]*FabricChaincode, error) {

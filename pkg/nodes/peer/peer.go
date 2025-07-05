@@ -27,9 +27,11 @@ import (
 	"github.com/hyperledger/fabric-gateway/pkg/client"
 	gwidentity "github.com/hyperledger/fabric-gateway/pkg/identity"
 	cb "github.com/hyperledger/fabric-protos-go-apiv2/common"
+	"github.com/hyperledger/fabric-protos-go-apiv2/gateway"
 	"github.com/hyperledger/fabric-protos-go-apiv2/orderer"
 	"github.com/hyperledger/fabric-protos-go-apiv2/peer/lifecycle"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
 	"io"
@@ -2933,16 +2935,46 @@ func (p *LocalPeer) GetBlockByTxID(ctx context.Context, channelID string, txID s
 		return nil, fmt.Errorf("failed to get admin identity: %w", err)
 	}
 
-	gateway, err := client.Connect(adminIdentity, client.WithClientConnection(peerConn), client.WithSign(signer))
+	gatewayFabric, err := client.Connect(adminIdentity, client.WithClientConnection(peerConn), client.WithSign(signer))
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to gateway: %w", err)
 	}
-	defer gateway.Close()
-	network := gateway.GetNetwork(channelID)
+	defer gatewayFabric.Close()
+	network := gatewayFabric.GetNetwork(channelID)
 	contract := network.GetContract(qscc)
 	response, err := contract.EvaluateTransaction(qsccBlockByTxID, channelID, txID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query block by transaction ID: %w", err)
+		endorseError, ok := err.(*client.EndorseError)
+		if ok {
+			detailsStr := []string{}
+			for _, detail := range status.Convert(err).Details() {
+				switch detail := detail.(type) {
+				case *gateway.ErrorDetail:
+					detailsStr = append(detailsStr, fmt.Sprintf("- address: %s; mspId: %s; message: %s\n", detail.GetAddress(), detail.GetMspId(), detail.GetMessage()))
+
+				}
+			}
+			return nil, fmt.Errorf("failed to submit transaction: %s (gRPC status: %s)",
+				endorseError.TransactionError.Error(),
+				strings.Join(detailsStr, "\n"))
+		}
+		statusError := status.Convert(err)
+		if statusError != nil {
+			detailsStr := []string{}
+			for _, detail := range statusError.Details() {
+				switch detail := detail.(type) {
+				case *gateway.ErrorDetail:
+					detailsStr = append(detailsStr, fmt.Sprintf("- address: %s; mspId: %s; message: %s",
+						detail.GetAddress(),
+						detail.GetMspId(),
+						detail.GetMessage()))
+				}
+			}
+			return nil, fmt.Errorf("failed to submit transaction: %s (gRPC status details: %s)",
+				statusError.Message(),
+				strings.Join(detailsStr, "\n"))
+		}
+		return nil, fmt.Errorf("failed to submit transaction: %w", err)
 	}
 
 	// Unmarshal block
@@ -2973,16 +3005,47 @@ func (p *LocalPeer) GetChannelInfoOnPeer(ctx context.Context, channelID string) 
 		return nil, fmt.Errorf("failed to get admin identity: %w", err)
 	}
 
-	gateway, err := client.Connect(adminIdentity, client.WithClientConnection(peerConn), client.WithSign(signer))
+	gatewayFabric, err := client.Connect(adminIdentity, client.WithClientConnection(peerConn), client.WithSign(signer))
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to gateway: %w", err)
 	}
-	defer gateway.Close()
-	network := gateway.GetNetwork(channelID)
+	defer gatewayFabric.Close()
+	network := gatewayFabric.GetNetwork(channelID)
 	contract := network.GetContract(qscc)
 	response, err := contract.EvaluateTransaction(qsccChannelInfo, channelID)
+
 	if err != nil {
-		return nil, fmt.Errorf("failed to query block by transaction ID: %w", err)
+		endorseError, ok := err.(*client.EndorseError)
+		if ok {
+			detailsStr := []string{}
+			for _, detail := range status.Convert(err).Details() {
+				switch detail := detail.(type) {
+				case *gateway.ErrorDetail:
+					detailsStr = append(detailsStr, fmt.Sprintf("- address: %s; mspId: %s; message: %s\n", detail.GetAddress(), detail.GetMspId(), detail.GetMessage()))
+
+				}
+			}
+			return nil, fmt.Errorf("failed to submit transaction: %s (gRPC status: %s)",
+				endorseError.TransactionError.Error(),
+				strings.Join(detailsStr, "\n"))
+		}
+		statusError := status.Convert(err)
+		if statusError != nil {
+			detailsStr := []string{}
+			for _, detail := range statusError.Details() {
+				switch detail := detail.(type) {
+				case *gateway.ErrorDetail:
+					detailsStr = append(detailsStr, fmt.Sprintf("- address: %s; mspId: %s; message: %s",
+						detail.GetAddress(),
+						detail.GetMspId(),
+						detail.GetMessage()))
+				}
+			}
+			return nil, fmt.Errorf("failed to submit transaction: %s (gRPC status details: %s)",
+				statusError.Message(),
+				strings.Join(detailsStr, "\n"))
+		}
+		return nil, fmt.Errorf("failed to submit transaction: %w", err)
 	}
 	p.logger.Info("Channel info", "response", response)
 	bci := &cb.BlockchainInfo{}

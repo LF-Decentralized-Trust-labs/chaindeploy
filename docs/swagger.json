@@ -2440,6 +2440,60 @@
                         "schema": {
                             "$ref": "#/definitions/http.UpdateBatchTimeoutPayload"
                         }
+                    },
+                    "209": {
+                        "description": "",
+                        "schema": {
+                            "$ref": "#/definitions/http.UpdateApplicationPolicyPayload"
+                        }
+                    },
+                    "210": {
+                        "description": "",
+                        "schema": {
+                            "$ref": "#/definitions/http.UpdateOrdererPolicyPayload"
+                        }
+                    },
+                    "211": {
+                        "description": "",
+                        "schema": {
+                            "$ref": "#/definitions/http.UpdateChannelPolicyPayload"
+                        }
+                    },
+                    "212": {
+                        "description": "",
+                        "schema": {
+                            "$ref": "#/definitions/http.UpdateChannelCapabilityOperation"
+                        }
+                    },
+                    "213": {
+                        "description": "",
+                        "schema": {
+                            "$ref": "#/definitions/http.UpdateOrdererCapabilityOperation"
+                        }
+                    },
+                    "214": {
+                        "description": "",
+                        "schema": {
+                            "$ref": "#/definitions/http.UpdateApplicationCapabilityOperation"
+                        }
+                    },
+                    "215": {
+                        "description": "",
+                        "schema": {
+                            "$ref": "#/definitions/http.AddOrdererOrgPayload"
+                        }
+                    },
+                    "216": {
+                        "description": "",
+                        "schema": {
+                            "$ref": "#/definitions/http.RemoveOrdererOrgPayload"
+                        }
+                    },
+                    "217": {
+                        "description": "",
+                        "schema": {
+                            "$ref": "#/definitions/http.UpdateOrdererOrgMSPPayload"
+                        }
                     }
                 }
             }
@@ -11968,6 +12022,41 @@
                 }
             }
         },
+        "http.AddOrdererOrgPayload": {
+            "type": "object",
+            "required": [
+                "msp_id",
+                "orderer_endpoints",
+                "root_certs",
+                "tls_root_certs"
+            ],
+            "properties": {
+                "msp_id": {
+                    "type": "string"
+                },
+                "orderer_endpoints": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "root_certs": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "tls_root_certs": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "http.AddOrgPayload": {
             "type": "object",
             "required": [
@@ -12268,14 +12357,14 @@
             ],
             "properties": {
                 "payload": {
-                    "description": "Payload contains the operation-specific data\nThe structure depends on the operation type:\n- add_org: AddOrgPayload\n- remove_org: RemoveOrgPayload\n- update_org_msp: UpdateOrgMSPPayload\n- set_anchor_peers: SetAnchorPeersPayload\n- add_consenter: AddConsenterPayload\n- remove_consenter: RemoveConsenterPayload\n- update_consenter: UpdateConsenterPayload\n- update_etcd_raft_options: UpdateEtcdRaftOptionsPayload\n- update_batch_size: UpdateBatchSizePayload\n- update_batch_timeout: UpdateBatchTimeoutPayload\n@Description The payload for the configuration update operation\n@Description Can be one of:\n@Description - AddOrgPayload when type is \"add_org\"\n@Description - RemoveOrgPayload when type is \"remove_org\"\n@Description - UpdateOrgMSPPayload when type is \"update_org_msp\"\n@Description - SetAnchorPeersPayload when type is \"set_anchor_peers\"\n@Description - AddConsenterPayload when type is \"add_consenter\"\n@Description - RemoveConsenterPayload when type is \"remove_consenter\"\n@Description - UpdateConsenterPayload when type is \"update_consenter\"\n@Description - UpdateEtcdRaftOptionsPayload when type is \"update_etcd_raft_options\"\n@Description - UpdateBatchSizePayload when type is \"update_batch_size\"\n@Description - UpdateBatchTimeoutPayload when type is \"update_batch_timeout\"",
+                    "description": "Payload contains the operation-specific data\nThe structure depends on the operation type:\n- add_org: AddOrgPayload\n- remove_org: RemoveOrgPayload\n- update_org_msp: UpdateOrgMSPPayload\n- set_anchor_peers: SetAnchorPeersPayload\n- add_consenter: AddConsenterPayload\n- remove_consenter: RemoveConsenterPayload\n- update_consenter: UpdateConsenterPayload\n- update_etcd_raft_options: UpdateEtcdRaftOptionsPayload\n- update_batch_size: UpdateBatchSizePayload\n- update_batch_timeout: UpdateBatchTimeoutPayload\n- update_application_policy: UpdateApplicationPolicyPayload\n- update_orderer_policy: UpdateOrdererPolicyPayload\n- update_channel_policy: UpdateChannelPolicyPayload\n- update_channel_capability: UpdateChannelCapabilityOperation\n- update_orderer_capability: UpdateOrdererCapabilityOperation\n- update_application_capability: UpdateApplicationCapabilityOperation\n@Description The payload for the configuration update operation\n@Description Can be one of:\n@Description - AddOrgPayload when type is \"add_org\"\n@Description - RemoveOrgPayload when type is \"remove_org\"\n@Description - UpdateOrgMSPPayload when type is \"update_org_msp\"\n@Description - SetAnchorPeersPayload when type is \"set_anchor_peers\"\n@Description - AddConsenterPayload when type is \"add_consenter\"\n@Description - RemoveConsenterPayload when type is \"remove_consenter\"\n@Description - UpdateConsenterPayload when type is \"update_consenter\"\n@Description - UpdateEtcdRaftOptionsPayload when type is \"update_etcd_raft_options\"\n@Description - UpdateBatchSizePayload when type is \"update_batch_size\"\n@Description - UpdateBatchTimeoutPayload when type is \"update_batch_timeout\"\n@Description - UpdateApplicationPolicyPayload when type is \"update_application_policy\"\n@Description - UpdateOrdererPolicyPayload when type is \"update_orderer_policy\"\n@Description - UpdateChannelPolicyPayload when type is \"update_channel_policy\"\n@Description - UpdateChannelCapabilityPayload when type is \"update_channel_capability\"\n@Description - UpdateOrdererCapabilityPayload when type is \"update_orderer_capability\"\n@Description - UpdateApplicationCapabilityPayload when type is \"update_application_capability\"\n@Description - AddOrdererOrgPayload when type is \"add_orderer_org\"\n@Description - RemoveOrdererOrgPayload when type is \"remove_orderer_org\"\n@Description - UpdateOrdererOrgMSPPayload when type is \"update_orderer_org_msp\"",
                     "type": "array",
                     "items": {
                         "type": "integer"
                     }
                 },
                 "type": {
-                    "description": "Type is the type of configuration update operation\nenum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout",
+                    "description": "Type is the type of configuration update operation\nenum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout,update_application_policy,update_orderer_policy,update_channel_policy,add_orderer_org,remove_orderer_org,update_orderer_org_msp",
                     "type": "string",
                     "enum": [
                         "add_org",
@@ -12287,7 +12376,16 @@
                         "update_consenter",
                         "update_etcd_raft_options",
                         "update_batch_size",
-                        "update_batch_timeout"
+                        "update_batch_timeout",
+                        "update_application_policy",
+                        "update_orderer_policy",
+                        "update_channel_policy",
+                        "update_channel_capability",
+                        "update_orderer_capability",
+                        "update_application_capability",
+                        "add_orderer_org",
+                        "remove_orderer_org",
+                        "update_orderer_org_msp"
                     ]
                 }
             }
@@ -12320,17 +12418,6 @@
                     "type": "string"
                 },
                 "status": {
-                    "type": "string"
-                }
-            }
-        },
-        "http.ConsenterConfig": {
-            "type": "object",
-            "required": [
-                "id"
-            ],
-            "properties": {
-                "id": {
                     "type": "string"
                 }
             }
@@ -12647,40 +12734,20 @@
                 }
             }
         },
-        "http.ExternalOrgConfig": {
-            "type": "object",
-            "required": [
-                "id",
-                "mspid"
-            ],
-            "properties": {
-                "consenters": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/http.ConsenterConfig"
-                    }
-                },
-                "id": {
-                    "type": "string"
-                },
-                "mspid": {
-                    "type": "string"
-                }
-            }
-        },
         "http.FabricNetworkConfig": {
             "type": "object",
             "properties": {
-                "externalOrdererOrgs": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/http.ExternalOrgConfig"
+                "applicationPolicies": {
+                    "description": "Optional policies",
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/http.FabricPolicy"
                     }
                 },
-                "externalPeerOrgs": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/http.ExternalOrgConfig"
+                "channelPolicies": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/http.FabricPolicy"
                     }
                 },
                 "ordererOrganizations": {
@@ -12689,11 +12756,28 @@
                         "$ref": "#/definitions/http.OrganizationConfig"
                     }
                 },
+                "ordererPolicies": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/http.FabricPolicy"
+                    }
+                },
                 "peerOrganizations": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/http.OrganizationConfig"
                     }
+                }
+            }
+        },
+        "http.FabricPolicy": {
+            "type": "object",
+            "properties": {
+                "rule": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
                 }
             }
         },
@@ -13059,6 +13143,17 @@
                 }
             }
         },
+        "http.RemoveOrdererOrgPayload": {
+            "type": "object",
+            "required": [
+                "msp_id"
+            ],
+            "properties": {
+                "msp_id": {
+                    "type": "string"
+                }
+            }
+        },
         "http.RemoveOrgPayload": {
             "type": "object",
             "required": [
@@ -13160,6 +13255,33 @@
             "properties": {
                 "block": {
                     "$ref": "#/definitions/block.Block"
+                }
+            }
+        },
+        "http.UpdateApplicationCapabilityOperation": {
+            "type": "object",
+            "properties": {
+                "capability": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "http.UpdateApplicationPolicyPayload": {
+            "type": "object",
+            "required": [
+                "policy",
+                "policy_name"
+            ],
+            "properties": {
+                "policy": {
+                    "$ref": "#/definitions/http.FabricPolicy"
+                },
+                "policy_name": {
+                    "type": "string"
                 }
             }
         },
@@ -13318,6 +13440,33 @@
                 },
                 "rpcPort": {
                     "type": "integer"
+                }
+            }
+        },
+        "http.UpdateChannelCapabilityOperation": {
+            "type": "object",
+            "properties": {
+                "capability": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "http.UpdateChannelPolicyPayload": {
+            "type": "object",
+            "required": [
+                "policy",
+                "policy_name"
+            ],
+            "properties": {
+                "policy": {
+                    "$ref": "#/definitions/http.FabricPolicy"
+                },
+                "policy_name": {
+                    "type": "string"
                 }
             }
         },
@@ -13503,6 +13652,60 @@
                 },
                 "name": {
                     "description": "Common fields",
+                    "type": "string"
+                }
+            }
+        },
+        "http.UpdateOrdererCapabilityOperation": {
+            "type": "object",
+            "properties": {
+                "capability": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "http.UpdateOrdererOrgMSPPayload": {
+            "type": "object",
+            "required": [
+                "msp_id",
+                "root_certs",
+                "tls_root_certs"
+            ],
+            "properties": {
+                "msp_id": {
+                    "type": "string"
+                },
+                "root_certs": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "tls_root_certs": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "http.UpdateOrdererPolicyPayload": {
+            "type": "object",
+            "required": [
+                "policy",
+                "policy_name"
+            ],
+            "properties": {
+                "policy": {
+                    "$ref": "#/definitions/http.FabricPolicy"
+                },
+                "policy_name": {
                     "type": "string"
                 }
             }

@@ -12,8 +12,10 @@ interface InstallChaincodeDialogProps {
 	setInstallDialogOpen: (open: boolean) => void
 	availablePeers: ServiceNetworkNode[]
 	definitionId: number
+	onSuccess?: () => void
+	onError?: (error: any) => void
 }
-function InstallChaincodeDialog({ installDialogOpen, setInstallDialogOpen, availablePeers, definitionId }: InstallChaincodeDialogProps) {
+function InstallChaincodeDialog({ installDialogOpen, setInstallDialogOpen, availablePeers, definitionId, onSuccess, onError }: InstallChaincodeDialogProps) {
 	const [selectedPeers, setSelectedPeers] = useState<Set<string>>(new Set())
 
 	const installMutation = useMutation({
@@ -21,6 +23,10 @@ function InstallChaincodeDialog({ installDialogOpen, setInstallDialogOpen, avail
 		onSuccess: () => {
 			toast.success('Chaincode installed successfully')
 			setInstallDialogOpen(false)
+			onSuccess?.()
+		},
+		onError: (error: any) => {
+			onError?.(error)
 		},
 	})
 	return (

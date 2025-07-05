@@ -11,13 +11,19 @@ interface ApproveChaincodeDialogProps {
 	setApproveDialogOpen: (open: boolean) => void
 	availablePeers: ServiceNetworkNode[]
 	definitionId: number
+	onSuccess?: () => void
+	onError?: (error: any) => void
 }
-function ApproveChaincodeDialog({ approveDialogOpen, setApproveDialogOpen, availablePeers, definitionId }: ApproveChaincodeDialogProps) {
+function ApproveChaincodeDialog({ approveDialogOpen, setApproveDialogOpen, availablePeers, definitionId, onSuccess, onError }: ApproveChaincodeDialogProps) {
 	const [selectedPeerId, setSelectedPeerId] = useState<string | null>(null)
 	const approveMutation = useMutation({
 		...postScFabricDefinitionsByDefinitionIdApproveMutation(),
 		onSuccess: () => {
 			toast.success('Chaincode approved successfully')
+			onSuccess?.()
+		},
+		onError: (error: any) => {
+			onError?.(error)
 		},
 	})
 	return (

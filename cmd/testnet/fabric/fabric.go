@@ -270,8 +270,6 @@ func (r *FabricTestnetRunner) Run() error {
 		Config: networkshttp.FabricNetworkConfig{
 			PeerOrganizations:    peerOrgs,
 			OrdererOrganizations: ordererOrgs,
-			ExternalPeerOrgs:     []networkshttp.ExternalOrgConfig{},
-			ExternalOrdererOrgs:  []networkshttp.ExternalOrgConfig{},
 		},
 	}
 

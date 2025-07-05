@@ -3,6 +3,7 @@ import {
 	deleteOrganizationsByIdCrlRevokeSerialMutation,
 	getNetworksFabricByIdChannelConfigOptions,
 	getNetworksFabricByIdCurrentChannelConfigOptions,
+	getNetworksFabricByIdMapOptions,
 	getNetworksFabricByIdNodesOptions,
 	getNodesByIdChannelsByChannelIdChaincodesOptions,
 	getNodesOptions,
@@ -14,7 +15,6 @@ import {
 	postNetworksFabricByIdPeersByPeerIdJoinMutation,
 	postOrganizationsByIdCrlRevokePemMutation,
 	postOrganizationsByIdCrlRevokeSerialMutation,
-	getNetworksFabricByIdMapOptions,
 } from '@/api/client/@tanstack/react-query.gen'
 import { BesuIcon } from '@/components/icons/besu-icon'
 import { FabricIcon } from '@/components/icons/fabric-icon'
@@ -37,166 +37,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { TimeAgo } from '@/components/ui/time-ago'
+import AnalyticsPage from '@/pages/platform/analytics'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Activity, AlertTriangle, Anchor, ArrowLeft, ArrowUpToLine, Blocks, Check, Code, Copy, Loader2, Network, Plus, Settings, ShieldAlert, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import SyntaxHighlighter, { SyntaxHighlighterProps } from 'react-syntax-highlighter'
 import { toast } from 'sonner'
 import * as z from 'zod'
 import { ChannelUpdateForm } from '../nodes/ChannelUpdateForm'
 import { AddMultipleNodesDialog } from './add-multiple-nodes-dialog'
 import { BlockExplorer } from './block-explorer'
 import { ChaincodeManagement } from './chaincode-management'
+import FabricNetworkMetricsTab from './FabricNetworkMetricsTab'
 import { NetworkMap } from './NetworkMap'
-
-const SyntaxHighlighterComp = SyntaxHighlighter as unknown as React.ComponentType<SyntaxHighlighterProps>
 interface FabricNetworkDetailsProps {
 	network: HttpNetworkResponse
-}
-
-// Update the CHAINCODE_INSTRUCTIONS to be a function that takes parameters
-const getChainCodeInstructions = (channelName: string, mspId: string) => {
-	// Get the current origin and append /api/v1
-	const apiUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/v1` : 'http://localhost:8100/api/v1'
-
-	return `
-# Chaincode Installation Guide
-
-## Clone the Repository
-
-First, clone the chaincode repository:
-
-\`\`\`bash
-git clone https://github.com/kfs-learn/chaincode-typescript
-cd chaincode-typescript
-\`\`\`
-
-## Install Required Tools
-
-### Install bun.sh
-
-We need to install bun.sh to run the project:
-
-\`\`\`bash
-curl -fsSL https://bun.sh/install | bash
-\`\`\`
-
-### Install Node.JS using NVM
-
-First, install NVM:
-
-\`\`\`bash
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
-\`\`\`
-
-Then, install Node.JS using NVM:
-
-\`\`\`bash
-nvm install v22
-nvm use default v22
-\`\`\`
-
-### Install Dependencies
-
-Install the project dependencies:
-
-\`\`\`bash
-bun install
-\`\`\`
-
-## Start Chaincode
-
-### Pull Network Configuration
-
-First, set up environment variables and pull the network configuration:
-
-\`\`\`bash
-export CHANNEL_NAME=${channelName}
-export MSP_ID=${mspId}
-export URL="${apiUrl}"
-export CHAINLAUNCH_USER=admin
-export CHAINLAUNCH_PASSWORD="<chainlaunch_password>"
-
-chainlaunch fabric network-config pull \\
-    --network=$CHANNEL_NAME \\
-    --msp-id=$MSP_ID \\
-    --url=$URL \\
-    --username="$CHAINLAUNCH_USER" \\
-    --password="$CHAINLAUNCH_PASSWORD" \\
-    --output=network-config.yaml
-\`\`\`
-
-### Start the Chaincode Service
-
-Set up additional environment variables and start the chaincode:
-
-\`\`\`bash
-export CHANNEL_NAME=${channelName}
-export CHAINCODE_NAME=basic
-export CHAINCODE_ADDRESS="localhost:9996"  # Chaincode listening address
-export USER_NAME=admin
-export MSP_ID=${mspId}
-
-chainlaunch fabric install --local \\
-    --config=$PWD/network-config.yaml \\
-    --channel=$CHANNEL_NAME \\
-    --chaincode=$CHAINCODE_NAME \\
-    -o $MSP_ID -u $USER_NAME \\
-    --policy="OR('\${MSP_ID}.member')" \\
-    --chaincodeAddress="\${CHAINCODE_ADDRESS}" \\
-    --envFile=$PWD/.env
-
-bun run build
-bun start:dev
-\`\`\`
-
-### Initialize and Test the Chaincode
-
-Initialize the ledger and verify it's working:
-
-\`\`\`bash
-export CHANNEL_NAME=${channelName}
-export CHAINCODE_NAME=basic
-export MSP_ID=${mspId}
-
-# Initialize the ledger
-chainlaunch fabric invoke \\
-    --chaincode=$CHAINCODE_NAME \\
-    --config=network-config.yaml \\
-    --channel $CHANNEL_NAME \\
-    --fcn InitLedger \\
-    --user=admin \\
-    --mspID=$MSP_ID
-
-# Query all assets to verify
-chainlaunch fabric query \\
-    --chaincode=$CHAINCODE_NAME \\
-    --config=network-config.yaml \\
-    --channel $CHANNEL_NAME \\
-    --fcn GetAllAssets \\
-    --user=admin \\
-    --mspID=$MSP_ID
-\`\`\`
-`
-}
-
-function CopyButton({ text }: { text: string }) {
-	const [copied, setCopied] = useState(false)
-
-	const copy = () => {
-		navigator.clipboard.writeText(text)
-		setCopied(true)
-		setTimeout(() => setCopied(false), 2000)
-	}
-
-	return (
-		<button onClick={copy} className="absolute right-2 top-2 p-2 hover:bg-muted-foreground/20 rounded-md transition-colors">
-			{copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4 text-muted-foreground" />}
-		</button>
-	)
 }
 
 function CRLManagement({ network, organizations }: { network: HttpNetworkResponse; organizations: any[] }) {
@@ -1011,6 +868,7 @@ export default function FabricNetworkDetails({ network }: FabricNetworkDetailsPr
 								)}
 							</div>
 						}
+						metrics={<FabricNetworkMetricsTab nodes={networkNodes?.nodes ?? []} isLoading={networkNodesLoading} networkName={network.name} />}
 						map={<NetworkMap map={networkMap} isLoading={networkMapLoading} />}
 						channelUpdate={
 							<div className="space-y-6">

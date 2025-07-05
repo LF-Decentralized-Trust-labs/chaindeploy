@@ -47,14 +47,14 @@ interface ChaincodeDefinitionCardProps {
 	refetch?: () => void
 }
 
-const LIFECYCLE_ACTIONS = ['install', 'approve', 'deploy', 'commit', 'undeploy'] as const
+const LIFECYCLE_ACTIONS = ['install', 'approve', 'deploy', 'commit', 'stop'] as const
 type LifecycleAction = (typeof LIFECYCLE_ACTIONS)[number]
 const actionLabels: Record<LifecycleAction, string> = {
 	install: 'Install',
 	approve: 'Approve',
 	deploy: 'Deploy',
 	commit: 'Commit',
-	undeploy: 'Undeploy',
+	stop: 'Stop Chaincode',
 }
 
 export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineComponent = DefinitionTimeline, availablePeers = [], onSuccess, refetch }: ChaincodeDefinitionCardProps) {
@@ -81,7 +81,7 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 	const [commitDialogOpen, setCommitDialogOpen] = useState(false)
 
 	// Undeploy dialog state
-	const [undeployOpen, setUndeployOpen] = useState(false)
+	const [stopOpen, setStopOpen] = useState(false)
 
 	// Docker status helpers
 	const dockerState = useMemo(() => v.docker_info?.state || v.docker_info?.status || v.docker_info?.docker_status || '', [v.docker_info])
@@ -96,6 +96,7 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 			setEditOpen(false)
 			setTimelineKey((prev) => prev + 1)
 			onSuccess?.()
+			refetch?.()
 		},
 		onError: (error: any) => {
 			let message = 'Failed to update chaincode definition.'
@@ -119,11 +120,11 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 	})
 
 	// Undeploy mutation
-	const undeployMutation = useMutation({
+	const stopMutation = useMutation({
 		...postScFabricDefinitionsByDefinitionIdUndeployMutation(),
 		onSuccess: () => {
 			setTimelineKey((prev) => prev + 1)
-			setUndeployOpen(false)
+			setStopOpen(false)
 			onSuccess?.()
 			refetch?.()
 		},
@@ -160,6 +161,7 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 		onSuccess: () => {
 			setDeleteOpen(false)
 			onSuccess?.()
+			refetch?.()
 		},
 	})
 	const handleDelete = useCallback(() => {
@@ -171,13 +173,13 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 	}, [deleteMutation, v.id])
 	const handleDeleteDialogOpenChange = useCallback((open: boolean) => setDeleteOpen(open), [])
 
-	const handleUndeploy = useCallback(async () => {
-		await toast.promise(undeployMutation.mutateAsync({ path: { definitionId: v.id } }), {
-			loading: 'Undeploying chaincode...',
-			success: 'Chaincode undeployed successfully',
-			error: (err) => `Failed to undeploy chaincode: ${err.message || 'Unknown error'}`,
+	const handleStop = useCallback(async () => {
+		await toast.promise(stopMutation.mutateAsync({ path: { definitionId: v.id } }), {
+			loading: 'Stopping chaincode...',
+			success: 'Chaincode stopped successfully',
+			error: (err) => `Failed to stop chaincode: ${err.message || 'Unknown error'}`,
 		})
-	}, [undeployMutation, v.id])
+	}, [stopMutation, v.id])
 
 	// Lifecycle action handler
 	const handleLifecycleAction = useCallback(async (action: string) => {
@@ -203,10 +205,10 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 			} catch (error) {
 				// Error is already handled by toast.promise
 			}
-		} else if (action === 'undeploy') {
-			setUndeployOpen(true)
+		} else if (action === 'stop') {
+			setStopOpen(true)
 		}
-	}, [deployMutation, undeployMutation, v.id])
+	}, [deployMutation, v.id])
 
 	return (
 		<Card key={v.id} className="p-4 mb-4">
@@ -227,15 +229,14 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 						<DropdownMenuItem onClick={() => setDeleteOpen(true)} disabled={deleteMutation.isPending}>
 							{deleteMutation.isPending ? 'Deleting...' : 'Delete'}
 						</DropdownMenuItem>
-						{isDockerRunning ? (
-							<DropdownMenuItem onClick={() => setUndeployOpen(true)} disabled={undeployMutation.isPending}>
-								{undeployMutation.isPending ? 'Undeploying...' : 'Undeploy'}
-							</DropdownMenuItem>
-						) : (
-							<DropdownMenuItem onClick={() => handleLifecycleAction('deploy')} disabled={deployMutation.isPending}>
-								{deployMutation.isPending ? 'Deploying...' : 'Deploy'}
+						{isDockerRunning && (
+							<DropdownMenuItem onClick={() => setStopOpen(true)} disabled={stopMutation.isPending}>
+								{stopMutation.isPending ? 'Stopping...' : 'Stop Chaincode'}
 							</DropdownMenuItem>
 						)}
+						<DropdownMenuItem onClick={() => handleLifecycleAction('deploy')} disabled={deployMutation.isPending}>
+							{deployMutation.isPending ? 'Deploying...' : 'Deploy'}
+						</DropdownMenuItem>
 					</DropdownMenuContent>
 				</DropdownMenu>
 				<AlertDialog open={deleteOpen} onOpenChange={handleDeleteDialogOpenChange}>
@@ -253,19 +254,19 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 						</AlertDialogFooter>
 					</AlertDialogContent>
 				</AlertDialog>
-				<AlertDialog open={undeployOpen} onOpenChange={setUndeployOpen}>
+				<AlertDialog open={stopOpen} onOpenChange={setStopOpen}>
 					<AlertDialogContent>
 						<AlertDialogHeader>
-							<AlertDialogTitle>Undeploy Chaincode</AlertDialogTitle>
+							<AlertDialogTitle>Stop Chaincode</AlertDialogTitle>
 							<AlertDialogDescription>
-								Are you sure you want to undeploy this chaincode definition? This will stop the running chaincode container but keep the definition.
+								Are you sure you want to stop this chaincode? This will stop the running chaincode container but keep the definition.
 							</AlertDialogDescription>
 						</AlertDialogHeader>
-						{undeployMutation.error && <div className="text-red-500 text-sm mb-2">{undeployMutation.error.message}</div>}
+						{stopMutation.error && <div className="text-red-500 text-sm mb-2">{stopMutation.error.message}</div>}
 						<AlertDialogFooter>
-							<AlertDialogCancel onClick={() => setUndeployOpen(false)}>Cancel</AlertDialogCancel>
-							<AlertDialogAction disabled={undeployMutation.isPending} onClick={handleUndeploy}>
-								{undeployMutation.isPending ? 'Undeploying...' : 'Undeploy'}
+							<AlertDialogCancel onClick={() => setStopOpen(false)}>Cancel</AlertDialogCancel>
+							<AlertDialogAction disabled={stopMutation.isPending} onClick={handleStop}>
+								{stopMutation.isPending ? 'Stopping...' : 'Stop Chaincode'}
 							</AlertDialogAction>
 						</AlertDialogFooter>
 					</AlertDialogContent>
@@ -304,19 +305,9 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 				<span className="font-medium">Chaincode Address:</span> {v.chaincode_address}
 			</div>
 			<div className="mt-2 flex gap-2">
-				<Button size="sm" variant="outline" onClick={handleEdit}>
-					Edit
+				<Button key="deploy" size="sm" variant="default" onClick={() => handleLifecycleAction('deploy')} disabled={deployMutation.isPending}>
+					{deployMutation.isPending ? 'Deploying...' : 'Deploy'}
 				</Button>
-				{!isDockerRunning && (
-					<Button key="deploy" size="sm" variant="default" onClick={() => handleLifecycleAction('deploy')} disabled={deployMutation.isPending}>
-						{deployMutation.isPending ? 'Deploying...' : 'Deploy'}
-					</Button>
-				)}
-				{isDockerRunning && (
-					<Button key="undeploy" size="sm" variant="destructive" onClick={() => handleLifecycleAction('undeploy')} disabled={undeployMutation.isPending}>
-						{undeployMutation.isPending ? 'Undeploying...' : 'Undeploy'}
-					</Button>
-				)}
 				{['install', 'approve', 'commit'].map((action) => (
 					<Button key={action} size="sm" variant="default" onClick={() => handleLifecycleAction(action)}>
 						{actionLabels[action as LifecycleAction]}
@@ -407,11 +398,11 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 				</DialogContent>
 			</Dialog>
 			{/* Install Dialog */}
-			<InstallChaincodeDialog installDialogOpen={installDialogOpen} setInstallDialogOpen={setInstallDialogOpen} availablePeers={availablePeers} definitionId={v.id} />
+			<InstallChaincodeDialog installDialogOpen={installDialogOpen} setInstallDialogOpen={setInstallDialogOpen} availablePeers={availablePeers} definitionId={v.id} onSuccess={() => refetch?.()} onError={(error) => refetch?.()} />
 			{/* Approve Dialog */}
-			<ApproveChaincodeDialog approveDialogOpen={approveDialogOpen} setApproveDialogOpen={setApproveDialogOpen} availablePeers={availablePeers} definitionId={v.id} />
+			<ApproveChaincodeDialog approveDialogOpen={approveDialogOpen} setApproveDialogOpen={setApproveDialogOpen} availablePeers={availablePeers} definitionId={v.id} onSuccess={() => refetch?.()} onError={(error) => refetch?.()} />
 			{/* Commit Dialog */}
-			<CommitChaincodeDialog commitDialogOpen={commitDialogOpen} setCommitDialogOpen={setCommitDialogOpen} availablePeers={availablePeers} definitionId={v.id} />
+			<CommitChaincodeDialog commitDialogOpen={commitDialogOpen} setCommitDialogOpen={setCommitDialogOpen} availablePeers={availablePeers} definitionId={v.id} onSuccess={() => refetch?.()} onError={(error) => refetch?.()} />
 			<div className="mt-4">
 				<div className="text-sm font-medium mb-2">Timeline</div>
 				<DefinitionTimelineComponent key={timelineKey} definitionId={v.id} />

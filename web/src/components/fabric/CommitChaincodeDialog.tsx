@@ -12,15 +12,21 @@ interface CommitChaincodeDialogProps {
 	setCommitDialogOpen: (open: boolean) => void
 	availablePeers: ServiceNetworkNode[]
 	definitionId: number
+	onSuccess?: () => void
+	onError?: (error: any) => void
 }
 
-function CommitChaincodeDialog({ commitDialogOpen, setCommitDialogOpen, availablePeers, definitionId }: CommitChaincodeDialogProps) {
+function CommitChaincodeDialog({ commitDialogOpen, setCommitDialogOpen, availablePeers, definitionId, onSuccess, onError }: CommitChaincodeDialogProps) {
 	const [selectedPeerId, setSelectedPeerId] = useState<string | null>(null)
 	const commitMutation = useMutation({
 		...postScFabricDefinitionsByDefinitionIdCommitMutation(),
 		onSuccess: () => {
 			toast.success('Chaincode committed successfully')
 			setCommitDialogOpen(false)
+			onSuccess?.()
+		},
+		onError: (error: any) => {
+			onError?.(error)
 		},
 	})
 	return (

@@ -479,7 +479,7 @@ func (c *serveCmd) setupServer(queries *db.Queries, authService *auth.AuthServic
 	// --- Smart contract deployment handler (Fabric & Besu) ---
 	// Import the EVM deployer constructor
 	besuDeployer := chainlaunchdeploy.NewDeployerWithAudit(auditService)
-	chaincodeService := chainlaunchdeploy.NewChaincodeService(queries, logger, nodesService)
+	chaincodeService := chainlaunchdeploy.NewChaincodeService(queries, logger, nodesService, keyManagementService)
 	scHandler := chainlaunchdeploy.NewHandler(auditService, logger, besuDeployer, nodesService, chaincodeService, networksService)
 
 	// Initialize handlers

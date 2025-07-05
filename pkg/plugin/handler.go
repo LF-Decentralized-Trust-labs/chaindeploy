@@ -275,15 +275,10 @@ func (h *Handler) deletePlugin(w http.ResponseWriter, r *http.Request) error {
 
 			if err := h.pm.StopPlugin(r.Context(), plugin, h.store); err != nil {
 				h.logger.Errorf("Failed to stop plugin %s before deletion: %v", name, err)
-				return errors.NewInternalError("failed to stop plugin before deletion", err, map[string]interface{}{
-					"detail":      "Plugin is running and could not be stopped",
-					"code":        "PLUGIN_STOP_FAILED",
-					"plugin_name": name,
-					"status":      deploymentStatus,
-				})
 			}
-
-			h.logger.Infof("Successfully stopped plugin %s before deletion", name)
+			if err == nil {
+				h.logger.Infof("Successfully stopped plugin %s before deletion", name)
+			}
 		}
 	}
 

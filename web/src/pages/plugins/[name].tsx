@@ -135,7 +135,7 @@ const PluginDetailPage = () => {
 									toast.promise(stopMutation.mutateAsync({ path: { name: name! } }), {
 										loading: 'Stopping plugin...',
 										success: 'Plugin stopped successfully',
-										error: 'Failed to stop plugin',
+										error: e => `Failed to stop plugin: ${e.message}`,
 									})
 								}
 								disabled={status?.status !== 'deployed'}

@@ -11,9 +11,11 @@ import (
 	"github.com/hyperledger/fabric-admin-sdk/pkg/network"
 	"github.com/hyperledger/fabric-gateway/pkg/client"
 	"github.com/hyperledger/fabric-gateway/pkg/identity"
+	"github.com/hyperledger/fabric-protos-go-apiv2/gateway"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 )
 
 type queryChaincodeCmd struct {
@@ -109,18 +111,48 @@ func (c *queryChaincodeCmd) run(out io.Writer) error {
 	}
 	defer conn.Close()
 
-	gateway, err := client.Connect(userIdentity, client.WithSign(userPK), client.WithClientConnection(conn))
+	gatewayFabric, err := client.Connect(userIdentity, client.WithSign(userPK), client.WithClientConnection(conn))
 	if err != nil {
 		return err
 	}
-	defer gateway.Close()
+	defer gatewayFabric.Close()
 
-	network := gateway.GetNetwork(c.channel)
+	network := gatewayFabric.GetNetwork(c.channel)
 	contract := network.GetContract(c.chaincode)
 
 	result, err := contract.EvaluateTransaction(c.fcn, c.args...)
 	if err != nil {
-		return errors.Wrapf(err, "failed to evaluate transaction")
+		endorseError, ok := err.(*client.EndorseError)
+		if ok {
+			detailsStr := []string{}
+			for _, detail := range status.Convert(err).Details() {
+				switch detail := detail.(type) {
+				case *gateway.ErrorDetail:
+					detailsStr = append(detailsStr, fmt.Sprintf("- address: %s; mspId: %s; message: %s\n", detail.GetAddress(), detail.GetMspId(), detail.GetMessage()))
+
+				}
+			}
+			return fmt.Errorf("failed to submit transaction: %s (gRPC status: %s)",
+				endorseError.TransactionError.Error(),
+				strings.Join(detailsStr, "\n"))
+		}
+		statusError := status.Convert(err)
+		if statusError != nil {
+			detailsStr := []string{}
+			for _, detail := range statusError.Details() {
+				switch detail := detail.(type) {
+				case *gateway.ErrorDetail:
+					detailsStr = append(detailsStr, fmt.Sprintf("- address: %s; mspId: %s; message: %s",
+						detail.GetAddress(),
+						detail.GetMspId(),
+						detail.GetMessage()))
+				}
+			}
+			return fmt.Errorf("failed to submit transaction: %s (gRPC status details: %s)",
+				statusError.Message(),
+				strings.Join(detailsStr, "\n"))
+		}
+		return fmt.Errorf("failed to submit transaction: %w", err)
 	}
 
 	_, err = fmt.Fprint(out, string(result))

@@ -315,4 +315,4 @@ require (
 	golang.org/x/tools v0.32.0 // indirect
 )
 
-replace github.com/hyperledger/fabric-admin-sdk => github.com/kfsoftware/fabric-admin-sdk v0.0.0-20250405175109-fd063100bb3f
+replace github.com/hyperledger/fabric-admin-sdk => github.com/kfsoftware/fabric-admin-sdk v0.0.0-20250705205658-948f43b6a15d

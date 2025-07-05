@@ -59,6 +59,10 @@ type CreateChannelInput struct {
 	PeerOrgs    []Organization     `json:"peerOrgs"`
 	OrdererOrgs []Organization     `json:"ordererOrgs"`
 	Consenters  []AddressWithCerts `json:"consenters"`
+	// Optional policies
+	ChannelPolicies     map[string]configtx.Policy `json:"channelPolicies,omitempty"`
+	ApplicationPolicies map[string]configtx.Policy `json:"applicationPolicies,omitempty"`
+	OrdererPolicies     map[string]configtx.Policy `json:"ordererPolicies,omitempty"`
 }
 
 // SetAnchorPeersInput represents the input for setting anchor peers
@@ -405,34 +409,77 @@ func (s *ChannelService) parseAndCreateChannel(input CreateChannelInput) ([]byte
 	}
 
 	// Create channel configuration
+	appPolicies := input.ApplicationPolicies
+	if appPolicies == nil {
+		appPolicies = map[string]configtx.Policy{
+			"Readers": {
+				Type: "ImplicitMeta",
+				Rule: "ANY Readers",
+			},
+			"Writers": {
+				Type: "ImplicitMeta",
+				Rule: "ANY Writers",
+			},
+			"Admins": {
+				Type: "ImplicitMeta",
+				Rule: "MAJORITY Admins",
+			},
+			"LifecycleEndorsement": {
+				Type: "ImplicitMeta",
+				Rule: "MAJORITY Endorsement",
+			},
+			"Endorsement": {
+				Type: "ImplicitMeta",
+				Rule: "MAJORITY Endorsement",
+			},
+		}
+	}
+	ordererPolicies := input.OrdererPolicies
+	if ordererPolicies == nil {
+		ordererPolicies = map[string]configtx.Policy{
+			"Readers": {
+				Type: "ImplicitMeta",
+				Rule: "ANY Readers",
+			},
+			"Writers": {
+				Type: "ImplicitMeta",
+				Rule: "ANY Writers",
+			},
+			"Admins": {
+				Type: "ImplicitMeta",
+				Rule: "MAJORITY Admins",
+			},
+			"BlockValidation": {
+				Type: "ImplicitMeta",
+				Rule: "ANY Writers",
+			},
+		}
+	}
+	channelPolicies := input.ChannelPolicies
+	if channelPolicies == nil {
+		channelPolicies = map[string]configtx.Policy{
+			"Readers": {
+				Type: "ImplicitMeta",
+				Rule: "ANY Readers",
+			},
+			"Writers": {
+				Type: "ImplicitMeta",
+				Rule: "ANY Writers",
+			},
+			"Admins": {
+				Type: "ImplicitMeta",
+				Rule: "MAJORITY Admins",
+			},
+		}
+	}
+
 	channelConfig := configtx.Channel{
 		Consortiums: nil, // Not needed for application channels
 		Application: configtx.Application{
 			Organizations: peerOrgs,
 			Capabilities:  []string{"V2_0"},
 			ACLs:          defaultACLs(),
-			Policies: map[string]configtx.Policy{
-				"Readers": {
-					Type: "ImplicitMeta",
-					Rule: "ANY Readers",
-				},
-				"Writers": {
-					Type: "ImplicitMeta",
-					Rule: "ANY Writers",
-				},
-				"Admins": {
-					Type: "ImplicitMeta",
-					Rule: "MAJORITY Admins",
-				},
-				"LifecycleEndorsement": {
-					Type: "ImplicitMeta",
-					Rule: "MAJORITY Endorsement",
-				},
-				"Endorsement": {
-					Type: "ImplicitMeta",
-					Rule: "MAJORITY Endorsement",
-				},
-			},
+			Policies:      appPolicies,
 		},
 		Orderer: configtx.Orderer{
 			OrdererType:  orderer.ConsensusTypeEtcdRaft,
@@ -455,40 +502,10 @@ func (s *ChannelService) parseAndCreateChannel(input CreateChannelInput) ([]byte
 			},
 			Organizations: ordererOrgs,
 			Capabilities:  []string{"V2_0"},
-			Policies: map[string]configtx.Policy{
-				"Readers": {
-					Type: "ImplicitMeta",
-					Rule: "ANY Readers",
-				},
-				"Writers": {
-					Type: "ImplicitMeta",
-					Rule: "ANY Writers",
-				},
-				"Admins": {
-					Type: "ImplicitMeta",
-					Rule: "MAJORITY Admins",
-				},
-				"BlockValidation": {
-					Type: "ImplicitMeta",
-					Rule: "ANY Writers",
-				},
-			},
+			Policies:      ordererPolicies,
 		},
 		Capabilities: []string{"V2_0"},
-		Policies: map[string]configtx.Policy{
-			"Readers": {
-				Type: "ImplicitMeta",
-				Rule: "ANY Readers",
-			},
-			"Writers": {
-				Type: "ImplicitMeta",
-				Rule: "ANY Writers",
-			},
-			"Admins": {
-				Type: "ImplicitMeta",
-				Rule: "MAJORITY Admins",
-			},
-		},
+		Policies:     channelPolicies,
 	}
 
 	// Create genesis block

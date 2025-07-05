@@ -1366,6 +1366,31 @@ definitions:
     - nodeId
     - role
     type: object
+  http.AddOrdererOrgPayload:
+    properties:
+      msp_id:
+        type: string
+      orderer_endpoints:
+        items:
+          type: string
+        minItems: 1
+        type: array
+      root_certs:
+        items:
+          type: string
+        minItems: 1
+        type: array
+      tls_root_certs:
+        items:
+          type: string
+        minItems: 1
+        type: array
+    required:
+    - msp_id
+    - orderer_endpoints
+    - root_certs
+    - tls_root_certs
+    type: object
   http.AddOrgPayload:
     properties:
       msp_id:
@@ -1575,6 +1600,12 @@ definitions:
           - update_etcd_raft_options: UpdateEtcdRaftOptionsPayload
           - update_batch_size: UpdateBatchSizePayload
           - update_batch_timeout: UpdateBatchTimeoutPayload
+          - update_application_policy: UpdateApplicationPolicyPayload
+          - update_orderer_policy: UpdateOrdererPolicyPayload
+          - update_channel_policy: UpdateChannelPolicyPayload
+          - update_channel_capability: UpdateChannelCapabilityOperation
+          - update_orderer_capability: UpdateOrdererCapabilityOperation
+          - update_application_capability: UpdateApplicationCapabilityOperation
           @Description The payload for the configuration update operation
           @Description Can be one of:
           @Description - AddOrgPayload when type is "add_org"
@@ -1587,13 +1618,22 @@ definitions:
           @Description - UpdateEtcdRaftOptionsPayload when type is "update_etcd_raft_options"
           @Description - UpdateBatchSizePayload when type is "update_batch_size"
           @Description - UpdateBatchTimeoutPayload when type is "update_batch_timeout"
+          @Description - UpdateApplicationPolicyPayload when type is "update_application_policy"
+          @Description - UpdateOrdererPolicyPayload when type is "update_orderer_policy"
+          @Description - UpdateChannelPolicyPayload when type is "update_channel_policy"
+          @Description - UpdateChannelCapabilityPayload when type is "update_channel_capability"
+          @Description - UpdateOrdererCapabilityPayload when type is "update_orderer_capability"
+          @Description - UpdateApplicationCapabilityPayload when type is "update_application_capability"
+          @Description - AddOrdererOrgPayload when type is "add_orderer_org"
+          @Description - RemoveOrdererOrgPayload when type is "remove_orderer_org"
+          @Description - UpdateOrdererOrgMSPPayload when type is "update_orderer_org_msp"
         items:
           type: integer
         type: array
       type:
         description: |-
           Type is the type of configuration update operation
-          enum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout
+          enum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout,update_application_policy,update_orderer_policy,update_channel_policy,add_orderer_org,remove_orderer_org,update_orderer_org_msp
         enum:
         - add_org
         - remove_org
@@ -1605,6 +1645,15 @@ definitions:
         - update_etcd_raft_options
         - update_batch_size
         - update_batch_timeout
+        - update_application_policy
+        - update_orderer_policy
+        - update_channel_policy
+        - update_channel_capability
+        - update_orderer_capability
+        - update_application_capability
+        - add_orderer_org
+        - remove_orderer_org
+        - update_orderer_org_msp
         type: string
     required:
     - payload
@@ -1630,13 +1679,6 @@ definitions:
         type: string
       status:
         type: string
-    type: object
-  http.ConsenterConfig:
-    properties:
-      id:
-        type: string
-    required:
-    - id
     type: object
   http.CreateBackupRequest:
     properties:
@@ -1905,38 +1947,36 @@ definitions:
     - name
     - type
     type: object
-  http.ExternalOrgConfig:
-    properties:
-      consenters:
-        items:
-          $ref: '#/definitions/http.ConsenterConfig'
-        type: array
-      id:
-        type: string
-      mspid:
-        type: string
-    required:
-    - id
-    - mspid
-    type: object
   http.FabricNetworkConfig:
     properties:
-      externalOrdererOrgs:
-        items:
-          $ref: '#/definitions/http.ExternalOrgConfig'
-        type: array
-      externalPeerOrgs:
-        items:
-          $ref: '#/definitions/http.ExternalOrgConfig'
-        type: array
+      applicationPolicies:
+        additionalProperties:
+          $ref: '#/definitions/http.FabricPolicy'
+        description: Optional policies
+        type: object
+      channelPolicies:
+        additionalProperties:
+          $ref: '#/definitions/http.FabricPolicy'
+        type: object
       ordererOrganizations:
         items:
           $ref: '#/definitions/http.OrganizationConfig'
         type: array
+      ordererPolicies:
+        additionalProperties:
+          $ref: '#/definitions/http.FabricPolicy'
+        type: object
       peerOrganizations:
         items:
           $ref: '#/definitions/http.OrganizationConfig'
         type: array
+    type: object
+  http.FabricPolicy:
+    properties:
+      rule:
+        type: string
+      type:
+        type: string
     type: object
   http.GetNetworkNodesResponse:
     properties:
@@ -2178,6 +2218,13 @@ definitions:
     - host
     - port
     type: object
+  http.RemoveOrdererOrgPayload:
+    properties:
+      msp_id:
+        type: string
+    required:
+    - msp_id
+    type: object
   http.RemoveOrgPayload:
     properties:
       msp_id:
@@ -2246,6 +2293,24 @@ definitions:
     properties:
       block:
         $ref: '#/definitions/block.Block'
+    type: object
+  http.UpdateApplicationCapabilityOperation:
+    properties:
+      capability:
+        items:
+          type: string
+        minItems: 1
+        type: array
+    type: object
+  http.UpdateApplicationPolicyPayload:
+    properties:
+      policy:
+        $ref: '#/definitions/http.FabricPolicy'
+      policy_name:
+        type: string
+    required:
+    - policy
+    - policy_name
     type: object
   http.UpdateBackupScheduleRequest:
     properties:
@@ -2355,6 +2420,24 @@ definitions:
     - p2pPort
     - rpcHost
     - rpcPort
+    type: object
+  http.UpdateChannelCapabilityOperation:
+    properties:
+      capability:
+        items:
+          type: string
+        minItems: 1
+        type: array
+    type: object
+  http.UpdateChannelPolicyPayload:
+    properties:
+      policy:
+        $ref: '#/definitions/http.FabricPolicy'
+      policy_name:
+        type: string
+    required:
+    - policy
+    - policy_name
     type: object
   http.UpdateConsenterPayload:
     properties:
@@ -2482,6 +2565,43 @@ definitions:
       name:
         description: Common fields
         type: string
+    type: object
+  http.UpdateOrdererCapabilityOperation:
+    properties:
+      capability:
+        items:
+          type: string
+        minItems: 1
+        type: array
+    type: object
+  http.UpdateOrdererOrgMSPPayload:
+    properties:
+      msp_id:
+        type: string
+      root_certs:
+        items:
+          type: string
+        minItems: 1
+        type: array
+      tls_root_certs:
+        items:
+          type: string
+        minItems: 1
+        type: array
+    required:
+    - msp_id
+    - root_certs
+    - tls_root_certs
+    type: object
+  http.UpdateOrdererPolicyPayload:
+    properties:
+      policy:
+        $ref: '#/definitions/http.FabricPolicy'
+      policy_name:
+        type: string
+    required:
+    - policy
+    - policy_name
     type: object
   http.UpdateOrgMSPPayload:
     properties:
@@ -5542,6 +5662,42 @@ paths:
           description: Already Reported
           schema:
             $ref: '#/definitions/http.UpdateBatchTimeoutPayload'
+        "209":
+          description: ""
+          schema:
+            $ref: '#/definitions/http.UpdateApplicationPolicyPayload'
+        "210":
+          description: ""
+          schema:
+            $ref: '#/definitions/http.UpdateOrdererPolicyPayload'
+        "211":
+          description: ""
+          schema:
+            $ref: '#/definitions/http.UpdateChannelPolicyPayload'
+        "212":
+          description: ""
+          schema:
+            $ref: '#/definitions/http.UpdateChannelCapabilityOperation'
+        "213":
+          description: ""
+          schema:
+            $ref: '#/definitions/http.UpdateOrdererCapabilityOperation'
+        "214":
+          description: ""
+          schema:
+            $ref: '#/definitions/http.UpdateApplicationCapabilityOperation'
+        "215":
+          description: ""
+          schema:
+            $ref: '#/definitions/http.AddOrdererOrgPayload'
+        "216":
+          description: ""
+          schema:
+            $ref: '#/definitions/http.RemoveOrdererOrgPayload'
+        "217":
+          description: ""
+          schema:
+            $ref: '#/definitions/http.UpdateOrdererOrgMSPPayload'
       summary: Submit config update proposal
       tags:
       - Fabric Networks

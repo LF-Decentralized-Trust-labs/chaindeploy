@@ -888,6 +888,13 @@ export type HttpAddNodeToNetworkRequest = {
     role: 'peer' | 'orderer';
 };
 
+export type HttpAddOrdererOrgPayload = {
+    msp_id: string;
+    orderer_endpoints: Array<string>;
+    root_certs: Array<string>;
+    tls_root_certs: Array<string>;
+};
+
 export type HttpAddOrgPayload = {
     msp_id: string;
     root_certs: Array<string>;
@@ -1013,6 +1020,12 @@ export type HttpConfigUpdateOperationRequest = {
      * - update_etcd_raft_options: UpdateEtcdRaftOptionsPayload
      * - update_batch_size: UpdateBatchSizePayload
      * - update_batch_timeout: UpdateBatchTimeoutPayload
+     * - update_application_policy: UpdateApplicationPolicyPayload
+     * - update_orderer_policy: UpdateOrdererPolicyPayload
+     * - update_channel_policy: UpdateChannelPolicyPayload
+     * - update_channel_capability: UpdateChannelCapabilityOperation
+     * - update_orderer_capability: UpdateOrdererCapabilityOperation
+     * - update_application_capability: UpdateApplicationCapabilityOperation
      * @Description The payload for the configuration update operation
      * @Description Can be one of:
      * @Description - AddOrgPayload when type is "add_org"
@@ -1025,13 +1038,22 @@ export type HttpConfigUpdateOperationRequest = {
      * @Description - UpdateEtcdRaftOptionsPayload when type is "update_etcd_raft_options"
      * @Description - UpdateBatchSizePayload when type is "update_batch_size"
      * @Description - UpdateBatchTimeoutPayload when type is "update_batch_timeout"
+     * @Description - UpdateApplicationPolicyPayload when type is "update_application_policy"
+     * @Description - UpdateOrdererPolicyPayload when type is "update_orderer_policy"
+     * @Description - UpdateChannelPolicyPayload when type is "update_channel_policy"
+     * @Description - UpdateChannelCapabilityPayload when type is "update_channel_capability"
+     * @Description - UpdateOrdererCapabilityPayload when type is "update_orderer_capability"
+     * @Description - UpdateApplicationCapabilityPayload when type is "update_application_capability"
+     * @Description - AddOrdererOrgPayload when type is "add_orderer_org"
+     * @Description - RemoveOrdererOrgPayload when type is "remove_orderer_org"
+     * @Description - UpdateOrdererOrgMSPPayload when type is "update_orderer_org_msp"
      */
     payload: Array<number>;
     /**
      * Type is the type of configuration update operation
-     * enum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout
+     * enum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout,update_application_policy,update_orderer_policy,update_channel_policy,add_orderer_org,remove_orderer_org,update_orderer_org_msp
      */
-    type: 'add_org' | 'remove_org' | 'update_org_msp' | 'set_anchor_peers' | 'add_consenter' | 'remove_consenter' | 'update_consenter' | 'update_etcd_raft_options' | 'update_batch_size' | 'update_batch_timeout';
+    type: 'add_org' | 'remove_org' | 'update_org_msp' | 'set_anchor_peers' | 'add_consenter' | 'remove_consenter' | 'update_consenter' | 'update_etcd_raft_options' | 'update_batch_size' | 'update_batch_timeout' | 'update_application_policy' | 'update_orderer_policy' | 'update_channel_policy' | 'update_channel_capability' | 'update_orderer_capability' | 'update_application_capability' | 'add_orderer_org' | 'remove_orderer_org' | 'update_orderer_org_msp';
 };
 
 export type HttpConfigUpdateResponse = {
@@ -1043,10 +1065,6 @@ export type HttpConfigUpdateResponse = {
     operations?: Array<HttpConfigUpdateOperationRequest>;
     preview_json?: string;
     status?: string;
-};
-
-export type HttpConsenterConfig = {
-    id: string;
 };
 
 export type HttpCreateBackupRequest = {
@@ -1272,17 +1290,26 @@ export type HttpCreateProviderRequest = {
     type: 'SMTP';
 };
 
-export type HttpExternalOrgConfig = {
-    consenters?: Array<HttpConsenterConfig>;
-    id: string;
-    mspid: string;
+export type HttpFabricNetworkConfig = {
+    /**
+     * Optional policies
+     */
+    applicationPolicies?: {
+        [key: string]: HttpFabricPolicy;
+    };
+    channelPolicies?: {
+        [key: string]: HttpFabricPolicy;
+    };
+    ordererOrganizations?: Array<HttpOrganizationConfig>;
+    ordererPolicies?: {
+        [key: string]: HttpFabricPolicy;
+    };
+    peerOrganizations?: Array<HttpOrganizationConfig>;
 };
 
-export type HttpFabricNetworkConfig = {
-    externalOrdererOrgs?: Array<HttpExternalOrgConfig>;
-    externalPeerOrgs?: Array<HttpExternalOrgConfig>;
-    ordererOrganizations?: Array<HttpOrganizationConfig>;
-    peerOrganizations?: Array<HttpOrganizationConfig>;
+export type HttpFabricPolicy = {
+    rule?: string;
+    type?: string;
 };
 
 export type HttpGetNetworkNodesResponse = {
@@ -1410,6 +1437,10 @@ export type HttpRemoveConsenterPayload = {
     port: number;
 };
 
+export type HttpRemoveOrdererOrgPayload = {
+    msp_id: string;
+};
+
 export type HttpRemoveOrgPayload = {
     msp_id: string;
 };
@@ -1443,6 +1474,15 @@ export type HttpTestProviderResponse = {
 
 export type HttpTransactionResponse = {
     block?: BlockBlock;
+};
+
+export type HttpUpdateApplicationCapabilityOperation = {
+    capability?: Array<string>;
+};
+
+export type HttpUpdateApplicationPolicyPayload = {
+    policy: HttpFabricPolicy;
+    policy_name: string;
 };
 
 export type HttpUpdateBackupScheduleRequest = {
@@ -1494,6 +1534,15 @@ export type HttpUpdateBesuNodeRequest = {
     p2pPort: number;
     rpcHost: string;
     rpcPort: number;
+};
+
+export type HttpUpdateChannelCapabilityOperation = {
+    capability?: Array<string>;
+};
+
+export type HttpUpdateChannelPolicyPayload = {
+    policy: HttpFabricPolicy;
+    policy_name: string;
 };
 
 export type HttpUpdateConsenterPayload = {
@@ -1557,6 +1606,21 @@ export type HttpUpdateNodeRequest = {
      * Common fields
      */
     name?: string;
+};
+
+export type HttpUpdateOrdererCapabilityOperation = {
+    capability?: Array<string>;
+};
+
+export type HttpUpdateOrdererOrgMspPayload = {
+    msp_id: string;
+    root_certs: Array<string>;
+    tls_root_certs: Array<string>;
+};
+
+export type HttpUpdateOrdererPolicyPayload = {
+    policy: HttpFabricPolicy;
+    policy_name: string;
 };
 
 export type HttpUpdateOrgMspPayload = {
@@ -4166,6 +4230,15 @@ export type PostDummyResponses = {
      * Already Reported
      */
     208: HttpUpdateBatchTimeoutPayload;
+    209: HttpUpdateApplicationPolicyPayload;
+    210: HttpUpdateOrdererPolicyPayload;
+    211: HttpUpdateChannelPolicyPayload;
+    212: HttpUpdateChannelCapabilityOperation;
+    213: HttpUpdateOrdererCapabilityOperation;
+    214: HttpUpdateApplicationCapabilityOperation;
+    215: HttpAddOrdererOrgPayload;
+    216: HttpRemoveOrdererOrgPayload;
+    217: HttpUpdateOrdererOrgMspPayload;
 };
 
 export type PostDummyResponse = PostDummyResponses[keyof PostDummyResponses];
