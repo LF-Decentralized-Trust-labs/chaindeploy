@@ -1,16 +1,9 @@
-import React from 'react'
-import { Copy, FileText } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import type { SyntaxHighlighterProps } from 'react-syntax-highlighter'
-import SyntaxHighlighter from 'react-syntax-highlighter'
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { getLanguage } from '@/lib/language'
+import { Copy, FileText } from 'lucide-react'
+import { LazyCodeBlock } from './lazy-code-block'
 import { ToolEvent } from './ToolEventRenderer'
 import { ToolSummaryCard } from './ToolSummaryCard'
-import { getLanguage } from '@/lib/language'
-
-const SyntaxHighlighterComp = SyntaxHighlighter as unknown as React.ComponentType<SyntaxHighlighterProps>
 
 interface ReadFileEnhancedUpdateProps {
 	event: ToolEvent
@@ -127,18 +120,10 @@ export const ReadFileEnhancedResult = ({ event, copyToClipboard, copiedCode }: R
 							</button>
 						</div>
 						<ScrollArea className="max-h-[400px] overflow-auto">
-							<SyntaxHighlighterComp
+							<LazyCodeBlock
+								code={content}
 								language={language}
-								style={vscDarkPlus}
-								PreTag="div"
-								className="rounded-lg"
-								showLineNumbers={true}
-								wrapLines={true}
-								wrapLongLines={true}
-								customStyle={{ margin: 0, padding: '1rem' }}
-							>
-								{content}
-							</SyntaxHighlighterComp>
+							/>
 						</ScrollArea>
 					</div>
 				)}

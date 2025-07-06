@@ -37,6 +37,8 @@ Development Guidelines:
 - Structure code with clear separation of concerns
 - Implement proper validation for all inputs
 - Use Fabric's built-in access control mechanisms
+- Always use @Transaction annotation for all transaction methods
+- When adding new contracts, always register them in index.ts
 
 Common Patterns:
 - Asset CRUD operations (Create, Read, Update, Delete)
@@ -53,6 +55,8 @@ Important Contract Design Principles:
 - Use the ledger as the single source of truth for all data
 - Implement proper state management through Fabric's key-value store
 - Ensure all operations read from and write to the ledger directly
+- Always decorate transaction methods with @Transaction annotation
+- Register all contracts in index.ts for proper chaincode initialization
 
 State Management Best Practices:
 - Always use ctx.stub.putState() to persist data
@@ -69,6 +73,7 @@ Transaction Isolation:
 - Always query the ledger for current state
 - Implement proper error handling for missing states
 - Use transactions to maintain data consistency
+- Ensure all transaction methods are properly annotated with @Transaction
 `,
 	},
 	"chaincode-fabric-go": {

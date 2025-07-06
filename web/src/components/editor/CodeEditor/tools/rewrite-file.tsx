@@ -3,11 +3,9 @@ import { Check, Copy, RefreshCw } from 'lucide-react'
 import React, { useEffect, useMemo, useRef } from 'react'
 import type { SyntaxHighlighterProps } from 'react-syntax-highlighter'
 import SyntaxHighlighter from 'react-syntax-highlighter'
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { ToolEvent } from './ToolEventRenderer'
 import { ToolSummaryCard } from './ToolSummaryCard'
-
-const SyntaxHighlighterComp = SyntaxHighlighter as unknown as React.ComponentType<SyntaxHighlighterProps>
+import { LazyCodeBlock } from './lazy-code-block'
 
 interface RewriteFileUpdateProps {
 	event: ToolEvent
@@ -88,24 +86,10 @@ export const RewriteFileUpdate = ({ event, accumulatedArgs, copyToClipboard }: R
 				<div ref={scrollContainerRef} className="max-h-[500px] overflow-auto">
 					{newContent ? (
 						<div className="overflow-auto">
-							<SyntaxHighlighterComp
+							<LazyCodeBlock
+								code={newContent}
 								language={language}
-								style={vscDarkPlus}
-								PreTag="div"
-								className="rounded text-xs"
-								showLineNumbers={true}
-								wrapLines={false}
-								wrapLongLines={false}
-								customStyle={{
-									margin: 0,
-									padding: '0.5rem',
-									background: 'rgb(20, 20, 20)',
-									fontSize: '11px',
-									minWidth: '100%',
-								}}
-							>
-								{newContent}
-							</SyntaxHighlighterComp>
+							/>
 						</div>
 					) : (
 						<div className="p-3 text-muted-foreground italic flex items-center justify-center h-[200px]">Waiting for content...</div>
@@ -164,18 +148,10 @@ export const RewriteFileResult = ({ event, copyToClipboard, copiedCode }: Rewrit
 							</button>
 						</div>
 						<div className="max-h-[400px] overflow-auto">
-							<SyntaxHighlighterComp
+							<LazyCodeBlock
+								code={newContent}
 								language={getLanguage(filePath)}
-								style={vscDarkPlus}
-								PreTag="div"
-								className="rounded-lg"
-								showLineNumbers={true}
-								wrapLines={true}
-								wrapLongLines={true}
-								customStyle={{ margin: 0, padding: '1rem' }}
-							>
-								{newContent}
-							</SyntaxHighlighterComp>
+							/>
 						</div>
 					</div>
 				)}

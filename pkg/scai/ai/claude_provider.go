@@ -282,3 +282,17 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+// GetMaxTokens returns the max tokens for a given Claude model
+func (p *ClaudeProvider) GetMaxTokens(model string) int {
+	switch model {
+	case "claude-3-opus-20240229":
+		return 200000
+	case "claude-3-sonnet-20240229":
+		return 100000
+	case "claude-3-haiku-20240307":
+		return 200000
+	default:
+		return 4096
+	}
+}

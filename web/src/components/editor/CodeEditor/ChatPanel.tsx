@@ -283,7 +283,7 @@ export function useStreamingChat(projectId: number, conversationId: number, onTo
 				}
 				setIsLoading(false)
 				// Only clear active tool if it doesn't have a result (i.e., it wasn't completed)
-				setActiveTool((prev) => prev && (prev.result !== undefined || prev.error) ? prev : null)
+				setActiveTool((prev) => (prev && (prev.result !== undefined || prev.error) ? prev : null))
 				partialArgsRef.current = ''
 				if (onComplete) {
 					onComplete()
@@ -310,11 +310,19 @@ type ChatPanelProps = {
 	handleChatComplete: () => void
 }
 
+const MessagesList = React.memo(({ messages }: { messages: Message[] }) => (
+	<div className="flex flex-col gap-1">
+		{messages.map((msg, idx) => <Message key={idx} message={msg} />)}
+	</div>
+))
+
 export function ChatPanel({ projectId = 1, handleToolResult, handleChatComplete }: ChatPanelProps) {
 	const [partialArgs, setPartialArgs] = useState<Record<string, unknown> | null>(null)
 	const [firstConversationId, setFirstConversationId] = useState<string | null>(null)
 	const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
 	const messagesEndRef = useRef<HTMLDivElement>(null)
+	const scrollAreaRef = useRef<HTMLDivElement>(null)
+	const autoScrollRef = useRef(true)
 	const { textareaRef, adjustHeight } = useAutoResizeTextarea()
 	const { data: conversations, refetch: refetchConversations } = useQuery({
 		...getAiByProjectIdConversationsOptions({ path: { projectId } }),
@@ -350,12 +358,30 @@ export function ChatPanel({ projectId = 1, handleToolResult, handleChatComplete 
 	})
 	const { messages, input, setInput, isLoading, activeTool, handleSubmit, partialArgsRef, setMessages, handleStop } = chatState
 	const scrollToBottom = useCallback(() => {
-		messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+		if (scrollAreaRef.current) {
+			scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight
+		}
 	}, [])
 
+	// Scroll to bottom on first load and when new messages arrive, if auto-scroll is enabled
+	useEffect(() => {
+		if (autoScrollRef.current) {
+			scrollToBottom()
+		}
+	}, [messages, scrollToBottom])
+
+	// On mount, scroll to bottom
 	useEffect(() => {
 		scrollToBottom()
-	}, [messages, scrollToBottom])
+	}, [])
+
+	// Handler to detect user scroll position
+	const handleScroll = useCallback(() => {
+		const el = scrollAreaRef.current
+		if (!el) return
+		const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 10
+		autoScrollRef.current = atBottom
+	}, [])
 
 	const handleInputChange = useCallback(
 		(e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -474,17 +500,23 @@ export function ChatPanel({ projectId = 1, handleToolResult, handleChatComplete 
 		return () => clearInterval(interval)
 	}, [activeTool, parsePartialArgs])
 
+	const listRef = useRef<any>(null)
+
+	useEffect(() => {
+		if (listRef.current) {
+			listRef.current.scrollToItem(messages.length - 1)
+		}
+	}, [messages.length])
+
 	const messagesContent = useMemo(
 		() => (
-			<div className="flex-1 overflow-auto p-2 space-y-4">
-				{messages.map((msg, i) => (
-					<Message key={i} message={msg} />
-				))}
+			<div ref={scrollAreaRef} onScroll={handleScroll} className="flex-1 overflow-auto p-2">
+				<MessagesList messages={messages} />
 				{isLoading && <div className="text-sm text-muted-foreground">{activeTool ? <ActiveTool tool={activeTool} partialArgs={partialArgs} /> : <div>Thinking...</div>}</div>}
 				<div ref={messagesEndRef} />
 			</div>
 		),
-		[messages, isLoading, activeTool, partialArgs]
+		[messages, isLoading, activeTool, partialArgs, handleScroll]
 	)
 	const createConversationMutation = useMutation({
 		...postAiByProjectIdConversationsMutation({}),
@@ -606,11 +638,7 @@ export function ChatPanel({ projectId = 1, handleToolResult, handleChatComplete 
 						Stop
 					</button>
 				) : (
-					<button
-						type="submit"
-						className="px-3 py-1 rounded bg-primary text-primary-foreground text-sm self-end"
-						disabled={!input.trim()}
-					>
+					<button type="submit" className="px-3 py-1 rounded bg-primary text-primary-foreground text-sm self-end" disabled={!input.trim()}>
 						Send
 					</button>
 				)}
@@ -779,10 +807,8 @@ const Message = React.memo(({ message }: MessageProps) => {
 
 	const getMessageContent = useCallback(() => {
 		let content = ''
-		
 		// Add role indicator
 		content += `${message.role === 'user' ? 'User' : 'Assistant'}:\n\n`
-		
 		// Add each part's content
 		message.parts.forEach((part, index) => {
 			if (part.type === 'text' && part.content) {
@@ -811,7 +837,6 @@ const Message = React.memo(({ message }: MessageProps) => {
 				}
 			}
 		})
-		
 		return content
 	}, [message])
 
@@ -822,21 +847,16 @@ const Message = React.memo(({ message }: MessageProps) => {
 
 	const messageContent = useMemo(
 		() => (
-			<div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} relative group`}>
-				<div className={`max-w-[80%] rounded-lg p-3 ${message.role === 'user' ? 'bg-muted' : 'bg-muted'} relative space-y-2`}>
+			<div className={`flex w-full ${message.role === 'user' ? 'justify-end' : 'justify-start'} relative group`}>
+				<div className={`w-full rounded-lg p-2 ${message.role === 'user' ? 'bg-accent' : ''} relative space-y-2`}>
 					{/* Copy button - positioned at top right */}
 					<button
 						onClick={handleCopyMessage}
 						className="absolute top-2 right-2 p-1.5 rounded bg-background/80 hover:bg-background transition-colors opacity-0 group-hover:opacity-100 z-10"
 						title="Copy message"
 					>
-						{copiedMessage === getMessageContent() ? (
-							<Check className="w-3 h-3 text-green-500" />
-						) : (
-							<Copy className="w-3 h-3" />
-						)}
+						{copiedMessage === getMessageContent() ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
 					</button>
-					
 					{message.parts.map((part, index) => {
 						if (part.type === 'text' && part.content) {
 							return <MarkdownRenderer key={index} content={part.content} />
@@ -863,7 +883,7 @@ interface ActiveToolProps {
 const ActiveTool = ({ tool, partialArgs }: ActiveToolProps) => {
 	const isCompleted = tool.status === 'completed' || tool.status === 'error'
 	const isError = tool.status === 'error'
-	
+
 	return (
 		<div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg border border-border">
 			<div className="flex items-center gap-2 mb-3">
@@ -882,10 +902,7 @@ const ActiveTool = ({ tool, partialArgs }: ActiveToolProps) => {
 					</div>
 				)}
 				<span className="font-medium">
-					{isCompleted 
-						? (isError ? `Error in ${tool.name.replace(/_/g, ' ')}` : `Completed ${tool.name.replace(/_/g, ' ')}`)
-						: `Executing ${tool.name.replace(/_/g, ' ')}...`
-					}
+					{isCompleted ? (isError ? `Error in ${tool.name.replace(/_/g, ' ')}` : `Completed ${tool.name.replace(/_/g, ' ')}`) : `Executing ${tool.name.replace(/_/g, ' ')}...`}
 				</span>
 			</div>
 			{partialArgs && (
@@ -952,7 +969,7 @@ const CommitDetails = ({ projectId, commit, commitHash }: CommitDetailsProps) =>
 
 	const diffEditorRef = useRef<monaco.editor.IStandaloneDiffEditor | null>(null)
 	const diffContainerRef = useRef<HTMLDivElement>(null)
-	
+
 	useEffect(() => {
 		if (!diffContainerRef.current || !selectedFile) return
 
@@ -1008,7 +1025,7 @@ const CommitDetails = ({ projectId, commit, commitHash }: CommitDetailsProps) =>
 			newModifiedModel.dispose()
 		}
 	}, [commitDetails?.added, currentFileContent, selectedFile, parentFileContent])
-	
+
 	useEffect(() => {
 		if (!open) {
 			setSelectedFile(null)
@@ -1017,7 +1034,7 @@ const CommitDetails = ({ projectId, commit, commitHash }: CommitDetailsProps) =>
 			setSelectedFile(firstChangedFile)
 		}
 	}, [open, commitDetails, selectedFile])
-	
+
 	return (
 		<Dialog open={open} onOpenChange={setOpen}>
 			<DialogTrigger asChild>

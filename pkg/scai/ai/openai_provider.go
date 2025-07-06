@@ -84,10 +84,11 @@ func (p *OpenAIProvider) StreamAgentStep(
 	}
 
 	stream, err := p.Client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{
-		Model:    model,
-		Messages: openAIMessages,
-		Tools:    openAITools,
-		Stream:   true,
+		Model:     model,
+		Messages:  openAIMessages,
+		Tools:     openAITools,
+		Stream:    true,
+		MaxTokens: 32768,
 	})
 	if err != nil {
 		return nil, nil, nil, err
@@ -236,9 +237,6 @@ func (p *OpenAIProvider) StreamAgentStep(
 
 	// Always create one assistant message with content and tool calls
 	content := contentBuilder.String()
-	if content == "" {
-		content = "No content generated"
-	}
 
 	// Create the single assistant message with all tool calls linked to it
 	assistantMsg := &AIMessage{
@@ -249,4 +247,24 @@ func (p *OpenAIProvider) StreamAgentStep(
 	}
 
 	return assistantMsg, aiToolCalls, toolCallResults, nil
+}
+
+// GetMaxTokens returns the max tokens for a given OpenAI model
+func (p *OpenAIProvider) GetMaxTokens(model string) int {
+	switch model {
+	case "gpt-3.5-turbo":
+		return 4096
+	case "gpt-3.5-turbo-16k":
+		return 16384
+	case "gpt-4":
+		return 8192
+	case "gpt-4-32k":
+		return 32768
+	case "gpt-4-turbo":
+		return 128000
+	case "gpt-4o":
+		return 128000
+	default:
+		return 32768 // Default/fallback
+	}
 }

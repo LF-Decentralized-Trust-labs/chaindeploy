@@ -41,6 +41,8 @@ export default function ChaincodePlaygroundPage() {
 		}
 	}, [metadataQuery.data])
 	const [paramValues, setParamValues] = useState<Record<string, string>>({})
+	const [selectedContract, setSelectedContract] = useState<string | undefined>(undefined)
+	const [selectedTx, setSelectedTx] = useState<string | undefined>(undefined)
 
 	// Load state from localStorage on mount
 	useEffect(() => {
@@ -53,6 +55,8 @@ export default function ChaincodePlaygroundPage() {
 				setSelectedKey(parsed.selectedKey)
 				setParamValues(parsed.paramValues || {})
 				setResponses(parsed.responses || [])
+				setSelectedContract(parsed.selectedContract)
+				setSelectedTx(parsed.selectedTx)
 			} catch {}
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -70,16 +74,18 @@ export default function ChaincodePlaygroundPage() {
 						selectedKey,
 						responses: responses.slice(0, 10),
 						paramValues,
+						selectedContract,
+						selectedTx,
 					})
 				)
 			} catch {}
 		}
 
 		// Only save if we have actual data (not on initial mount)
-		if (fn || args || selectedKey || responses.length > 0) {
+		if (fn || args || selectedKey || responses.length > 0 || selectedContract || selectedTx) {
 			saveToStorage()
 		}
-	}, [fn, args, selectedKey, responses, STORAGE_KEY])
+	}, [fn, args, selectedKey, responses, paramValues, selectedContract, selectedTx, STORAGE_KEY])
 
 	const sortedResponses = useMemo(() => {
 		return responses.slice().sort((a, b) => b.timestamp - a.timestamp)
@@ -193,6 +199,10 @@ export default function ChaincodePlaygroundPage() {
 					setMode={setMode}
 					setParamValues={setParamValues}
 					paramValues={paramValues}
+					selectedContract={selectedContract}
+					setSelectedContract={setSelectedContract}
+					selectedTx={selectedTx}
+					setSelectedTx={setSelectedTx}
 				/>
 			)}
 		</div>

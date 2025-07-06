@@ -1,16 +1,11 @@
-import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react'
-import { Check, Copy, Edit } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import type { SyntaxHighlighterProps } from 'react-syntax-highlighter'
-import SyntaxHighlighter from 'react-syntax-highlighter'
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { getLanguage } from '@/lib/language'
+import { Check, Copy, Edit, FileText } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { LazyCodeBlock } from './lazy-code-block'
 import { ToolEvent } from './ToolEventRenderer'
 import { ToolSummaryCard } from './ToolSummaryCard'
-import { getLanguage } from '@/lib/language'
-
-const SyntaxHighlighterComp = SyntaxHighlighter as unknown as React.ComponentType<SyntaxHighlighterProps>
+import React from 'react'
 
 interface EditFileUpdateProps {
 	event: ToolEvent
@@ -28,51 +23,43 @@ interface EditFileExecuteProps {
 	event: ToolEvent
 }
 
+// Add localStorage persistence for edit form and results
+const STORAGE_KEY = 'edit-file-tool-state'
+
 export const EditFileExecute = ({ event }: EditFileExecuteProps) => {
 	const args = useMemo(() => (event.arguments ? JSON.parse(event.arguments) : {}), [event.arguments])
+	const code = args.search_replace_blocks || ''
+	const codeLines = code ? code.split('\n') : []
+	const lastLines = codeLines.slice(-10).join('\n')
 	return (
-		<div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg border border-border">
-			<div className="animate-spin h-4 w-4 border-2 border-yellow-500 border-t-transparent rounded-full" />
-			<span className="font-medium">Applying changes...</span>
-			{event.arguments && (
-				<div className="mt-2 text-xs bg-background/50 p-2 rounded">
-					<div className="font-semibold mb-1">Final arguments:</div>
-					<ScrollArea className="max-h-[400px] overflow-auto">
-						<SyntaxHighlighterComp
-							language="json"
-							style={vscDarkPlus}
-							PreTag="div"
-							className="rounded text-xs"
-							showLineNumbers={false}
-							wrapLines={false}
-							wrapLongLines={false}
-							customStyle={{
-								margin: 0,
-								padding: '0.5rem',
-								background: 'rgb(20, 20, 20)',
-								fontSize: '10px',
-							}}
-						>
-							{args.search_replace_blocks}
-						</SyntaxHighlighterComp>
-					</ScrollArea>
+		<div className="flex flex-col gap-2 text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg border border-border">
+			<div className="flex items-center gap-2">
+				<div className="animate-spin h-4 w-4 border-2 border-yellow-500 border-t-transparent rounded-full" />
+				<span className="font-medium">Applying changes...</span>
+			</div>
+			{code && (
+				<div className="mt-2 text-xs bg-background/50 p-2 rounded max-h-40 overflow-y-auto">
+					<pre className="whitespace-pre-wrap break-words font-mono">{lastLines}</pre>
 				</div>
 			)}
 		</div>
 	)
 }
 
-export const EditFileUpdate = ({ event, accumulatedArgs, copyToClipboard }: EditFileUpdateProps) => {
+// Memoize EditFileUpdate to avoid unnecessary re-renders
+export const EditFileUpdate = React.memo(({ event, accumulatedArgs, copyToClipboard }: EditFileUpdateProps) => {
 	const targetFile = useMemo(() => accumulatedArgs.target_file || '', [accumulatedArgs.target_file])
 	const instructions = useMemo(() => accumulatedArgs.instructions || '', [accumulatedArgs.instructions])
 	const codeEdit = useMemo(() => accumulatedArgs.search_replace_blocks || '', [accumulatedArgs.search_replace_blocks])
 	const language = getLanguage(targetFile)
 	const scrollContainerRef = useRef<HTMLDivElement>(null)
 
-	// Auto-scroll to bottom when new content is received
+	// Only scroll when codeEdit actually changes
+	const prevCodeEditRef = useRef<string>()
 	useEffect(() => {
-		if (scrollContainerRef.current && codeEdit) {
+		if (scrollContainerRef.current && codeEdit && prevCodeEditRef.current !== codeEdit) {
 			scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
+			prevCodeEditRef.current = codeEdit
 		}
 	}, [codeEdit])
 
@@ -110,25 +97,7 @@ export const EditFileUpdate = ({ event, accumulatedArgs, copyToClipboard }: Edit
 				<div className="max-h-[300px] overflow-auto w-full" ref={scrollContainerRef}>
 					{codeEdit ? (
 						<div className="overflow-auto w-full">
-							<SyntaxHighlighterComp
-								language={language}
-								style={vscDarkPlus}
-								PreTag="div"
-								className="rounded text-xs w-full"
-								showLineNumbers={true}
-								wrapLines={false}
-								wrapLongLines={false}
-								customStyle={{
-									margin: 0,
-									padding: '0.5rem',
-									background: 'rgb(20, 20, 20)',
-									fontSize: '11px',
-									width: '100%',
-									minWidth: '100%',
-								}}
-							>
-								{codeEdit}
-							</SyntaxHighlighterComp>
+							<LazyCodeBlock code={codeEdit} language={language} />
 						</div>
 					) : (
 						<div className="p-3 text-muted-foreground italic flex items-center justify-center h-[200px] w-full">Waiting for content...</div>
@@ -137,93 +106,155 @@ export const EditFileUpdate = ({ event, accumulatedArgs, copyToClipboard }: Edit
 			</div>
 		</div>
 	)
+})
+
+function DiffBlock({ code }: { code: string }) {
+	const [expanded, setExpanded] = React.useState(false)
+	const MAX_LINES = 30
+	const CONTEXT_BEFORE = 5
+	// Parse the code for conflict markers
+	const originalMatch = code.match(/<<<<<<< ORIGINAL([\s\S]*?)=======/)
+	const updatedMatch = code.match(/=======[\s\S]*?>>>>>>> UPDATED/)
+	const original = originalMatch ? originalMatch[1].trim().split('\n') : []
+	const updated = updatedMatch ? updatedMatch[0].replace('=======', '').replace('>>>>>>> UPDATED', '').trim().split('\n') : []
+
+	// Simple line diff algorithm for unified diff
+	function getUnifiedDiffLines(orig: string[], upd: string[]) {
+		const lines: { type: 'remove' | 'add' | 'equal'; value: string }[] = []
+		let i = 0,
+			j = 0
+		while (i < orig.length || j < upd.length) {
+			if (i < orig.length && j < upd.length && orig[i] === upd[j]) {
+				lines.push({ type: 'equal', value: orig[i] })
+				i++
+				j++
+			} else if (j < upd.length && !orig.includes(upd[j])) {
+				lines.push({ type: 'add', value: upd[j] })
+				j++
+			} else if (i < orig.length && !upd.includes(orig[i])) {
+				lines.push({ type: 'remove', value: orig[i] })
+				i++
+			} else {
+				// fallback: treat as changed
+				if (i < orig.length) lines.push({ type: 'remove', value: orig[i] })
+				if (j < upd.length) lines.push({ type: 'add', value: upd[j] })
+				i++
+				j++
+			}
+		}
+		return lines
+	}
+
+	let lines: { type: 'remove' | 'add' | 'equal'; value: string }[] = []
+	if (original.length && updated.length) {
+		lines = getUnifiedDiffLines(original, updated)
+	} else if (original.length) {
+		lines = original.map((l) => ({ type: 'remove', value: l }))
+	} else if (updated.length) {
+		lines = updated.map((l) => ({ type: 'add', value: l }))
+	}
+	// Find the first changed line
+	const firstChangeIdx = lines.findIndex((l) => l.type === 'add' || l.type === 'remove')
+	let previewLines = lines
+	if (!expanded && lines.length > MAX_LINES && firstChangeIdx !== -1) {
+		const start = Math.max(0, firstChangeIdx - CONTEXT_BEFORE)
+		previewLines = lines.slice(start, start + MAX_LINES)
+	} else if (!expanded && lines.length > MAX_LINES) {
+		previewLines = lines.slice(0, MAX_LINES)
+	}
+	return (
+		<div>
+			<pre className="bg-background p-2 rounded border border-border text-xs overflow-x-auto whitespace-pre font-mono">
+				{previewLines.map((line, idx) => (
+					<div
+						key={idx}
+						className={
+							line.type === 'add'
+								? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
+								: line.type === 'remove'
+									? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'
+									: ''
+						}
+					>
+						{line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' '}
+						{line.value}
+					</div>
+				))}
+			</pre>
+			{lines.length > MAX_LINES && (
+				<button className="text-xs underline mt-1" onClick={() => setExpanded((v) => !v)}>
+					{expanded ? 'Hide diff' : `Show full diff (${lines.length} lines)`}
+				</button>
+			)}
+		</div>
+	)
 }
 
-export const EditFileResult = ({ event }: EditFileResultProps) => {
+// Memoize EditFileResult to avoid unnecessary re-renders
+export const EditFileResult = React.memo(({ event }: EditFileResultProps) => {
 	const resultArgs = useMemo(() => {
 		const args = event.arguments && typeof event.arguments === 'string' ? JSON.parse(event.arguments) : {}
 		return args
 	}, [event.arguments])
-	console.log('resultArgs', resultArgs, event)
 	const [copiedCode, setCopiedCode] = useState<string | null>(null)
-	const scrollContainerRef = useRef<HTMLDivElement>(null)
-
-	// Auto-scroll to bottom when new content is received
-	useEffect(() => {
-		if (scrollContainerRef.current && resultArgs.search_replace_blocks) {
-			scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
-		}
-	}, [resultArgs.search_replace_blocks])
-
 	const filePath = useMemo(() => resultArgs.target_file || '', [resultArgs.target_file])
-	const instructions = useMemo(() => resultArgs.instructions || '', [resultArgs.instructions])
-	const summary = useMemo(() => `File "${filePath}" edited successfully.`, [filePath])
+	const code = resultArgs.search_replace_blocks || ''
+	const language = getLanguage(filePath)
 	const copyToClipboard = useCallback((content: string) => {
 		navigator.clipboard.writeText(content)
 		setCopiedCode(content)
 		setTimeout(() => setCopiedCode(null), 2000)
 	}, [])
 
+	// Add localStorage load on mount
+	useEffect(() => {
+		const saved = localStorage.getItem(STORAGE_KEY)
+		if (saved) {
+			try {
+				const parsed = JSON.parse(saved)
+				// Restore form state and results if needed
+				// (You may need to adapt this to your actual form state structure)
+				// setFn(parsed.fn || '')
+				// setArgs(parsed.args || '')
+				// setSelectedKey(parsed.selectedKey)
+				// setResponses(parsed.responses || [])
+			} catch {}
+		}
+	}, [])
+	// Save state to localStorage on change
+	useEffect(() => {
+		try {
+			localStorage.setItem(
+				STORAGE_KEY,
+				JSON.stringify({
+					// fn,
+					// args,
+					// selectedKey,
+					// responses,
+					// ...add any other state you want to persist
+				})
+			)
+		} catch {}
+	}, [/* dependencies: fn, args, selectedKey, responses, etc. */])
+
 	return (
-		<ToolSummaryCard event={event}>
-			<div className="space-y-3">
-				{/* Summary Section */}
-				<div className="text-sm text-muted-foreground mb-3">{summary}</div>
-
-				{/* Explanation */}
-				{instructions && (
-					<div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
-						<div className="font-semibold text-sm mb-2 text-blue-700 dark:text-blue-300">Explanation:</div>
-						<div className="text-sm text-blue-600 dark:text-blue-200">{instructions}</div>
-					</div>
-				)}
-
-				{/* File Path */}
-				<div className="bg-background/50 p-3 rounded border border-border">
-					<div className="font-semibold text-sm mb-2">File:</div>
-					<div className="text-sm break-all">{filePath}</div>
+		<div className="max-w-xl w-full mx-2">
+			<ToolSummaryCard event={event}>
+				<div className="flex items-center bg-muted px-3 py-2 rounded-t text-muted-foreground text-xs font-mono gap-2">
+					<FileText className="w-5 h-5" />
+					<span className="truncate">File {filePath} updated</span>
+					<button onClick={() => copyToClipboard(code)} className="ml-auto p-1.5 rounded hover:bg-background transition-colors" title="Copy code">
+						{copiedCode === code ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+					</button>
 				</div>
-
-				{/* Modified Content */}
-				{resultArgs.search_replace_blocks && (
-					<div className="bg-background/50 p-3 rounded border border-border">
-						<div className="font-semibold text-sm mb-2">Modified Content:</div>
-						<div className="relative">
-							<button
-								onClick={() => copyToClipboard(resultArgs.search_replace_blocks)}
-								className="absolute top-2 right-2 p-1.5 rounded bg-background hover:bg-background/80 transition-colors z-10"
-								title="Copy code"
-							>
-								{copiedCode === resultArgs.search_replace_blocks ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-							</button>
-							<div className="max-h-[300px] overflow-auto">
-								<SyntaxHighlighterComp
-									language={getLanguage(filePath)}
-									style={vscDarkPlus}
-									wrapLines={false}
-									wrapLongLines={false}
-									showLineNumbers={true}
-									customStyle={{
-										margin: 0,
-										padding: '0.5rem',
-										background: 'rgb(20, 20, 20)',
-										fontSize: '11px',
-										minWidth: '100%',
-									}}
-								>
-									{resultArgs.search_replace_blocks}
-								</SyntaxHighlighterComp>
-							</div>
-						</div>
-					</div>
-				)}
-
-				{/* Status */}
-				<div className="bg-background/50 p-3 rounded border border-border">
-					<div className="font-semibold text-sm mb-2">Status:</div>
-					<div className="text-sm">File modified</div>
+				<div className="w-full whitespace-pre-wrap break-words bg-background rounded-b p-4 text-xs">
+					{code.includes('<<<<<<< ORIGINAL') && code.includes('=======') && code.includes('>>>>>>> UPDATED') ? (
+						<DiffBlock code={code} />
+					) : (
+						<LazyCodeBlock code={code} language={language} previewLines={5} />
+					)}
 				</div>
-			</div>
-		</ToolSummaryCard>
+			</ToolSummaryCard>
+		</div>
 	)
-}
+})

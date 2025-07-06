@@ -1,4 +1,4 @@
-import { getChaincodeProjectsByIdMetadata, postChaincodeProjectsByIdInvoke, postChaincodeProjectsByIdQuery } from '@/api/client'
+import { postChaincodeProjectsByIdInvoke, postChaincodeProjectsByIdQuery } from '@/api/client'
 import { getChaincodeProjectsByIdMetadataOptions } from '@/api/client/@tanstack/react-query.gen'
 import { FabricKeySelect } from '@/components/FabricKeySelect'
 import { Button } from '@/components/ui/button'
@@ -65,6 +65,10 @@ interface PlaygroundCoreProps {
 	networkId: number
 	paramValues?: Record<string, string>
 	setParamValues?: (paramValues: Record<string, string>) => void
+	selectedContract?: string
+	setSelectedContract?: (c: string) => void
+	selectedTx?: string
+	setSelectedTx?: (t: string) => void
 }
 
 export function PlaygroundCore({
@@ -83,12 +87,16 @@ export function PlaygroundCore({
 	restoreOnly,
 	sortedResponses,
 	networkId,
+	paramValues,
+	setParamValues,
 	mode,
 	setMode,
 	metadata,
-	paramValues,
-	setParamValues,
 	onReloadMetadata,
+	selectedContract,
+	setSelectedContract,
+	selectedTx,
+	setSelectedTx,
 }: PlaygroundCoreProps & {
 	mode?: 'manual' | 'metadata'
 	setMode?: (mode: 'manual' | 'metadata') => void
@@ -107,18 +115,16 @@ export function PlaygroundCore({
 
 	// MetadataForm state management
 	const contracts = useMemo(() => (metadata ? Object.keys(metadata.contracts || {}) : []), [metadata])
-	const [selectedContract, setSelectedContract] = useState<string | undefined>(contracts[0])
 	const contract = useMemo(() => (selectedContract ? metadata?.contracts?.[selectedContract] : undefined), [selectedContract, metadata])
 	const transactions = contract?.transactions || []
-	const [selectedTx, setSelectedTx] = useState<string | undefined>(transactions[0]?.name)
 
 	// Keep contract/tx selection in sync with metadata changes
 	useEffect(() => {
-		if (contracts.length && !selectedContract) setSelectedContract(contracts[0])
-	}, [contracts, selectedContract])
+		if (contracts.length && !selectedContract && setSelectedContract) setSelectedContract(contracts[0])
+	}, [contracts, selectedContract, setSelectedContract])
 	useEffect(() => {
-		if (transactions.length && !selectedTx) setSelectedTx(transactions[0]?.name)
-	}, [transactions, selectedTx])
+		if (transactions.length && !selectedTx && setSelectedTx) setSelectedTx(transactions[0]?.name)
+	}, [transactions, selectedTx, setSelectedTx])
 
 	// Restore logic
 	const restoreOnlyInternal = useCallback(
@@ -131,7 +137,6 @@ export function PlaygroundCore({
 	// If metadata is present, show tabs to switch modes
 	const showTabs = useMemo(() => !!metadata, [metadata])
 
-	// In PlaygroundCore, track paramValues state for metadata mode
 	return (
 		<div className="w-full max-w-full mx-auto py-8">
 			<div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-4">
@@ -147,21 +152,14 @@ export function PlaygroundCore({
 					</div>
 					{showTabs && (
 						<div className="flex items-center mb-6 gap-2">
-							<Tabs value={currentMode} onValueChange={(v) => handleSetMode(v as 'manual' | 'metadata')} >
+							<Tabs value={currentMode} onValueChange={(v) => handleSetMode(v as 'manual' | 'metadata')}>
 								<TabsList>
 									<TabsTrigger value="metadata">From Metadata</TabsTrigger>
 									<TabsTrigger value="manual">Manual</TabsTrigger>
 								</TabsList>
 							</Tabs>
-							{onReloadMetadata && (
-								<Button
-									size="icon"
-									variant="ghost"
-									className="ml-1"
-									onClick={onReloadMetadata}
-									title="Reload metadata"
-									aria-label="Reload metadata"
-								>
+							{onReloadMetadata && currentMode === 'metadata' && (
+								<Button size="icon" variant="ghost" className="ml-1" onClick={onReloadMetadata} title="Reload metadata" aria-label="Reload metadata">
 									<RotateCcw className="h-4 w-4" />
 								</Button>
 							)}
@@ -205,6 +203,10 @@ export function PlaygroundCore({
 							selectedKey={selectedKey}
 							paramValues={paramValues}
 							setParamValues={setParamValues}
+							selectedContract={selectedContract}
+							setSelectedContract={setSelectedContract}
+							selectedTx={selectedTx}
+							setSelectedTx={setSelectedTx}
 						/>
 					)}
 				</div>
@@ -310,11 +312,23 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 	const [loadingInvoke, setLoadingInvoke] = useState(false)
 	const [loadingQuery, setLoadingQuery] = useState(false)
 	const [mode, setMode] = useState<'manual' | 'metadata'>('manual')
-	const STORAGE_KEY = `playground-state-${projectId}`
+	const STORAGE_KEY = useMemo(() => `playground-state-${projectId}`, [projectId])
 	const metadataQuery = useQuery({
 		...getChaincodeProjectsByIdMetadataOptions({ path: { id: projectId } }),
 	})
 	const metadata = useMemo(() => (metadataQuery.data?.result ? JSON.parse(metadataQuery.data.result as string) : undefined), [metadataQuery.data])
+	// Move this up before the useEffect hooks
+	const [paramValues, setParamValues] = useState<Record<string, string>>({})
+	// Add state for selectedContract and selectedTx above useEffect hooks
+	const [selectedContract, setSelectedContract] = useState<string | undefined>(undefined)
+	const [selectedTx, setSelectedTx] = useState<string | undefined>(undefined)
+
+	// Switch to metadata mode if metadata is available
+	useEffect(() => {
+		if (metadata && mode === 'manual') {
+			setMode('metadata')
+		}
+	}, [metadata, mode, setMode])
 	// Load state from localStorage on mount
 	useEffect(() => {
 		const saved = localStorage.getItem(STORAGE_KEY)
@@ -325,24 +339,32 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 				setArgs(parsed.args || '')
 				setSelectedKey(parsed.selectedKey)
 				setResponses(parsed.responses || [])
+				setParamValues(parsed.paramValues || {})
+				setSelectedContract(parsed.selectedContract)
+				setSelectedTx(parsed.selectedTx)
 			} catch {}
 		}
 	}, [STORAGE_KEY])
 
 	// Save state to localStorage on change
 	useEffect(() => {
-		try {
-			localStorage.setItem(
-				STORAGE_KEY,
-				JSON.stringify({
-					fn,
-					args,
-					selectedKey,
-					responses: responses.slice(0, 10),
-				})
-			)
-		} catch {}
-	}, [fn, args, selectedKey, responses, STORAGE_KEY])
+		if (fn.trim() || Object.keys(paramValues).length > 0 || selectedContract || selectedTx) {
+			try {
+				localStorage.setItem(
+					STORAGE_KEY,
+					JSON.stringify({
+						fn,
+						args,
+						selectedKey,
+						responses: responses.slice(0, 10),
+						paramValues,
+						selectedContract,
+						selectedTx,
+					})
+				)
+			} catch {}
+		}
+	}, [fn, args, selectedKey, responses, paramValues, selectedContract, selectedTx, STORAGE_KEY])
 
 	const sortedResponses = useMemo(() => responses.slice().sort((a, b) => b.timestamp - a.timestamp), [responses])
 
@@ -441,7 +463,6 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 	const handleDeleteResponse = useCallback((timestamp: number) => {
 		setResponses((prev) => prev.filter((op) => op.timestamp !== timestamp))
 	}, [])
-	const [paramValues, setParamValues] = useState<Record<string, string>>({})
 	return (
 		<PlaygroundCore
 			fn={fn}
@@ -471,6 +492,10 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 					error: (err) => `Failed to reload metadata: ${err.message || 'Unknown error'}`,
 				})
 			}}
+			selectedContract={selectedContract}
+			setSelectedContract={setSelectedContract}
+			selectedTx={selectedTx}
+			setSelectedTx={setSelectedTx}
 		/>
 	)
 }

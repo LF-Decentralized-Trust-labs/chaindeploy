@@ -1,13 +1,10 @@
-import React, { useMemo } from 'react'
-import { Copy, Terminal, AlertCircle, CheckCircle } from 'lucide-react'
+import { AlertCircle, CheckCircle, Copy, Terminal } from 'lucide-react'
+import React, { useMemo, useState } from 'react'
 import { Prism as SyntaxHighlighter, SyntaxHighlighterProps } from 'react-syntax-highlighter'
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { ToolEvent } from './ToolEventRenderer'
 import { ToolSummaryCard } from './ToolSummaryCard'
-const SyntaxHighlighterComp = SyntaxHighlighter as unknown as React.ComponentType<SyntaxHighlighterProps>
+import { LazyCodeBlock } from './lazy-code-block'
+
 interface RunTerminalCmdUpdateProps {
 	event: ToolEvent
 	accumulatedArgs: any
@@ -91,19 +88,7 @@ export const RunTerminalCmdUpdate = ({ event, accumulatedArgs, copyToClipboard }
 						<Terminal className="w-3 h-3" />
 						{isGoVet ? 'Go vet analysis' : isBackground ? 'Starting background command' : 'Preparing command'}:
 					</div>
-					<SyntaxHighlighterComp
-						language="bash"
-						style={vscDarkPlus}
-						customStyle={{
-							margin: 0,
-							padding: '0.5rem',
-							borderRadius: '0.25rem',
-							fontSize: '0.75rem',
-							lineHeight: '1.2',
-						}}
-					>
-						{command}
-					</SyntaxHighlighterComp>
+					<LazyCodeBlock code={command} language="bash" />
 					{explanation && <div className="text-xs text-muted-foreground italic mt-2">{explanation}</div>}
 				</div>
 
@@ -114,21 +99,7 @@ export const RunTerminalCmdUpdate = ({ event, accumulatedArgs, copyToClipboard }
 							<div className="animate-pulse h-2 w-2 bg-green-500 rounded-full"></div>
 							Streaming Output:
 						</div>
-						<SyntaxHighlighterComp
-							language="bash"
-							style={vscDarkPlus}
-							customStyle={{
-								margin: 0,
-								padding: '0.5rem',
-								borderRadius: '0.25rem',
-								fontSize: '0.75rem',
-								lineHeight: '1.2',
-								maxHeight: '200px',
-								overflow: 'auto',
-							}}
-						>
-							{output}
-						</SyntaxHighlighterComp>
+						<LazyCodeBlock code={output} language="bash" />
 					</div>
 				)}
 
@@ -139,21 +110,10 @@ export const RunTerminalCmdUpdate = ({ event, accumulatedArgs, copyToClipboard }
 							<AlertCircle className="w-3 h-3" />
 							Error:
 						</div>
-						<SyntaxHighlighterComp
+						<LazyCodeBlock
+							code={error}
 							language="bash"
-							style={vscDarkPlus}
-							customStyle={{
-								margin: 0,
-								padding: '0.5rem',
-								borderRadius: '0.25rem',
-								fontSize: '0.75rem',
-								lineHeight: '1.2',
-								maxHeight: '200px',
-								overflow: 'auto',
-							}}
-						>
-							{error}
-						</SyntaxHighlighterComp>
+						/>
 					</div>
 				)}
 			</div>
@@ -196,90 +156,30 @@ export const RunTerminalCmdResult = ({ event }: RunTerminalCmdResultProps) => {
 		}),
 		[resultData, args]
 	)
-
-	const summary = useMemo(() => {
-		return success ? 'Command completed successfully.' : `Command failed${error ? '.' : ' with an error.'}`
-	}, [success, error, output])
-
+	const [showDetails, setShowDetails] = useState(false)
 	return (
-		<ToolSummaryCard event={event}>
-			<div className="space-y-3">
-				{/* Summary Section */}
-				<div className="text-sm text-muted-foreground mb-3">
-					{summary}
-				</div>
-
-				{/* Command Section */}
-				<div className="bg-background/50 p-3 rounded border border-border">
-					<div className="font-semibold text-orange-600 flex items-center gap-2 mb-2">
-						<Terminal className="w-3 h-3" />
-						Executed Command:
-					</div>
-					<SyntaxHighlighterComp 
-						language="bash" 
-						style={vscDarkPlus} 
-						customStyle={{ 
-							margin: 0, 
-							padding: '0.5rem', 
-							borderRadius: '0.25rem',
-							fontSize: '0.75rem',
-							lineHeight: '1.2',
-						}}
-					>
-						{command}
-					</SyntaxHighlighterComp>
-				</div>
-
-				{/* Output Section */}
-				{output && (
-					<div className="bg-background/50 p-3 rounded border border-border">
-						<div className="font-semibold text-sm mb-2 flex items-center gap-2">
-							{success ? <CheckCircle className="w-3 h-3 text-green-600" /> : <AlertCircle className="w-3 h-3 text-red-600" />}
-							Output:
-						</div>
-						<div className="max-h-[200px] overflow-auto">
-							<SyntaxHighlighterComp 
-								language="bash" 
-								style={vscDarkPlus} 
-								customStyle={{ 
-									margin: 0, 
-									padding: '0.5rem', 
-									borderRadius: '0.25rem',
-									fontSize: '0.75rem',
-									lineHeight: '1.2',
-								}}
-							>
-								{output}
-							</SyntaxHighlighterComp>
-						</div>
-					</div>
-				)}
-
-				{/* Error Section */}
-				{error && (
-					<div className="bg-red-50 border border-red-200 p-3 rounded">
-						<div className="font-semibold text-sm mb-2 text-red-700 flex items-center gap-2">
-							<AlertCircle className="w-3 h-3" />
-							Error:
-						</div>
-						<div className="max-h-[200px] overflow-auto">
-							<SyntaxHighlighterComp 
-								language="bash" 
-								style={vscDarkPlus} 
-								customStyle={{ 
-									margin: 0, 
-									padding: '0.5rem', 
-									borderRadius: '0.25rem',
-									fontSize: '0.75rem',
-									lineHeight: '1.2',
-								}}
-							>
-								{error}
-							</SyntaxHighlighterComp>
-						</div>
-					</div>
-				)}
+		<div className="bg-muted/50 p-2 rounded border border-border text-xs text-muted-foreground">
+			<div className="flex items-center gap-2">
+				{success ? <CheckCircle className="w-4 h-4 text-green-600" /> : <AlertCircle className="w-4 h-4 text-red-600" />}
+				<span>{success ? 'Command completed successfully.' : 'Command failed.'}</span>
 			</div>
-		</ToolSummaryCard>
+			<div className="flex items-center gap-2 mt-1">
+				<Terminal className="w-4 h-4" />
+				<code className="bg-background px-2 py-1 rounded font-mono">{command}</code>
+			</div>
+			<button onClick={() => setShowDetails((v) => !v)} className="mt-2 p-1 rounded hover:bg-muted">
+				{showDetails ? 'Hide Output' : 'Show Output'}
+			</button>
+			{showDetails && (
+				<div className="mt-2">
+					{output && (
+						<pre className="bg-background p-2 rounded border overflow-x-auto text-xs whitespace-pre-wrap break-words">{output}</pre>
+					)}
+					{error && (
+						<pre className="bg-red-50 border border-red-200 p-2 rounded text-red-700 mt-2 overflow-x-auto text-xs whitespace-pre-wrap break-words">{error}</pre>
+					)}
+				</div>
+			)}
+		</div>
 	)
 }

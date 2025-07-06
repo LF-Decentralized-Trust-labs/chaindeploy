@@ -1,11 +1,8 @@
-import { Code, Copy } from 'lucide-react'
-import { useMemo } from 'react'
-import type { SyntaxHighlighterProps } from 'react-syntax-highlighter'
-import SyntaxHighlighter from 'react-syntax-highlighter'
+import { Code, Copy, FileText, ChevronDown, ChevronUp } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { ToolEvent } from './ToolEventRenderer'
 import { ToolSummaryCard } from './ToolSummaryCard'
-
-const SyntaxHighlighterComp = SyntaxHighlighter as unknown as React.ComponentType<SyntaxHighlighterProps>
+import { LazyCodeBlock } from './lazy-code-block'
 
 interface ReadFileUpdateProps {
 	event: ToolEvent
@@ -34,53 +31,10 @@ export const ReadFileExecute = ({ event }: ReadFileExecuteProps) => {
 
 export const ReadFileUpdate = ({ event, accumulatedArgs, copyToClipboard }: ReadFileUpdateProps) => {
 	const path = useMemo(() => accumulatedArgs.target_file || '', [accumulatedArgs.target_file])
-	const explanation = useMemo(() => accumulatedArgs.explanation || '', [accumulatedArgs.explanation])
-	const shouldReadEntireFile = useMemo(() => accumulatedArgs.should_read_entire_file ?? true, [accumulatedArgs.should_read_entire_file])
-	const startLine = useMemo(() => accumulatedArgs.start_line, [accumulatedArgs.start_line])
-	const endLine = useMemo(() => accumulatedArgs.end_line, [accumulatedArgs.end_line])
-
-	const handleCopyDelta = async () => {
-		await copyToClipboard(JSON.stringify(accumulatedArgs, null, 2))
-	}
-
-	const getReadingDescription = () => {
-		if (shouldReadEntireFile) {
-			return 'Reading entire file'
-		}
-		if (startLine && endLine) {
-			return `Reading lines ${startLine}-${endLine}`
-		}
-		if (startLine) {
-			return `Reading from line ${startLine}`
-		}
-		return 'Reading file'
-	}
-
 	return (
-		<div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg border border-border">
-			<div className="flex items-center gap-2 mb-3">
-				<svg className="mr-3 -ml-1 size-5 animate-spin text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-					<circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-					<path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-				</svg>
-				<span className="font-medium">
-					{getReadingDescription()} {path}
-				</span>
-			</div>
-			<div className="mt-2 text-xs bg-background/50 p-2 rounded border border-border relative">
-				<button onClick={handleCopyDelta} className="absolute top-2 right-2 p-1.5 rounded bg-muted hover:bg-muted/80 transition-colors" title="Copy arguments">
-					<Copy className="w-3 h-3" />
-				</button>
-				<div className="font-semibold text-blue-600 flex items-center gap-2">
-					<Code className="w-3 h-3" />
-					{getReadingDescription()}: {path || 'Unknown file'}
-				</div>
-				{explanation && (
-					<div className="mt-2 text-xs text-muted-foreground">
-						<strong>Reason:</strong> {explanation}
-					</div>
-				)}
-			</div>
+		<div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 p-2 rounded border border-border">
+			<FileText className="w-4 h-4" />
+			<span>Reading file <span className="font-mono">{path}</span></span>
 		</div>
 	)
 }
@@ -91,48 +45,28 @@ export const ReadFileResult = ({ event, copyToClipboard, copiedCode }: ReadFileR
 		return args
 	}, [event.arguments])
 	const path = useMemo(() => resultArgs.target_file || '', [resultArgs.target_file])
-	const explanation = useMemo(() => resultArgs.explanation || '', [resultArgs.explanation])
-	const shouldReadEntireFile = useMemo(() => resultArgs.should_read_entire_file ?? true, [resultArgs.should_read_entire_file])
-	const startLine = useMemo(() => resultArgs.start_line, [resultArgs.start_line])
-	const endLine = useMemo(() => resultArgs.end_line, [resultArgs.end_line])
-
-	const getReadingDescription = () => {
-		if (shouldReadEntireFile) {
-			return 'Entire file'
-		}
-		if (startLine && endLine) {
-			return `Lines ${startLine}-${endLine}`
-		}
-		if (startLine) {
-			return `From line ${startLine}`
-		}
-		return 'File content'
-	}
-
-	const summary = useMemo(() => `The file "${path}" has been read successfully.`, [path])
-
+	const [showDetails, setShowDetails] = useState(false)
+	const result = event.result && typeof event.result === 'object' ? event.result as any : {}
 	return (
-		<ToolSummaryCard event={event}>
-			<div className="space-y-3 ">
-				{/* Summary Section */}
-				<div className="text-sm text-muted-foreground">{summary}</div>
-
-				{/* Explanation */}
-				{explanation && (
-					<div className="p-3 m-2 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
-						<div className="font-semibold text-sm mb-2 text-blue-700 dark:text-blue-300">Explanation:</div>
-						<div className="text-sm text-blue-600 dark:text-blue-200">{explanation}</div>
-					</div>
-				)}
-
-				{/* File Details */}
-				<div className="bg-background/50 p-3 m-2 rounded border border-border">
-					<div className="font-semibold text-sm mb-2">File:</div>
-					<div className="text-sm">{path}</div>
-					<div className="font-semibold text-sm mb-2 mt-3">Content Read:</div>
-					<div className="text-sm text-muted-foreground">{getReadingDescription()}</div>
-				</div>
+		<div className="bg-muted/50 p-2 rounded border border-border text-xs text-muted-foreground">
+			<div className="flex items-center gap-2">
+				<FileText className="w-4 h-4" />
+				<span>File <span className="font-mono">{path}</span> read</span>
+				<button onClick={() => setShowDetails((v) => !v)} className="ml-2 p-1 rounded hover:bg-muted">
+					{showDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+				</button>
 			</div>
-		</ToolSummaryCard>
+			{showDetails && (
+				<div className="mt-2 w-full space-y-2">
+					<div className="flex flex-col gap-1">
+						<div><span className="font-semibold">File:</span> <span className="font-mono">{result.file_path}</span></div>
+						<div><span className="font-semibold">Lines:</span> {result.start_line} - {result.end_line} (<span className="font-mono">{result.total_lines}</span> total)</div>
+					</div>
+					{result.content && (
+						<LazyCodeBlock code={result.content} language="plaintext" previewLines={10} className="mt-1" />
+					)}
+				</div>
+			)}
+		</div>
 	)
 }

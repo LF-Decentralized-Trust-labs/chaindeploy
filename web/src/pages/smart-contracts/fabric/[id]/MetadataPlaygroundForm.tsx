@@ -72,6 +72,10 @@ export function MetadataForm({
 	restoredOperation,
 	paramValues: controlledParamValues,
 	setParamValues: controlledSetParamValues,
+	selectedContract: controlledSelectedContract,
+	setSelectedContract: controlledSetSelectedContract,
+	selectedTx: controlledSelectedTx,
+	setSelectedTx: controlledSetSelectedTx,
 }: {
 	metadata: any
 	onSubmit: (txName: string, args: string[], type: 'invoke' | 'query') => void
@@ -80,12 +84,20 @@ export function MetadataForm({
 	restoredOperation?: any
 	paramValues?: Record<string, string>
 	setParamValues?: (v: Record<string, string>) => void
+	selectedContract?: string
+	setSelectedContract?: (c: string) => void
+	selectedTx?: string
+	setSelectedTx?: (t: string) => void
 }) {
 	const contracts = useMemo(() => Object.keys(metadata.contracts || {}), [metadata])
-	const [selectedContract, setSelectedContract] = useState<string | undefined>(contracts[0])
+	const [internalSelectedContract, setInternalSelectedContract] = useState<string | undefined>(contracts[0])
+	const selectedContract = controlledSelectedContract !== undefined ? controlledSelectedContract : internalSelectedContract
+	const setSelectedContract = controlledSetSelectedContract || setInternalSelectedContract
 	const contract = useMemo(() => (selectedContract ? metadata.contracts[selectedContract] : undefined), [selectedContract, metadata])
 	const transactions = useMemo(() => contract?.transactions || [], [contract])
-	const [selectedTx, setSelectedTx] = useState<string | undefined>(transactions[0]?.name)
+	const [internalSelectedTx, setInternalSelectedTx] = useState<string | undefined>(transactions[0]?.name)
+	const selectedTx = controlledSelectedTx !== undefined ? controlledSelectedTx : internalSelectedTx
+	const setSelectedTx = controlledSetSelectedTx || setInternalSelectedTx
 	const tx = useMemo(() => transactions.find((t: any) => t.name === selectedTx), [transactions, selectedTx])
 	const [internalParamValues, setInternalParamValues] = useState<Record<string, string>>({})
 	const paramValues = useMemo(() => controlledParamValues ?? internalParamValues, [controlledParamValues, internalParamValues])
@@ -100,8 +112,8 @@ export function MetadataForm({
 				const contract = metadata.contracts[contractName]
 				const tx = (contract.transactions || []).find((t: any) => t.name === restoredOperation.fn)
 				if (tx) {
-					setSelectedContract(contractName)
-					setSelectedTx(tx.name)
+					setInternalSelectedContract(contractName)
+					setInternalSelectedTx(tx.name)
 					let paramObj: Record<string, string> = {}
 					if (restoredOperation.paramValues) {
 						paramObj = { ...restoredOperation.paramValues }

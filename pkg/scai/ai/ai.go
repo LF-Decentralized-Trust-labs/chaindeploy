@@ -50,6 +50,8 @@ type AIProviderInterface interface {
 		toolSchemas map[string]ToolSchema,
 		observer AgentStepObserver,
 	) (*AIMessage, []AIToolCall, []ToolCallResult, error)
+
+	GetMaxTokens(model string) int
 }
 
 // AIMessage represents a generic AI message
@@ -403,6 +405,9 @@ func (s *AIChatService) StreamChat(
 			Content:    m.Content,
 			ToolCallID: "",
 		}
+		if aiMsg.Content == "" {
+			aiMsg.Content = "No content generated"
+		}
 
 		// If this is an assistant message, check if it has tool calls and add tool response messages
 		if m.Sender == "assistant" && len(m.ToolCalls) > 0 {
@@ -445,6 +450,20 @@ func (s *AIChatService) StreamChat(
 	// Validate that we have messages after filtering empty ones
 	if len(chatMsgs) <= 1 { // Only system message
 		return fmt.Errorf("no valid messages found after filtering empty content")
+	}
+
+	// After chatMsgs is built, check token count
+	tokenCount := estimateTokenCount(chatMsgs)
+	maxTokens := s.AIProvider.GetMaxTokens(s.Model)
+	if tokenCount > maxTokens {
+		errResp := map[string]interface{}{
+			"error":       "too_many_tokens",
+			"message":     "This conversation is too long for the AI to process. Please start a new chat to continue.",
+			"token_count": tokenCount,
+			"max_tokens":  maxTokens,
+		}
+		b, _ := json.Marshal(errResp)
+		return fmt.Errorf(string(b))
 	}
 
 	// Debug logging for message flow
@@ -515,7 +534,9 @@ func (s *AIChatService) StreamChat(
 				}
 			}
 		}
-
+		if msg.Content == "" {
+			msg.Content = "No content generated"
+		}
 		// Add assistant message to chat context
 		chatMsgs = append(chatMsgs, *msg)
 
@@ -611,6 +632,7 @@ func (s *AIChatService) StreamChat(
 				s.Logger.Debugf("[StreamChat] Added validation message: %s", validationMessage)
 			}
 		}
+
 	}
 
 	// If we reach max steps, notify observer and make one final call and stream the response
@@ -1399,8 +1421,15 @@ Important Notes:
 - For completely new files, use the write_file tool instead
 - Ensure proper indentation and formatting in the FINAL section`)
 
+	// --- Custom user requirements ---
+	details = append(details, "Make the smallest modifications as possible at once.")
+	details = append(details, "Make a plan with steps before making any change, and show it to the user.")
+	details = append(details, "Keep functions small, build to reuse functions rather than duplicating code.  If you need to make a change to a function, make it small and focused on the change you need to make.")
+	details = append(details, "After each time you write/edit a file, make sure the application compiles.")
+	// --- End custom user requirements ---
+
 	details = append(details, "Do not make things up or use information not provided in the system information, tools, or user queries.")
-	details = append(details, "Always use MARKDOWN to format lists, bullet points, etc. Do NOT write tables.")
+	details = append(details, "Always use MARKDOWN to format lists, bullet points, etc. Do NOT write tables. Use lists instead of tables for any data presentation.")
 	details = append(details, fmt.Sprintf("Today's date is %s.", time.Now().Format("Monday, January 2, 2006")))
 
 	// Write important details
@@ -1454,4 +1483,13 @@ func NewOpenAIChatService(apiKey string, logger *logger.Logger, chatService *Cha
 
 	// Create the generic AI chat service with OpenAI provider
 	return NewAIChatService(logger, chatService, queries, projectsDir, openAIProvider, model)
+}
+
+func estimateTokenCount(messages []AIMessage) int {
+	total := 0
+	for _, m := range messages {
+		// Rough estimate: 1 token ≈ 4 chars (for English, OpenAI/Anthropic)
+		total += len(m.Content) / 4
+	}
+	return total
 }

@@ -1,13 +1,9 @@
 import { getLanguage } from '@/lib/language'
 import { Check, Copy, FileText } from 'lucide-react'
-import React, { useEffect, useMemo, useRef } from 'react'
-import type { SyntaxHighlighterProps } from 'react-syntax-highlighter'
-import SyntaxHighlighter from 'react-syntax-highlighter'
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { useEffect, useMemo, useRef, useCallback, useState } from 'react'
 import { ToolEvent } from './ToolEventRenderer'
 import { ToolSummaryCard } from './ToolSummaryCard'
-
-const SyntaxHighlighterComp = SyntaxHighlighter as unknown as React.ComponentType<SyntaxHighlighterProps>
+import { LazyCodeBlock } from './lazy-code-block'
 
 interface WriteFileUpdateProps {
 	event: ToolEvent
@@ -27,7 +23,7 @@ interface WriteFileExecuteProps {
 
 export const WriteFileExecute = ({ event }: WriteFileExecuteProps) => {
 	return (
-		<div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg border border-border">
+		<div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-lg border border-border">
 			<div className="animate-spin h-4 w-4 border-2 border-green-500 border-t-transparent rounded-full" />
 			<span className="font-medium">Executing file write...</span>
 		</div>
@@ -52,7 +48,7 @@ export const WriteFileUpdate = ({ event, accumulatedArgs, copyToClipboard }: Wri
 	}
 
 	return (
-		<div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg border border-border">
+		<div className="text-sm text-muted-foreground bg-muted/50  rounded-lg border border-border">
 			<div className="flex items-center gap-2 mb-3">
 				<svg className="mr-3 -ml-1 size-5 animate-spin text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
 					<circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -75,24 +71,7 @@ export const WriteFileUpdate = ({ event, accumulatedArgs, copyToClipboard }: Wri
 				<div ref={scrollContainerRef} className="max-h-[500px] overflow-auto">
 					{content ? (
 						<div className="overflow-auto">
-							<SyntaxHighlighterComp
-								language={language}
-								style={vscDarkPlus}
-								PreTag="div"
-								className="rounded text-xs"
-								showLineNumbers={true}
-								wrapLines={false}
-								wrapLongLines={false}
-								customStyle={{
-									margin: 0,
-									padding: '0.5rem',
-									background: 'rgb(20, 20, 20)',
-									fontSize: '11px',
-									minWidth: '100%',
-								}}
-							>
-								{content}
-							</SyntaxHighlighterComp>
+							<LazyCodeBlock code={content} language={language} />
 						</div>
 					) : (
 						<div className="p-3 text-muted-foreground italic flex items-center justify-center h-[200px]">Waiting for content...</div>
@@ -108,57 +87,29 @@ export const WriteFileResult = ({ event, copyToClipboard, copiedCode }: WriteFil
 		const args = event.arguments && typeof event.arguments === 'string' ? JSON.parse(event.arguments) : {}
 		return args
 	}, [event.arguments])
-
 	const path = useMemo(() => resultArgs.path || '', [resultArgs.path])
 	const content = useMemo(() => resultArgs.content || '', [resultArgs.content])
-	const result = useMemo(() => (event.result && typeof event.result === 'object' ? (event.result as any) : {}), [event.result])
-	const resultMessage = useMemo(() => result.result || '', [result.result])
-	const created = useMemo(() => result.created || false, [result.created])
 	const language = useMemo(() => getLanguage(path), [path])
-	const summary = useMemo(() => (created ? `New file "${path}" has been created.` : `The file "${path}" has been updated.`), [created, path])
-
+	const [copied, setCopied] = useState<string | null>(null)
+	const handleCopy = useCallback(() => {
+		copyToClipboard(content)
+		setCopied(content)
+		setTimeout(() => setCopied(null), 2000)
+	}, [content, copyToClipboard])
 	return (
-		<ToolSummaryCard event={event}>
-			<div className="space-y-3">
-				{/* Summary Section */}
-				<div className="text-sm text-muted-foreground mb-3">{summary}</div>
-
-				{/* File Info */}
-				<div className="bg-background/50 p-3 rounded border border-border">
-					<div className="font-semibold text-sm mb-2">File Info:</div>
-					<div className="text-sm space-y-1">
-						<div>Path: {path}</div>
-						<div>Status: {created ? 'Created new file' : 'Updated existing file'}</div>
-						{resultMessage && <div>Result: {resultMessage}</div>}
-					</div>
+		<div className="max-w-xl w-full ">
+			<ToolSummaryCard event={event}>
+				<div className="flex items-center bg-muted px-3 py-2 rounded-t text-muted-foreground text-xs font-mono gap-2">
+					<FileText className="w-4 h-4" />
+					<span className="truncate">{path}</span>
+					<button onClick={handleCopy} className="ml-auto p-1.5 rounded hover:bg-background transition-colors" title="Copy code">
+						{copied === content ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+					</button>
 				</div>
-
-				{/* File Content */}
-				{content && (
-					<div className="bg-background/50 p-3 rounded border border-border">
-						<div className="font-semibold text-sm mb-2 flex items-center justify-between">
-							<span>File Content:</span>
-							<button onClick={() => copyToClipboard(content)} className="p-1.5 rounded bg-muted hover:bg-muted/80 transition-colors" title="Copy code">
-								{copiedCode === content ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-							</button>
-						</div>
-						<div className="max-h-[400px] overflow-auto">
-							<SyntaxHighlighterComp
-								language={language}
-								style={vscDarkPlus}
-								PreTag="div"
-								className="rounded-lg"
-								showLineNumbers={true}
-								wrapLines={true}
-								wrapLongLines={true}
-								customStyle={{ margin: 0, padding: '1rem' }}
-							>
-								{content}
-							</SyntaxHighlighterComp>
-						</div>
-					</div>
-				)}
-			</div>
-		</ToolSummaryCard>
+				<div className="w-full whitespace-pre-wrap break-words bg-background rounded-b p-4 text-xs">
+					<LazyCodeBlock code={content} language={language} previewLines={5} />
+				</div>
+			</ToolSummaryCard>
+		</div>
 	)
 }
