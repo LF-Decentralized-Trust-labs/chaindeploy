@@ -124,7 +124,12 @@ export default function ChaincodeProjectEditorPage() {
 				</div>
 			</div>
 			<div className="flex-1 p-4">
-				<CodeEditor mode={mode} projectId={projectId} chaincodeProject={project} />
+				<CodeEditor 
+					mode={mode} 
+					projectId={projectId} 
+					chaincodeProject={project} 
+					key={`editor-${projectId}-${project?.status ?? 'unknown'}`}
+				/>
 			</div>
 		</div>
 	)

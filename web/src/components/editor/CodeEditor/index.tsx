@@ -12,7 +12,6 @@ import { LogsPanel } from './LogsPanel'
 import { Playground } from './Playground'
 import type { File } from './types'
 
-
 interface CodeEditorProps {
 	mode?: 'editor' | 'playground'
 	projectId?: number
@@ -184,11 +183,11 @@ export function CodeEditor({ mode = 'editor', projectId, chaincodeProject }: Cod
 						<ResizablePanelGroup direction="vertical">
 							<ResizablePanel defaultSize={80} minSize={40}>
 								<div className="grid h-full grid-rows-[auto_1fr] bg-background text-foreground">
-									<EditorTabs 
-										openTabs={openTabs} 
-										selectedFile={selectedFile} 
-										handleTabClick={handleTabClick} 
-										handleTabClose={handleTabClose} 
+									<EditorTabs
+										openTabs={openTabs}
+										selectedFile={selectedFile}
+										handleTabClick={handleTabClick}
+										handleTabClose={handleTabClose}
 										dirtyFiles={dirtyFiles}
 										projectId={projectId}
 										projectName={chaincodeProject.name}
@@ -239,7 +238,7 @@ export function CodeEditor({ mode = 'editor', projectId, chaincodeProject }: Cod
 							</ResizablePanel>
 							<ResizableHandle />
 							<ResizablePanel defaultSize={20} minSize={10} maxSize={50}>
-							<div className="bg-background text-foreground h-full">
+								<div className="bg-background text-foreground h-full">
 									<LogsPanel projectId={projectId} />
 								</div>
 							</ResizablePanel>
@@ -251,4 +250,3 @@ export function CodeEditor({ mode = 'editor', projectId, chaincodeProject }: Cod
 	)
 }
 export { useStreamingChat }
-

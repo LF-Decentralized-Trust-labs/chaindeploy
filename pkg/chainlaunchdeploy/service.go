@@ -757,7 +757,7 @@ func (s *ChaincodeService) buildChaincodeDefinition(ctx context.Context, definit
 	if err != nil {
 		return nil, err
 	}
-	packageID, _, err := s.getChaincodePackageInfo(ctx, chaincodeDB, definition)
+	packageID, _, err := s.getChaincodePackageInfo(chaincodeDB, definition)
 	if err != nil {
 		return nil, err
 	}
@@ -777,7 +777,7 @@ func (s *ChaincodeService) buildChaincodeDefinition(ctx context.Context, definit
 }
 
 // getChaincodePackageInfo returns the package ID and chaincode package bytes for a given chaincode and definition
-func (s *ChaincodeService) getChaincodePackageInfo(ctx context.Context, chaincode *Chaincode, definition *ChaincodeDefinition) (string, []byte, error) {
+func (s *ChaincodeService) getChaincodePackageInfo(chaincode *Chaincode, definition *ChaincodeDefinition) (string, []byte, error) {
 	label := chaincode.Name
 	codeTarGz, err := s.getCodeTarGz(definition.ChaincodeAddress, "", "", "", "")
 	if err != nil {
@@ -839,7 +839,7 @@ func (s *ChaincodeService) DeployChaincodeByDefinition(ctx context.Context, defi
 		_ = s.AddChaincodeDefinitionEvent(ctx, definitionID, "deploy", eventData)
 		return err
 	}
-	packageID, _, err := s.getChaincodePackageInfo(ctx, chaincodeDB, definition)
+	packageID, _, err := s.getChaincodePackageInfo(chaincodeDB, definition)
 	if err != nil {
 		eventData := DeployChaincodeEventData{HostPort: fmt.Sprintf("%s:%d", host, exposedPort), ContainerPort: internalPort, Result: "failure", ErrorMessage: err.Error()}
 		_ = s.AddChaincodeDefinitionEvent(ctx, definitionID, "deploy", eventData)
@@ -982,26 +982,6 @@ func (s *ChaincodeService) RemoveDeploymentByDefinition(ctx context.Context, def
 	eventData := DeployChaincodeEventData{HostPort: definition.ChaincodeAddress, ContainerPort: "7052", Result: "success", ErrorMessage: ""}
 	_ = s.AddChaincodeDefinitionEvent(ctx, definitionID, "undeploy", eventData)
 	return nil
-}
-
-// Helper to get Fabric peers for a network
-func getFabricPeersForNetwork(nodeService *service.NodeService, ctx context.Context, networkID int64) ([]int64, error) {
-	nodes, err := nodeService.GetAllNodes(ctx)
-	if err != nil {
-		return nil, err
-	}
-	var peerIDs []int64
-	for _, node := range nodes.Items {
-		if node.NodeType == "FABRIC_PEER" && node.Platform == "FABRIC" {
-			// NodeResponse has NetworkID in FabricPeer
-			if node.FabricPeer != nil && node.FabricPeer.OrganizationID != 0 {
-				// We don't have networkID directly, but we can check if the chaincode's networkID matches node.FabricPeer.OrganizationID
-				// This is a limitation, so for now, just collect all Fabric peers
-				peerIDs = append(peerIDs, node.ID)
-			}
-		}
-	}
-	return peerIDs, nil
 }
 
 // InvokeChaincode submits a transaction to a chaincode

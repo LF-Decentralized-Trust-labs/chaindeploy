@@ -88,11 +88,13 @@ export function PlaygroundCore({
 	metadata,
 	paramValues,
 	setParamValues,
+	onReloadMetadata,
 }: PlaygroundCoreProps & {
 	mode?: 'manual' | 'metadata'
 	setMode?: (mode: 'manual' | 'metadata') => void
 	metadata?: any
 	onMetadataSubmit?: (txName: string, args: any) => void
+	onReloadMetadata?: () => void
 }) {
 	const [copied, setCopied] = useState<{ [timestamp: number]: boolean }>({})
 	const currentMode = useMemo(() => (mode ? mode : 'manual'), [mode])
@@ -144,12 +146,26 @@ export function PlaygroundCore({
 						<FabricKeySelect value={selectedKey} onChange={setSelectedKey} />
 					</div>
 					{showTabs && (
-						<Tabs value={currentMode} onValueChange={(v) => handleSetMode(v as 'manual' | 'metadata')} className="mb-6">
-							<TabsList>
-								<TabsTrigger value="metadata">From Metadata</TabsTrigger>
-								<TabsTrigger value="manual">Manual</TabsTrigger>
-							</TabsList>
-						</Tabs>
+						<div className="flex items-center mb-6 gap-2">
+							<Tabs value={currentMode} onValueChange={(v) => handleSetMode(v as 'manual' | 'metadata')} >
+								<TabsList>
+									<TabsTrigger value="metadata">From Metadata</TabsTrigger>
+									<TabsTrigger value="manual">Manual</TabsTrigger>
+								</TabsList>
+							</Tabs>
+							{onReloadMetadata && (
+								<Button
+									size="icon"
+									variant="ghost"
+									className="ml-1"
+									onClick={onReloadMetadata}
+									title="Reload metadata"
+									aria-label="Reload metadata"
+								>
+									<RotateCcw className="h-4 w-4" />
+								</Button>
+							)}
+						</div>
 					)}
 					{currentMode === 'manual' && (
 						<>
@@ -448,6 +464,13 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 			mode={mode}
 			setMode={setMode}
 			metadata={metadata}
+			onReloadMetadata={() => {
+				toast.promise(metadataQuery.refetch(), {
+					loading: 'Reloading metadata...',
+					success: 'Metadata reloaded successfully',
+					error: (err) => `Failed to reload metadata: ${err.message || 'Unknown error'}`,
+				})
+			}}
 		/>
 	)
 }
