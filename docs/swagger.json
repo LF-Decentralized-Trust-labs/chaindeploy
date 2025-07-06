@@ -9155,6 +9155,50 @@
                 }
             }
         },
+        "/sc/fabric/definitions/{definitionId}/docker-info": {
+            "get": {
+                "description": "Get Docker container info for a specific chaincode definition by ID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chaincode"
+                ],
+                "summary": "Get Docker info for a chaincode definition",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Chaincode Definition ID",
+                        "name": "definitionId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/chainlaunchdeploy.DockerContainerInfo"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/sc/fabric/definitions/{definitionId}/install": {
             "post": {
                 "description": "Install chaincode on peers for a given definition",

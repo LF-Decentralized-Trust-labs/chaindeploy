@@ -16,7 +16,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/chainlaunch/chainlaunch/pkg/common/ports"
@@ -45,16 +44,14 @@ type Chaincode struct {
 }
 
 type ChaincodeDefinition struct {
-	ID                int64                `json:"id"`
-	ChaincodeID       int64                `json:"chaincode_id"`
-	Version           string               `json:"version"`
-	Sequence          int64                `json:"sequence"`
-	DockerImage       string               `json:"docker_image"`
-	EndorsementPolicy string               `json:"endorsement_policy"`
-	ChaincodeAddress  string               `json:"chaincode_address"`
-	CreatedAt         string               `json:"created_at"` // ISO8601
-	PeerStatuses      []PeerStatus         `json:"peer_statuses"`
-	DockerInfo        *DockerContainerInfo `json:"docker_info,omitempty"`
+	ID                int64  `json:"id"`
+	ChaincodeID       int64  `json:"chaincode_id"`
+	Version           string `json:"version"`
+	Sequence          int64  `json:"sequence"`
+	DockerImage       string `json:"docker_image"`
+	EndorsementPolicy string `json:"endorsement_policy"`
+	ChaincodeAddress  string `json:"chaincode_address"`
+	CreatedAt         string `json:"created_at"` // ISO8601
 }
 
 type PeerStatus struct {
@@ -215,30 +212,11 @@ func (s *ChaincodeService) ListChaincodeDefinitions(ctx context.Context, chainco
 	// Create a slice to hold the results
 	result := make([]*ChaincodeDefinition, len(defs))
 
-	// Create a WaitGroup to wait for all goroutines to complete
-	var wg sync.WaitGroup
-
 	// Process each definition concurrently
 	for i, def := range defs {
-		wg.Add(1)
-		go func(index int, definition *db.FabricChaincodeDefinition) {
-			defer wg.Done()
-
-			defSvc := dbDefToSvcDef(*definition)
-			dockerInfo, err := getDockerInfoForDefinition(ctx, defSvc)
-			if err != nil {
-				s.logger.Error("Failed to get docker info for definition", "error", err)
-				// Still add the definition without docker info
-				result[index] = defSvc
-				return
-			}
-			defSvc.DockerInfo = dockerInfo
-			result[index] = defSvc
-		}(i, def)
+		defSvc := dbDefToSvcDef(*def)
+		result[i] = defSvc
 	}
-
-	// Wait for all goroutines to complete
-	wg.Wait()
 
 	return result, nil
 }
@@ -249,8 +227,6 @@ func (s *ChaincodeService) GetChaincodeDefinition(ctx context.Context, id int64)
 		return nil, err
 	}
 	defSvc := dbDefToSvcDef(*def)
-	dockerInfo, _ := getDockerInfoForDefinition(ctx, defSvc)
-	defSvc.DockerInfo = dockerInfo
 	return defSvc, nil
 }
 
@@ -299,24 +275,6 @@ func (s *ChaincodeService) SetPeerStatus(ctx context.Context, definitionID, peer
 		Status:       ps.Status,
 		LastUpdated:  nullTimeToString(ps.LastUpdated),
 	}, nil
-}
-
-func (s *ChaincodeService) ListPeerStatuses(ctx context.Context, definitionID int64) ([]*PeerStatus, error) {
-	pss, err := s.queries.ListPeerStatuses(ctx, definitionID)
-	if err != nil {
-		return nil, err
-	}
-	var result []*PeerStatus
-	for _, ps := range pss {
-		result = append(result, &PeerStatus{
-			ID:           ps.ID,
-			DefinitionID: ps.DefinitionID,
-			PeerID:       ps.PeerID,
-			Status:       ps.Status,
-			LastUpdated:  nullTimeToString(ps.LastUpdated),
-		})
-	}
-	return result, nil
 }
 
 // --- Utility functions for sql.NullTime and sql.NullString ---

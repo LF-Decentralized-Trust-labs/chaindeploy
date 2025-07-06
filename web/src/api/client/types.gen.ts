@@ -9230,6 +9230,40 @@ export type PostScFabricDefinitionsByDefinitionIdDeployResponses = {
 
 export type PostScFabricDefinitionsByDefinitionIdDeployResponse = PostScFabricDefinitionsByDefinitionIdDeployResponses[keyof PostScFabricDefinitionsByDefinitionIdDeployResponses];
 
+export type GetScFabricDefinitionsByDefinitionIdDockerInfoData = {
+    body?: never;
+    path: {
+        /**
+         * Chaincode Definition ID
+         */
+        definitionId: number;
+    };
+    query?: never;
+    url: '/sc/fabric/definitions/{definitionId}/docker-info';
+};
+
+export type GetScFabricDefinitionsByDefinitionIdDockerInfoErrors = {
+    /**
+     * Not Found
+     */
+    404: ResponseResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ResponseResponse;
+};
+
+export type GetScFabricDefinitionsByDefinitionIdDockerInfoError = GetScFabricDefinitionsByDefinitionIdDockerInfoErrors[keyof GetScFabricDefinitionsByDefinitionIdDockerInfoErrors];
+
+export type GetScFabricDefinitionsByDefinitionIdDockerInfoResponses = {
+    /**
+     * OK
+     */
+    200: ChainlaunchdeployDockerContainerInfo;
+};
+
+export type GetScFabricDefinitionsByDefinitionIdDockerInfoResponse = GetScFabricDefinitionsByDefinitionIdDockerInfoResponses[keyof GetScFabricDefinitionsByDefinitionIdDockerInfoResponses];
+
 export type PostScFabricDefinitionsByDefinitionIdInstallData = {
     /**
      * Peer IDs to install on

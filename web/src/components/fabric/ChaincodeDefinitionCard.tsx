@@ -4,6 +4,7 @@ import {
 	postScFabricDefinitionsByDefinitionIdDeployMutation,
 	postScFabricDefinitionsByDefinitionIdUndeployMutation,
 	putScFabricDefinitionsByDefinitionIdMutation,
+	getScFabricDefinitionsByDefinitionIdDockerInfoOptions,
 } from '@/api/client/@tanstack/react-query.gen'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
@@ -15,7 +16,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { MoreVertical } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
@@ -25,6 +26,8 @@ import { ApproveChaincodeDialog } from './ApproveChaincodeDialog'
 import { CommitChaincodeDialog } from './CommitChaincodeDialog'
 import { DefinitionTimeline } from './DefinitionTimeline'
 import { InstallChaincodeDialog } from './InstallChaincodeDialog'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 
 const versionFormSchema = z.object({
 	endorsementPolicy: z.string().min(1, 'Endorsement policy is required'),
@@ -83,8 +86,20 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 	// Undeploy dialog state
 	const [stopOpen, setStopOpen] = useState(false)
 
-	// Docker status helpers
-	const dockerState = useMemo(() => v.docker_info?.state || v.docker_info?.status || v.docker_info?.docker_status || '', [v.docker_info])
+	// Fetch docker info independently
+	const {
+		data: dockerInfo,
+		isLoading: isDockerLoading,
+		error: dockerError,
+		refetch: refetchDockerInfo,
+	} = useQuery(
+		getScFabricDefinitionsByDefinitionIdDockerInfoOptions({
+			path: { definitionId: v.id! },
+		})
+	)
+
+	// Docker status helpers (use fetched dockerInfo)
+	const dockerState = useMemo(() => dockerInfo?.state || dockerInfo?.status || dockerInfo?.docker_status || '', [dockerInfo])
 	const isDockerRunning = useMemo(() => dockerState.toLowerCase() === 'running', [dockerState])
 	const dockerStatusLabel = useMemo(() => (dockerState ? dockerState.charAt(0).toUpperCase() + dockerState.slice(1) : 'Not running'), [dockerState])
 	const dockerBadgeVariant = isDockerRunning ? 'success' : dockerState ? 'secondary' : 'outline'
@@ -182,33 +197,36 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 	}, [stopMutation, v.id])
 
 	// Lifecycle action handler
-	const handleLifecycleAction = useCallback(async (action: string) => {
-		if (action === 'install') {
-			setInstallDialogOpen(true)
-		} else if (action === 'approve') {
-			setApproveDialogOpen(true)
-		} else if (action === 'commit') {
-			setCommitDialogOpen(true)
-		} else if (action === 'deploy') {
-			try {
-				await toast.promise(
-					deployMutation.mutateAsync({
-						path: { definitionId: v.id },
-						body: {},
-					}),
-					{
-						loading: 'Deploying chaincode...',
-						success: 'Chaincode deployed successfully',
-						error: (err) => `Failed to deploy chaincode: ${err.message || 'Unknown error'}`,
-					}
-				)
-			} catch (error) {
-				// Error is already handled by toast.promise
+	const handleLifecycleAction = useCallback(
+		async (action: string) => {
+			if (action === 'install') {
+				setInstallDialogOpen(true)
+			} else if (action === 'approve') {
+				setApproveDialogOpen(true)
+			} else if (action === 'commit') {
+				setCommitDialogOpen(true)
+			} else if (action === 'deploy') {
+				try {
+					await toast.promise(
+						deployMutation.mutateAsync({
+							path: { definitionId: v.id },
+							body: {},
+						}),
+						{
+							loading: 'Deploying chaincode...',
+							success: 'Chaincode deployed successfully',
+							error: (err) => `Failed to deploy chaincode: ${err.message || 'Unknown error'}`,
+						}
+					)
+				} catch (error) {
+					// Error is already handled by toast.promise
+				}
+			} else if (action === 'stop') {
+				setStopOpen(true)
 			}
-		} else if (action === 'stop') {
-			setStopOpen(true)
-		}
-	}, [deployMutation, v.id])
+		},
+		[deployMutation, v.id]
+	)
 
 	return (
 		<Card key={v.id} className="p-4 mb-4">
@@ -258,9 +276,7 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 					<AlertDialogContent>
 						<AlertDialogHeader>
 							<AlertDialogTitle>Stop Chaincode</AlertDialogTitle>
-							<AlertDialogDescription>
-								Are you sure you want to stop this chaincode? This will stop the running chaincode container but keep the definition.
-							</AlertDialogDescription>
+							<AlertDialogDescription>Are you sure you want to stop this chaincode? This will stop the running chaincode container but keep the definition.</AlertDialogDescription>
 						</AlertDialogHeader>
 						{stopMutation.error && <div className="text-red-500 text-sm mb-2">{stopMutation.error.message}</div>}
 						<AlertDialogFooter>
@@ -273,37 +289,51 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 				</AlertDialog>
 			</div>
 
-			{/* Main info rows with Docker details inline */}
 			<div className="mb-1 text-sm">
 				<span className="font-medium">Endorsement Policy:</span> {v.endorsement_policy}
 			</div>
 			<div className="mb-1 text-sm">
-				<span className="font-medium">Docker Image:</span> {v.docker_image}
-				{v.docker_info?.image && v.docker_info?.image !== v.docker_image && <span className="ml-2 text-muted-foreground">({v.docker_info.image})</span>}
-			</div>
-			{v.docker_info?.name && (
-				<div className="mb-1 text-sm">
-					<span className="font-medium">Container Name:</span> {v.docker_info.name}
-				</div>
-			)}
-			{v.docker_info?.id && (
-				<div className="mb-1 text-sm">
-					<span className="font-medium">Container ID:</span> {v.docker_info.id}
-				</div>
-			)}
-			{v.docker_info?.ports && v.docker_info.ports.length > 0 && (
-				<div className="mb-1 text-sm">
-					<span className="font-medium">Ports:</span> {v.docker_info.ports.join(', ')}
-				</div>
-			)}
-			{v.docker_info?.created && (
-				<div className="mb-1 text-sm">
-					<span className="font-medium">Created:</span> {new Date(v.docker_info.created * 1000).toLocaleString()}
-				</div>
-			)}
-			<div className="mb-1 text-sm">
 				<span className="font-medium">Chaincode Address:</span> {v.chaincode_address}
 			</div>
+
+			{/* Docker Info Section */}
+			{isDockerLoading ? (
+				<div className="space-y-1 mb-2">
+					<Skeleton className="h-4 w-1/3" />
+					<Skeleton className="h-4 w-1/2" />
+					<Skeleton className="h-4 w-1/4" />
+				</div>
+			) : dockerError ? (
+				<></>
+			) : dockerInfo ? (
+				<div className="mb-2 text-sm space-y-1">
+					<div>
+						<span className="font-medium">Docker Image:</span> {v.docker_image}
+						{dockerInfo.image && dockerInfo.image !== v.docker_image && <span className="ml-2 text-muted-foreground">({dockerInfo.image})</span>}
+					</div>
+					{dockerInfo.name && (
+						<div>
+							<span className="font-medium">Container Name:</span> {dockerInfo.name}
+						</div>
+					)}
+					{dockerInfo.id && (
+						<div>
+							<span className="font-medium">Container ID:</span> {dockerInfo.id}
+						</div>
+					)}
+					{dockerInfo.ports && dockerInfo.ports.length > 0 && (
+						<div>
+							<span className="font-medium">Ports:</span> {dockerInfo.ports.join(', ')}
+						</div>
+					)}
+					{dockerInfo.created && (
+						<div>
+							<span className="font-medium">Created:</span> {new Date(dockerInfo.created * 1000).toLocaleString()}
+						</div>
+					)}
+				</div>
+			) : null}
+
 			<div className="mt-2 flex gap-2">
 				<Button key="deploy" size="sm" variant="default" onClick={() => handleLifecycleAction('deploy')} disabled={deployMutation.isPending}>
 					{deployMutation.isPending ? 'Deploying...' : 'Deploy'}
@@ -314,6 +344,7 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 					</Button>
 				))}
 			</div>
+
 			<Dialog open={editOpen} onOpenChange={handleEditDialogOpenChange}>
 				<DialogContent>
 					<DialogHeader>
@@ -398,11 +429,32 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 				</DialogContent>
 			</Dialog>
 			{/* Install Dialog */}
-			<InstallChaincodeDialog installDialogOpen={installDialogOpen} setInstallDialogOpen={setInstallDialogOpen} availablePeers={availablePeers} definitionId={v.id} onSuccess={() => refetch?.()} onError={(error) => refetch?.()} />
+			<InstallChaincodeDialog
+				installDialogOpen={installDialogOpen}
+				setInstallDialogOpen={setInstallDialogOpen}
+				availablePeers={availablePeers}
+				definitionId={v.id}
+				onSuccess={() => refetch?.()}
+				onError={(error) => refetch?.()}
+			/>
 			{/* Approve Dialog */}
-			<ApproveChaincodeDialog approveDialogOpen={approveDialogOpen} setApproveDialogOpen={setApproveDialogOpen} availablePeers={availablePeers} definitionId={v.id} onSuccess={() => refetch?.()} onError={(error) => refetch?.()} />
+			<ApproveChaincodeDialog
+				approveDialogOpen={approveDialogOpen}
+				setApproveDialogOpen={setApproveDialogOpen}
+				availablePeers={availablePeers}
+				definitionId={v.id}
+				onSuccess={() => refetch?.()}
+				onError={(error) => refetch?.()}
+			/>
 			{/* Commit Dialog */}
-			<CommitChaincodeDialog commitDialogOpen={commitDialogOpen} setCommitDialogOpen={setCommitDialogOpen} availablePeers={availablePeers} definitionId={v.id} onSuccess={() => refetch?.()} onError={(error) => refetch?.()} />
+			<CommitChaincodeDialog
+				commitDialogOpen={commitDialogOpen}
+				setCommitDialogOpen={setCommitDialogOpen}
+				availablePeers={availablePeers}
+				definitionId={v.id}
+				onSuccess={() => refetch?.()}
+				onError={(error) => refetch?.()}
+			/>
 			<div className="mt-4">
 				<div className="text-sm font-medium mb-2">Timeline</div>
 				<DefinitionTimelineComponent key={timelineKey} definitionId={v.id} />

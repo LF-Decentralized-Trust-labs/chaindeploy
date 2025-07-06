@@ -76,6 +76,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Put("/{definitionId}", response.Middleware(h.UpdateChaincodeDefinition))
 		r.Get("/{definitionId}/timeline", response.Middleware(h.GetChaincodeDefinitionTimeline))
 		r.Delete("/{definitionId}", response.Middleware(h.DeleteChaincodeDefinition))
+		r.Get("/{definitionId}/docker-info", response.Middleware(h.GetChaincodeDefinitionDockerInfo))
 	})
 
 	r.Route("/sc/besu", func(r chi.Router) {
@@ -1343,4 +1344,40 @@ func (h *Handler) GetChaincodeMetadata(w http.ResponseWriter, r *http.Request) e
 		Result:  metadata,
 	}
 	return response.WriteJSON(w, http.StatusOK, resp)
+}
+
+// @Summary Get Docker info for a chaincode definition
+// @Description Get Docker container info for a specific chaincode definition by ID
+// @Tags Chaincode
+// @Accept json
+// @Produce json
+// @Param definitionId path int true "Chaincode Definition ID"
+// @Success 200 {object} DockerContainerInfo
+// @Failure 404 {object} response.Response
+// @Failure 500 {object} response.Response
+// @Router /sc/fabric/definitions/{definitionId}/docker-info [get]
+func (h *Handler) GetChaincodeDefinitionDockerInfo(w http.ResponseWriter, r *http.Request) error {
+	definitionIdStr := chi.URLParam(r, "definitionId")
+	definitionId, err := strconv.ParseInt(definitionIdStr, 10, 64)
+	if err != nil {
+		h.logger.Error("Invalid definition ID", "definitionId", definitionIdStr)
+		return errors.NewValidationError("invalid definition ID", map[string]interface{}{"detail": "Invalid definition ID"})
+	}
+	def, err := h.chaincodeService.GetChaincodeDefinition(r.Context(), definitionId)
+	if err != nil {
+		h.logger.Error("Failed to get chaincode definition", "error", err)
+		return errors.NewInternalError("failed to get chaincode definition", err, nil)
+	}
+	if def == nil {
+		return response.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "Chaincode definition not found"})
+	}
+	dockerInfo, err := getDockerInfoForDefinition(r.Context(), def)
+	if err != nil {
+		h.logger.Error("Failed to get Docker info for definition", "error", err)
+		return errors.NewInternalError("failed to get Docker info for definition", err, nil)
+	}
+	if dockerInfo == nil {
+		return response.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "Docker info not found for definition"})
+	}
+	return response.WriteJSON(w, http.StatusOK, dockerInfo)
 }
