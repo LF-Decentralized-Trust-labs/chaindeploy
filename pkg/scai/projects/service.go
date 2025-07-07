@@ -467,7 +467,7 @@ func (s *ProjectsService) StartProjectServer(ctx context.Context, projectID int6
 		)
 	}
 
-	command, args, image, err := projectrunner.GetBoilerplateRunner(s.BoilerplateService, project.Boilerplate.String)
+	command, args, image, err := s.BoilerplateService.GetBoilerplateRunner(project.Boilerplate.String)
 	if err != nil {
 		return fmt.Errorf("failed to get boilerplate runner: %w", err)
 	}

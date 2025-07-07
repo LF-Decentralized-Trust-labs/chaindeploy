@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { MetadataForm } from '@/pages/smart-contracts/fabric/[id]/MetadataPlaygroundForm'
 import { useQuery } from '@tanstack/react-query'
@@ -141,74 +142,76 @@ export function PlaygroundCore({
 		<div className="w-full max-w-full mx-auto py-8">
 			<div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-4">
 				{/* Playground form (left) */}
-				<div className="border rounded bg-background shadow-sm p-6 flex flex-col overflow-auto h-[70vh] ">
-					<h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-						<PlayCircle className="h-5 w-5" /> Playground
-					</h2>
-					{/* Shared Org/Key selector */}
-					<div className="mb-4">
-						<Label>Key & Organization</Label>
-						<FabricKeySelect value={selectedKey} onChange={setSelectedKey} />
-					</div>
-					{showTabs && (
-						<div className="flex items-center mb-6 gap-2">
-							<Tabs value={currentMode} onValueChange={(v) => handleSetMode(v as 'manual' | 'metadata')}>
-								<TabsList>
-									<TabsTrigger value="metadata">From Metadata</TabsTrigger>
-									<TabsTrigger value="manual">Manual</TabsTrigger>
-								</TabsList>
-							</Tabs>
-							{onReloadMetadata && currentMode === 'metadata' && (
-								<Button size="icon" variant="ghost" className="ml-1" onClick={onReloadMetadata} title="Reload metadata" aria-label="Reload metadata">
-									<RotateCcw className="h-4 w-4" />
-								</Button>
-							)}
+				<div className="flex flex-col h-full border rounded bg-background shadow-sm p-6 mx-4">
+					<div className=" flex flex-col overflow-y-auto  max-h-[70vh]">
+						<h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+							<PlayCircle className="h-5 w-5" /> Playground
+						</h2>
+						{/* Shared Org/Key selector */}
+						<div className="mb-4">
+							<Label>Key & Organization</Label>
+							<FabricKeySelect value={selectedKey} onChange={setSelectedKey} />
 						</div>
-					)}
-					{currentMode === 'manual' && (
-						<>
-							<div className="space-y-4 mb-4">
-								<div>
-									<Label htmlFor="fn">Function name</Label>
-									<Input id="fn" value={fn} onChange={(e) => setFn(e.target.value)} placeholder="e.g. queryAsset" />
-								</div>
-								<div>
-									<Label htmlFor="args">Arguments (comma separated)</Label>
-									<Input id="args" value={args} onChange={(e) => setArgs(e.target.value)} placeholder="e.g. asset1, 100" />
-								</div>
+						{showTabs && (
+							<div className="flex items-center mb-6 gap-2">
+								<Tabs value={currentMode} onValueChange={(v) => handleSetMode(v as 'manual' | 'metadata')}>
+									<TabsList>
+										<TabsTrigger value="metadata">From Metadata</TabsTrigger>
+										<TabsTrigger value="manual">Manual</TabsTrigger>
+									</TabsList>
+								</Tabs>
+								{onReloadMetadata && currentMode === 'metadata' && (
+									<Button size="icon" variant="ghost" className="ml-1" onClick={onReloadMetadata} title="Reload metadata" aria-label="Reload metadata">
+										<RotateCcw className="h-4 w-4" />
+									</Button>
+								)}
 							</div>
-							<div className="flex gap-2 mt-2">
-								<Button className="flex-1" onClick={() => handleInvoke(fn, args, selectedKey, paramValues)} disabled={loadingInvoke || !fn || !selectedKey}>
-									{loadingInvoke ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <PlayCircle className="h-4 w-4 mr-2" />}
-									Invoke
-								</Button>
-								<Button className="flex-1" onClick={() => handleQuery(fn, args, selectedKey, paramValues)} disabled={loadingQuery || !fn || !selectedKey} variant="secondary">
-									{loadingQuery ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
-									Query
-								</Button>
-							</div>
-						</>
-					)}
-					{currentMode === 'metadata' && metadata && (
-						<MetadataForm
-							metadata={metadata}
-							onSubmit={(txName, args, type) => {
-								if (type === 'invoke') {
-									handleInvoke(txName, args as any, selectedKey, { ...paramValues })
-								} else {
-									handleQuery(txName, args as any, selectedKey, { ...paramValues })
-								}
-							}}
-							loading={loadingInvoke || loadingQuery}
-							selectedKey={selectedKey}
-							paramValues={paramValues}
-							setParamValues={setParamValues}
-							selectedContract={selectedContract}
-							setSelectedContract={setSelectedContract}
-							selectedTx={selectedTx}
-							setSelectedTx={setSelectedTx}
-						/>
-					)}
+						)}
+						{currentMode === 'manual' && (
+							<>
+								<div className="space-y-4 mb-4">
+									<div>
+										<Label htmlFor="fn">Function name</Label>
+										<Input id="fn" value={fn} onChange={(e) => setFn(e.target.value)} placeholder="e.g. queryAsset" />
+									</div>
+									<div>
+										<Label htmlFor="args">Arguments (comma separated)</Label>
+										<Input id="args" value={args} onChange={(e) => setArgs(e.target.value)} placeholder="e.g. asset1, 100" />
+									</div>
+								</div>
+								<div className="flex gap-2 mt-2">
+									<Button className="flex-1" onClick={() => handleInvoke(fn, args, selectedKey, paramValues)} disabled={loadingInvoke || !fn || !selectedKey}>
+										{loadingInvoke ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <PlayCircle className="h-4 w-4 mr-2" />}
+										Invoke
+									</Button>
+									<Button className="flex-1" onClick={() => handleQuery(fn, args, selectedKey, paramValues)} disabled={loadingQuery || !fn || !selectedKey} variant="secondary">
+										{loadingQuery ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
+										Query
+									</Button>
+								</div>
+							</>
+						)}
+						{currentMode === 'metadata' && metadata && (
+							<MetadataForm
+								metadata={metadata}
+								onSubmit={(txName, args, type) => {
+									if (type === 'invoke') {
+										handleInvoke(txName, args as any, selectedKey, { ...paramValues })
+									} else {
+										handleQuery(txName, args as any, selectedKey, { ...paramValues })
+									}
+								}}
+								loading={loadingInvoke || loadingQuery}
+								selectedKey={selectedKey}
+								paramValues={paramValues}
+								setParamValues={setParamValues}
+								selectedContract={selectedContract}
+								setSelectedContract={setSelectedContract}
+								selectedTx={selectedTx}
+								setSelectedTx={setSelectedTx}
+							/>
+						)}
+					</div>
 				</div>
 
 				{/* Responses (right) */}

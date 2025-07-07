@@ -15,6 +15,9 @@ import (
 	"github.com/chainlaunch/chainlaunch/pkg/scai/projects"
 	"github.com/chainlaunch/chainlaunch/pkg/scai/sessionchanges"
 	"github.com/chainlaunch/chainlaunch/pkg/scai/versionmanagement"
+
+	// No need to import ai/errors, use local ai package type
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -70,6 +73,7 @@ func (h *AIHandler) RegisterRoutes(r chi.Router) {
 		r.Post("/{projectId}/conversations", response.Middleware(h.CreateConversation))
 		r.Get("/{projectId}/conversations/{conversationId}", response.Middleware(h.GetConversationMessages))
 		r.Get("/{projectId}/conversations/{conversationId}/export", response.Middleware(h.GetConversationDetail))
+		r.Post("/{projectId}/conversations/{conversationId}/summarize", response.Middleware(h.SummarizeConversation))
 	})
 }
 
@@ -195,7 +199,7 @@ func (h *AIHandler) GetConversationMessages(w http.ResponseWriter, r *http.Reque
 		})
 	}
 
-	messages, err := h.ChatService.GetConversationMessages(r.Context(), projectID, conversationID)
+	messages, err := h.ChatService.GetConversationMessages(r.Context(), projectID, conversationID, false)
 	if err != nil {
 		if err.Error() == "sql: no rows in result set" {
 			return errors.NewNotFoundError("conversation not found", nil)
@@ -491,6 +495,180 @@ func (h *AIHandler) CreateConversation(w http.ResponseWriter, r *http.Request) e
 	return response.WriteJSON(w, http.StatusCreated, resp)
 }
 
+// SummarizeConversation godoc
+// @Summary      Create a new conversation from an existing one with a summary
+// @Description  Summarizes an existing conversation and starts a new one with a summary message
+// @Tags         ai
+// @Accept       json
+// @Produce      json
+// @Param        projectId path int true "Project ID"
+// @Param        conversationId path int true "Conversation ID"
+// @Success      201 {object} response.DetailedResponse
+// @Failure      400 {object} response.DetailedErrorResponse
+// @Failure      404 {object} response.DetailedErrorResponse
+// @Failure      500 {object} response.DetailedErrorResponse
+// @Router       /ai/{projectId}/conversations/{conversationId}/summarize [post]
+func (h *AIHandler) SummarizeConversation(w http.ResponseWriter, r *http.Request) error {
+	projectID, err := strconv.ParseInt(chi.URLParam(r, "projectId"), 10, 64)
+	if err != nil {
+		response.WriteJSON(w, http.StatusBadRequest, response.DetailedErrorResponse{
+			Error:   "invalid_project_id",
+			Message: "Invalid project ID",
+			Details: map[string]interface{}{"error": err.Error()},
+		})
+		return nil
+	}
+	conversationID, err := strconv.ParseInt(chi.URLParam(r, "conversationId"), 10, 64)
+	if err != nil {
+		response.WriteJSON(w, http.StatusBadRequest, response.DetailedErrorResponse{
+			Error:   "invalid_conversation_id",
+			Message: "Invalid conversation ID",
+			Details: map[string]interface{}{"error": err.Error()},
+		})
+		return nil
+	}
+
+	// Fetch conversation messages
+	messages, err := h.ChatService.GetConversationMessages(r.Context(), projectID, conversationID, false)
+	if err != nil {
+		response.WriteJSON(w, http.StatusNotFound, response.DetailedErrorResponse{
+			Error:   "conversation_not_found",
+			Message: "Failed to get conversation messages",
+			Details: map[string]interface{}{"error": err.Error()},
+		})
+		return nil
+	}
+	if len(messages) == 0 {
+		response.WriteJSON(w, http.StatusNotFound, response.DetailedErrorResponse{
+			Error:   "empty_conversation",
+			Message: "No messages found in conversation",
+		})
+		return nil
+	}
+
+	// Build the conversation text for the prompt
+	var conversationText strings.Builder
+	for _, m := range messages {
+		conversationText.WriteString("[" + m.Sender + "] ")
+		conversationText.WriteString(m.Content)
+		conversationText.WriteString("\n")
+	}
+
+	prompt := `You are a technical conversation summarizer for an AI coding assistant. Create a concise but comprehensive summary of this coding conversation that will be used to maintain context in a new chat session.
+
+PRESERVE THESE CRITICAL ELEMENTS:
+
+**PROJECT CONTEXT:**
+- Project type, tech stack, and architecture decisions
+- Key libraries, frameworks, and dependencies discussed
+- Database schema or data structures established
+- API endpoints or interfaces defined
+
+**TECHNICAL DECISIONS:**
+- Design patterns and coding conventions adopted
+- Performance optimizations implemented
+- Security considerations addressed
+- Testing strategies discussed
+
+**CODE STATE:**
+- Files created, modified, or referenced
+- Functions/classes implemented or planned
+- Configuration changes made
+- Dependencies added or updated
+
+**ACTIVE WORK:**
+- Current implementation status
+- Unresolved issues or bugs being addressed
+- Next steps or TODOs explicitly mentioned
+- Features in progress or planned
+
+**CONTEXT REFERENCES:**
+- Important code snippets or algorithms discussed
+- Error messages or debugging insights
+- External resources or documentation referenced
+- Specific requirements or constraints
+
+EXCLUDE THESE ELEMENTS:
+- Conversational pleasantries and acknowledgments
+- Repetitive explanations of the same concept
+- Detailed step-by-step code walkthroughs (keep only final outcomes)
+- Tangential discussions not related to the main task
+
+FORMAT REQUIREMENTS:
+- Use clear section headers
+- Keep technical details precise but concise
+- Include specific file names, function names, and key variables
+- Mention version numbers or specific configurations when relevant
+- Maximum 500 words unless complexity requires more
+
+CONVERSATION TO SUMMARIZE:
+` + conversationText.String() + `
+
+Create a summary that allows the AI to seamlessly continue the technical discussion with full context of what has been accomplished and what needs to be done next.`
+
+	// Use the current model to generate the summary
+	model := h.AIChatService.Model
+	aiProvider := h.AIChatService.AIProvider
+
+	aiMsg := AIMessage{
+		Role:    "user",
+		Content: prompt,
+	}
+	msg, _, _, err := aiProvider.StreamAgentStep(r.Context(), []AIMessage{aiMsg}, model, nil, nil, nil)
+	if err != nil {
+		response.WriteJSON(w, http.StatusInternalServerError, response.DetailedErrorResponse{
+			Error:   "ai_summary_failed",
+			Message: "Failed to generate summary",
+			Details: map[string]interface{}{"error": err.Error()},
+		})
+		return nil
+	}
+	if msg == nil || strings.TrimSpace(msg.Content) == "" {
+		response.WriteJSON(w, http.StatusInternalServerError, response.DetailedErrorResponse{
+			Error:   "empty_summary",
+			Message: "AI did not return a summary",
+		})
+		return nil
+	}
+
+	// Create a new conversation
+	conv, err := h.ChatService.CreateConversation(r.Context(), projectID, "Summary: "+messages[0].Content[:min(40, len(messages[0].Content))])
+	if err != nil {
+		response.WriteJSON(w, http.StatusInternalServerError, response.DetailedErrorResponse{
+			Error:   "create_conversation_failed",
+			Message: "Failed to create new conversation",
+			Details: map[string]interface{}{"error": err.Error()},
+		})
+		return nil
+	}
+
+	// Add the summary message to the new conversation
+	summaryTitle := "Conversation Summary"
+	summaryContent := msg.Content
+	_, err = h.ChatService.AddMessage(r.Context(), conv.ID, nil, "summary", summaryContent, "", summaryTitle)
+	if err != nil {
+		response.WriteJSON(w, http.StatusInternalServerError, response.DetailedErrorResponse{
+			Error:   "add_summary_failed",
+			Message: "Failed to add summary message",
+			Details: map[string]interface{}{"error": err.Error()},
+		})
+		return nil
+	}
+
+	return response.WriteJSON(w, http.StatusCreated, response.DetailedResponse{
+		"newConversationId": conv.ID,
+		"summaryTitle":      summaryTitle,
+		"summaryContent":    summaryContent,
+	})
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // Chat godoc
 // @Summary      Chat with AI assistant
 // @Description  Stream a conversation with the AI assistant using Server-Sent Events (SSE)
@@ -553,6 +731,19 @@ func (h *AIHandler) Chat(w http.ResponseWriter, r *http.Request) error {
 	sessionTracker := sessionchanges.NewTracker()
 	err = h.AIChatService.ChatWithPersistence(r.Context(), projectID, userMessage, observer, 0, req.ConversationID, sessionTracker)
 	if err != nil && err != io.EOF {
+		// Handle MaxTokensExceededError
+		if maxErr, ok := err.(*MaxTokensExceededError); ok {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"error":      "max_tokens_exceeded",
+				"message":    "The conversation is too long for the selected model.",
+				"model":      maxErr.Model,
+				"tokenCount": maxErr.TokenCount,
+				"maxTokens":  maxErr.MaxTokens,
+			})
+			return nil
+		}
 		return fmt.Errorf("chat error: %w", err)
 	}
 

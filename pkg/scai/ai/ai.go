@@ -52,6 +52,9 @@ type AIProviderInterface interface {
 	) (*AIMessage, []AIToolCall, []ToolCallResult, error)
 
 	GetMaxTokens(model string) int
+
+	// GenerateJSONSchemaFromMessage generates a JSON schema based on a message and model.
+	GenerateJSONSchemaFromMessage(ctx context.Context, message string, model string, schema string) (string, error)
 }
 
 // AIMessage represents a generic AI message
@@ -105,13 +108,14 @@ type ToolSchema struct {
 
 // AIChatService implements the generic AI chat service
 type AIChatService struct {
-	Logger            *logger.Logger
-	ChatService       *ChatService
-	Queries           *db.Queries
-	ProjectsDir       string
-	ValidationService *ValidationService
-	AIProvider        AIProviderInterface
-	Model             string
+	Logger             *logger.Logger
+	ChatService        *ChatService
+	Queries            *db.Queries
+	ProjectsDir        string
+	ValidationService  *ValidationService
+	AIProvider         AIProviderInterface
+	Model              string
+	BoilerplateService *boilerplates.BoilerplateService
 }
 
 // NewAIChatService creates a new generic AI chat service
@@ -122,6 +126,7 @@ func NewAIChatService(
 	projectsDir string,
 	aiProvider AIProviderInterface,
 	model string,
+	boilerplateService *boilerplates.BoilerplateService,
 ) *AIChatService {
 	// Create boilerplate service
 	boilerplateService, err := boilerplates.NewBoilerplateService(queries)
@@ -141,13 +146,14 @@ func NewAIChatService(
 	}
 
 	return &AIChatService{
-		Logger:            logger,
-		ChatService:       chatService,
-		Queries:           queries,
-		ProjectsDir:       projectsDir,
-		ValidationService: validationService,
-		AIProvider:        aiProvider,
-		Model:             model,
+		Logger:             logger,
+		ChatService:        chatService,
+		Queries:            queries,
+		ProjectsDir:        projectsDir,
+		ValidationService:  validationService,
+		AIProvider:         aiProvider,
+		Model:              model,
+		BoilerplateService: boilerplateService,
 	}
 }
 
@@ -292,7 +298,10 @@ func (s *AIChatService) getProjectStructurePrompt(projectRoot string, toolSchema
 
 	// Add boilerplate-specific prompt if available
 	if project.Boilerplate.Valid && project.Boilerplate.String != "" {
-		boilerplatePrompt := projectrunner.GetBoilerplatePrompt(project.Boilerplate.String)
+		boilerplatePrompt, err := s.BoilerplateService.GetProjectPrompt(project.Boilerplate.String)
+		if err != nil {
+			s.Logger.Errorf("Failed to get boilerplate prompt: %v", err)
+		}
 		if boilerplatePrompt != "" {
 			sb.WriteString("\n\n")
 			sb.WriteString(boilerplatePrompt)
@@ -456,14 +465,11 @@ func (s *AIChatService) StreamChat(
 	tokenCount := estimateTokenCount(chatMsgs)
 	maxTokens := s.AIProvider.GetMaxTokens(s.Model)
 	if tokenCount > maxTokens {
-		errResp := map[string]interface{}{
-			"error":       "too_many_tokens",
-			"message":     "This conversation is too long for the AI to process. Please start a new chat to continue.",
-			"token_count": tokenCount,
-			"max_tokens":  maxTokens,
+		return &MaxTokensExceededError{
+			Model:      s.Model,
+			TokenCount: tokenCount,
+			MaxTokens:  maxTokens,
 		}
-		b, _ := json.Marshal(errResp)
-		return fmt.Errorf(string(b))
 	}
 
 	// Debug logging for message flow
@@ -600,6 +606,39 @@ func (s *AIChatService) StreamChat(
 
 			s.Logger.Debugf("[StreamChat] Added tool response message for tool call %s: %s", toolCall.ID, toolResponseContent)
 
+			// --- BEGIN VALIDATION HOOK ---
+			// Only keep the latest validation message in memory, not in the database
+			var latestValidationMessage string
+			if ShouldTriggerValidation(toolCall.Function.Name) && s.ValidationService != nil {
+				validationResult, err := s.ValidationService.ValidateProjectAfterFileOperation(ctx, projectSlug)
+				if err != nil {
+					s.Logger.Debugf("[StreamChat] Validation error: %v", err)
+				} else if validationResult != nil && !validationResult.Success {
+					validationMessage := CreateValidationMessage(validationResult)
+					latestValidationMessage = validationMessage
+					s.Logger.Debugf("[StreamChat] Validation message (in-memory only): %s", validationMessage)
+				}
+			}
+			// Remove any previous validation message from chatMsgs
+			if latestValidationMessage != "" {
+				// Remove any previous validation message (role=user, content matches previous validation message)
+				var newChatMsgs []AIMessage
+				for _, m := range chatMsgs {
+					if m.Role == "user" && strings.HasPrefix(m.Content, "Validation failed") {
+						continue
+					}
+					newChatMsgs = append(newChatMsgs, m)
+				}
+				chatMsgs = newChatMsgs
+				// Add the latest validation message
+				chatMsgs = append(chatMsgs, AIMessage{
+					Role:       "user",
+					Content:    latestValidationMessage,
+					ToolCallID: "",
+				})
+			}
+			// --- END VALIDATION HOOK ---
+
 			// If validation failed, add a user message to trigger the AI to fix the errors
 			var validationRequired bool
 			var validationMessage string
@@ -726,7 +765,7 @@ func (s *AIChatService) ChatWithPersistence(
 	}
 
 	// 3. Fetch all messages again (now includes the message with enhanced content)
-	dbMessages, err := s.ChatService.GetMessages(ctx, conv.ID)
+	dbMessages, err := s.ChatService.GetMessages(ctx, conv.ID, false)
 	if err != nil {
 		return err
 	}
@@ -1315,7 +1354,7 @@ func chatSystemMessage(params ChatSystemMessageParams) string {
 
 	switch params.ChatMode {
 	case ChatModeAgent:
-		header += `to help the user develop, run, and make changes to their codebase.`
+		header += `to help the user develop, run, and make changes to their codebase ensuring the code compiles and it's valid to be executed.`
 	case ChatModeGather:
 		header += `to search, understand, and reference files in the user's codebase.`
 	case ChatModeNormal:
@@ -1426,6 +1465,8 @@ Important Notes:
 	details = append(details, "Make a plan with steps before making any change, and show it to the user.")
 	details = append(details, "Keep functions small, build to reuse functions rather than duplicating code.  If you need to make a change to a function, make it small and focused on the change you need to make.")
 	details = append(details, "After each time you write/edit a file, make sure the application compiles.")
+	details = append(details, "Always act with specific, action-oriented steps. Do not be vague or general. Every response should be actionable.")
+	details = append(details, "Be as concise as possible. Only include what is necessary to accomplish the task. Avoid verbosity and unnecessary explanations.")
 	// --- End custom user requirements ---
 
 	details = append(details, "Do not make things up or use information not provided in the system information, tools, or user queries.")
@@ -1477,12 +1518,12 @@ func systemToolsXMLPrompt(mode ChatMode, mcpTools []InternalToolInfo) string {
 	return sb.String()
 }
 
-func NewOpenAIChatService(apiKey string, logger *logger.Logger, chatService *ChatService, queries *db.Queries, projectsDir string, model string) *AIChatService {
+func NewOpenAIChatService(apiKey string, logger *logger.Logger, chatService *ChatService, queries *db.Queries, projectsDir string, model string, boilerplateService *boilerplates.BoilerplateService) *AIChatService {
 	// Create OpenAI provider
 	openAIProvider := NewOpenAIProvider(apiKey, logger)
 
 	// Create the generic AI chat service with OpenAI provider
-	return NewAIChatService(logger, chatService, queries, projectsDir, openAIProvider, model)
+	return NewAIChatService(logger, chatService, queries, projectsDir, openAIProvider, model, boilerplateService)
 }
 
 func estimateTokenCount(messages []AIMessage) int {

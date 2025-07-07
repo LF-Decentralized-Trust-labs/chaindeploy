@@ -276,13 +276,6 @@ func max(a, b int) int {
 	return b
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // GetMaxTokens returns the max tokens for a given Claude model
 func (p *ClaudeProvider) GetMaxTokens(model string) int {
 	switch model {
@@ -295,4 +288,67 @@ func (p *ClaudeProvider) GetMaxTokens(model string) int {
 	default:
 		return 4096
 	}
+}
+
+// GenerateJSONSchemaFromMessage generates a JSON object based on a message and schema using Claude's API.
+func (p *ClaudeProvider) GenerateJSONSchemaFromMessage(ctx context.Context, message string, model string, schema string) (string, error) {
+	// Prepare the user message
+	claudeMessages := []anthropic.MessageParam{
+		anthropic.NewUserMessage(anthropic.NewTextBlock(message)),
+	}
+
+	// Parse the schema into a map
+	var schemaMap map[string]interface{}
+	if err := json.Unmarshal([]byte(schema), &schemaMap); err != nil {
+		return "", fmt.Errorf("invalid JSON schema: %w", err)
+	}
+
+	// Extract properties for the tool schema
+	properties, ok := schemaMap["properties"].(map[string]interface{})
+	if !ok {
+		return "", fmt.Errorf("schema must have a 'properties' object at the top level")
+	}
+
+	// Use Claude's JSON output mode (tool use with schema)
+	tools := []anthropic.ToolUnionParam{
+		anthropic.ToolUnionParamOfTool(
+			anthropic.ToolInputSchemaParam{
+				Type:       "object",
+				Properties: properties,
+			},
+			"generate_json",
+		),
+	}
+	toolChoice := anthropic.ToolChoiceUnionParam{
+
+		OfTool: &anthropic.ToolChoiceToolParam{
+			Name:                   "generate_json",
+			DisableParallelToolUse: param.Opt[bool]{Value: true},
+			Type:                   "tool",
+		},
+	}
+
+	resp, err := p.Client.Messages.New(ctx, anthropic.MessageNewParams{
+		Model:       anthropic.Model(model),
+		Messages:    claudeMessages,
+		Tools:       tools,
+		MaxTokens:   1024,
+		Temperature: param.Opt[float64]{Value: 0.3},
+		ToolChoice:  toolChoice,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	// Find the tool use result in the response
+	for _, block := range resp.Content {
+		if block.Type == "tool_use" && block.Name == "generate_json" {
+			// block.Input is json.RawMessage, so convert to string
+			if block.Input != nil {
+				return string(block.Input), nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("no tool use result returned by Claude")
 }

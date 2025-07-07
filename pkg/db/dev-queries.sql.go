@@ -11,6 +11,15 @@ import (
 	"time"
 )
 
+const AddIsInternalToMessages = `-- name: AddIsInternalToMessages :exec
+ALTER TABLE messages ADD COLUMN is_internal BOOLEAN NOT NULL DEFAULT FALSE
+`
+
+func (q *Queries) AddIsInternalToMessages(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, AddIsInternalToMessages)
+	return err
+}
+
 const CreateConversation = `-- name: CreateConversation :one
 INSERT INTO conversations (project_id) VALUES (?) RETURNING id, project_id, started_at
 `
@@ -190,7 +199,7 @@ func (q *Queries) GetProjectBySlug(ctx context.Context, slug string) (*GetProjec
 }
 
 const InsertMessage = `-- name: InsertMessage :one
-INSERT INTO messages (conversation_id, parent_id, sender, content, enhanced_content, tool_arguments) VALUES (?, ?, ?, ?, ?, ?) RETURNING id, conversation_id, parent_id, sender, content, enhanced_content, tool_arguments, created_at
+INSERT INTO messages (conversation_id, parent_id, sender, content, enhanced_content, tool_arguments, is_internal) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id, conversation_id, parent_id, sender, content, enhanced_content, tool_arguments, is_internal, created_at
 `
 
 type InsertMessageParams struct {
@@ -200,6 +209,7 @@ type InsertMessageParams struct {
 	Content         string         `json:"content"`
 	EnhancedContent sql.NullString `json:"enhancedContent"`
 	ToolArguments   sql.NullString `json:"toolArguments"`
+	IsInternal      bool           `json:"isInternal"`
 }
 
 func (q *Queries) InsertMessage(ctx context.Context, arg *InsertMessageParams) (*Message, error) {
@@ -210,6 +220,7 @@ func (q *Queries) InsertMessage(ctx context.Context, arg *InsertMessageParams) (
 		arg.Content,
 		arg.EnhancedContent,
 		arg.ToolArguments,
+		arg.IsInternal,
 	)
 	var i Message
 	err := row.Scan(
@@ -220,6 +231,7 @@ func (q *Queries) InsertMessage(ctx context.Context, arg *InsertMessageParams) (
 		&i.Content,
 		&i.EnhancedContent,
 		&i.ToolArguments,
+		&i.IsInternal,
 		&i.CreatedAt,
 	)
 	return &i, err
@@ -287,7 +299,7 @@ func (q *Queries) ListConversationsForProject(ctx context.Context, projectID int
 }
 
 const ListMessagesForConversation = `-- name: ListMessagesForConversation :many
-SELECT id, conversation_id, parent_id, sender, content, enhanced_content, tool_arguments, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC
+SELECT id, conversation_id, parent_id, sender, content, enhanced_content, tool_arguments, is_internal, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC
 `
 
 func (q *Queries) ListMessagesForConversation(ctx context.Context, conversationID int64) ([]*Message, error) {
@@ -307,6 +319,7 @@ func (q *Queries) ListMessagesForConversation(ctx context.Context, conversationI
 			&i.Content,
 			&i.EnhancedContent,
 			&i.ToolArguments,
+			&i.IsInternal,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -464,7 +477,7 @@ func (q *Queries) ListToolCallsForMessage(ctx context.Context, messageID int64) 
 }
 
 const UpdateMessageEnhancedContent = `-- name: UpdateMessageEnhancedContent :one
-UPDATE messages SET enhanced_content = ? WHERE id = ? RETURNING id, conversation_id, parent_id, sender, content, enhanced_content, tool_arguments, created_at
+UPDATE messages SET enhanced_content = ? WHERE id = ? RETURNING id, conversation_id, parent_id, sender, content, enhanced_content, tool_arguments, is_internal, created_at
 `
 
 type UpdateMessageEnhancedContentParams struct {
@@ -483,6 +496,7 @@ func (q *Queries) UpdateMessageEnhancedContent(ctx context.Context, arg *UpdateM
 		&i.Content,
 		&i.EnhancedContent,
 		&i.ToolArguments,
+		&i.IsInternal,
 		&i.CreatedAt,
 	)
 	return &i, err

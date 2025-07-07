@@ -1,7 +1,6 @@
 // Determine language for syntax highlighting based on file extension
 export const getLanguage = (filePath: string) => {
 	const ext = filePath.split('.').pop()?.toLowerCase()
-	console.log('ext', ext)
 	switch (ext) {
 		case 'js': return 'javascript'
 		case 'ts': return 'typescript'

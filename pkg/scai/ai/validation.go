@@ -78,7 +78,7 @@ func (v *ValidationService) ValidateProjectAfterFileOperation(ctx context.Contex
 
 // ShouldTriggerValidation checks if validation should be triggered based on the tool name
 func ShouldTriggerValidation(toolName string) bool {
-	validationTools := []string{"write_file", "edit_file", "delete_file"}
+	validationTools := []string{"rewrite_file", "write_file", "edit_file", "delete_file"}
 	for _, tool := range validationTools {
 		if toolName == tool {
 			return true

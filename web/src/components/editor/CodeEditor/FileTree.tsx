@@ -101,7 +101,7 @@ export function FileTree({
 	if (isRoot) {
 		// Render only children, not the root node itself
 		return (
-			<div className="overflow-y-auto max-h-[calc(100vh-200px)]">
+			<div className="overflow-auto">
 				<div className="ml-2">
 					{node.children?.map((child) => (
 						<FileTree
@@ -137,7 +137,7 @@ export function FileTree({
 								>
 									{isOpen ? <FaChevronDown className="text-xs" /> : <FaChevronRight className="text-xs" />}
 									{isOpen ? <FaFolderOpen className="text-yellow-400" /> : <FaFolder className="text-yellow-400" />}
-									<span className="ml-1 font-semibold text-base">{node.name}</span>
+									<span className="ml-1 font-semibold text-sm">{node.name}</span>
 								</button>
 								{isOpen && hasChildren && (
 									<div className="ml-4">
@@ -158,11 +158,11 @@ export function FileTree({
 							</div>
 						) : (
 							<button
-								className={cn('flex items-center gap-2 text-left py-1 px-2 w-full hover:bg-muted rounded', selectedFile?.name === node.name && 'bg-accent')}
+								className={cn('flex items-center gap-2 text-left py-1 px-2 w-full hover:bg-muted rounded ', selectedFile?.name === node.name && 'bg-accent')}
 								onClick={() => handleFileClick({ name: node.name!, path: node.path! })}
 							>
 								{(() => { const { icon: Icon, className } = getFileIcon(node.name!); return <Icon className={className} /> })()}
-								<span className="ml-1 text-base">{node.name}</span>
+								<span className="ml-1 text-sm flex-1 truncate overflow-hidden whitespace-nowrap">{node.name}</span>
 							</button>
 						)}
 					</div>

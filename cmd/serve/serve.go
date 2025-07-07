@@ -634,28 +634,6 @@ func (c *serveCmd) initializeAIServices(queries *db.Queries, logger *logger.Logg
 		return nil, nil, nil, nil
 	}
 
-	chatService := ai.NewChatService(queries)
-	var aiService *ai.AIChatService
-	switch c.aiProvider {
-	case "anthropic", "claude":
-		if c.anthropicKey == "" {
-			logger.Warn("ANTHROPIC_API_KEY is not set and --anthropic-key not provided - AI services will not be available")
-			return nil, nil, nil, nil
-		}
-		claudeProvider := ai.NewClaudeProvider(c.anthropicKey, logger)
-		aiService = ai.NewAIChatService(logger, chatService, queries, projectsDir, claudeProvider, c.aiModel)
-	case "openai":
-		if c.openaiKey == "" {
-			logger.Warn("OPENAI_API_KEY is not set and --openai-key not provided - AI services will not be available")
-			return nil, nil, nil, nil
-		}
-		openAIProvider := ai.NewOpenAIProvider(c.openaiKey, logger)
-		aiService = ai.NewAIChatService(logger, chatService, queries, projectsDir, openAIProvider, c.aiModel)
-	default:
-		logger.Warnf("Unknown AI provider: %s - AI services will not be available", c.aiProvider)
-		return nil, nil, nil, nil
-	}
-
 	// Initialize projectsService
 	runner := projectrunner.NewRunner(queries)
 	projectsService, err := projects.NewProjectsService(queries, runner, projectsDir, organizationService, keyManagementService, networksService)
@@ -674,6 +652,28 @@ func (c *serveCmd) initializeAIServices(queries *db.Queries, logger *logger.Logg
 	boilerplateService, err := boilerplates.NewBoilerplateService(queries)
 	if err != nil {
 		logger.Warnf("Failed to create boilerplate service: %v - AI services will not be available", err)
+		return nil, nil, nil, nil
+	}
+
+	chatService := ai.NewChatService(queries)
+	var aiService *ai.AIChatService
+	switch c.aiProvider {
+	case "anthropic", "claude":
+		if c.anthropicKey == "" {
+			logger.Warn("ANTHROPIC_API_KEY is not set and --anthropic-key not provided - AI services will not be available")
+			return nil, nil, nil, nil
+		}
+		claudeProvider := ai.NewClaudeProvider(c.anthropicKey, logger)
+		aiService = ai.NewAIChatService(logger, chatService, queries, projectsDir, claudeProvider, c.aiModel, boilerplateService)
+	case "openai":
+		if c.openaiKey == "" {
+			logger.Warn("OPENAI_API_KEY is not set and --openai-key not provided - AI services will not be available")
+			return nil, nil, nil, nil
+		}
+		openAIProvider := ai.NewOpenAIProvider(c.openaiKey, logger)
+		aiService = ai.NewAIChatService(logger, chatService, queries, projectsDir, openAIProvider, c.aiModel, boilerplateService)
+	default:
+		logger.Warnf("Unknown AI provider: %s - AI services will not be available", c.aiProvider)
 		return nil, nil, nil, nil
 	}
 

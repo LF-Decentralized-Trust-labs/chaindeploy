@@ -264,10 +264,8 @@ export type ChainlaunchdeployChaincodeDefinition = {
      */
     created_at?: string;
     docker_image?: string;
-    docker_info?: ChainlaunchdeployDockerContainerInfo;
     endorsement_policy?: string;
     id?: number;
-    peer_statuses?: Array<ChainlaunchdeployPeerStatus>;
     sequence?: number;
     version?: string;
 };
@@ -591,17 +589,6 @@ export type ChainlaunchdeployListChaincodeDefinitionsResponse = {
 
 export type ChainlaunchdeployListChaincodesResponse = {
     chaincodes?: Array<ChainlaunchdeployChaincodeResponse>;
-};
-
-export type ChainlaunchdeployPeerStatus = {
-    definition_id?: number;
-    id?: number;
-    /**
-     * ISO8601
-     */
-    last_updated?: string;
-    peer_id?: number;
-    status?: string;
 };
 
 export type ChainlaunchdeployUpdateChaincodeDefinitionRequest = {
@@ -1901,6 +1888,18 @@ export type RegistryPluginMetadata = {
     version?: string;
 };
 
+export type ResponseDetailedErrorResponse = {
+    details?: {
+        [key: string]: unknown;
+    };
+    error?: string;
+    message?: string;
+};
+
+export type ResponseDetailedResponse = {
+    [key: string]: unknown;
+};
+
 export type ResponseErrorResponse = {
     error?: string;
 };
@@ -2680,6 +2679,48 @@ export type GetAiByProjectIdConversationsByConversationIdExportResponses = {
 };
 
 export type GetAiByProjectIdConversationsByConversationIdExportResponse = GetAiByProjectIdConversationsByConversationIdExportResponses[keyof GetAiByProjectIdConversationsByConversationIdExportResponses];
+
+export type PostAiByProjectIdConversationsByConversationIdSummarizeData = {
+    body?: never;
+    path: {
+        /**
+         * Project ID
+         */
+        projectId: number;
+        /**
+         * Conversation ID
+         */
+        conversationId: number;
+    };
+    query?: never;
+    url: '/ai/{projectId}/conversations/{conversationId}/summarize';
+};
+
+export type PostAiByProjectIdConversationsByConversationIdSummarizeErrors = {
+    /**
+     * Bad Request
+     */
+    400: ResponseDetailedErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ResponseDetailedErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ResponseDetailedErrorResponse;
+};
+
+export type PostAiByProjectIdConversationsByConversationIdSummarizeError = PostAiByProjectIdConversationsByConversationIdSummarizeErrors[keyof PostAiByProjectIdConversationsByConversationIdSummarizeErrors];
+
+export type PostAiByProjectIdConversationsByConversationIdSummarizeResponses = {
+    /**
+     * Created
+     */
+    201: ResponseDetailedResponse;
+};
+
+export type PostAiByProjectIdConversationsByConversationIdSummarizeResponse = PostAiByProjectIdConversationsByConversationIdSummarizeResponses[keyof PostAiByProjectIdConversationsByConversationIdSummarizeResponses];
 
 export type GetAuditLogsData = {
     body?: never;

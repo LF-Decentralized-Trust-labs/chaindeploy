@@ -32,6 +32,7 @@ type BoilerplateConfig struct {
 	RepoName        string   `yaml:"repoName" json:"repoName"`
 	RepoPath        string   `yaml:"repoPath,omitempty" json:"repoPath,omitempty"`
 	ValidateCommand string   `yaml:"validateCommand,omitempty" json:"validateCommand,omitempty"`
+	SystemPrompt    string   `yaml: "systemPrompt"`
 }
 
 // BoilerplatesConfig represents the top-level configuration structure
@@ -394,6 +395,33 @@ func (s *BoilerplateService) GetBoilerplatesByNetworkID(ctx context.Context, net
 
 	// Get boilerplates for the network's platform
 	return s.GetBoilerplatesByPlatform(network.Platform), nil
+}
+
+// GetBoilerplateRunner returns the command, args, and image for a given boilerplate type
+func (s *BoilerplateService) GetBoilerplateRunner(boilerplateType string) (string, []string, string, error) {
+	config, err := s.GetBoilerplateConfig(boilerplateType)
+	if err != nil {
+		return "", nil, "", fmt.Errorf("unknown boilerplate type: %s", boilerplateType)
+	}
+
+	return config.Command, config.Args, config.Image, nil
+}
+
+// GetProjectPrompt returns the prompt for a specific project
+func (s *BoilerplateService) GetProjectPrompt(name string) (string, error) {
+
+	// Get boilerplates for the network's platform
+	boilerplates := s.GetBoilerplates()
+	if len(boilerplates) == 0 {
+		return "", fmt.Errorf("no boilerplates found")
+	}
+	for _, boilerplate := range boilerplates {
+		if boilerplate.Name == name {
+			return boilerplate.SystemPrompt, nil
+		}
+	}
+
+	return "", nil
 }
 
 //go:embed configs/boilerplates.yaml

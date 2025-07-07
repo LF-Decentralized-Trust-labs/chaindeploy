@@ -7,15 +7,16 @@ import {
 	getChaincodeProjectsByIdFileAtCommitOptions,
 	postAiByProjectIdConversationsMutation,
 } from '@/api/client/@tanstack/react-query.gen'
+import { MultimodalInput } from '@/components/editor/CodeEditor/ChatInput'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { jsonrepair } from 'jsonrepair'
-import { ArrowLeft, Check, ChevronDown, Copy, GitCommit, History, Plus, Square } from 'lucide-react'
+import { ArrowDown, ArrowLeft, Check, ChevronDown, Copy, GitCommit, History, Plus } from 'lucide-react'
 import * as monaco from 'monaco-editor'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { Components } from 'react-markdown'
 import ReactMarkdown from 'react-markdown'
 import { useSearchParams } from 'react-router-dom'
@@ -25,8 +26,14 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { toast } from 'sonner'
 import { ToolEventRenderer } from './tools/ToolEventRenderer'
 import { getMonacoLanguage } from './types'
+import { useScrollToBottom } from '@/hooks/use-scroll-to-bottom'
+import { AnimatePresence, motion } from 'framer-motion'
 
 const SyntaxHighlighterComp = SyntaxHighlighter as unknown as React.ComponentType<SyntaxHighlighterProps>
+
+// Context to provide chat panel actions to Message
+const ChatPanelContext = createContext<any>(null)
+const useChatPanelContext = () => useContext(ChatPanelContext)
 
 function useAutoResizeTextarea() {
 	const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -53,7 +60,7 @@ interface MessagePart {
 }
 
 interface Message {
-	role: 'user' | 'assistant'
+	role: 'user' | 'assistant' | 'summary'
 	parts: MessagePart[]
 }
 
@@ -312,7 +319,9 @@ type ChatPanelProps = {
 
 const MessagesList = React.memo(({ messages }: { messages: Message[] }) => (
 	<div className="flex flex-col gap-1">
-		{messages.map((msg, idx) => <Message key={idx} message={msg} />)}
+		{messages.map((msg, idx) => (
+			<Message key={idx} message={msg} />
+		))}
 	</div>
 ))
 
@@ -323,7 +332,14 @@ export function ChatPanel({ projectId = 1, handleToolResult, handleChatComplete 
 	const messagesEndRef = useRef<HTMLDivElement>(null)
 	const scrollAreaRef = useRef<HTMLDivElement>(null)
 	const autoScrollRef = useRef(true)
-	const { textareaRef, adjustHeight } = useAutoResizeTextarea()
+
+	const scrollToBottom = useCallback(() => {
+		if (scrollAreaRef.current) {
+			scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight
+		}
+	}, [])
+
+	const { textareaRef } = useAutoResizeTextarea()
 	const { data: conversations, refetch: refetchConversations } = useQuery({
 		...getAiByProjectIdConversationsOptions({ path: { projectId } }),
 	})
@@ -357,13 +373,6 @@ export function ChatPanel({ projectId = 1, handleToolResult, handleChatComplete 
 		...getChaincodeProjectsByIdCommitsOptions({ path: { id: projectId } }),
 	})
 	const { messages, input, setInput, isLoading, activeTool, handleSubmit, partialArgsRef, setMessages, handleStop } = chatState
-	const scrollToBottom = useCallback(() => {
-		if (scrollAreaRef.current) {
-			scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight
-		}
-	}, [])
-
-	// Scroll to bottom on first load and when new messages arrive, if auto-scroll is enabled
 	useEffect(() => {
 		if (autoScrollRef.current) {
 			scrollToBottom()
@@ -373,32 +382,6 @@ export function ChatPanel({ projectId = 1, handleToolResult, handleChatComplete 
 	// On mount, scroll to bottom
 	useEffect(() => {
 		scrollToBottom()
-	}, [])
-
-	// Handler to detect user scroll position
-	const handleScroll = useCallback(() => {
-		const el = scrollAreaRef.current
-		if (!el) return
-		const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 10
-		autoScrollRef.current = atBottom
-	}, [])
-
-	const handleInputChange = useCallback(
-		(e: React.ChangeEvent<HTMLTextAreaElement>) => {
-			setInput(e.target.value)
-			adjustHeight()
-		},
-		[setInput, adjustHeight]
-	)
-
-	const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-		if (e.key === 'Enter' && !e.shiftKey) {
-			e.preventDefault()
-			const form = e.currentTarget.form
-			if (form) {
-				form.requestSubmit()
-			}
-		}
 	}, [])
 
 	const handleFormSubmit = useCallback(
@@ -423,7 +406,7 @@ export function ChatPanel({ projectId = 1, handleToolResult, handleChatComplete 
 			const formattedMessages = data
 				.filter((msg) => msg.content || (msg.toolCalls && msg.toolCalls.length > 0))
 				.map((msg) => ({
-					role: (msg.sender === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+					role: msg.sender === 'summary' ? 'summary' : ((msg.sender === 'user' ? 'user' : 'assistant') as 'user' | 'assistant' | 'summary'),
 					parts: [
 						...(msg.sender !== 'tool' && msg.content
 							? [
@@ -508,16 +491,6 @@ export function ChatPanel({ projectId = 1, handleToolResult, handleChatComplete 
 		}
 	}, [messages.length])
 
-	const messagesContent = useMemo(
-		() => (
-			<div ref={scrollAreaRef} onScroll={handleScroll} className="flex-1 overflow-auto p-2">
-				<MessagesList messages={messages} />
-				{isLoading && <div className="text-sm text-muted-foreground">{activeTool ? <ActiveTool tool={activeTool} partialArgs={partialArgs} /> : <div>Thinking...</div>}</div>}
-				<div ref={messagesEndRef} />
-			</div>
-		),
-		[messages, isLoading, activeTool, partialArgs, handleScroll]
-	)
 	const createConversationMutation = useMutation({
 		...postAiByProjectIdConversationsMutation({}),
 		onSuccess: (data) => {
@@ -532,6 +505,7 @@ export function ChatPanel({ projectId = 1, handleToolResult, handleChatComplete 
 			toast.error('Failed to create new conversation')
 		},
 	})
+
 	const createNewConversation = useCallback(async () => {
 		createConversationMutation.mutate({
 			path: { projectId },
@@ -541,108 +515,129 @@ export function ChatPanel({ projectId = 1, handleToolResult, handleChatComplete 
 		})
 	}, [createConversationMutation])
 
+	// Provide context values for Message
+	const contextValue = {
+		setFirstConversationId,
+		createNewConversation,
+		setInput,
+		handleSubmit,
+	}
+
 	return (
-		<div className="flex flex-col h-full bg-background border-r border-border text-foreground">
-			<div className="p-2 border-b border-border font-semibold text-sm flex items-center justify-between">
-				<div className="flex items-center gap-2">
-					<DropdownMenu>
-						<DropdownMenuTrigger asChild>
-							<Button variant="ghost" size="sm" className="h-8 gap-1 font-normal">
-								{conversations?.find((c) => c.id?.toString() === firstConversationId)?.id ? `Chat #${firstConversationId}` : 'Select Chat'}
-								<ChevronDown className="h-4 w-4" />
-							</Button>
-						</DropdownMenuTrigger>
-						<DropdownMenuContent align="start" className="w-[200px]">
-							<DropdownMenuItem className="gap-2" onClick={createNewConversation}>
-								<Plus className="h-4 w-4" />
-								New Conversation
-							</DropdownMenuItem>
-							{conversations?.map((conversation) => (
-								<DropdownMenuItem key={conversation.id} className="gap-2" onClick={() => setFirstConversation(conversation.id?.toString() || '')}>
-									{conversation.id?.toString() === firstConversationId && <Check className="h-4 w-4" />}
-									<span className={conversation.id?.toString() === firstConversationId ? 'font-medium' : ''}>Chat #{conversation.id}</span>
+		<ChatPanelContext.Provider value={contextValue}>
+			<div className="flex flex-col h-full bg-background border-r border-border text-foreground">
+				<div className="p-2 border-b border-border font-semibold text-sm flex items-center justify-between">
+					<div className="flex items-center gap-2">
+						<DropdownMenu>
+							<DropdownMenuTrigger asChild>
+								<Button variant="ghost" size="sm" className="h-8 gap-1 font-normal">
+									{conversations?.find((c) => c.id?.toString() === firstConversationId)?.id ? `Chat #${firstConversationId}` : 'Select Chat'}
+									<ChevronDown className="h-4 w-4" />
+								</Button>
+							</DropdownMenuTrigger>
+							<DropdownMenuContent align="start" className="w-[200px]">
+								<DropdownMenuItem className="gap-2" onClick={createNewConversation}>
+									<Plus className="h-4 w-4" />
+									New Conversation
 								</DropdownMenuItem>
-							))}
-						</DropdownMenuContent>
-					</DropdownMenu>
-					<Button variant="ghost" size="sm" onClick={createNewConversation} className="h-8">
-						<Plus className="h-4 w-4" />
-					</Button>
-				</div>
-				<Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
-					<DialogTrigger asChild>
-						<Button variant="ghost" size="sm" className="h-8">
-							<History className="h-4 w-4" />
+								{conversations?.map((conversation) => (
+									<DropdownMenuItem key={conversation.id} className="gap-2" onClick={() => setFirstConversation(conversation.id?.toString() || '')}>
+										{conversation.id?.toString() === firstConversationId && <Check className="h-4 w-4" />}
+										<span className={conversation.id?.toString() === firstConversationId ? 'font-medium' : ''}>Chat #{conversation.id}</span>
+									</DropdownMenuItem>
+								))}
+							</DropdownMenuContent>
+						</DropdownMenu>
+						<Button variant="ghost" size="sm" onClick={createNewConversation} className="h-8">
+							<Plus className="h-4 w-4" />
 						</Button>
-					</DialogTrigger>
-					<DialogContent className="max-w-2xl">
-						<DialogHeader>
-							<DialogTitle>Chat History</DialogTitle>
-						</DialogHeader>
-						<div className="grid grid-cols-2 gap-4">
-							<div>
-								<h3 className="text-sm font-medium mb-2">Conversations</h3>
-								<ScrollArea className="h-[60vh]">
-									<div className="space-y-4">
-										{conversations?.map((conversation, index) => (
-											<div
-												key={conversation.id}
-												className={`p-3 rounded-lg cursor-pointer hover:bg-accent ${conversation.id?.toString() === firstConversationId ? 'bg-accent' : ''}`}
-												onClick={() => {
-													setFirstConversation(conversation.id?.toString() || '')
-													setHistoryDialogOpen(false)
-												}}
-											>
-												<div className="text-sm font-medium">{conversationDetails?.[index]?.[0]?.content?.slice(0, 100) || 'Empty conversation'}</div>
-												<div className="text-xs text-muted-foreground mt-1">{new Date(conversation.startedAt || '').toLocaleString()}</div>
-											</div>
-										))}
-									</div>
-								</ScrollArea>
+					</div>
+					<Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
+						<DialogTrigger asChild>
+							<Button variant="ghost" size="sm" className="h-8">
+								<History className="h-4 w-4" />
+							</Button>
+						</DialogTrigger>
+						<DialogContent className="max-w-2xl">
+							<DialogHeader>
+								<DialogTitle>Chat History</DialogTitle>
+							</DialogHeader>
+							<div className="grid grid-cols-2 gap-4">
+								<div>
+									<h3 className="text-sm font-medium mb-2">Conversations</h3>
+									<ScrollArea className="h-[60vh]">
+										<div className="space-y-4">
+											{conversations?.map((conversation, index) => (
+												<div
+													key={conversation.id}
+													className={`p-3 rounded-lg cursor-pointer hover:bg-accent ${conversation.id?.toString() === firstConversationId ? 'bg-accent' : ''}`}
+													onClick={() => {
+														setFirstConversation(conversation.id?.toString() || '')
+														setHistoryDialogOpen(false)
+													}}
+												>
+													<div className="text-sm font-medium">{conversationDetails?.[index]?.[0]?.content?.slice(0, 100) || 'Empty conversation'}</div>
+													<div className="text-xs text-muted-foreground mt-1">{new Date(conversation.startedAt || '').toLocaleString()}</div>
+												</div>
+											))}
+										</div>
+									</ScrollArea>
+								</div>
+								<div>
+									<h3 className="text-sm font-medium mb-2">Commits</h3>
+									<ScrollArea className="h-[60vh]">
+										<div className="space-y-4">
+											{commits?.commits?.map((commit) => (
+												<div key={commit.hash} className="p-3 rounded-lg border border-border hover:bg-accent/50 transition-colors cursor-pointer">
+													<CommitDetails projectId={projectId} commit={commit} commitHash={commit.hash || ''} />
+												</div>
+											))}
+										</div>
+									</ScrollArea>
+								</div>
 							</div>
-							<div>
-								<h3 className="text-sm font-medium mb-2">Commits</h3>
-								<ScrollArea className="h-[60vh]">
-									<div className="space-y-4">
-										{commits?.commits?.map((commit) => (
-											<div key={commit.hash} className="p-3 rounded-lg border border-border hover:bg-accent/50 transition-colors cursor-pointer">
-												<CommitDetails projectId={projectId} commit={commit} commitHash={commit.hash || ''} />
-											</div>
-										))}
-									</div>
-								</ScrollArea>
-							</div>
-						</div>
-					</DialogContent>
-				</Dialog>
+						</DialogContent>
+					</Dialog>
+				</div>
+				<Messages messages={messages} isLoading={isLoading} activeTool={activeTool} partialArgs={partialArgs} containerRef={scrollAreaRef} endRef={messagesEndRef} />
+				<form onSubmit={handleFormSubmit} className="p-2">
+					{/* Textarea */}
+					<MultimodalInput
+						value={input}
+						onChange={(value) => setInput(value)}
+						onSend={() => {
+							handleSubmit({ preventDefault: () => {} } as any)
+						}}
+						handleStop={handleStop}
+						disabled={isLoading}
+						isLoading={isLoading}
+					/>
+				</form>
 			</div>
-			{messagesContent}
-			<form onSubmit={handleFormSubmit} className="flex p-2 border-t border-border gap-2">
-				<textarea
-					ref={textareaRef}
-					className="flex-1 rounded border px-2 py-1 text-sm bg-background text-foreground resize-none min-h-[36px] max-h-[400px] overflow-y-auto"
-					value={input}
-					onChange={handleInputChange}
-					onKeyDown={handleKeyDown}
-					placeholder="Type a message... (Shift + Enter for new line)"
-					disabled={isLoading}
-					rows={3}
-				/>
-				{isLoading ? (
-					<button
-						type="button"
-						onClick={handleStop}
-						className="px-3 py-1 rounded bg-destructive text-destructive-foreground hover:bg-destructive/90 text-sm self-end flex items-center gap-1"
-					>
-						<Square className="h-4 w-4" />
-						Stop
-					</button>
-				) : (
-					<button type="submit" className="px-3 py-1 rounded bg-primary text-primary-foreground text-sm self-end" disabled={!input.trim()}>
-						Send
-					</button>
-				)}
-			</form>
+		</ChatPanelContext.Provider>
+	)
+}
+
+function Messages({
+	messages,
+	isLoading,
+	activeTool,
+	partialArgs,
+	containerRef,
+	endRef,
+}: {
+	messages: Message[]
+	isLoading: boolean
+	activeTool: any
+	partialArgs: any
+	containerRef: React.RefObject<HTMLDivElement>
+	endRef: React.RefObject<HTMLDivElement>
+}) {
+	return (
+		<div ref={containerRef} className="flex-1 overflow-auto p-2">
+			<MessagesList messages={messages} />
+			{isLoading && <div className="text-sm text-muted-foreground">{activeTool ? <ActiveTool tool={activeTool} partialArgs={partialArgs} /> : <div>Thinking...</div>}</div>}
+			<div ref={endRef} />
 		</div>
 	)
 }
@@ -793,6 +788,9 @@ interface MessageProps {
 
 const Message = React.memo(({ message }: MessageProps) => {
 	const [copiedMessage, setCopiedMessage] = useState<string | null>(null)
+	const [expanded, setExpanded] = useState(false)
+	const [startingNew, setStartingNew] = useState(false)
+	const { setFirstConversationId, createNewConversation, setInput, handleSubmit } = useChatPanelContext?.() || {}
 
 	const copyToClipboard = async (content: string) => {
 		try {
@@ -808,7 +806,7 @@ const Message = React.memo(({ message }: MessageProps) => {
 	const getMessageContent = useCallback(() => {
 		let content = ''
 		// Add role indicator
-		content += `${message.role === 'user' ? 'User' : 'Assistant'}:\n\n`
+		content += `${message.role === 'user' ? 'User' : message.role === 'assistant' ? 'Assistant' : 'Summary'}:\n\n`
 		// Add each part's content
 		message.parts.forEach((part, index) => {
 			if (part.type === 'text' && part.content) {
@@ -845,6 +843,11 @@ const Message = React.memo(({ message }: MessageProps) => {
 		copyToClipboard(messageContent)
 	}
 
+	// Detect max_tokens_exceeded error in summary
+	const maxTokensError = message.parts.some((part) => part.type === 'text' && part.content && part.content.includes('max_tokens_exceeded'))
+	// Find the summary text for reuse
+	const summaryText = (message.parts.find((p) => p.type === 'text' && p.content)?.content || '').trim()
+
 	const messageContent = useMemo(
 		() => (
 			<div className={`flex w-full ${message.role === 'user' ? 'justify-end' : 'justify-start'} relative group`}>
@@ -871,7 +874,72 @@ const Message = React.memo(({ message }: MessageProps) => {
 		),
 		[message, copiedMessage, getMessageContent, handleCopyMessage]
 	)
-
+	if (message.role === 'summary') {
+		const preview = summaryText
+		return (
+			<div className="flex w-full flex-col items-center relative group">
+				<div className="w-full rounded-lg p-2 bg-muted/70 border border-border text-xs flex items-center gap-2">
+					<span className="font-semibold text-muted-foreground">Summary:</span>
+					<span className="truncate flex-1">
+						{preview.slice(0, 80)}
+						{preview.length > 80 ? '…' : ''}
+					</span>
+					<button
+						onClick={() => setExpanded((v) => !v)}
+						className="ml-2 px-2 py-1 rounded bg-background border text-xs hover:bg-accent transition-colors"
+						title={expanded ? 'Hide full summary' : 'Show full summary'}
+					>
+						{expanded ? 'Hide' : 'Show more'}
+					</button>
+					<button
+						onClick={handleCopyMessage}
+						className="ml-1 p-1.5 rounded bg-background/80 hover:bg-background transition-colors opacity-0 group-hover:opacity-100 z-10"
+						title="Copy summary"
+					>
+						{copiedMessage === getMessageContent() ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+					</button>
+				</div>
+				{expanded && (
+					<div className="w-full rounded-lg p-3 bg-background border border-border mt-2 text-xs">
+						{message.parts.map((part, index) => {
+							if (part.type === 'text' && part.content) {
+								const trimmed = part.content.trim()
+								if (!trimmed) return null
+								return <MarkdownRenderer key={index} content={trimmed} />
+							}
+							if (part.type === 'tool' && part.toolEvent) {
+								return <ToolEventRenderer key={index} event={part.toolEvent} />
+							}
+							return null
+						})}
+						{maxTokensError && (
+							<div className="mt-4 flex flex-col items-center">
+								<Button
+									size="sm"
+									disabled={startingNew}
+									onClick={async () => {
+										if (!createNewConversation || !setFirstConversationId) return
+										setStartingNew(true)
+										const newId = await createNewConversation()
+										setFirstConversationId(newId)
+										setExpanded(false)
+										setStartingNew(false)
+										if (setInput && handleSubmit) {
+											setInput(summaryText)
+											setTimeout(() => handleSubmit({ preventDefault: () => {} } as any), 100)
+										}
+									}}
+									className="mt-2"
+								>
+									{startingNew ? 'Starting new conversation...' : 'Start new conversation from this summary'}
+								</Button>
+							</div>
+						)}
+					</div>
+				)}
+			</div>
+		)
+	}
 	return messageContent
 })
 

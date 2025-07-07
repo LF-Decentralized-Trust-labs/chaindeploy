@@ -9,6 +9,63 @@ boilerplates:
         repoOwner: chainlaunch
         repoName: chaincode-fabric-ts-tmpl
         validateCommand: npm run build:verify
+        systemPrompt: |
+            This is a Hyperledger Fabric TypeScript chaincode project.
+
+            When executing commands related to node.js, use NPM and NPX to install dependencies and run commands related to packages.
+
+            Key Technologies and Patterns:
+            - TypeScript for type-safe chaincode development
+            - Hyperledger Fabric SDK for Node.js
+            - Chaincode lifecycle management
+            - Asset-based data modeling
+            - Smart contract patterns for blockchain
+
+            Development Guidelines:
+            - Use TypeScript interfaces for asset definitions
+            - Implement proper error handling with Fabric errors
+            - Follow Fabric's transaction-based programming model
+            - Use the fabric-contract-api for contract development
+            - Structure code with clear separation of concerns
+            - Implement proper validation for all inputs
+            - Use Fabric's built-in access control mechanisms
+            - Always use @Transaction annotation for all transaction methods
+            - When adding new contracts, always register them in index.ts
+
+            Common Patterns:
+            - Asset CRUD operations (Create, Read, Update, Delete)
+            - Query operations with rich filtering
+            - Cross-asset transactions
+            - Event emission for external systems
+            - Access control and authorization checks
+
+            Important Contract Design Principles:
+            - Contracts must be completely stateless - never store data in memory or class variables
+            - All data must be persisted to the ledger using putState/getState operations
+            - Avoid any in-memory caching or temporary storage
+            - Each transaction should be independent and not rely on previous transaction state
+            - Use the ledger as the single source of truth for all data
+            - Implement proper state management through Fabric's key-value store
+            - Ensure all operations read from and write to the ledger directly
+            - Always decorate transaction methods with @Transaction annotation
+            - Register all contracts in index.ts for proper chaincode initialization
+
+            State Management Best Practices:
+            - Always use ctx.stub.putState() to persist data
+            - Always use ctx.stub.getState() to retrieve data
+            - Never use class properties or variables to store transaction data
+            - Implement proper key management for state storage
+            - Use doc types instead of composite keys to store data to the ledger
+            - Validate state existence before operations
+            - Handle state deletion with ctx.stub.deleteState()
+
+            Transaction Isolation:
+            - Each transaction should be self-contained
+            - Don't rely on data from previous transactions in memory
+            - Always query the ledger for current state
+            - Implement proper error handling for missing states
+            - Use transactions to maintain data consistency
+            - Ensure all transaction methods are properly annotated with @Transaction
     chaincode-fabric-go:
         name: Chaincode Fabric Go
         description: A Go-based Hyperledger Fabric chaincode project
@@ -18,4 +75,92 @@ boilerplates:
         repoOwner: chainlaunch
         repoName: chaincode-fabric-go-tmpl
         validateCommand: go vet ./...
+        systemPrompt: |
+            This is a Hyperledger Fabric Go chaincode project.
 
+            Key Technologies and Patterns:
+            - Go for high-performance chaincode development
+            - Hyperledger Fabric SDK for Go
+            - Chaincode lifecycle management
+            - Asset-based data modeling with Go structs
+            - Smart contract patterns for blockchain
+
+            Go Development Guidelines:
+            - Use Go interfaces for contract definitions
+            - Implement proper error handling with Go error types
+            - Follow Go naming conventions and idioms
+            - Use the fabric-contract-api-go for contract development
+            - Structure code with clear separation of concerns
+            - Implement proper validation using Go's reflect package
+            - Use Go's strong typing for asset definitions
+            - Follow Go module conventions and dependency management
+
+            Security Best Practices in Go:
+            - Always validate and sanitize all inputs
+            - Use Go's crypto packages for cryptographic operations
+            - Implement proper access control with Go's context package
+            - Avoid using unsafe packages unless absolutely necessary
+            - Use Go's built-in race detection for concurrent operations
+            - Implement proper logging with structured logging libraries
+            - Use Go's vet tool for static analysis
+            - Follow Go security guidelines for memory management
+
+            Common Patterns:
+            - Asset CRUD operations using Go structs
+            - Query operations with rich filtering using Go slices and maps
+            - Cross-asset transactions with proper error propagation
+            - Event emission using Fabric's event system
+            - Access control and authorization using Go's context
+            - JSON marshaling/unmarshaling for data serialization
+            - Composite key management for complex relationships
+
+            Important Contract Design Principles:
+            - Contracts must be completely stateless - never use package-level variables
+            - All data must be persisted to the ledger using PutState/GetState operations
+            - Avoid any in-memory caching or temporary storage
+            - Each transaction should be independent and not rely on previous transaction state
+            - Use the ledger as the single source of truth for all data
+            - Implement proper state management through Fabric's key-value store
+            - Ensure all operations read from and write to the ledger directly
+            - Use Go's defer statements for cleanup operations
+
+            State Management Best Practices:
+            - Always use ctx.GetStub().PutState() to persist data
+            - Always use ctx.GetStub().GetState() to retrieve data
+            - Never use package-level variables to store transaction data
+            - Implement proper key management using Go strings and byte slices
+            - Use composite keys for complex data relationships
+            - Validate state existence before operations
+            - Handle state deletion with ctx.GetStub().DelState()
+            - Use Go's encoding/json for data serialization
+            - Implement proper error handling with Go's error interface
+
+            Transaction Isolation:
+            - Each transaction should be self-contained
+            - Don't rely on data from previous transactions in memory
+            - Always query the ledger for current state
+            - Implement proper error handling for missing states
+            - Use transactions to maintain data consistency
+            - Use Go's context for transaction context management
+
+            Go-Specific Best Practices:
+            - Use Go modules for dependency management
+            - Implement proper logging with structured logging
+            - Use Go's testing framework for unit tests
+            - Follow Go's error handling patterns
+            - Use Go's interfaces for abstraction
+            - Implement proper resource cleanup with defer
+            - Use Go's channels for concurrent operations when needed
+            - Follow Go's code formatting with gofmt
+            - Use Go's linters (golint, govet) for code quality
+            - Implement proper documentation with Go doc comments
+
+            Performance Considerations:
+            - Optimize JSON marshaling/unmarshaling for ledger operations
+            - Minimize memory allocations during transaction processing
+            - Use efficient Go data structures for temporary computations
+            - Implement proper error handling to avoid unnecessary ledger reads
+            - Use batch operations when possible for multiple state changes
+            - Optimize key generation and management for state storage
+            - Use Go's efficient string and byte slice operations
+            - Implement proper cleanup with defer statements

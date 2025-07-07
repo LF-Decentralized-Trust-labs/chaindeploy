@@ -208,6 +208,7 @@ type Message struct {
 	Content         string         `json:"content"`
 	EnhancedContent sql.NullString `json:"enhancedContent"`
 	ToolArguments   sql.NullString `json:"toolArguments"`
+	IsInternal      bool           `json:"isInternal"`
 	CreatedAt       time.Time      `json:"createdAt"`
 }
 

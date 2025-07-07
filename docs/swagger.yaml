@@ -449,16 +449,10 @@ definitions:
         type: string
       docker_image:
         type: string
-      docker_info:
-        $ref: '#/definitions/chainlaunchdeploy.DockerContainerInfo'
       endorsement_policy:
         type: string
       id:
         type: integer
-      peer_statuses:
-        items:
-          $ref: '#/definitions/chainlaunchdeploy.PeerStatus'
-        type: array
       sequence:
         type: integer
       version:
@@ -885,20 +879,6 @@ definitions:
         items:
           $ref: '#/definitions/chainlaunchdeploy.ChaincodeResponse'
         type: array
-    type: object
-  chainlaunchdeploy.PeerStatus:
-    properties:
-      definition_id:
-        type: integer
-      id:
-        type: integer
-      last_updated:
-        description: ISO8601
-        type: string
-      peer_id:
-        type: integer
-      status:
-        type: string
     type: object
   chainlaunchdeploy.UpdateChaincodeDefinitionRequest:
     properties:
@@ -3219,6 +3199,19 @@ definitions:
       version:
         type: string
     type: object
+  response.DetailedErrorResponse:
+    properties:
+      details:
+        additionalProperties: true
+        type: object
+      error:
+        type: string
+      message:
+        type: string
+    type: object
+  response.DetailedResponse:
+    additionalProperties: true
+    type: object
   response.ErrorResponse:
     properties:
       error:
@@ -4240,6 +4233,45 @@ paths:
           schema:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Get conversation detail
+      tags:
+      - ai
+  /ai/{projectId}/conversations/{conversationId}/summarize:
+    post:
+      consumes:
+      - application/json
+      description: Summarizes an existing conversation and starts a new one with a
+        summary message
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: integer
+      - description: Conversation ID
+        in: path
+        name: conversationId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.DetailedResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.DetailedErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.DetailedErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.DetailedErrorResponse'
+      summary: Create a new conversation from an existing one with a summary
       tags:
       - ai
   /ai/boilerplates:

@@ -264,7 +264,56 @@ func (p *OpenAIProvider) GetMaxTokens(model string) int {
 		return 128000
 	case "gpt-4o":
 		return 128000
+	case "gpt-4.1-mini":
+		return 32768
 	default:
 		return 32768 // Default/fallback
 	}
+}
+
+// GenerateJSONSchemaFromMessage generates a JSON schema based on a message and model (fully implemented).
+func (p *OpenAIProvider) GenerateJSONSchemaFromMessage(ctx context.Context, message string, model string, schema string) (string, error) {
+	// Prepare the system and user messages
+	messages := []openai.ChatCompletionMessage{
+		{
+			Role:    openai.ChatMessageRoleSystem,
+			Content: "You are a helpful assistant that generates JSON objects based on a provided schema.",
+		},
+		{
+			Role:    openai.ChatMessageRoleUser,
+			Content: message,
+		},
+	}
+
+	// Prepare the function/tool definition for JSON mode
+	var schemaMap map[string]interface{}
+	if err := json.Unmarshal([]byte(schema), &schemaMap); err != nil {
+		return "", fmt.Errorf("invalid JSON schema: %w", err)
+	}
+
+	// Use OpenAI's JSON mode (response_format: json_object)
+	resp, err := p.Client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+		Model:    model,
+		Messages: messages,
+		ResponseFormat: &openai.ChatCompletionResponseFormat{
+			Type: openai.ChatCompletionResponseFormatTypeJSONObject,
+		},
+		Functions: []openai.FunctionDefinition{
+			{
+				Name:        "generate_json",
+				Description: "Generate a JSON object based on the provided schema.",
+				Parameters:  schemaMap,
+			},
+		},
+		FunctionCall: &openai.FunctionCall{Name: "generate_json"},
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if len(resp.Choices) == 0 || resp.Choices[0].Message.FunctionCall == nil {
+		return "", fmt.Errorf("no function call result returned by OpenAI")
+	}
+
+	return resp.Choices[0].Message.FunctionCall.Arguments, nil
 }
