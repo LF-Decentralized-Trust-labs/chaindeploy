@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"os/exec"
@@ -2466,6 +2467,9 @@ func (p *LocalPeer) GetAdminIdentity(ctx context.Context) (identity.SigningIdent
 	return signingIdentity, signer, nil
 }
 func (p *LocalPeer) GetIdentity(ctx context.Context, keyID int64) (identity.SigningIdentity, gwidentity.Sign, error) {
+	if keyID < math.MinInt || keyID > math.MaxInt {
+		return nil, nil, fmt.Errorf("keyID out of valid range for int conversion")
+	}
 	adminSignKeyDB, err := p.keyService.GetKey(ctx, int(keyID))
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get TLS CA key: %w", err)

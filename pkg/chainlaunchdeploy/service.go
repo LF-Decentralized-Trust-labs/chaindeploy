@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"net"
 	"os"
@@ -993,6 +994,9 @@ func (s *ChaincodeService) InvokeChaincode(ctx context.Context, chaincodeId int6
 	if cc == nil {
 		return nil, fmt.Errorf("chaincode not found")
 	}
+	if keyID < math.MinInt || keyID > math.MaxInt {
+		return nil, fmt.Errorf("keyID value %d is out of valid range for int type", keyID)
+	}
 	// Get MSP ID from key
 	key, err := s.keyManagementService.GetKey(ctx, int(keyID))
 	if err != nil {
@@ -1068,6 +1072,9 @@ func (s *ChaincodeService) QueryChaincode(ctx context.Context, chaincodeId int64
 	}
 	if cc == nil {
 		return nil, fmt.Errorf("chaincode not found")
+	}
+	if keyID < math.MinInt || keyID > math.MaxInt {
+		return nil, fmt.Errorf("keyID value %d is out of valid range for int type", keyID)
 	}
 	// Get MSP ID from key
 	key, err := s.keyManagementService.GetKey(ctx, int(keyID))

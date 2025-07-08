@@ -502,6 +502,9 @@ func (s *OrganizationService) GetCRL(ctx context.Context, orgID int64) ([]byte, 
 	}
 
 	// Get private key from key management service
+	if org.SignKeyID.Int64 < math.MinInt || org.SignKeyID.Int64 > math.MaxInt {
+		return nil, fmt.Errorf("sign key ID %d is out of valid range for int type", org.SignKeyID.Int64)
+	}
 	privateKeyPEM, err := s.keyManagement.GetDecryptedPrivateKey(int(org.SignKeyID.Int64))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get private key: %w", err)
