@@ -1,5 +1,4 @@
-import type { ServiceNetworkMap } from '@/api/client/types.gen'
-import type { ServiceNodeMapInfo } from '@/api/client/types.gen'
+import type { ServiceNetworkMap, ServiceNodeMapInfo } from '@/api/client/types.gen'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -16,12 +15,7 @@ interface NetworkMapProps {
 	isLoading?: boolean
 }
 
-const getNodeColor = (role: string | undefined, healthy: boolean | undefined) => {
-	if (!healthy) return 'bg-destructive text-destructive-foreground'
-	if (role === 'orderer') return 'bg-primary text-primary-foreground'
-	if (role === 'peer') return 'bg-secondary text-secondary-foreground'
-	return 'bg-muted text-muted-foreground'
-}
+
 
 export function AnimatedSVGEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label }: EdgeProps) {
 	const [edgePath] = getSmoothStepPath({

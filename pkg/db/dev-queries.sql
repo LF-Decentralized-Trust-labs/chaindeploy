@@ -70,3 +70,6 @@ WHERE id = ?;
 
 -- name: UpdateMessageEnhancedContent :one
 UPDATE messages SET enhanced_content = ? WHERE id = ? RETURNING *;
+
+-- name: GetConversation :one
+SELECT id, project_id, started_at FROM conversations WHERE id = ? LIMIT 1;

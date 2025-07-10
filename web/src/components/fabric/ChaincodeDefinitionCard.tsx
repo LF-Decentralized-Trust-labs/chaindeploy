@@ -1,10 +1,10 @@
 import { ChainlaunchdeployChaincodeDefinition, ServiceNetworkNode } from '@/api/client'
 import {
 	deleteScFabricDefinitionsByDefinitionIdMutation,
+	getScFabricDefinitionsByDefinitionIdDockerInfoOptions,
 	postScFabricDefinitionsByDefinitionIdDeployMutation,
 	postScFabricDefinitionsByDefinitionIdUndeployMutation,
 	putScFabricDefinitionsByDefinitionIdMutation,
-	getScFabricDefinitionsByDefinitionIdDockerInfoOptions,
 } from '@/api/client/@tanstack/react-query.gen'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -26,8 +27,6 @@ import { ApproveChaincodeDialog } from './ApproveChaincodeDialog'
 import { CommitChaincodeDialog } from './CommitChaincodeDialog'
 import { DefinitionTimeline } from './DefinitionTimeline'
 import { InstallChaincodeDialog } from './InstallChaincodeDialog'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 
 const versionFormSchema = z.object({
 	endorsementPolicy: z.string().min(1, 'Endorsement policy is required'),

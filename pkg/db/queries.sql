@@ -1175,8 +1175,6 @@ INSERT INTO fabric_chaincode_definition_events (definition_id, event_type, event
 -- name: ListChaincodeDefinitionEvents :many
 SELECT id, definition_id, event_type, event_data, created_at FROM fabric_chaincode_definition_events WHERE definition_id = ? ORDER BY created_at ASC;
 
--- name: GetConversation :one
-SELECT id, project_id, started_at FROM conversations WHERE id = ? LIMIT 1;
 
 
 -- name: UpdateFabricChaincodeDefinitionAddress :exec

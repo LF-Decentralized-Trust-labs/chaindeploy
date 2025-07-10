@@ -443,7 +443,6 @@ func (c *serveCmd) setupServer(queries *db.Queries, authService *auth.AuthServic
 		log.Fatal("Failed to initialize plugin manager:", err)
 	}
 	// --- Registry integration for GitHub plugins ---
-	// TODO: Load registry config from file or env
 	regConfig := &pluginregistry.RegistryConfig{
 		Sources: []pluginregistry.RegistrySource{
 			{

@@ -437,24 +437,17 @@ export function ChatPanel({ projectId = 1, handleToolResult, handleChatComplete 
 	const parsePartialArgs = useCallback(() => {
 		if (!partialArgsRef.current) return
 
-		console.log('parsePartialArgs - raw input:', partialArgsRef.current)
-
 		try {
 			// Try direct JSON parse first
 			const args = JSON.parse(partialArgsRef.current)
-			console.log('parsePartialArgs - direct parse success:', args)
 			setPartialArgs(args)
 		} catch (error) {
-			console.log('parsePartialArgs - direct parse failed:', error)
 			try {
 				// Try to repair with jsonrepair
 				const repaired = jsonrepair(partialArgsRef.current)
-				console.log('parsePartialArgs - jsonrepair result:', repaired)
 				const args = JSON.parse(repaired)
-				console.log('parsePartialArgs - repaired parse success:', args)
 				setPartialArgs(args)
 			} catch (repairError) {
-				console.log('parsePartialArgs - jsonrepair failed:', repairError)
 				setPartialArgs({ raw: partialArgsRef.current })
 			}
 		}

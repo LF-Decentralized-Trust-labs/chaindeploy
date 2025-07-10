@@ -16,7 +16,7 @@ var defaultConfig = SettingConfig{
 	PeerTemplateCMD:     "{{.Cmd}}",
 	OrdererTemplateCMD:  "{{.Cmd}}",
 	BesuTemplateCMD:     "{{.Cmd}}",
-	DefaultNodeExposeIP: "0.0.0.0", // Default to all interfaces
+	DefaultNodeExposeIP: "127.0.0.1", // Default to all interfaces
 }
 
 // Setting represents a setting in the service layer
