@@ -1044,10 +1044,10 @@ func (s *ChaincodeService) InvokeChaincode(ctx context.Context, chaincodeId int6
 	contract := network.GetContract(cc.Name)
 	var result []byte
 	var commit *fabricclient.Commit
-	if transient != nil && len(transient) > 0 {
-		result, commit, err = contract.SubmitAsync(function, fabricclient.WithArguments(args...), fabricclient.WithTransient(transient))
-	} else {
+	if transient == nil || len(transient) <= 0 {
 		result, commit, err = contract.SubmitAsync(function, fabricclient.WithArguments(args...))
+	} else {
+		result, commit, err = contract.SubmitAsync(function, fabricclient.WithArguments(args...), fabricclient.WithTransient(transient))
 	}
 	if err != nil {
 		return nil, err

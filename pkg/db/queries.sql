@@ -1107,7 +1107,7 @@ SELECT COUNT(*) FROM audit_logs
 WHERE (? IS NULL OR timestamp >= ?)
   AND (? IS NULL OR timestamp <= ?)
   AND (? = '' OR event_type = ?)
-  AND (? = '' OR user_identity = ?);
+  AND (? = 0 OR user_identity = ?);
 
 -- name: GetFabricChaincodeByName :one
 SELECT * FROM fabric_chaincodes WHERE name = ? LIMIT 1;

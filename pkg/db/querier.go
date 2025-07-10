@@ -11,7 +11,6 @@ import (
 
 type Querier interface {
 	AddChaincodeDefinitionEvent(ctx context.Context, arg *AddChaincodeDefinitionEventParams) error
-	AddIsInternalToMessages(ctx context.Context) error
 	AddRevokedCertificate(ctx context.Context, arg *AddRevokedCertificateParams) error
 	CheckNetworkNodeExists(ctx context.Context, arg *CheckNetworkNodeExistsParams) (int64, error)
 	CountAuditLogs(ctx context.Context, arg *CountAuditLogsParams) (int64, error)

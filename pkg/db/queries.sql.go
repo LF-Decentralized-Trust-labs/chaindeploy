@@ -76,7 +76,7 @@ SELECT COUNT(*) FROM audit_logs
 WHERE (? IS NULL OR timestamp >= ?)
   AND (? IS NULL OR timestamp <= ?)
   AND (? = '' OR event_type = ?)
-  AND (? = '' OR user_identity = ?)
+  AND (? = 0 OR user_identity = ?)
 `
 
 type CountAuditLogsParams struct {

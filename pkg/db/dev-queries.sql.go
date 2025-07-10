@@ -11,15 +11,6 @@ import (
 	"time"
 )
 
-const AddIsInternalToMessages = `-- name: AddIsInternalToMessages :exec
-ALTER TABLE messages ADD COLUMN is_internal BOOLEAN NOT NULL DEFAULT FALSE
-`
-
-func (q *Queries) AddIsInternalToMessages(ctx context.Context) error {
-	_, err := q.db.ExecContext(ctx, AddIsInternalToMessages)
-	return err
-}
-
 const CreateConversation = `-- name: CreateConversation :one
 INSERT INTO conversations (project_id) VALUES (?) RETURNING id, project_id, started_at
 `

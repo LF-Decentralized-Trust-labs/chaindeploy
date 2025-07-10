@@ -5,13 +5,15 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { zodResolver } from '@hookform/resolvers/zod'
+import { Card } from '@/components/ui/card'
+import { getChaincodeProjectsOptions } from '@/api/client/@tanstack/react-query.gen'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 import * as z from 'zod'
+import { zodResolver } from '@hookform/resolvers/zod'
 
 const developChaincodeFormSchema = z.object({
 	name: z
@@ -55,6 +57,11 @@ export function DevelopChaincodeDialog({ networks, refetch }: DevelopChaincodeDi
 			query: { network_id: Number(selectedNetworkId) || 0 },
 		}),
 		enabled: !!selectedNetworkId,
+	})
+
+	// Fetch existing chaincode projects
+	const { data: chaincodeProjects, isLoading: isLoadingProjects, error: projectsError } = useQuery({
+		...getChaincodeProjectsOptions(),
 	})
 
 	// Develop chaincode mutation
@@ -113,6 +120,38 @@ export function DevelopChaincodeDialog({ networks, refetch }: DevelopChaincodeDi
 					<DialogTitle>Develop Chaincode</DialogTitle>
 					<DialogDescription>Create a new chaincode project with a boilerplate.</DialogDescription>
 				</DialogHeader>
+
+				{/* Chaincode Projects Section */}
+				<div className="mb-6">
+					<h2 className="text-lg font-semibold mb-2">Your Chaincode Projects</h2>
+					<div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+						{isLoadingProjects ? (
+							<div className="col-span-full text-center text-muted-foreground">Loading projects...</div>
+						) : projectsError ? (
+							<div className="col-span-full text-center text-destructive">Error loading projects</div>
+						) : !chaincodeProjects?.projects?.length ? (
+							<Card className="p-6 text-center text-muted-foreground col-span-full">No chaincode projects yet.</Card>
+						) : (
+							chaincodeProjects.projects.map((project: any) => (
+								<Card key={project.id} className="flex flex-col justify-between h-full">
+									<div className="p-4">
+										<div className="font-semibold text-base mb-1">{project.name}</div>
+										<div className="text-sm text-muted-foreground mb-2 line-clamp-2">{project.description}</div>
+										<div className="text-xs text-muted-foreground">
+											<div>Network: {networks?.find((n) => n.id === project.networkId)?.name || project.networkId || 'N/A'}</div>
+											<div>Boilerplate: {project.boilerplate}</div>
+										</div>
+									</div>
+									<div className="p-4 pt-0">
+										<Button variant="outline" size="sm" className="w-full" onClick={() => navigate(`/sc/fabric/projects/chaincodes/${project.id}`)}>
+											View Details
+										</Button>
+									</div>
+								</Card>
+							))
+						)}
+					</div>
+				</div>
 				<Form {...form}>
 					<form
 						onSubmit={form.handleSubmit((data) => {
