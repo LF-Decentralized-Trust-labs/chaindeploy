@@ -1,6 +1,7 @@
-import { getNetworksFabricOptions, getScFabricChaincodesOptions } from '@/api/client/@tanstack/react-query.gen'
+import { getChaincodeProjectsOptions, getNetworksFabricOptions, getScFabricChaincodesOptions } from '@/api/client/@tanstack/react-query.gen'
 import { postScFabricChaincodes } from '@/api/client/sdk.gen'
 import { DevelopChaincodeDialog } from '@/components/forms/develop-chaincode-dialog'
+import { BesuIcon } from '@/components/icons/besu-icon'
 import { FabricIcon } from '@/components/icons/fabric-icon'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -31,21 +32,6 @@ const chaincodeFormSchema = z.object({
 
 type ChaincodeFormValues = z.infer<typeof chaincodeFormSchema>
 
-// Develop Chaincode schema
-const developChaincodeFormSchema = z.object({
-	name: z
-		.string()
-		.min(1, 'Name is required')
-		.regex(/^[a-z0-9_-]+$/, 'Name must be lowercase, no spaces, and can only contain letters, numbers, hyphens, or underscores')
-		.transform((val) => val.toLowerCase()),
-	networkId: z.string().min(1, 'Network is required'),
-	boilerplate: z.string().min(1, 'Boilerplate is required'),
-	description: z.string().min(1, 'Description is required'),
-	endorsementPolicy: z.string().min(1, 'Endorsement policy is required'),
-})
-
-type DevelopChaincodeFormValues = z.infer<typeof developChaincodeFormSchema>
-
 export default function SmartContractsPage() {
 	const navigate = useNavigate()
 	const { data, isLoading, error, refetch } = useQuery({
@@ -55,6 +41,15 @@ export default function SmartContractsPage() {
 	// Fetch networks for the select
 	const { data: networks } = useQuery({
 		...getNetworksFabricOptions({ query: { limit: 10, offset: 0 } }),
+	})
+
+	// Fetch projects for the section
+	const {
+		data: projectsData,
+		isLoading: isLoadingProjects,
+		error: projectsError,
+	} = useQuery({
+		...getChaincodeProjectsOptions(),
 	})
 
 	// Dialog state
@@ -214,6 +209,70 @@ export default function SmartContractsPage() {
 								</CardContent>
 							</Card>
 						))}
+					</div>
+				)}
+			</div>
+
+			{/* Projects Section */}
+			<div className="mb-8">
+				<h2 className="text-xl font-semibold mb-4">Chaincode Projects</h2>
+				{isLoadingProjects ? (
+					<div className="grid gap-6 md:grid-cols-2">
+						{Array.from({ length: 3 }).map((_, i) => (
+							<Skeleton key={i} className="h-40 w-full" />
+						))}
+					</div>
+				) : projectsError ? (
+					typeof projectsError === 'string' && (projectsError as string).includes('404') ? (
+						<Alert variant="warning" className="mb-4">
+							<AlertTitle>AI is not configured</AlertTitle>
+							<AlertDescription>
+								Please follow the{' '}
+								<a href="https://docs.chainlaunch.dev/ai-setup" target="_blank" rel="noopener noreferrer" className="underline text-primary">
+									documentation
+								</a>{' '}
+								to configure AI features.
+							</AlertDescription>
+						</Alert>
+					) : (
+						<Alert variant="destructive" className="mb-4">
+							<AlertTitle>Error loading chaincodes</AlertTitle>
+							<AlertDescription>{error instanceof Error ? error.message : 'An unexpected error occurred.'}</AlertDescription>
+						</Alert>
+					)
+				) : !projectsData?.projects?.length ? (
+					<Card className="p-6 text-center text-muted-foreground">No chaincode projects found.</Card>
+				) : (
+					<div className="grid gap-6 md:grid-cols-2">
+						{projectsData.projects.map((project) => {
+							let Icon = null
+							if (project.networkPlatform?.toLowerCase() === 'fabric') {
+								Icon = FabricIcon
+							} else if (project.networkPlatform?.toLowerCase() === 'besu') {
+								Icon = BesuIcon
+							} // Add more platforms as needed
+							return (
+								<Card key={project.id} className="cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => navigate(`/sc/fabric/projects/chaincodes/${project.id}`)}>
+									<CardHeader>
+										<CardTitle className="flex items-center gap-2">
+											{Icon && <Icon className="h-6 w-6" />}
+											{project.name}
+										</CardTitle>
+										<CardDescription>
+											Network: {project.networkName ?? project.networkId ?? 'N/A'}
+											<br />
+											Platform: {project.networkPlatform ?? 'N/A'}
+										</CardDescription>
+									</CardHeader>
+									<CardContent>
+										<div className="space-y-2">
+											{project.description && <p className="text-sm text-muted-foreground line-clamp-2">{project.description}</p>}
+											{project.boilerplate && <p className="text-xs text-muted-foreground">Boilerplate: {project.boilerplate}</p>}
+										</div>
+									</CardContent>
+								</Card>
+							)
+						})}
 					</div>
 				)}
 			</div>
