@@ -437,6 +437,9 @@ SELECT COUNT(*) FROM networks;
 DELETE FROM networks
 WHERE id = ?;
 
+-- name: DeleteChaincodesByNetwork :exec
+DELETE FROM fabric_chaincodes WHERE network_id = ?;
+
 -- name: UpdateNodeDeploymentConfig :one
 UPDATE nodes
 SET deployment_config = ?,
@@ -1104,7 +1107,7 @@ SELECT COUNT(*) FROM audit_logs
 WHERE (? IS NULL OR timestamp >= ?)
   AND (? IS NULL OR timestamp <= ?)
   AND (? = '' OR event_type = ?)
-  AND (? = '' OR user_identity = ?);
+  AND (? = 0 OR user_identity = ?);
 
 -- name: GetFabricChaincodeByName :one
 SELECT * FROM fabric_chaincodes WHERE name = ? LIMIT 1;
@@ -1118,7 +1121,7 @@ VALUES (?, ?)
 RETURNING *;
 
 -- name: ListChaincodes :many
-SELECT * FROM fabric_chaincodes ORDER BY id;
+SELECT * FROM fabric_chaincodes ORDER BY created_at DESC;
 
 -- name: GetChaincode :one
 SELECT fc.*, n.id as network_id, n.name as network_name, n.platform as network_platform
@@ -1171,3 +1174,21 @@ INSERT INTO fabric_chaincode_definition_events (definition_id, event_type, event
 
 -- name: ListChaincodeDefinitionEvents :many
 SELECT id, definition_id, event_type, event_data, created_at FROM fabric_chaincode_definition_events WHERE definition_id = ? ORDER BY created_at ASC;
+
+
+
+-- name: UpdateFabricChaincodeDefinitionAddress :exec
+UPDATE fabric_chaincode_definitions
+SET chaincode_address = ?
+WHERE id = ?;
+
+
+-- name: CreateFabricChaincode :one
+INSERT INTO fabric_chaincodes (name, network_id)
+VALUES (?, ?)
+RETURNING id, name, network_id;
+
+-- name: GetFabricChaincodeByNameAndNetwork :one
+SELECT id, name, network_id
+FROM fabric_chaincodes
+WHERE name = ? AND network_id = ?;

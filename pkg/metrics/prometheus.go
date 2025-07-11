@@ -79,13 +79,27 @@ func NewDockerPrometheusDeployer(config *common.Config, db *db.Queries, nodeServ
 // Start starts the Prometheus container
 func (d *DockerPrometheusDeployer) Start(ctx context.Context) error {
 	containerName := "chainlaunch-prometheus"
+	// Remove any existing container
+	containerDocker, err := d.client.ContainerInspect(ctx, containerName)
+	if err == nil {
+		if containerDocker.State.Running {
+			if err := d.client.ContainerStop(ctx, containerName, container.StopOptions{}); err != nil {
+				return fmt.Errorf("failed to stop existing container: %w", err)
+			}
+		}
+		if err := d.client.ContainerRemove(ctx, containerName, container.RemoveOptions{Force: true}); err != nil {
+			return fmt.Errorf("failed to remove existing container: %w", err)
+		}
+	}
+	if err != nil && !client.IsErrNotFound(err) {
+		return fmt.Errorf("failed to inspect container: %w", err)
+	}
 
 	// Create volumes if they don't exist
 	volumes := []string{
 		"chainlaunch-prometheus-data",
 		"chainlaunch-prometheus-config",
 	}
-
 	for _, volName := range volumes {
 		_, err := d.client.VolumeCreate(ctx, volume.CreateOptions{
 			Name: volName,
@@ -101,11 +115,46 @@ func (d *DockerPrometheusDeployer) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to generate Prometheus config: %w", err)
 	}
 
+	// Pull Alpine image for config writer
+	alpineReader, err := d.client.ImagePull(ctx, "alpine:latest", image.PullOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to pull alpine image: %w", err)
+	}
+	_, err = io.Copy(os.Stdout, alpineReader)
+	if err != nil {
+		return fmt.Errorf("failed to copy alpine image: %w", err)
+	}
+
+	// Start a temporary container to write the config file into the config volume
+	writerContainerName := containerName + "-writer"
+	_ = d.client.ContainerRemove(ctx, writerContainerName, container.RemoveOptions{Force: true})
+	writerConfig := &container.Config{
+		Image: "alpine:latest",
+		Cmd:   []string{"sh", "-c", fmt.Sprintf("echo '%s' > /etc/prometheus/prometheus.yml", strings.ReplaceAll(configData, "'", "'\\''"))},
+	}
+	writerHostConfig := &container.HostConfig{
+		Mounts: []mount.Mount{
+			{
+				Type:   mount.TypeVolume,
+				Source: "chainlaunch-prometheus-config",
+				Target: "/etc/prometheus",
+			},
+		},
+	}
+	respWriter, err := d.client.ContainerCreate(ctx, writerConfig, writerHostConfig, nil, &v1.Platform{}, writerContainerName)
+	if err != nil {
+		return fmt.Errorf("failed to create config writer container: %w", err)
+	}
+	if err := d.client.ContainerStart(ctx, respWriter.ID, container.StartOptions{}); err != nil {
+		return fmt.Errorf("failed to start config writer container: %w", err)
+	}
+	// Wait for the config to be written
+	time.Sleep(2 * time.Second)
+	_ = d.client.ContainerRemove(ctx, writerContainerName, container.RemoveOptions{Force: true})
+
 	// Pull Prometheus image
 	imageName := fmt.Sprintf("prom/prometheus:%s", d.config.PrometheusVersion)
-	reader, err := d.client.ImagePull(ctx, imageName, image.PullOptions{
-		// All: true,
-	})
+	reader, err := d.client.ImagePull(ctx, imageName, image.PullOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to pull Prometheus image: %w", err)
 	}
@@ -129,7 +178,6 @@ func (d *DockerPrometheusDeployer) Start(ctx context.Context) error {
 			nat.Port(fmt.Sprintf("%d/tcp", d.config.PrometheusPort)): struct{}{},
 		},
 	}
-
 	// Create host config
 	hostConfig := &container.HostConfig{
 		PortBindings: nat.PortMap{
@@ -157,30 +205,17 @@ func (d *DockerPrometheusDeployer) Start(ctx context.Context) error {
 		},
 		ExtraHosts: []string{"host.docker.internal:host-gateway"},
 	}
-
 	// Create container
 	resp, err := d.client.ContainerCreate(ctx, containerConfig, hostConfig, nil, &v1.Platform{}, containerName)
 	if err != nil {
 		return fmt.Errorf("failed to create container: %w", err)
 	}
-
 	// Start container
 	if err := d.client.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
 		return fmt.Errorf("failed to start container: %w", err)
 	}
-
 	// Wait for container to be ready
 	time.Sleep(2 * time.Second)
-
-	// Create config file in the config volume
-	configPath := "/etc/prometheus/prometheus.yml"
-	_, err = d.client.ContainerExecCreate(ctx, containerName, container.ExecOptions{
-		Cmd: []string{"sh", "-c", fmt.Sprintf("echo '%s' > %s", configData, configPath)},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create config file: %w", err)
-	}
-
 	// Reload configuration
 	return d.Reload(ctx)
 }

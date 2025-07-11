@@ -47,14 +47,13 @@ func (s *NodeService) GetBesuNodeDefaults(besuNodes int) ([]BesuNodeDefaults, er
 		return nil, fmt.Errorf("besu node count exceeds maximum supported nodes (15)")
 	}
 
-	// Get external IP for p2p communication
-	externalIP, err := s.GetExternalIP()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get external IP: %w", err)
+	// Fetch default IP from settings
+	defaultIP := "127.0.0.1"
+	if setting, err := s.settingsService.GetSetting(context.Background()); err == nil {
+		if setting.Config.DefaultNodeExposeIP != "" {
+			defaultIP = setting.Config.DefaultNodeExposeIP
+		}
 	}
-
-	// Use localhost for internal IP
-	internalIP := "127.0.0.1"
 
 	// Base ports for Besu nodes with sufficient spacing
 	const (
@@ -97,19 +96,18 @@ func (s *NodeService) GetBesuNodeDefaults(besuNodes int) ([]BesuNodeDefaults, er
 
 		// Create node defaults with unique ports
 		nodeDefaults[i] = BesuNodeDefaults{
-			P2PHost:    externalIP, // Use external IP for p2p host
+			P2PHost:    defaultIP, // Use default IP for p2p host
 			P2PPort:    p2pPort,
-			RPCHost:    "0.0.0.0", // Allow RPC from any interface
+			RPCHost:    defaultIP, // Use default IP for rpc host
 			RPCPort:    rpcPort,
-			ExternalIP: externalIP,
-			InternalIP: internalIP,
+			ExternalIP: defaultIP,
 			Mode:       ModeService,
 			Env: map[string]string{
 				"JAVA_OPTS": "-Xmx4g",
 			},
 			// Set metrics configuration
 			MetricsEnabled:  true,
-			MetricsHost:     "0.0.0.0", // Allow metrics from any interface
+			MetricsHost:     defaultIP, // Use default IP for metrics host
 			MetricsPort:     uint(metricsPorts[0]),
 			MetricsProtocol: "PROMETHEUS",
 		}
@@ -292,6 +290,7 @@ func (s *NodeService) startBesuNode(ctx context.Context, dbNode *db.Node) error 
 // UpdateBesuNodeOpts contains the options for updating a Besu node
 type UpdateBesuNodeRequest struct {
 	NetworkID  uint              `json:"networkId" validate:"required"`
+	Mode       string            `json:"mode,omitempty"`
 	P2PHost    string            `json:"p2pHost" validate:"required"`
 	P2PPort    uint              `json:"p2pPort" validate:"required"`
 	RPCHost    string            `json:"rpcHost" validate:"required"`
@@ -346,6 +345,23 @@ func (s *NodeService) UpdateBesuNode(ctx context.Context, nodeID int64, req Upda
 		}
 	}
 
+	// --- MODE CHANGE LOGIC ---
+	modeChanged := false
+	var newMode string
+	if req.Mode != "" {
+		if req.Mode != string(besuConfig.Mode) {
+			modeChanged = true
+			newMode = req.Mode
+		}
+	}
+	if modeChanged {
+		if err := s.stopBesuNode(ctx, node); err != nil {
+			s.logger.Warn("Failed to stop Besu node before mode change", "error", err)
+		}
+		besuConfig.Mode = newMode
+		deployBesuConfig.Mode = newMode
+	}
+
 	// Update configuration fields
 	besuConfig.NetworkID = int64(req.NetworkID)
 	besuConfig.P2PPort = req.P2PPort
@@ -380,6 +396,11 @@ func (s *NodeService) UpdateBesuNode(ctx context.Context, nodeID int64, req Upda
 	if req.Env != nil {
 		besuConfig.Env = req.Env
 		deployBesuConfig.Env = req.Env
+	}
+
+	// Validate the updated configuration
+	if err := s.validateBesuNodeConfig(besuConfig); err != nil {
+		return nil, fmt.Errorf("invalid besu configuration: %w", err)
 	}
 
 	// Get the key to update the enodeURL
@@ -426,6 +447,13 @@ func (s *NodeService) UpdateBesuNode(ctx context.Context, nodeID int64, req Upda
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to update deployment config: %w", err)
+	}
+
+	// If mode changed, start the node with the new mode
+	if modeChanged {
+		if err := s.startBesuNode(ctx, node); err != nil {
+			s.logger.Warn("Failed to start Besu node after mode change", "error", err)
+		}
 	}
 
 	// Return updated node

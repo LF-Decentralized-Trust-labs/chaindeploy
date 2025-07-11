@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useQuery } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 interface BlockExplorerProps {
@@ -12,19 +12,28 @@ interface BlockExplorerProps {
 }
 
 export function BlockExplorer({ networkId }: BlockExplorerProps) {
-	const { data: blocksResponse, isLoading: blocksLoading } = useQuery({
+	const limit = 3
+	const [offset, setOffset] = useState(0)
+	const { data: blocksResponse, isLoading: blocksLoading, isFetching } = useQuery({
 		...getNetworksFabricByIdBlocksOptions({
 			path: { id: networkId },
 			query: {
-				limit: 3,
-				offset: 0,
+				limit,
+				offset,
 				reverse: true,
 			},
 		}),
 	})
 	// Sort blocks in descending order by block number
-	const sortedBlocks = useMemo(() => [...(blocksResponse?.blocks || [])].sort((a, b) => (b.number ?? 0) - (a.number ?? 0)), [blocksResponse?.blocks])
-	if (blocksLoading) {
+	const sortedBlocks = useMemo(
+		() => [...(blocksResponse?.blocks || [])].sort((a, b) => (b.number ?? 0) - (a.number ?? 0)),
+		[blocksResponse?.blocks]
+	)
+	const hasBlockZero = sortedBlocks.some((block) => block.number === 0)
+	const isFirstPage = offset === 0
+	const isLastPage = hasBlockZero || (sortedBlocks.length < limit)
+
+	if (blocksLoading && !blocksResponse) {
 		return (
 			<div className="space-y-4">
 				<Skeleton className="h-8 w-32" />
@@ -61,6 +70,24 @@ export function BlockExplorer({ networkId }: BlockExplorerProps) {
 						</div>
 					</Card>
 				))}
+			</div>
+			<div className="flex justify-end gap-2 pt-2">
+				<Button
+					variant="outline"
+					size="sm"
+					onClick={() => setOffset((o) => Math.max(0, o - limit))}
+					disabled={isFirstPage || isFetching}
+				>
+					Previous
+				</Button>
+				<Button
+					variant="outline"
+					size="sm"
+					onClick={() => setOffset((o) => o + limit)}
+					disabled={isLastPage || isFetching}
+				>
+					Next
+				</Button>
 			</div>
 		</div>
 	)

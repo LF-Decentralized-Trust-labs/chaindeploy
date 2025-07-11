@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"os/exec"
@@ -18,7 +19,7 @@ import (
 	"time"
 
 	// add sprig/v3
-	"github.com/Masterminds/sprig/v3"
+
 	"github.com/hyperledger/fabric-admin-sdk/pkg/chaincode"
 	"github.com/hyperledger/fabric-admin-sdk/pkg/channel"
 	"github.com/hyperledger/fabric-admin-sdk/pkg/identity"
@@ -27,9 +28,11 @@ import (
 	"github.com/hyperledger/fabric-gateway/pkg/client"
 	gwidentity "github.com/hyperledger/fabric-gateway/pkg/identity"
 	cb "github.com/hyperledger/fabric-protos-go-apiv2/common"
+	"github.com/hyperledger/fabric-protos-go-apiv2/gateway"
 	"github.com/hyperledger/fabric-protos-go-apiv2/orderer"
 	"github.com/hyperledger/fabric-protos-go-apiv2/peer/lifecycle"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
 	"io"
@@ -951,7 +954,7 @@ func (p *LocalPeer) Init() (nodetypes.NodeDeploymentConfig, error) {
 		DNSNames:           []string{p.opts.ID},
 		IsCA:               true,
 		KeyUsage:           x509.KeyUsageCertSign,
-		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign sign key: %w", err)
@@ -1017,7 +1020,7 @@ func (p *LocalPeer) Init() (nodetypes.NodeDeploymentConfig, error) {
 		IsCA:               true,
 		ValidFor:           validFor,
 		KeyUsage:           x509.KeyUsageCertSign,
-		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign TLS certificate: %w", err)
@@ -1221,7 +1224,10 @@ func (p *LocalPeer) startDocker(env map[string]string, mspConfigPath, dataConfig
 		return nil, fmt.Errorf("failed to pull image %s: %w", imageName, err)
 	}
 	defer reader.Close()
-	io.Copy(io.Discard, reader) // Wait for pull to complete
+	_, err = io.Copy(io.Discard, reader) // Wait for pull to complete
+	if err != nil {
+		return nil, fmt.Errorf("failed to pull image %s: %w", imageName, err)
+	}
 
 	containerName, err := p.getContainerName()
 	if err != nil {
@@ -1498,7 +1504,7 @@ func (p *LocalPeer) RenewCertificates(peerDeploymentConfig *nodetypes.FabricPeer
 	}
 	// Renew signing certificate
 	validFor := kmodels.Duration(time.Hour * 24 * 365) // 1 year validity
-	_, err = p.keyService.RenewCertificate(ctx, int(peerDeploymentConfig.SignKeyID), kmodels.CertificateRequest{
+	renewedSignKeyDB, err := p.keyService.RenewCertificate(ctx, int(peerDeploymentConfig.SignKeyID), kmodels.CertificateRequest{
 		CommonName:         p.opts.ID,
 		Organization:       []string{org.MspID},
 		OrganizationalUnit: []string{"peer"},
@@ -1506,7 +1512,6 @@ func (p *LocalPeer) RenewCertificates(peerDeploymentConfig *nodetypes.FabricPeer
 		IsCA:               false,
 		ValidFor:           validFor,
 		KeyUsage:           x509.KeyUsageCertSign,
-		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	})
 	if err != nil {
 		return fmt.Errorf("failed to renew signing certificate: %w", err)
@@ -1544,7 +1549,7 @@ func (p *LocalPeer) RenewCertificates(peerDeploymentConfig *nodetypes.FabricPeer
 		ipAddresses = append(ipAddresses, net.ParseIP("127.0.0.1"))
 	}
 
-	_, err = p.keyService.RenewCertificate(ctx, int(peerDeploymentConfig.TLSKeyID), kmodels.CertificateRequest{
+	renewedTlsKeyDB, err := p.keyService.RenewCertificate(ctx, int(peerDeploymentConfig.TLSKeyID), kmodels.CertificateRequest{
 		CommonName:         p.opts.ID,
 		Organization:       []string{org.MspID},
 		OrganizationalUnit: []string{"peer"},
@@ -1552,8 +1557,8 @@ func (p *LocalPeer) RenewCertificates(peerDeploymentConfig *nodetypes.FabricPeer
 		IPAddresses:        ipAddresses,
 		IsCA:               false,
 		ValidFor:           validFor,
-		KeyUsage:           x509.KeyUsageCertSign,
-		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		KeyUsage:           x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature | x509.KeyUsageKeyAgreement,
+		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
 	})
 	if err != nil {
 		return fmt.Errorf("failed to renew TLS certificate: %w", err)
@@ -1576,8 +1581,8 @@ func (p *LocalPeer) RenewCertificates(peerDeploymentConfig *nodetypes.FabricPeer
 
 	err = p.writeCertificatesAndKeys(
 		mspConfigPath,
-		tlsKeyDB,
-		signKeyDB,
+		renewedTlsKeyDB,  // Use the renewed TLS certificate
+		renewedSignKeyDB, // Use the renewed signing certificate
 		tlsKey,
 		signKey,
 		signCAKey,
@@ -1629,174 +1634,6 @@ type Orderer struct {
 	URL       string
 	Name      string
 	TLSCACert string
-}
-
-const tmplGoConfig = `
-name: hlf-network
-version: 1.0.0
-client:
-  organization: "{{ .Organization }}"
-{{- if not .Organizations }}
-organizations: {}
-{{- else }}
-organizations:
-  {{ range $org := .Organizations }}
-  {{ $org.MSPID }}:
-    mspid: {{ $org.MSPID }}
-    cryptoPath: /tmp/cryptopath
-    users: {}
-{{- if not $org.CertAuths }}
-    certificateAuthorities: []
-{{- else }}
-    certificateAuthorities: 
-      {{- range $ca := $org.CertAuths }}
-      - {{ $ca.Name }}
- 	  {{- end }}
-{{- end }}
-{{- if not $org.Peers }}
-    peers: []
-{{- else }}
-    peers:
-      {{- range $peer := $org.Peers }}
-      - {{ $peer }}
- 	  {{- end }}
-{{- end }}
-{{- if not $org.Orderers }}
-    orderers: []
-{{- else }}
-    orderers:
-      {{- range $orderer := $org.Orderers }}
-      - {{ $orderer }}
- 	  {{- end }}
-
-    {{- end }}
-{{- end }}
-{{- end }}
-
-{{- if not .Orderers }}
-{{- else }}
-orderers:
-{{- range $orderer := .Orderers }}
-  {{$orderer.Name}}:
-    url: {{ $orderer.URL }}
-    grpcOptions:
-      allow-insecure: false
-    tlsCACerts:
-      pem: |
-{{ $orderer.TLSCACert | indent 8 }}
-{{- end }}
-{{- end }}
-
-{{- if not .Peers }}
-{{- else }}
-peers:
-  {{- range $peer := .Peers }}
-  {{$peer.Name}}:
-    url: {{ $peer.URL }}
-    tlsCACerts:
-      pem: |
-{{ $peer.TLSCACert | indent 8 }}
-{{- end }}
-{{- end }}
-
-{{- if not .CertAuths }}
-{{- else }}
-certificateAuthorities:
-{{- range $ca := .CertAuths }}
-  {{ $ca.Name }}:
-    url: https://{{ $ca.URL }}
-{{if $ca.EnrollID }}
-    registrar:
-        enrollId: {{ $ca.EnrollID }}
-        enrollSecret: "{{ $ca.EnrollSecret }}"
-{{ end }}
-    caName: {{ $ca.CAName }}
-    tlsCACerts:
-      pem: 
-       - |
-{{ $ca.TLSCert | indent 12 }}
-
-{{- end }}
-{{- end }}
-
-channels:
-  _default:
-{{- if not .Orderers }}
-    orderers: []
-{{- else }}
-    orderers:
-{{- range $orderer := .Orderers }}
-      - {{$orderer.Name}}
-{{- end }}
-{{- end }}
-{{- if not .Peers }}
-    peers: {}
-{{- else }}
-    peers:
-{{- range $peer := .Peers }}
-       {{$peer.Name}}:
-        discover: true
-        endorsingPeer: true
-        chaincodeQuery: true
-        ledgerQuery: true
-        eventSource: true
-{{- end }}
-{{- end }}
-
-`
-
-func (p *LocalPeer) generateNetworkConfigForPeer(
-	peerUrl string, peerMspID string, peerTlsCACert string, ordererUrl string, ordererTlsCACert string) (*NetworkConfigResponse, error) {
-
-	tmpl, err := template.New("networkConfig").Funcs(sprig.HermeticTxtFuncMap()).Parse(tmplGoConfig)
-	if err != nil {
-		return nil, err
-	}
-	var buf bytes.Buffer
-	orgs := []*Org{}
-	var peers []*Peer
-	var certAuths []*CA
-	var ordererNodes []*Orderer
-
-	org := &Org{
-		MSPID:     peerMspID,
-		CertAuths: []string{},
-		Peers:     []string{},
-		Orderers:  []string{},
-	}
-	orgs = append(orgs, org)
-	if peerTlsCACert != "" {
-		peer := &Peer{
-			Name:      "peer0",
-			URL:       peerUrl,
-			TLSCACert: peerTlsCACert,
-		}
-		org.Peers = append(org.Peers, "peer0")
-		peers = append(peers, peer)
-	}
-	if ordererTlsCACert != "" && ordererUrl != "" {
-		orderer := &Orderer{
-			URL:       ordererUrl,
-			Name:      "orderer0",
-			TLSCACert: ordererTlsCACert,
-		}
-		ordererNodes = append(ordererNodes, orderer)
-	}
-	err = tmpl.Execute(&buf, map[string]interface{}{
-		"Peers":         peers,
-		"Orderers":      ordererNodes,
-		"Organizations": orgs,
-		"CertAuths":     certAuths,
-		"Organization":  peerMspID,
-		"Internal":      false,
-	})
-	if err != nil {
-		return nil, err
-	}
-	p.logger.Debugf("Network config: %s", buf.String())
-	return &NetworkConfigResponse{
-		NetworkConfig: buf.String(),
-	}, nil
 }
 
 // JoinChannel joins the peer to a channel
@@ -2060,10 +1897,6 @@ func (p *LocalPeer) writeConfigFiles(mspConfigPath, dataConfigPath string) error
 	return nil
 }
 
-func (p *LocalPeer) getLogPath() string {
-	return p.GetStdOutPath()
-}
-
 // TailLogs tails the logs of the peer service
 func (p *LocalPeer) TailLogs(ctx context.Context, tail int, follow bool) (<-chan string, error) {
 	logChan := make(chan string, 100)
@@ -2295,6 +2128,7 @@ func (p *LocalPeer) PrepareAdminCertMSP(mspID string) (string, error) {
 
 // LeaveChannel removes the peer from a channel
 func (p *LocalPeer) LeaveChannel(channelID string) error {
+	// Stop the peer before unjoining
 	err := p.Stop()
 	if err != nil {
 		return fmt.Errorf("failed to stop peer: %w", err)
@@ -2302,32 +2136,118 @@ func (p *LocalPeer) LeaveChannel(channelID string) error {
 
 	p.logger.Info("Removing peer from channel", "peer", p.opts.ID, "channel", channelID)
 
-	// Build peer channel remove command
-	peerBinary, err := p.findPeerBinary()
-	if err != nil {
-		return fmt.Errorf("failed to find peer binary: %w", err)
-	}
-	peerPath := p.getPeerPath()
-	peerConfigPath := filepath.Join(peerPath, "config")
-	cmd := exec.Command(peerBinary, "node", "unjoin", "-c", channelID)
 	listenAddress := strings.Replace(p.opts.ListenAddress, "0.0.0.0", "localhost", 1)
 
-	// Set environment variables
-	cmd.Env = append(os.Environ(),
-		fmt.Sprintf("CORE_PEER_MSPCONFIGPATH=%s", peerConfigPath),
-		fmt.Sprintf("CORE_PEER_ADDRESS=%s", listenAddress),
-		fmt.Sprintf("CORE_PEER_LOCALMSPID=%s", p.mspID),
-		"CORE_PEER_TLS_ENABLED=true",
-		fmt.Sprintf("FABRIC_CFG_PATH=%s", peerConfigPath),
-	)
+	var output []byte
+	if p.mode == "docker" {
+		// containerName, err := p.getContainerName()
+		// if err != nil {
+		// 	return fmt.Errorf("failed to get container name: %w", err)
+		// }
+		cli, err := dockerclient.NewClientWithOpts(
+			dockerclient.FromEnv,
+			dockerclient.WithAPIVersionNegotiation(),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create docker client: %w", err)
+		}
+		defer cli.Close()
 
-	// Execute command
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to remove channel: %w, output: %s", err, string(output))
+		ctx := context.Background()
+		imageName := fmt.Sprintf("hyperledger/fabric-peer:%s", p.opts.Version)
+		mspConfigPath := filepath.Join(p.getPeerPath(), "config")
+		dataConfigPath := filepath.Join(p.getPeerPath(), "data")
+		mounts := []mount.Mount{
+			{
+				Type:   mount.TypeBind,
+				Source: mspConfigPath,
+				Target: "/etc/hyperledger/fabric/msp",
+			},
+			{
+				Type:   mount.TypeBind,
+				Source: dataConfigPath,
+				Target: "/var/hyperledger/production",
+			},
+		}
+		cmd := []string{"/usr/local/bin/peer", "node", "unjoin", "-c", channelID}
+		envVars := []string{
+			"CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/msp",
+			"CORE_PEER_ADDRESS=" + listenAddress,
+			"CORE_PEER_LOCALMSPID=" + p.mspID,
+			"CORE_PEER_TLS_ENABLED=true",
+			"FABRIC_CFG_PATH=/etc/hyperledger/fabric/msp",
+		}
+		containerConfig := &container.Config{
+			Image: imageName,
+			Cmd:   cmd,
+			Env:   envVars,
+		}
+		hostConfig := &container.HostConfig{
+			Mounts: mounts,
+			RestartPolicy: container.RestartPolicy{
+				Name: container.RestartPolicyUnlessStopped,
+			},
+		}
+		// Create ephemeral container
+		resp, err := cli.ContainerCreate(ctx, containerConfig, hostConfig, nil, nil, "peer-unjoin-ephemeral-"+p.opts.ID)
+		if err != nil {
+			return fmt.Errorf("failed to create ephemeral container: %w", err)
+		}
+		// Start container
+		if err := cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
+			_ = cli.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+			return fmt.Errorf("failed to start ephemeral container: %w", err)
+		}
+		// Wait for container to finish
+		statusCh, errCh := cli.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
+		select {
+		case status := <-statusCh:
+			if status.StatusCode != 0 {
+				logs, _ := cli.ContainerLogs(ctx, resp.ID, container.LogsOptions{ShowStdout: true, ShowStderr: true})
+				logBytes, _ := io.ReadAll(logs)
+				_ = cli.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+				return fmt.Errorf("failed to remove channel (docker ephemeral): exit code %d, output: %s", status.StatusCode, string(logBytes))
+			}
+		case err := <-errCh:
+			_ = cli.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+			return fmt.Errorf("failed to wait for ephemeral container: %w", err)
+		}
+		// Get logs for output
+		logs, err := cli.ContainerLogs(ctx, resp.ID, container.LogsOptions{ShowStdout: true, ShowStderr: true})
+		if err != nil {
+			return fmt.Errorf("failed to get logs: %w", err)
+		}
+		output, err = io.ReadAll(logs)
+		if err != nil {
+			return fmt.Errorf("failed to read logs: %w", err)
+		}
+		err = cli.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+		if err != nil {
+			return fmt.Errorf("failed to remove container: %w", err)
+		}
+	} else {
+		peerPath := p.getPeerPath()
+		peerConfigPath := filepath.Join(peerPath, "config")
+		peerBinary, err := p.findPeerBinary()
+		if err != nil {
+			return fmt.Errorf("failed to find peer binary: %w", err)
+		}
+		// Service/systemd/launchd mode (host execution)
+		cmd := exec.Command(peerBinary, "node", "unjoin", "-c", channelID)
+		cmd.Env = append(os.Environ(),
+			fmt.Sprintf("CORE_PEER_MSPCONFIGPATH=%s", peerConfigPath),
+			fmt.Sprintf("CORE_PEER_ADDRESS=%s", listenAddress),
+			fmt.Sprintf("CORE_PEER_LOCALMSPID=%s", p.mspID),
+			"CORE_PEER_TLS_ENABLED=true",
+			fmt.Sprintf("FABRIC_CFG_PATH=%s", peerConfigPath),
+		)
+		output, err = cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("failed to remove channel: %w, output: %s", err, string(output))
+		}
 	}
 
-	p.logger.Info("Successfully removed channel", "peer", p.opts.ID, "channel", channelID)
+	p.logger.Info("Successfully removed channel", "peer", p.opts.ID, "channel", channelID, "output", string(output))
 	_, err = p.Start()
 	if err != nil {
 		return fmt.Errorf("failed to start peer: %w", err)
@@ -2508,7 +2428,11 @@ func (p *LocalPeer) GetMSPID() string {
 	return p.mspID
 }
 func (p *LocalPeer) GetAdminIdentity(ctx context.Context) (identity.SigningIdentity, gwidentity.Sign, error) {
-	adminSignKeyDB, err := p.keyService.GetKey(ctx, int(p.org.AdminSignKeyID.Int64))
+	adminKeyID := int(p.org.AdminSignKeyID.Int64)
+	if adminKeyID == 0 {
+		adminKeyID = int(p.org.AdminTlsKeyID.Int64)
+	}
+	adminSignKeyDB, err := p.keyService.GetKey(ctx, adminKeyID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get TLS CA key: %w", err)
 	}
@@ -2516,7 +2440,45 @@ func (p *LocalPeer) GetAdminIdentity(ctx context.Context) (identity.SigningIdent
 		return nil, nil, fmt.Errorf("TLS CA key is not set")
 	}
 	certificate := *adminSignKeyDB.Certificate
-	privateKey, err := p.keyService.GetDecryptedPrivateKey(int(p.org.AdminSignKeyID.Int64))
+	privateKey, err := p.keyService.GetDecryptedPrivateKey(adminKeyID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get decrypted private key: %w", err)
+	}
+
+	cert, err := gwidentity.CertificateFromPEM([]byte(certificate))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read certificate: %w", err)
+	}
+
+	priv, err := gwidentity.PrivateKeyFromPEM([]byte(privateKey))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read private key: %w", err)
+	}
+
+	signingIdentity, err := identity.NewPrivateKeySigningIdentity(p.mspID, cert, priv)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create signing identity: %w", err)
+	}
+
+	signer, err := gwidentity.NewPrivateKeySign(priv)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create signer: %w", err)
+	}
+	return signingIdentity, signer, nil
+}
+func (p *LocalPeer) GetIdentity(ctx context.Context, keyID int64) (identity.SigningIdentity, gwidentity.Sign, error) {
+	if keyID < math.MinInt || keyID > math.MaxInt {
+		return nil, nil, fmt.Errorf("keyID out of valid range for int conversion")
+	}
+	adminSignKeyDB, err := p.keyService.GetKey(ctx, int(keyID))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get TLS CA key: %w", err)
+	}
+	if adminSignKeyDB.Certificate == nil {
+		return nil, nil, fmt.Errorf("TLS CA key is not set")
+	}
+	certificate := *adminSignKeyDB.Certificate
+	privateKey, err := p.keyService.GetDecryptedPrivateKey(int(keyID))
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get decrypted private key: %w", err)
 	}
@@ -2977,16 +2939,46 @@ func (p *LocalPeer) GetBlockByTxID(ctx context.Context, channelID string, txID s
 		return nil, fmt.Errorf("failed to get admin identity: %w", err)
 	}
 
-	gateway, err := client.Connect(adminIdentity, client.WithClientConnection(peerConn), client.WithSign(signer))
+	gatewayFabric, err := client.Connect(adminIdentity, client.WithClientConnection(peerConn), client.WithSign(signer))
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to gateway: %w", err)
 	}
-	defer gateway.Close()
-	network := gateway.GetNetwork(channelID)
+	defer gatewayFabric.Close()
+	network := gatewayFabric.GetNetwork(channelID)
 	contract := network.GetContract(qscc)
 	response, err := contract.EvaluateTransaction(qsccBlockByTxID, channelID, txID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query block by transaction ID: %w", err)
+		endorseError, ok := err.(*client.EndorseError)
+		if ok {
+			detailsStr := []string{}
+			for _, detail := range status.Convert(err).Details() {
+				switch detail := detail.(type) {
+				case *gateway.ErrorDetail:
+					detailsStr = append(detailsStr, fmt.Sprintf("- address: %s; mspId: %s; message: %s\n", detail.GetAddress(), detail.GetMspId(), detail.GetMessage()))
+
+				}
+			}
+			return nil, fmt.Errorf("failed to submit transaction: %s (gRPC status: %s)",
+				endorseError.TransactionError.Error(),
+				strings.Join(detailsStr, "\n"))
+		}
+		statusError := status.Convert(err)
+		if statusError != nil {
+			detailsStr := []string{}
+			for _, detail := range statusError.Details() {
+				switch detail := detail.(type) {
+				case *gateway.ErrorDetail:
+					detailsStr = append(detailsStr, fmt.Sprintf("- address: %s; mspId: %s; message: %s",
+						detail.GetAddress(),
+						detail.GetMspId(),
+						detail.GetMessage()))
+				}
+			}
+			return nil, fmt.Errorf("failed to submit transaction: %s (gRPC status details: %s)",
+				statusError.Message(),
+				strings.Join(detailsStr, "\n"))
+		}
+		return nil, fmt.Errorf("failed to submit transaction: %w", err)
 	}
 
 	// Unmarshal block
@@ -3017,16 +3009,47 @@ func (p *LocalPeer) GetChannelInfoOnPeer(ctx context.Context, channelID string) 
 		return nil, fmt.Errorf("failed to get admin identity: %w", err)
 	}
 
-	gateway, err := client.Connect(adminIdentity, client.WithClientConnection(peerConn), client.WithSign(signer))
+	gatewayFabric, err := client.Connect(adminIdentity, client.WithClientConnection(peerConn), client.WithSign(signer))
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to gateway: %w", err)
 	}
-	defer gateway.Close()
-	network := gateway.GetNetwork(channelID)
+	defer gatewayFabric.Close()
+	network := gatewayFabric.GetNetwork(channelID)
 	contract := network.GetContract(qscc)
 	response, err := contract.EvaluateTransaction(qsccChannelInfo, channelID)
+
 	if err != nil {
-		return nil, fmt.Errorf("failed to query block by transaction ID: %w", err)
+		endorseError, ok := err.(*client.EndorseError)
+		if ok {
+			detailsStr := []string{}
+			for _, detail := range status.Convert(err).Details() {
+				switch detail := detail.(type) {
+				case *gateway.ErrorDetail:
+					detailsStr = append(detailsStr, fmt.Sprintf("- address: %s; mspId: %s; message: %s\n", detail.GetAddress(), detail.GetMspId(), detail.GetMessage()))
+
+				}
+			}
+			return nil, fmt.Errorf("failed to submit transaction: %s (gRPC status: %s)",
+				endorseError.TransactionError.Error(),
+				strings.Join(detailsStr, "\n"))
+		}
+		statusError := status.Convert(err)
+		if statusError != nil {
+			detailsStr := []string{}
+			for _, detail := range statusError.Details() {
+				switch detail := detail.(type) {
+				case *gateway.ErrorDetail:
+					detailsStr = append(detailsStr, fmt.Sprintf("- address: %s; mspId: %s; message: %s",
+						detail.GetAddress(),
+						detail.GetMspId(),
+						detail.GetMessage()))
+				}
+			}
+			return nil, fmt.Errorf("failed to submit transaction: %s (gRPC status details: %s)",
+				statusError.Message(),
+				strings.Join(detailsStr, "\n"))
+		}
+		return nil, fmt.Errorf("failed to submit transaction: %w", err)
 	}
 	p.logger.Info("Channel info", "response", response)
 	bci := &cb.BlockchainInfo{}
@@ -3200,4 +3223,27 @@ func (p *LocalPeer) GetPeerClient(ctx context.Context) (*chaincode.Peer, *grpc.C
 
 	peer := chaincode.NewPeer(peerConn, adminIdentity)
 	return peer, peerConn, nil
+}
+
+func (p *LocalPeer) GetGatewayClient(ctx context.Context, keyID int64) (*client.Gateway, *grpc.ClientConn, error) {
+	peerUrl := p.GetPeerAddress()
+	tlsCACert, err := p.GetTLSRootCACert(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get TLS CA cert: %w", err)
+	}
+
+	adminIdentity, signer, err := p.GetIdentity(ctx, keyID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get admin identity: %w", err)
+	}
+	peerConn, err := p.CreatePeerConnection(ctx, peerUrl, tlsCACert)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create peer connection: %w", err)
+	}
+
+	gateway, err := client.Connect(adminIdentity, client.WithClientConnection(peerConn), client.WithSign(signer))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to connect to gateway: %w", err)
+	}
+	return gateway, peerConn, nil
 }

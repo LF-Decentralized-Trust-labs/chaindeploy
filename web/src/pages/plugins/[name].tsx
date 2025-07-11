@@ -123,7 +123,7 @@ const PluginDetailPage = () => {
 									toast.promise(resumeMutation.mutateAsync({ path: { name: name! } }), {
 										loading: 'Resuming plugin...',
 										success: 'Plugin resumed successfully',
-										error: 'Failed to resume plugin',
+										error: (e) => `Failed to resume plugin: ${e.message}`,
 									})
 								}
 								disabled={status?.status !== 'stopped'}
@@ -135,7 +135,7 @@ const PluginDetailPage = () => {
 									toast.promise(stopMutation.mutateAsync({ path: { name: name! } }), {
 										loading: 'Stopping plugin...',
 										success: 'Plugin stopped successfully',
-										error: 'Failed to stop plugin',
+										error: e => `Failed to stop plugin: ${e.message}`,
 									})
 								}
 								disabled={status?.status !== 'deployed'}

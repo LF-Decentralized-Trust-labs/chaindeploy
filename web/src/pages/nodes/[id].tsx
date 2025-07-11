@@ -210,11 +210,9 @@ export default function NodeDetailPage() {
 	const renewCertificates = useMutation({
 		...postNodesByIdCertificatesRenewMutation(),
 		onSuccess: () => {
-			toast.success('Certificates renewed successfully')
+			refetchEvents()
 			refetch()
-		},
-		onError: (error: any) => {
-			toast.error(`Failed to renew certificates: ${(error as any).error.message}`)
+			setShowRenewCertDialog(false)
 		},
 	})
 
@@ -256,10 +254,11 @@ export default function NodeDetailPage() {
 	const handleRenewCertificates = async () => {
 		if (!node) return
 		try {
-			await renewCertificates.mutateAsync({ path: { id: node.id! } })
-			refetchEvents()
-			refetch()
-			setShowRenewCertDialog(false)
+			await toast.promise(renewCertificates.mutateAsync({ path: { id: node.id! } }), {
+				loading: 'Renewing certificates...',
+				success: 'Certificates renewed successfully',
+				error: (e) => `Failed to renew certificates: ${e.message}`,
+			})
 		} catch (error) {
 			// Error handling is done in the mutation callbacks
 		}
@@ -267,7 +266,7 @@ export default function NodeDetailPage() {
 
 	useEffect(() => {
 		const eventSource = new EventSource(`/api/v1/nodes/${id}/logs?follow=true`, {
-			withCredentials: true
+			withCredentials: true,
 		})
 
 		let fullText = ''
@@ -275,7 +274,7 @@ export default function NodeDetailPage() {
 		eventSource.onmessage = (event) => {
 			fullText += event.data + '\n'
 			setLogs(fullText)
-			
+
 			// Scroll to bottom after new logs arrive
 			if (logsRef.current) {
 				setTimeout(() => {
@@ -388,6 +387,24 @@ export default function NodeDetailPage() {
 									<TimeAgo date={node.updatedAt} />
 								</div>
 							)}
+							{node.fabricPeer ? (
+								<div>
+									<p className="text-sm font-medium text-muted-foreground">Mode</p>
+									<p>{node.fabricPeer.mode || 'N/A'}</p>
+								</div>
+							) : null}
+							{node.fabricOrderer ? (
+								<div>
+									<p className="text-sm font-medium text-muted-foreground">Mode</p>
+									<p>{node.fabricOrderer.mode || 'N/A'}</p>
+								</div>
+							) : null}
+							{node.besuNode ? (
+								<div>
+									<p className="text-sm font-medium text-muted-foreground">Mode</p>
+									<p>{node.besuNode.mode || 'N/A'}</p>
+								</div>
+							) : null}
 						</div>
 					</CardContent>
 				</Card>

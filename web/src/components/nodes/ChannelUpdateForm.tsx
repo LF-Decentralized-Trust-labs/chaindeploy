@@ -1,4 +1,4 @@
-import { HttpChannelResponse } from '@/api/client'
+import { HttpChannelResponse, HttpConfigUpdateOperationRequest } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { Form } from '@/components/ui/form'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -23,11 +23,21 @@ import { UpdateBatchTimeoutOperation } from './operations/UpdateBatchTimeoutOper
 import { UpdateConsenterOperation } from './operations/UpdateConsenterOperation'
 import { UpdateEtcdRaftOptionsOperation } from './operations/UpdateEtcdRaftOptionsOperation'
 import { UpdateOrgMSPOperation } from './operations/UpdateOrgMSPOperation'
+import { UpdateApplicationPolicyOperation } from './operations/UpdateApplicationPolicyOperation'
+import { UpdateOrdererPolicyOperation } from './operations/UpdateOrdererPolicyOperation'
+import { UpdateChannelPolicyOperation } from './operations/UpdateChannelPolicyOperation'
+import { UpdateChannelCapabilityOperation } from './operations/UpdateChannelCapabilityOperation'
+import { UpdateOrdererCapabilityOperation } from './operations/UpdateOrdererCapabilityOperation'
+import { UpdateApplicationCapabilityOperation } from './operations/UpdateApplicationCapabilityOperation'
+import { AddOrdererOrgOperation } from './operations/AddOrdererOrgOperation'
+import { RemoveOrdererOrgOperation } from './operations/RemoveOrdererOrgOperation'
 
 // Operation type mapping
 const operationTypes = {
 	add_org: 'Add Organization',
 	remove_org: 'Remove Organization',
+	add_orderer_org: 'Add Orderer Organization',
+	remove_orderer_org: 'Remove Orderer Organization',
 	update_org_msp: 'Update Organization MSP',
 	add_consenter: 'Add Consenter',
 	remove_consenter: 'Remove Consenter',
@@ -35,6 +45,12 @@ const operationTypes = {
 	update_etcd_raft_options: 'Update Etcd Raft Options',
 	update_batch_size: 'Update Batch Size',
 	update_batch_timeout: 'Update Batch Timeout',
+	update_application_policy: 'Update Application Policy',
+	update_orderer_policy: 'Update Orderer Policy',
+	update_channel_policy: 'Update Channel Policy',
+	update_channel_capability: 'Update Channel Capability',
+	update_orderer_capability: 'Update Orderer Capability',
+	update_application_capability: 'Update Application Capability',
 } as const
 
 type OperationType = keyof typeof operationTypes
@@ -47,6 +63,10 @@ const getDefaultPayloadForType = (type: OperationType) => {
 		case 'add_org':
 			return { msp_id: '', root_certs: [], tls_root_certs: [] }
 		case 'remove_org':
+			return { msp_id: '' }
+		case 'add_orderer_org':
+			return { msp_id: '', root_certs: [], tls_root_certs: [] }
+		case 'remove_orderer_org':
 			return { msp_id: '' }
 		case 'update_org_msp':
 			return { msp_id: '', root_certs: [], tls_root_certs: [] }
@@ -62,6 +82,42 @@ const getDefaultPayloadForType = (type: OperationType) => {
 			return { absolute_max_bytes: 10485760, max_message_count: 500, preferred_max_bytes: 2097152 }
 		case 'update_batch_timeout':
 			return { timeout: '2s' }
+		case 'update_application_policy':
+			return {
+				policy_name: '',
+				policy: {
+					type: 'Signature',
+					signatureOperator: 'OR',
+					organizations: [],
+					signatureN: 1,
+				},
+			}
+		case 'update_orderer_policy':
+			return {
+				policy_name: '',
+				policy: {
+					type: 'Signature',
+					signatureOperator: 'OR',
+					organizations: [],
+					signatureN: 1,
+				},
+			}
+		case 'update_channel_policy':
+			return {
+				policy_name: '',
+				policy: {
+					type: 'Signature',
+					signatureOperator: 'OR',
+					organizations: [],
+					signatureN: 1,
+				},
+			}
+		case 'update_channel_capability':
+			return { capability: [] }
+		case 'update_orderer_capability':
+			return { capability: [] }
+		case 'update_application_capability':
+			return { capability: [] }
 		default:
 			return {}
 	}
@@ -75,6 +131,8 @@ const formSchema = z.object({
 				type: z.enum([
 					'add_org',
 					'remove_org',
+					'add_orderer_org',
+					'remove_orderer_org',
 					'update_org_msp',
 					'set_anchor_peers',
 					'add_consenter',
@@ -83,7 +141,13 @@ const formSchema = z.object({
 					'update_etcd_raft_options',
 					'update_batch_size',
 					'update_batch_timeout',
-				]),
+					'update_application_policy',
+					'update_orderer_policy',
+					'update_channel_policy',
+					'update_channel_capability',
+					'update_orderer_capability',
+					'update_application_capability',
+				]) as z.ZodType<HttpConfigUpdateOperationRequest['type']>,
 				payload: z.any(),
 			})
 		)
@@ -137,13 +201,65 @@ export function ChannelUpdateForm({ network, onSuccess, channelConfig }: Channel
 
 	const onSubmit = (data: FormValues) => {
 		// Convert the payload to the format expected by the API
-		const operations = data.operations.map((op) => {
-			// In a real implementation, we would need to convert the payload to the format expected by the API
-			// For now, we'll just pass it as is
-			return {
+		const operations: HttpConfigUpdateOperationRequest[] = data.operations.map((op) => {
+			const operation: HttpConfigUpdateOperationRequest = {
 				type: op.type,
-				payload: op.payload,
+				payload: { ...op.payload }, // Ensure payload is a new object
 			}
+
+			// Handle policy operations
+			if (['update_application_policy', 'update_orderer_policy', 'update_channel_policy'].includes(op.type)) {
+				const policy = op.payload.policy
+
+				if (policy.type === 'Signature') {
+					// Map policy names to their correct role identifiers
+					const roleMap: Record<string, string> = {
+						Admins: 'admin',
+						Writers: 'member',
+						Readers: 'member',
+						LifecycleEndorsement: 'member',
+						Endorsement: 'member',
+						BlockValidation: 'member',
+					}
+					const role = roleMap[op.payload.policy_name] || 'member'
+
+					// Build the policy string based on the operator
+					let policyString = ''
+					const selectedOrgs = policy.organizations || []
+
+					if (policy.signatureOperator === 'OR') {
+						policyString = selectedOrgs.map((mspId) => `'${mspId}.${role}'`).join(',')
+						policyString = `OR(${policyString})`
+					} else if (policy.signatureOperator === 'AND') {
+						policyString = selectedOrgs.map((mspId) => `'${mspId}.${role}'`).join(',')
+						policyString = `AND(${policyString})`
+					} else if (policy.signatureOperator === 'OUTOF' && policy.signatureN) {
+						policyString = selectedOrgs.map((mspId) => `'${mspId}.${role}'`).join(',')
+						policyString = `OutOf(${policy.signatureN},${policyString})`
+					}
+
+					// Update the operation payload with the formatted policy
+					operation.payload = {
+						policy_name: op.payload.policy_name,
+						policy: {
+							type: 'Signature',
+							rule: policyString,
+						},
+					} as any
+				}
+				if (policy.type === 'ImplicitMeta') {
+					const policyString = `${op.payload.policy.implicitMetaOperator} ${op.payload.policy.implicitMetaRole}`
+					operation.payload = {
+						policy_name: op.payload.policy_name,
+						policy: {
+							type: 'ImplicitMeta',
+							rule: policyString,
+						},
+					} as any
+				}
+			}
+
+			return operation
 		})
 
 		prepareUpdate.mutate({
@@ -158,6 +274,10 @@ export function ChannelUpdateForm({ network, onSuccess, channelConfig }: Channel
 				return <AddOrgOperation key={index} index={index} onRemove={() => remove(index)} />
 			case 'remove_org':
 				return <RemoveOrgOperation key={index} index={index} onRemove={() => remove(index)} />
+			case 'add_orderer_org':
+				return <AddOrdererOrgOperation key={index} index={index} onRemove={() => remove(index)} />
+			case 'remove_orderer_org':
+				return <RemoveOrdererOrgOperation key={index} index={index} onRemove={() => remove(index)} />
 			case 'update_org_msp':
 				return <UpdateOrgMSPOperation key={index} index={index} onRemove={() => remove(index)} />
 			case 'add_consenter':
@@ -172,6 +292,18 @@ export function ChannelUpdateForm({ network, onSuccess, channelConfig }: Channel
 				return <UpdateBatchSizeOperation key={index} index={index} onRemove={() => remove(index)} channelConfig={channelConfig} />
 			case 'update_batch_timeout':
 				return <UpdateBatchTimeoutOperation key={index} index={index} onRemove={() => remove(index)} channelConfig={channelConfig} />
+			case 'update_application_policy':
+				return <UpdateApplicationPolicyOperation key={index} index={index} onRemove={() => remove(index)} channelConfig={channelConfig} />
+			case 'update_orderer_policy':
+				return <UpdateOrdererPolicyOperation key={index} index={index} onRemove={() => remove(index)} channelConfig={channelConfig} />
+			case 'update_channel_policy':
+				return <UpdateChannelPolicyOperation key={index} index={index} onRemove={() => remove(index)} channelConfig={channelConfig} />
+			case 'update_channel_capability':
+				return <UpdateChannelCapabilityOperation key={index} index={index} onRemove={() => remove(index)} channelConfig={channelConfig} />
+			case 'update_orderer_capability':
+				return <UpdateOrdererCapabilityOperation key={index} index={index} onRemove={() => remove(index)} channelConfig={channelConfig} />
+			case 'update_application_capability':
+				return <UpdateApplicationCapabilityOperation key={index} index={index} onRemove={() => remove(index)} channelConfig={channelConfig} />
 			default:
 				return null
 		}

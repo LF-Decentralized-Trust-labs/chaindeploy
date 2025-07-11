@@ -12,6 +12,8 @@ interface Node {
 	id: number
 	name: string
 	nodeType: string
+	mspId?: string
+	externalEndpoint?: string
 }
 
 interface AddMultipleNodesDialogProps {
@@ -39,6 +41,14 @@ export function AddMultipleNodesDialog({ networkId, availableNodes, onNodesAdded
 		},
 	})
 
+	// Select all nodes by default when dialog opens
+	const handleOpenChange = (open: boolean) => {
+		setIsOpen(open)
+		if (open) {
+			setSelectedNodes(availableNodes.map((node) => node.id))
+		}
+	}
+
 	const handleAddNodes = async () => {
 		if (selectedNodes.length === 0) {
 			toast.error('Please select at least one node')
@@ -62,7 +72,7 @@ export function AddMultipleNodesDialog({ networkId, availableNodes, onNodesAdded
 	}
 
 	return (
-		<Dialog open={isOpen} onOpenChange={setIsOpen}>
+		<Dialog open={isOpen} onOpenChange={handleOpenChange}>
 			<DialogTrigger asChild>
 				<Button variant="outline" size="sm">
 					<PlusCircle className="h-4 w-4 mr-2" />
@@ -78,22 +88,28 @@ export function AddMultipleNodesDialog({ networkId, availableNodes, onNodesAdded
 					<ScrollArea className="h-[300px] pr-4">
 						<div className="space-y-4">
 							{availableNodes.map((node) => (
-								<div key={node.id} className="flex items-center space-x-2">
-									<Checkbox
-										id={`node-${node.id}`}
-										checked={selectedNodes.includes(node.id)}
-										onCheckedChange={(checked) => {
-											if (checked) {
-												setSelectedNodes([...selectedNodes, node.id])
-											} else {
-												setSelectedNodes(selectedNodes.filter((id) => id !== node.id))
-											}
-										}}
-									/>
-									<label htmlFor={`node-${node.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-										{node.name}
-										<span className="ml-2 text-xs text-muted-foreground">({node.nodeType === 'FABRIC_PEER' ? 'Peer' : 'Orderer'})</span>
-									</label>
+								<div key={node.id} className="space-y-1">
+									<div className="flex items-center space-x-2">
+										<Checkbox
+											id={`node-${node.id}`}
+											checked={selectedNodes.includes(node.id)}
+											onCheckedChange={(checked) => {
+												if (checked) {
+													setSelectedNodes([...selectedNodes, node.id])
+												} else {
+													setSelectedNodes(selectedNodes.filter((id) => id !== node.id))
+												}
+											}}
+										/>
+										<label htmlFor={`node-${node.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+											{node.name}
+											<span className="ml-2 text-xs text-muted-foreground">({node.nodeType === 'FABRIC_PEER' ? 'Peer' : 'Orderer'})</span>
+										</label>
+									</div>
+									<div className="ml-7 text-xs text-muted-foreground flex flex-col gap-0.5">
+										<span>MSP: {node.mspId || <span className="italic">N/A</span>}</span>
+										<span>Endpoint: {node.externalEndpoint || <span className="italic">N/A</span>}</span>
+									</div>
 								</div>
 							))}
 						</div>

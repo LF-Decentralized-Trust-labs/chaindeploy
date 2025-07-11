@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/chainlaunch/chainlaunch/pkg/errors"
@@ -13,6 +14,10 @@ import (
 	"github.com/chainlaunch/chainlaunch/pkg/nodes/service"
 	"github.com/chainlaunch/chainlaunch/pkg/nodes/types"
 	"github.com/go-chi/chi/v5"
+
+	"github.com/golang/protobuf/proto"
+	cb "github.com/hyperledger/fabric-protos-go-apiv2/common"
+	msp "github.com/hyperledger/fabric-protos-go-apiv2/msp"
 )
 
 type NodeHandler struct {
@@ -815,6 +820,7 @@ func (h *NodeHandler) updateBesuNode(w http.ResponseWriter, r *http.Request, nod
 		ExternalIP: req.ExternalIP,
 		InternalIP: req.InternalIP,
 		Env:        req.Env,
+		Mode:       req.Mode,
 	}
 
 	// Call service layer to update the Besu node
@@ -868,6 +874,7 @@ func (h *NodeHandler) updateFabricPeer(w http.ResponseWriter, r *http.Request, n
 	if req.Version != nil {
 		opts.Version = *req.Version
 	}
+	opts.Mode = req.Mode
 
 	updatedNode, err := h.service.UpdateFabricPeer(r.Context(), opts)
 	if err != nil {
@@ -904,6 +911,7 @@ func (h *NodeHandler) updateFabricOrderer(w http.ResponseWriter, r *http.Request
 	if req.Version != nil {
 		opts.Version = *req.Version
 	}
+	opts.Mode = req.Mode
 
 	updatedNode, err := h.service.UpdateFabricOrderer(r.Context(), opts)
 	if err != nil {
@@ -911,6 +919,17 @@ func (h *NodeHandler) updateFabricOrderer(w http.ResponseWriter, r *http.Request
 	}
 
 	return response.WriteJSON(w, http.StatusOK, toNodeResponse(updatedNode))
+}
+
+// ChaincodeResponse represents a committed chaincode in the response
+type ChaincodeResponse struct {
+	Name              string `json:"name"`
+	Version           string `json:"version"`
+	Sequence          int64  `json:"sequence"`
+	EndorsementPlugin string `json:"endorsementPlugin"`
+	ValidationPlugin  string `json:"validationPlugin"`
+	InitRequired      bool   `json:"initRequired"`
+	EndorsementPolicy string `json:"endorsementPolicy,omitempty"`
 }
 
 // GetNodeChaincodes godoc
@@ -961,17 +980,104 @@ func (h *NodeHandler) GetNodeChaincodes(w http.ResponseWriter, r *http.Request) 
 			ValidationPlugin:  cc.ValidationPlugin,
 			InitRequired:      cc.InitRequired,
 		}
+
+		// Convert endorsement policy to string if it exists
+		if len(cc.ValidationParameter) > 0 {
+			policy, _, err := UnmarshalApplicationPolicy(cc.ValidationParameter)
+			if err != nil {
+				return errors.NewInternalError("failed to unmarshal endorsement policy", err, nil)
+			}
+			policyStr, err := SignaturePolicyToString(policy)
+			if err != nil {
+				return errors.NewInternalError("failed to convert endorsement policy to string", err, nil)
+			}
+			chaincodeResponses[i].EndorsementPolicy = policyStr
+		}
 	}
 
-	return response.WriteJSON(w, http.StatusOK, chaincodeResponses)
+	response.JSON(w, http.StatusOK, chaincodeResponses)
+	return nil
 }
 
-// ChaincodeResponse represents a committed chaincode in the response
-type ChaincodeResponse struct {
-	Name              string `json:"name"`
-	Version           string `json:"version"`
-	Sequence          int64  `json:"sequence"`
-	EndorsementPlugin string `json:"endorsementPlugin"`
-	ValidationPlugin  string `json:"validationPlugin"`
-	InitRequired      bool   `json:"initRequired"`
+// SignaturePolicyToString converts a SignaturePolicyEnvelope to a human-readable string format
+func SignaturePolicyToString(policy *cb.SignaturePolicyEnvelope) (string, error) {
+	if policy == nil {
+		return "", fmt.Errorf("policy is nil")
+	}
+
+	rule := policy.GetRule()
+	if rule == nil {
+		return "", fmt.Errorf("policy rule is nil")
+	}
+
+	switch t := rule.Type.(type) {
+	case *cb.SignaturePolicy_SignedBy:
+		// Get the identity index
+		idx := t.SignedBy
+		if idx < 0 || int(idx) >= len(policy.Identities) {
+			return "", fmt.Errorf("invalid identity index: %d", idx)
+		}
+		// Get the identity
+		identity := policy.Identities[idx]
+		if identity == nil {
+			return "", fmt.Errorf("identity at index %d is nil", idx)
+		}
+		// Get the MSP ID and role
+		mspID := strings.TrimSpace(string(identity.Principal))
+		role := "member" // Default role
+		if identity.PrincipalClassification == msp.MSPPrincipal_ROLE {
+			role = "admin"
+		}
+		return fmt.Sprintf("'%s.%s'", mspID, role), nil
+
+	case *cb.SignaturePolicy_NOutOf_:
+		nOutOf := t.NOutOf
+		if nOutOf == nil {
+			return "", fmt.Errorf("n_out_of policy is nil")
+		}
+		// Convert sub-rules
+		var rules []string
+		for _, r := range nOutOf.Rules {
+			ruleStr, err := SignaturePolicyToString(&cb.SignaturePolicyEnvelope{
+				Version:    policy.Version,
+				Rule:       r,
+				Identities: policy.Identities,
+			})
+			if err != nil {
+				return "", fmt.Errorf("error converting sub-rule: %w", err)
+			}
+			rules = append(rules, ruleStr)
+		}
+		// Format based on N value
+		if nOutOf.N == 1 {
+			return fmt.Sprintf("OR(%s)", strings.Join(rules, ", ")), nil
+		} else if nOutOf.N == int32(len(rules)) {
+			return fmt.Sprintf("AND(%s)", strings.Join(rules, ", ")), nil
+		} else {
+			return fmt.Sprintf("OutOf(%s, %d)", strings.Join(rules, ", "), nOutOf.N), nil
+		}
+
+	default:
+		return "", fmt.Errorf("unsupported policy type: %T", t)
+	}
+}
+
+// UnmarshalApplicationPolicy unmarshals the policy baytes and returns either a signature policy or a channel config policy.
+func UnmarshalApplicationPolicy(policyBytes []byte) (*cb.SignaturePolicyEnvelope, string, error) {
+	applicationPolicy := &cb.ApplicationPolicy{}
+	err := proto.Unmarshal(policyBytes, applicationPolicy)
+	if err != nil {
+		return nil, "", errors.NewInternalError("failed to unmarshal application policy", err, nil)
+	}
+
+	switch policy := applicationPolicy.Type.(type) {
+	case *cb.ApplicationPolicy_SignaturePolicy:
+		return policy.SignaturePolicy, "", nil
+	case *cb.ApplicationPolicy_ChannelConfigPolicyReference:
+		return nil, policy.ChannelConfigPolicyReference, nil
+	default:
+		return nil, "", errors.NewInternalError("unsupported policy type", nil, map[string]interface{}{
+			"policyType": fmt.Sprintf("%T", policy),
+		})
+	}
 }

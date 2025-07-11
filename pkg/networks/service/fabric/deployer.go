@@ -57,12 +57,22 @@ const (
 	OpUpdateOrgMSP          ConfigUpdateOperationType = "update_org_msp"
 	OpSetAnchorPeers        ConfigUpdateOperationType = "set_anchor_peers"
 	OpUpdateEtcdRaftOptions ConfigUpdateOperationType = "update_etcd_raft_options"
+	OpUpdateAppPolicy       ConfigUpdateOperationType = "update_application_policy"
+	OpUpdateOrdererPolicy   ConfigUpdateOperationType = "update_orderer_policy"
+	OpUpdateChannelPolicy   ConfigUpdateOperationType = "update_channel_policy"
 	// Orderer config update operations
 	OpAddConsenter       ConfigUpdateOperationType = "add_consenter"
 	OpRemoveConsenter    ConfigUpdateOperationType = "remove_consenter"
 	OpUpdateConsenter    ConfigUpdateOperationType = "update_consenter"
 	OpUpdateBatchSize    ConfigUpdateOperationType = "update_batch_size"
 	OpUpdateBatchTimeout ConfigUpdateOperationType = "update_batch_timeout"
+	// New operations
+	OpUpdateChannelCapability                    ConfigUpdateOperationType = "update_channel_capability"
+	OpUpdateOrdererCapability                    ConfigUpdateOperationType = "update_orderer_capability"
+	OpUpdateApplicationCapability                ConfigUpdateOperationType = "update_application_capability"
+	ConfigUpdateOperationTypeAddOrdererOrg       ConfigUpdateOperationType = "add_orderer_org"
+	ConfigUpdateOperationTypeRemoveOrdererOrg    ConfigUpdateOperationType = "remove_orderer_org"
+	ConfigUpdateOperationTypeUpdateOrdererOrgMSP ConfigUpdateOperationType = "update_orderer_org_msp"
 )
 
 // ConfigUpdateOperation represents a configuration update operation with its associated data
@@ -638,6 +648,54 @@ func CreateConfigModifier(operation ConfigUpdateOperation) (ConfigModifier, erro
 			return nil, fmt.Errorf("failed to unmarshal update batch timeout payload: %w", err)
 		}
 		modifier = &op
+	case OpUpdateAppPolicy:
+		var op UpdateApplicationPolicyOperation
+		if err := json.Unmarshal(operation.Payload, &op); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal update application policy payload: %w", err)
+		}
+		modifier = &op
+	case OpUpdateOrdererPolicy:
+		var op UpdateOrdererPolicyOperation
+		if err := json.Unmarshal(operation.Payload, &op); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal update orderer policy payload: %w", err)
+		}
+		modifier = &op
+	case OpUpdateChannelPolicy:
+		var op UpdateChannelPolicyOperation
+		if err := json.Unmarshal(operation.Payload, &op); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal update channel policy payload: %w", err)
+		}
+		modifier = &op
+	case "update_channel_capability":
+		var op UpdateChannelCapabilityOperation
+		if err := json.Unmarshal(operation.Payload, &op); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal update channel capability operation: %w", err)
+		}
+		return &op, op.Validate()
+	case "update_orderer_capability":
+		var op UpdateOrdererCapabilityOperation
+		if err := json.Unmarshal(operation.Payload, &op); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal update orderer capability operation: %w", err)
+		}
+		return &op, op.Validate()
+	case "update_application_capability":
+		var op UpdateApplicationCapabilityOperation
+		if err := json.Unmarshal(operation.Payload, &op); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal update application capability operation: %w", err)
+		}
+		return &op, op.Validate()
+	case ConfigUpdateOperationTypeAddOrdererOrg:
+		var op AddOrdererOrgOperation
+		if err := json.Unmarshal(operation.Payload, &op); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal add_orderer_org operation: %v", err)
+		}
+		return &op, nil
+	case ConfigUpdateOperationTypeRemoveOrdererOrg:
+		var op RemoveOrdererOrgOperation
+		if err := json.Unmarshal(operation.Payload, &op); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal remove_orderer_org operation: %v", err)
+		}
+		return &op, nil
 	default:
 		return nil, fmt.Errorf("unsupported operation type: %s", operation.Type)
 	}
@@ -823,7 +881,7 @@ orderers:
     url: {{$orderer.URL}}
     tlsCACerts:
       pem: |
-{{$orderer.TLSCert|indent 10}}
+{{$orderer.TLSCACert|indent 10}}
   {{- end}}
 
 peers:
@@ -832,7 +890,7 @@ peers:
     url: {{$peer.URL}}
     tlsCACerts:
       pem: |
-{{$peer.TLSCert|indent 10}}
+{{$peer.TLSCACert|indent 10}}
   {{- end}}
 
 channels:
@@ -863,12 +921,14 @@ type NetworkConfigData struct {
 		Certificate string
 	}
 	Orderers map[string]struct {
-		URL     string
-		TLSCert string
+		URL       string
+		TLSCert   string
+		TLSCACert string
 	}
 	Peers map[string]struct {
-		URL     string
-		TLSCert string
+		URL       string
+		TLSCert   string
+		TLSCACert string
 	}
 }
 
@@ -1095,6 +1155,10 @@ func (d *FabricDeployer) CreateGenesisBlock(networkID int64, config interface{})
 		Consenters:  consenters,
 		PeerOrgs:    peerOrgs,
 		OrdererOrgs: ordererOrgs,
+		// Pass policies if present
+		ApplicationPolicies: fabricConfig.ApplicationPolicies,
+		OrdererPolicies:     fabricConfig.OrdererPolicies,
+		ChannelPolicies:     fabricConfig.ChannelPolicies,
 	}
 	d.logger.Debug("Creating channel with request: %+v", createReq)
 	channel, err := d.channelService.CreateChannel(createReq)
@@ -1220,6 +1284,29 @@ func (d *FabricDeployer) GetCurrentChannelConfig(networkID int64) ([]byte, error
 	}
 
 	return blockBytes, nil
+}
+
+func (d *FabricDeployer) GetCurrentChannelConfigTX(networkID int64) (*configtx.ConfigTx, error) {
+	ctx := context.Background()
+	configBlock, err := d.FetchCurrentChannelConfig(ctx, networkID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current channel config: %w", err)
+	}
+
+	block := &cb.Block{}
+	err = proto.Unmarshal(configBlock, block)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal block: %w", err)
+	}
+
+	cmnConfig, err := ExtractConfigFromBlock(block)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract config from block: %w", err)
+	}
+
+	cfgtx := configtx.New(cmnConfig)
+
+	return &cfgtx, nil
 }
 
 func (d *FabricDeployer) GetCurrentChannelConfigAsMap(networkID int64) (map[string]interface{}, error) {
@@ -1697,12 +1784,14 @@ func (d *FabricDeployer) GenerateNetworkConfig(ctx context.Context, networkID in
 			Certificate: string(*adminKey.Certificate),
 		},
 		Orderers: make(map[string]struct {
-			URL     string
-			TLSCert string
+			URL       string
+			TLSCert   string
+			TLSCACert string
 		}),
 		Peers: make(map[string]struct {
-			URL     string
-			TLSCert string
+			URL       string
+			TLSCert   string
+			TLSCACert string
 		}),
 	}
 
@@ -1722,11 +1811,13 @@ func (d *FabricDeployer) GenerateNetworkConfig(ctx context.Context, networkID in
 			}
 
 			data.Peers[nodeDetails.Name] = struct {
-				URL     string
-				TLSCert string
+				URL       string
+				TLSCert   string
+				TLSCACert string
 			}{
-				URL:     fmt.Sprintf("grpcs://%s", peerConfig.ExternalEndpoint),
-				TLSCert: string(*peerTLSKey.Certificate),
+				URL:       fmt.Sprintf("grpcs://%s", peerConfig.ExternalEndpoint),
+				TLSCert:   string(*peerTLSKey.Certificate),
+				TLSCACert: peerConfig.TLSCACert,
 			}
 
 		case nodetypes.NodeTypeFabricOrderer:
@@ -1737,11 +1828,13 @@ func (d *FabricDeployer) GenerateNetworkConfig(ctx context.Context, networkID in
 			}
 
 			data.Orderers[nodeDetails.Name] = struct {
-				URL     string
-				TLSCert string
+				URL       string
+				TLSCert   string
+				TLSCACert string
 			}{
-				URL:     fmt.Sprintf("grpcs://%s", ordererConfig.ExternalEndpoint),
-				TLSCert: string(*ordererTLSKey.Certificate),
+				URL:       fmt.Sprintf("grpcs://%s", ordererConfig.ExternalEndpoint),
+				TLSCert:   string(*ordererTLSKey.Certificate),
+				TLSCACert: ordererConfig.TLSCACert,
 			}
 		}
 	}
@@ -2643,4 +2736,394 @@ func (d *FabricDeployer) GetBlockByTransaction(ctx context.Context, networkID in
 	}
 
 	return blockResponse, nil
+}
+
+// UpdateApplicationPolicyOperation represents an operation to update application policies
+type UpdateApplicationPolicyOperation struct {
+	PolicyName string       `json:"policy_name"`
+	Policy     FabricPolicy `json:"policy"`
+}
+
+func (op *UpdateApplicationPolicyOperation) Type() ConfigUpdateOperationType {
+	return OpUpdateAppPolicy
+}
+
+func (op *UpdateApplicationPolicyOperation) Validate() error {
+	if op.PolicyName == "" {
+		return fmt.Errorf("policy name is required")
+	}
+	if op.Policy.Type == "" {
+		return fmt.Errorf("policy type is required")
+	}
+	if op.Policy.Rule == "" {
+		return fmt.Errorf("policy rule is required")
+	}
+	if op.Policy.Type != "Signature" && op.Policy.Type != "ImplicitMeta" {
+		return fmt.Errorf("policy type must be either 'Signature' or 'ImplicitMeta'")
+	}
+	return nil
+}
+
+func (op *UpdateApplicationPolicyOperation) Modify(ctx context.Context, c *configtx.ConfigTx) error {
+
+	// Get the application config
+	app := c.Application()
+	if app == nil {
+		return fmt.Errorf("application config not found")
+	}
+	policy := configtx.Policy{
+		Type: op.Policy.Type,
+		Rule: op.Policy.Rule,
+	}
+
+	// Set the policy in the application config
+	if err := app.SetPolicy(op.PolicyName, policy); err != nil {
+		return fmt.Errorf("failed to set application policy: %w", err)
+	}
+
+	return nil
+}
+
+type FabricPolicy struct {
+	Type string `json:"type"`
+	Rule string `json:"rule"`
+}
+
+// UpdateOrdererPolicyOperation represents an operation to update orderer policies
+type UpdateOrdererPolicyOperation struct {
+	PolicyName string       `json:"policy_name"`
+	Policy     FabricPolicy `json:"policy"`
+}
+
+func (op *UpdateOrdererPolicyOperation) Type() ConfigUpdateOperationType {
+	return OpUpdateOrdererPolicy
+}
+
+func (op *UpdateOrdererPolicyOperation) Validate() error {
+	if op.PolicyName == "" {
+		return fmt.Errorf("policy name is required")
+	}
+	if op.Policy.Type == "" {
+		return fmt.Errorf("policy type is required")
+	}
+	if op.Policy.Rule == "" {
+		return fmt.Errorf("policy rule is required")
+	}
+	if op.Policy.Type != "Signature" && op.Policy.Type != "ImplicitMeta" {
+		return fmt.Errorf("policy type must be either 'Signature' or 'ImplicitMeta'")
+	}
+	return nil
+}
+
+func (op *UpdateOrdererPolicyOperation) Modify(ctx context.Context, c *configtx.ConfigTx) error {
+	// Parse the signature policy if needed
+
+	// Get the orderer config
+	orderer := c.Orderer()
+	if orderer == nil {
+		return fmt.Errorf("orderer config not found")
+	}
+	policy := configtx.Policy{
+		Type: op.Policy.Type,
+		Rule: op.Policy.Rule,
+	}
+	// Set the policy in the orderer config
+	if err := orderer.SetPolicy(op.PolicyName, policy); err != nil {
+		return fmt.Errorf("failed to set orderer policy: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateChannelPolicyOperation represents an operation to update channel-level policies
+type UpdateChannelPolicyOperation struct {
+	PolicyName string       `json:"policy_name"`
+	Policy     FabricPolicy `json:"policy"`
+}
+
+func (op *UpdateChannelPolicyOperation) Type() ConfigUpdateOperationType {
+	return OpUpdateChannelPolicy
+}
+
+func (op *UpdateChannelPolicyOperation) Validate() error {
+	if op.PolicyName == "" {
+		return fmt.Errorf("policy name is required")
+	}
+	if op.Policy.Type == "" {
+		return fmt.Errorf("policy type is required")
+	}
+	if op.Policy.Rule == "" {
+		return fmt.Errorf("policy rule is required")
+	}
+	if op.Policy.Type != "Signature" && op.Policy.Type != "ImplicitMeta" {
+		return fmt.Errorf("policy type must be either 'Signature' or 'ImplicitMeta'")
+	}
+	return nil
+}
+
+func (op *UpdateChannelPolicyOperation) Modify(ctx context.Context, c *configtx.ConfigTx) error {
+
+	policy := configtx.Policy{
+		Type: op.Policy.Type,
+		Rule: op.Policy.Rule,
+	}
+	channel := c.Channel()
+	if channel == nil {
+		return fmt.Errorf("channel config not found")
+	}
+	// Set the policy in the channel config
+	if err := channel.SetPolicy(op.PolicyName, policy); err != nil {
+		return fmt.Errorf("failed to set channel policy: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateApplicationCapabilityOperation represents an operation to update application-level capabilities
+type UpdateApplicationCapabilityOperation struct {
+	Capabilities []string `json:"capability"`
+}
+
+func (op *UpdateApplicationCapabilityOperation) Type() ConfigUpdateOperationType {
+	return "update_application_capability"
+}
+
+func (op *UpdateApplicationCapabilityOperation) Validate() error {
+	if op.Capabilities == nil {
+		return fmt.Errorf("capability is required")
+	}
+	if len(op.Capabilities) == 0 {
+		return fmt.Errorf("capability is required")
+	}
+	return nil
+}
+
+func (op *UpdateApplicationCapabilityOperation) Modify(ctx context.Context, c *configtx.ConfigTx) error {
+	app := c.Application()
+	if app == nil {
+		return fmt.Errorf("application config not found")
+	}
+
+	capabilities, err := app.Capabilities()
+	if err != nil {
+		return fmt.Errorf("failed to get application capabilities: %w", err)
+	}
+
+	for _, cap := range capabilities {
+		app.RemoveCapability(cap)
+	}
+
+	for _, cap := range op.Capabilities {
+		app.AddCapability(cap)
+	}
+
+	return nil
+}
+
+// AddOrdererOrgOperation represents an operation to add a new orderer organization
+type AddOrdererOrgOperation struct {
+	MSPID            string   `json:"msp_id"`
+	TLSRootCerts     []string `json:"tls_root_certs"`
+	RootCerts        []string `json:"root_certs"`
+	OrdererEndpoints []string `json:"orderer_endpoints"`
+}
+
+func (op *AddOrdererOrgOperation) Type() ConfigUpdateOperationType {
+	return ConfigUpdateOperationTypeAddOrdererOrg
+}
+
+func (op *AddOrdererOrgOperation) Validate() error {
+	if op.MSPID == "" {
+		return fmt.Errorf("msp_id is required")
+	}
+	if len(op.TLSRootCerts) == 0 {
+		return fmt.Errorf("tls_root_certs is required")
+	}
+	if len(op.RootCerts) == 0 {
+		return fmt.Errorf("root_certs is required")
+	}
+	return nil
+}
+
+func (op *AddOrdererOrgOperation) Modify(ctx context.Context, c *configtx.ConfigTx) error {
+
+	mspID := op.MSPID
+
+	var rootCerts []*x509.Certificate
+	for _, rootCertStr := range op.RootCerts {
+		rootCert, err := certutils.ParseX509Certificate([]byte(rootCertStr))
+		if err != nil {
+			return fmt.Errorf("failed to parse root certificate: %w", err)
+		}
+		rootCerts = append(rootCerts, rootCert)
+	}
+
+	var tlsRootCerts []*x509.Certificate
+	for _, tlsRootCertStr := range op.TLSRootCerts {
+		tlsRootCert, err := certutils.ParseX509Certificate([]byte(tlsRootCertStr))
+		if err != nil {
+			return fmt.Errorf("failed to parse TLS root certificate: %w", err)
+		}
+		tlsRootCerts = append(tlsRootCerts, tlsRootCert)
+	}
+	signCACert := rootCerts[0]
+
+	// Set MSP configuration
+	err := c.Orderer().SetOrganization(configtx.Organization{
+		Name: mspID,
+
+		MSP: configtx.MSP{
+			Name:         mspID,
+			RootCerts:    rootCerts,
+			TLSRootCerts: tlsRootCerts,
+			Admins:       []*x509.Certificate{},
+			NodeOUs: membership.NodeOUs{
+				Enable: true,
+				ClientOUIdentifier: membership.OUIdentifier{
+					Certificate:                  signCACert,
+					OrganizationalUnitIdentifier: "client",
+				},
+				PeerOUIdentifier: membership.OUIdentifier{
+					Certificate:                  signCACert,
+					OrganizationalUnitIdentifier: "peer",
+				},
+				AdminOUIdentifier: membership.OUIdentifier{
+					Certificate:                  signCACert,
+					OrganizationalUnitIdentifier: "admin",
+				},
+				OrdererOUIdentifier: membership.OUIdentifier{
+					Certificate:                  signCACert,
+					OrganizationalUnitIdentifier: "orderer",
+				},
+			},
+		},
+		AnchorPeers:      []configtx.Address{},
+		OrdererEndpoints: op.OrdererEndpoints,
+		Policies: map[string]configtx.Policy{
+			"Admins": {
+				Type: "Signature",
+				Rule: fmt.Sprintf("OR('%s.admin')", mspID),
+			},
+			"Readers": {
+				Type: "Signature",
+				Rule: fmt.Sprintf("OR('%s.member')", mspID),
+			},
+			"Writers": {
+				Type: "Signature",
+				Rule: fmt.Sprintf("OR('%s.member')", mspID),
+			},
+			"Endorsement": {
+				Type: "Signature",
+				Rule: fmt.Sprintf("OR('%s.member')", mspID),
+			},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to set MSP configuration: %w", err)
+	}
+
+	return nil
+}
+
+// RemoveOrdererOrgOperation represents an operation to remove an orderer organization
+type RemoveOrdererOrgOperation struct {
+	MSPID string `json:"msp_id"`
+}
+
+func (op *RemoveOrdererOrgOperation) Type() ConfigUpdateOperationType {
+	return ConfigUpdateOperationTypeRemoveOrdererOrg
+}
+
+func (op *RemoveOrdererOrgOperation) Validate() error {
+	if op.MSPID == "" {
+		return fmt.Errorf("msp_id is required")
+	}
+	return nil
+}
+
+func (op *RemoveOrdererOrgOperation) Modify(ctx context.Context, c *configtx.ConfigTx) error {
+	c.Orderer().RemoveOrganization(op.MSPID)
+
+	return nil
+}
+
+// UpdateChannelCapabilityOperation represents an operation to update channel-level capabilities
+type UpdateChannelCapabilityOperation struct {
+	Capabilities []string `json:"capability"`
+}
+
+func (op *UpdateChannelCapabilityOperation) Type() ConfigUpdateOperationType {
+	return "update_channel_capability"
+}
+
+func (op *UpdateChannelCapabilityOperation) Validate() error {
+	if op.Capabilities == nil {
+		return fmt.Errorf("capability is required")
+	}
+	if len(op.Capabilities) == 0 {
+		return fmt.Errorf("capability is required")
+	}
+	return nil
+}
+
+func (op *UpdateChannelCapabilityOperation) Modify(ctx context.Context, c *configtx.ConfigTx) error {
+	channel := c.Channel()
+	if channel == nil {
+		return fmt.Errorf("channel config not found")
+	}
+
+	capabilities, err := channel.Capabilities()
+	if err != nil {
+		return fmt.Errorf("failed to get channel capabilities: %w", err)
+	}
+
+	for _, cap := range capabilities {
+		channel.RemoveCapability(cap)
+	}
+
+	for _, cap := range op.Capabilities {
+		channel.AddCapability(cap)
+	}
+
+	return nil
+}
+
+// UpdateOrdererCapabilityOperation represents an operation to update orderer-level capabilities
+type UpdateOrdererCapabilityOperation struct {
+	Capabilities []string `json:"capability"`
+}
+
+func (op *UpdateOrdererCapabilityOperation) Type() ConfigUpdateOperationType {
+	return "update_orderer_capability"
+}
+
+func (op *UpdateOrdererCapabilityOperation) Validate() error {
+	if op.Capabilities == nil {
+		return fmt.Errorf("capability is required")
+	}
+	if len(op.Capabilities) == 0 {
+		return fmt.Errorf("capability is required")
+	}
+	return nil
+}
+
+func (op *UpdateOrdererCapabilityOperation) Modify(ctx context.Context, c *configtx.ConfigTx) error {
+	orderer := c.Orderer()
+	if orderer == nil {
+		return fmt.Errorf("orderer config not found")
+	}
+
+	capabilities, err := orderer.Capabilities()
+	if err != nil {
+		return fmt.Errorf("failed to get orderer capabilities: %w", err)
+	}
+
+	for _, cap := range capabilities {
+		orderer.RemoveCapability(cap)
+	}
+	for _, cap := range op.Capabilities {
+		orderer.AddCapability(cap)
+	}
+
+	return nil
 }

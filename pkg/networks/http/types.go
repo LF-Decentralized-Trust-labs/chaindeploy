@@ -53,25 +53,27 @@ type ErrorResponse struct {
 	Message string `json:"message"`
 }
 
+// FabricPolicy represents a policy for the HTTP API
+// This matches configtx.Policy (Type, Rule)
+type FabricPolicy struct {
+	Type string `json:"type"`
+	Rule string `json:"rule"`
+}
+
 // FabricNetworkConfig represents the configuration for a Fabric network
 type FabricNetworkConfig struct {
 	PeerOrganizations    []OrganizationConfig `json:"peerOrganizations"`
 	OrdererOrganizations []OrganizationConfig `json:"ordererOrganizations"`
-	ExternalPeerOrgs     []ExternalOrgConfig  `json:"externalPeerOrgs,omitempty"`
-	ExternalOrdererOrgs  []ExternalOrgConfig  `json:"externalOrdererOrgs,omitempty"`
+	// Optional policies
+	ApplicationPolicies map[string]FabricPolicy `json:"applicationPolicies,omitempty"`
+	OrdererPolicies     map[string]FabricPolicy `json:"ordererPolicies,omitempty"`
+	ChannelPolicies     map[string]FabricPolicy `json:"channelPolicies,omitempty"`
 }
 
 // OrganizationConfig represents an organization in the network
 type OrganizationConfig struct {
 	ID      int64   `json:"id" validate:"required"`
 	NodeIDs []int64 `json:"nodeIds" validate:"required,min=1"`
-}
-
-// ExternalOrgConfig represents an external organization configuration
-type ExternalOrgConfig struct {
-	ID         string            `json:"id" validate:"required"`
-	MSPID      string            `json:"mspid" validate:"required"`
-	Consenters []ConsenterConfig `json:"consenters,omitempty"`
 }
 
 // ConsenterConfig represents a consenter node configuration
@@ -99,7 +101,7 @@ type AnchorPeer struct {
 // SetAnchorPeersRequest represents the request to set anchor peers for an organization
 type SetAnchorPeersRequest struct {
 	OrganizationID int64        `json:"organizationId" validate:"required"`
-	AnchorPeers    []AnchorPeer `json:"anchorPeers" validate:"required,min=1"`
+	AnchorPeers    []AnchorPeer `json:"anchorPeers" validate:"required,min=0"`
 }
 
 // SetAnchorPeersResponse represents the response after setting anchor peers

@@ -425,6 +425,7 @@ func (s *SQLStore) GetFabricPeerDetails(ctx context.Context, id string) (*types.
 		Name:             peer.Name,
 		ExternalEndpoint: peer.FabricPeer.ExternalEndpoint,
 		TLSCert:          peer.FabricPeer.TLSCert,
+		TLSCACert:        peer.FabricPeer.TLSCACert,
 		MspID:            peer.FabricPeer.MSPID,
 		OrgID:            peer.FabricPeer.OrganizationID,
 	}, nil

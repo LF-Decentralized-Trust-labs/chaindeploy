@@ -11,9 +11,11 @@ import (
 	"github.com/hyperledger/fabric-admin-sdk/pkg/network"
 	"github.com/hyperledger/fabric-gateway/pkg/client"
 	"github.com/hyperledger/fabric-gateway/pkg/identity"
+	"github.com/hyperledger/fabric-protos-go-apiv2/gateway"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 )
 
 type invokeChaincodeCmd struct {
@@ -112,12 +114,12 @@ func (c *invokeChaincodeCmd) run(out io.Writer) error {
 		return err
 	}
 	defer conn.Close()
-	gateway, err := client.Connect(userIdentity, client.WithSign(userPK), client.WithClientConnection(conn))
+	gatewayClient, err := client.Connect(userIdentity, client.WithSign(userPK), client.WithClientConnection(conn))
 	if err != nil {
 		return err
 	}
-	defer gateway.Close()
-	network := gateway.GetNetwork(c.channel)
+	defer gatewayClient.Close()
+	network := gatewayClient.GetNetwork(c.channel)
 	contract := network.GetContract(c.chaincode)
 	args := [][]byte{}
 	for _, arg := range c.args {
@@ -134,7 +136,21 @@ func (c *invokeChaincodeCmd) run(out io.Writer) error {
 	}
 	submitResponse, err := endorseResponse.Submit()
 	if err != nil {
-		return errors.Wrapf(err, "failed to submit proposal")
+		endorseError, ok := err.(*client.EndorseError)
+		if ok {
+			detailsStr := []string{}
+			for _, detail := range status.Convert(err).Details() {
+				switch detail := detail.(type) {
+				case *gateway.ErrorDetail:
+					detailsStr = append(detailsStr, fmt.Sprintf("- address: %s; mspId: %s; message: %s\n", detail.GetAddress(), detail.GetMspId(), detail.GetMessage()))
+
+				}
+			}
+			return fmt.Errorf("failed to submit transaction: %s (gRPC status: %s)",
+				endorseError.TransactionError.Error(),
+				strings.Join(detailsStr, "\n"))
+		}
+		return fmt.Errorf("failed to submit transaction: %w", err)
 	}
 	responseBytes, err := submitResponse.Bytes()
 	if err != nil {

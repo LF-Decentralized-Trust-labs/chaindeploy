@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/chainlaunch/chainlaunch/pkg/errors"
+	"github.com/chainlaunch/chainlaunch/pkg/http/response"
 	"github.com/chainlaunch/chainlaunch/pkg/logger"
 	"github.com/chainlaunch/chainlaunch/pkg/metrics/common"
 	"github.com/chainlaunch/chainlaunch/pkg/metrics/types"
@@ -29,14 +31,14 @@ func NewHandler(service common.Service, logger *logger.Logger) *Handler {
 // RegisterRoutes registers the metrics routes
 func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Route("/metrics", func(r chi.Router) {
-		r.Post("/deploy", h.DeployPrometheus)
-		r.Post("/undeploy", h.UndeployPrometheus)
-		r.Get("/node/{id}", h.GetNodeMetrics)
-		r.Post("/reload", h.ReloadConfiguration)
-		r.Get("/node/{id}/label/{label}/values", h.GetLabelValues)
-		r.Get("/node/{id}/range", h.GetNodeMetricsRange)
-		r.Post("/node/{id}/query", h.CustomQuery)
-		r.Get("/status", h.GetStatus)
+		r.Post("/deploy", response.Middleware(h.DeployPrometheus))
+		r.Post("/undeploy", response.Middleware(h.UndeployPrometheus))
+		r.Get("/node/{id}", response.Middleware(h.GetNodeMetrics))
+		r.Post("/reload", response.Middleware(h.ReloadConfiguration))
+		r.Get("/node/{id}/label/{label}/values", response.Middleware(h.GetLabelValues))
+		r.Get("/node/{id}/range", response.Middleware(h.GetNodeMetricsRange))
+		r.Post("/node/{id}/query", response.Middleware(h.CustomQuery))
+		r.Get("/status", response.Middleware(h.GetStatus))
 	})
 }
 
@@ -51,11 +53,10 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /metrics/deploy [post]
-func (h *Handler) DeployPrometheus(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) DeployPrometheus(w http.ResponseWriter, r *http.Request) error {
 	var req types.DeployPrometheusRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return errors.NewValidationError("Invalid request body", nil)
 	}
 
 	config := &common.Config{
@@ -66,13 +67,10 @@ func (h *Handler) DeployPrometheus(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.service.Start(r.Context(), config); err != nil {
 		h.logger.Error("Failed to deploy Prometheus", "error", err)
-		http.Error(w, "Failed to deploy Prometheus", http.StatusInternalServerError)
-		return
+		return errors.NewInternalError("Failed to deploy Prometheus", err, nil)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(types.MessageResponse{Message: "Prometheus deployed successfully"})
+	return response.WriteJSON(w, http.StatusOK, types.MessageResponse{Message: "Prometheus deployed successfully"})
 }
 
 // GetNodeMetrics retrieves metrics for a specific node
@@ -86,31 +84,25 @@ func (h *Handler) DeployPrometheus(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /metrics/node/{id} [get]
-func (h *Handler) GetNodeMetrics(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetNodeMetrics(w http.ResponseWriter, r *http.Request) error {
 	nodeID := chi.URLParam(r, "id")
 	if nodeID == "" {
-		http.Error(w, "Node ID is required", http.StatusBadRequest)
-		return
+		return errors.NewValidationError("Node ID is required", nil)
 	}
 	nodeIDInt, err := strconv.ParseInt(nodeID, 10, 64)
 	if err != nil {
-		http.Error(w, "invalid node ID", http.StatusBadRequest)
-		return
+		return errors.NewValidationError("Invalid node ID", nil)
 	}
 
-	// Get PromQL query from query parameter
 	query := r.URL.Query().Get("query")
 
 	metrics, err := h.service.QueryMetrics(r.Context(), nodeIDInt, query)
 	if err != nil {
 		h.logger.Error("Failed to get node metrics", "error", err)
-		http.Error(w, "Failed to get node metrics", http.StatusInternalServerError)
-		return
+		return errors.NewInternalError("Failed to get node metrics", err, nil)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(metrics)
+	return response.WriteJSON(w, http.StatusOK, metrics)
 }
 
 // ReloadConfiguration reloads the Prometheus configuration
@@ -121,16 +113,12 @@ func (h *Handler) GetNodeMetrics(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} types.MessageResponse
 // @Failure 500 {object} map[string]string
 // @Router /metrics/reload [post]
-func (h *Handler) ReloadConfiguration(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ReloadConfiguration(w http.ResponseWriter, r *http.Request) error {
 	if err := h.service.Reload(r.Context()); err != nil {
 		h.logger.Error("Failed to reload Prometheus configuration", "error", err)
-		http.Error(w, "Failed to reload Prometheus configuration", http.StatusInternalServerError)
-		return
+		return errors.NewInternalError("Failed to reload Prometheus configuration", err, nil)
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(types.MessageResponse{Message: "Prometheus configuration reloaded successfully"})
+	return response.WriteJSON(w, http.StatusOK, types.MessageResponse{Message: "Prometheus configuration reloaded successfully"})
 }
 
 // @Summary Get label values for a specific label
@@ -145,37 +133,25 @@ func (h *Handler) ReloadConfiguration(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} map[string]interface{} "Bad request"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /metrics/node/{id}/label/{label}/values [get]
-func (h *Handler) GetLabelValues(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetLabelValues(w http.ResponseWriter, r *http.Request) error {
 	nodeID := chi.URLParam(r, "id")
 	if nodeID == "" {
-		http.Error(w, "node ID is required", http.StatusBadRequest)
-		return
+		return errors.NewValidationError("Node ID is required", nil)
 	}
-
 	nodeIDInt, err := strconv.ParseInt(nodeID, 10, 64)
 	if err != nil {
-		http.Error(w, "invalid node ID", http.StatusBadRequest)
-		return
+		return errors.NewValidationError("Invalid node ID", nil)
 	}
-
 	labelName := chi.URLParam(r, "label")
 	if labelName == "" {
-		http.Error(w, "label name is required", http.StatusBadRequest)
-		return
+		return errors.NewValidationError("Label name is required", nil)
 	}
-
-	// Get matches from query parameters
 	matches := r.URL.Query()["match"]
-
 	values, err := h.service.GetLabelValues(r.Context(), nodeIDInt, labelName, matches)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return errors.NewInternalError("Failed to get label values", err, nil)
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(types.LabelValuesResponse{
+	return response.WriteJSON(w, http.StatusOK, types.LabelValuesResponse{
 		Status: "success",
 		Data:   values,
 	})
@@ -195,76 +171,52 @@ func (h *Handler) GetLabelValues(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} map[string]interface{} "Bad request"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /metrics/node/{id}/range [get]
-func (h *Handler) GetNodeMetricsRange(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetNodeMetricsRange(w http.ResponseWriter, r *http.Request) error {
 	nodeID := chi.URLParam(r, "id")
 	if nodeID == "" {
-		http.Error(w, "node ID is required", http.StatusBadRequest)
-		return
+		return errors.NewValidationError("Node ID is required", nil)
 	}
-
 	nodeIDInt, err := strconv.ParseInt(nodeID, 10, 64)
 	if err != nil {
-		http.Error(w, "invalid node ID", http.StatusBadRequest)
-		return
+		return errors.NewValidationError("Invalid node ID", nil)
 	}
-
-	// Get query parameters
 	query := r.URL.Query().Get("query")
 	if query == "" {
-		http.Error(w, "query is required", http.StatusBadRequest)
-		return
+		return errors.NewValidationError("Query is required", nil)
 	}
-
 	startStr := r.URL.Query().Get("start")
 	if startStr == "" {
-		http.Error(w, "start time is required", http.StatusBadRequest)
-		return
+		return errors.NewValidationError("Start time is required", nil)
 	}
 	start, err := time.Parse(time.RFC3339, startStr)
 	if err != nil {
-		http.Error(w, "invalid start time format (use RFC3339)", http.StatusBadRequest)
-		return
+		return errors.NewValidationError("Invalid start time format (use RFC3339)", nil)
 	}
-
 	endStr := r.URL.Query().Get("end")
 	if endStr == "" {
-		http.Error(w, "end time is required", http.StatusBadRequest)
-		return
+		return errors.NewValidationError("End time is required", nil)
 	}
 	end, err := time.Parse(time.RFC3339, endStr)
 	if err != nil {
-		http.Error(w, "invalid end time format (use RFC3339)", http.StatusBadRequest)
-		return
+		return errors.NewValidationError("Invalid end time format (use RFC3339)", nil)
 	}
-
 	stepStr := r.URL.Query().Get("step")
 	if stepStr == "" {
-		http.Error(w, "step is required", http.StatusBadRequest)
-		return
+		return errors.NewValidationError("Step is required", nil)
 	}
 	step, err := time.ParseDuration(stepStr)
 	if err != nil {
-		http.Error(w, "invalid step duration", http.StatusBadRequest)
-		return
+		return errors.NewValidationError("Invalid step duration", nil)
 	}
-
-	// Validate time range
 	if end.Before(start) {
-		http.Error(w, "end time must be after start time", http.StatusBadRequest)
-		return
+		return errors.NewValidationError("End time must be after start time", nil)
 	}
-
-	// Get metrics with time range
 	metrics, err := h.service.QueryMetricsRange(r.Context(), nodeIDInt, query, start, end, step)
 	if err != nil {
 		h.logger.Error("Failed to get node metrics range", "error", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return errors.NewInternalError("Failed to get node metrics range", err, nil)
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(types.MetricsDataResponse{
+	return response.WriteJSON(w, http.StatusOK, types.MetricsDataResponse{
 		Status: "success",
 		Data:   metrics,
 	})
@@ -282,58 +234,41 @@ func (h *Handler) GetNodeMetricsRange(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /metrics/node/{id}/query [post]
-func (h *Handler) CustomQuery(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) CustomQuery(w http.ResponseWriter, r *http.Request) error {
 	nodeID := chi.URLParam(r, "id")
 	if nodeID == "" {
-		http.Error(w, "Node ID is required", http.StatusBadRequest)
-		return
+		return errors.NewValidationError("Node ID is required", nil)
 	}
 	nodeIDInt, err := strconv.ParseInt(nodeID, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid node ID", http.StatusBadRequest)
-		return
+		return errors.NewValidationError("Invalid node ID", nil)
 	}
-
 	var req types.CustomQueryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
-		return
+		return errors.NewValidationError("Invalid request body", nil)
 	}
-
-	// If time range parameters are provided, use QueryRange
 	if req.Start != nil && req.End != nil {
-		step := 1 * time.Minute // Default step
+		step := 1 * time.Minute
 		if req.Step != nil {
 			var err error
 			step, err = time.ParseDuration(*req.Step)
 			if err != nil {
-				http.Error(w, "Invalid step duration: "+err.Error(), http.StatusBadRequest)
-				return
+				return errors.NewValidationError("Invalid step duration", nil)
 			}
 		}
-
 		result, err := h.service.QueryRange(r.Context(), nodeIDInt, req.Query, *req.Start, *req.End, step)
 		if err != nil {
 			h.logger.Error("Failed to execute range query", "error", err)
-			http.Error(w, "Failed to execute range query: "+err.Error(), http.StatusInternalServerError)
-			return
+			return errors.NewInternalError("Failed to execute range query", err, nil)
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(result)
-		return
+		return response.WriteJSON(w, http.StatusOK, result)
 	}
-
-	// Otherwise use regular Query
 	result, err := h.service.Query(r.Context(), nodeIDInt, req.Query)
 	if err != nil {
 		h.logger.Error("Failed to execute query", "error", err)
-		http.Error(w, "Failed to execute query: "+err.Error(), http.StatusInternalServerError)
-		return
+		return errors.NewInternalError("Failed to execute query", err, nil)
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(result)
+	return response.WriteJSON(w, http.StatusOK, result)
 }
 
 // GetStatus returns the current status of the Prometheus instance
@@ -344,17 +279,13 @@ func (h *Handler) CustomQuery(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} common.Status
 // @Failure 500 {object} map[string]string
 // @Router /metrics/status [get]
-func (h *Handler) GetStatus(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetStatus(w http.ResponseWriter, r *http.Request) error {
 	status, err := h.service.GetStatus(r.Context())
 	if err != nil {
 		h.logger.Error("Failed to get Prometheus status", "error", err)
-		http.Error(w, "Failed to get Prometheus status", http.StatusInternalServerError)
-		return
+		return errors.NewInternalError("Failed to get Prometheus status", err, nil)
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(status)
+	return response.WriteJSON(w, http.StatusOK, status)
 }
 
 // UndeployPrometheus stops the Prometheus instance
@@ -365,13 +296,10 @@ func (h *Handler) GetStatus(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} types.MessageResponse
 // @Failure 500 {object} map[string]string
 // @Router /metrics/undeploy [post]
-func (h *Handler) UndeployPrometheus(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) UndeployPrometheus(w http.ResponseWriter, r *http.Request) error {
 	if err := h.service.Stop(r.Context()); err != nil {
 		h.logger.Error("Failed to undeploy Prometheus", "error", err)
-		http.Error(w, "Failed to undeploy Prometheus", http.StatusInternalServerError)
-		return
+		return errors.NewInternalError("Failed to undeploy Prometheus", err, nil)
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(types.MessageResponse{Message: "Prometheus undeployed successfully"})
+	return response.WriteJSON(w, http.StatusOK, types.MessageResponse{Message: "Prometheus undeployed successfully"})
 }

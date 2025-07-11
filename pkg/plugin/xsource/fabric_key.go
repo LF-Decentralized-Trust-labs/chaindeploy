@@ -9,6 +9,7 @@ import (
 	"github.com/chainlaunch/chainlaunch/pkg/db"
 	key "github.com/chainlaunch/chainlaunch/pkg/keymanagement/service"
 	nodeservice "github.com/chainlaunch/chainlaunch/pkg/nodes/service"
+	ptypes "github.com/chainlaunch/chainlaunch/pkg/plugin/types"
 )
 
 type FabricKeyValue struct {
@@ -92,7 +93,7 @@ type FabricKeyDetails struct {
 	KeyPath     string // Path inside the container
 }
 
-func (v *FabricKeyValue) GetValue(ctx context.Context) (interface{}, error) {
+func (v *FabricKeyValue) GetValue(ctx context.Context, spec ptypes.ParameterSpec) (interface{}, error) {
 	// Get key details from key management service
 	key, err := v.keyManagement.GetKey(ctx, int(v.KeyID))
 	if err != nil {

@@ -155,6 +155,7 @@ type FabricPeerDetails struct {
 	Name             string `json:"name"`
 	ExternalEndpoint string `json:"externalEndpoint"`
 	TLSCert          string `json:"tlsCert"`
+	TLSCACert        string `json:"tlsCACert"`
 	MspID            string `json:"mspId"`
 	OrgID            int64  `json:"orgId"`
 }

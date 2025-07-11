@@ -117,6 +117,9 @@ func (b *LocalBesu) startDocker(env map[string]string, dataDir, configDir string
 	// Create host config with bind mounts instead of volumes
 	hostConfig := &container.HostConfig{
 		PortBindings: portBindings,
+		RestartPolicy: container.RestartPolicy{
+			Name: container.RestartPolicyUnlessStopped,
+		},
 		Mounts: []mount.Mount{
 			{
 				Type:   mount.TypeBind,

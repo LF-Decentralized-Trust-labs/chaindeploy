@@ -7,7 +7,7 @@ require (
 	github.com/docker/docker v28.1.0+incompatible
 	github.com/docker/go-connections v0.5.0
 	github.com/ethereum/go-ethereum v1.15.1
-	github.com/go-chi/chi/v5 v5.2.0
+	github.com/go-chi/chi/v5 v5.2.2
 	github.com/go-chi/render v1.0.3
 	github.com/golang-migrate/migrate/v4 v4.18.1
 	github.com/golang/protobuf v1.5.4
@@ -29,9 +29,12 @@ require (
 
 require (
 	github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible
+	github.com/anthropics/anthropic-sdk-go v1.4.0
+	github.com/google/go-github/v45 v45.2.0
 	github.com/hyperledger/fabric-gateway v1.5.0
 	github.com/hyperledger/fabric-protos-go-apiv2 v0.3.3
 	github.com/lithammer/shortuuid/v4 v4.2.0
+	github.com/openai/openai-go v1.5.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/stretchr/testify v1.10.0
 	google.golang.org/grpc v1.72.0
@@ -127,6 +130,7 @@ require (
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/google/gnostic-models v0.6.9 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
+	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
@@ -218,6 +222,10 @@ require (
 	github.com/spf13/cast v1.7.1 // indirect
 	github.com/supranational/blst v0.3.14 // indirect
 	github.com/theupdateframework/notary v0.7.0 // indirect
+	github.com/tidwall/gjson v1.14.4 // indirect
+	github.com/tidwall/match v1.1.1 // indirect
+	github.com/tidwall/pretty v1.2.1 // indirect
+	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/tilt-dev/fsnotify v1.4.8-0.20220602155310-fff9c274a375 // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect
@@ -298,6 +306,8 @@ require (
 	github.com/ipfs/go-ipfs-api v0.7.0
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/mailru/easyjson v0.9.0 // indirect
+	github.com/sahilm/fuzzy v0.1.1
+	github.com/sashabaranov/go-openai v1.40.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/swaggo/files v0.0.0-20220610200504-28940afbdbfe // indirect
@@ -305,4 +315,4 @@ require (
 	golang.org/x/tools v0.32.0 // indirect
 )
 
-replace github.com/hyperledger/fabric-admin-sdk => github.com/kfsoftware/fabric-admin-sdk v0.0.0-20250405175109-fd063100bb3f
+replace github.com/hyperledger/fabric-admin-sdk => github.com/kfsoftware/fabric-admin-sdk v0.0.0-20250705205658-948f43b6a15d

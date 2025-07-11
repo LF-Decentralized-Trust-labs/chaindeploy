@@ -12,6 +12,7 @@ import (
 	fabricblock "github.com/chainlaunch/chainlaunch/pkg/networks/service/fabric/block"
 	"github.com/chainlaunch/chainlaunch/pkg/networks/service/types"
 	nodetypes "github.com/chainlaunch/chainlaunch/pkg/nodes/types"
+	"github.com/hyperledger/fabric-config/configtx"
 	"github.com/sirupsen/logrus"
 )
 
@@ -621,6 +622,27 @@ func (s *NetworkService) GetFabricCurrentChannelConfig(networkID int64) (map[str
 	}
 
 	return fabricDeployer.GetCurrentChannelConfigAsMap(networkID)
+}
+
+// GetFabricCurrentChannelConfig retrieves the current channel configuration for a network
+func (s *NetworkService) GetFabricNetworkConfigTX(networkID int64) (*configtx.ConfigTx, error) {
+	// Get the appropriate deployer
+	network, err := s.db.GetNetwork(context.Background(), networkID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get network: %w", err)
+	}
+
+	deployer, err := s.deployerFactory.GetDeployer(network.Platform)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get deployer: %w", err)
+	}
+
+	fabricDeployer, ok := deployer.(*fabric.FabricDeployer)
+	if !ok {
+		return nil, fmt.Errorf("network %d is not a Fabric network", networkID)
+	}
+
+	return fabricDeployer.GetCurrentChannelConfigTX(networkID)
 }
 
 // GetFabricChannelConfig retrieves the channel configuration for a network

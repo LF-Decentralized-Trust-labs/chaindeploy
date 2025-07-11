@@ -17,8 +17,7 @@ const (
 func getEncryptionKey() []byte {
 	key := os.Getenv("SESSION_ENCRYPTION_KEY")
 	if key == "" {
-		// Fallback to a default key if not set (not recommended for production)
-		key = "default-encryption-key-12345"
+		panic("SESSION_ENCRYPTION_KEY environment variable is not set")
 	}
 	return []byte(key)
 }

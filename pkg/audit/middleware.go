@@ -77,6 +77,18 @@ func HTTPMiddleware(service *AuditService) func(http.Handler) http.Handler {
 				return
 			}
 
+			// Skip auditing for chaincode project log streaming endpoints
+			if strings.Contains(r.URL.Path, "/chaincode-projects/") && strings.HasSuffix(r.URL.Path, "/logs/stream") {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Skip auditing for AI chat endpoints
+			if strings.Contains(r.URL.Path, "/ai/") && strings.HasSuffix(r.URL.Path, "/chat") {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			// Generate a unique request ID and get session ID
 			requestID := uuid.New()
 			sessionID := auth.GetSessionID(r)

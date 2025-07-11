@@ -45,6 +45,14 @@ export function AnchorPeerConfig({ organization, peers, currentAnchorPeers, onUp
 		return endpoint ? parseEndpoint(endpoint) !== null : false
 	})
 
+	// Select all available peers by default when dialog opens if none is selected
+	const handleDialogOpenChange = (open: boolean) => {
+		setIsDialogOpen(open)
+		if (open && selectedPeerIds.size === 0 && availablePeers.length > 0) {
+			setSelectedPeerIds(new Set(availablePeers.map((peer) => peer.node!.id!.toString())))
+		}
+	}
+
 	const handleAddAnchorPeer = async () => {
 		try {
 			const selectedPeers = availablePeers.filter((p) => selectedPeerIds.has(p.node!.id!.toString()))
@@ -80,7 +88,7 @@ export function AnchorPeerConfig({ organization, peers, currentAnchorPeers, onUp
 					<p className="text-sm text-muted-foreground">MSP ID: {organization.mspId}</p>
 				</div>
 
-				<Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+				<Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
 					<DialogTrigger asChild>
 						<Button variant="outline" size="sm" disabled={availableToAdd.length === 0}>
 							<Plus className="h-4 w-4 mr-2" />
@@ -102,8 +110,9 @@ export function AnchorPeerConfig({ organization, peers, currentAnchorPeers, onUp
 							<div className="space-y-6">
 								<div className="flex flex-col gap-4">
 									{availableToAdd.map((peer) => {
-										const endpoint = parseEndpoint(peer.node!.fabricPeer!.externalEndpoint!)
 										const peerId = peer.node!.id!.toString()
+										const mspId = peer.node!.fabricPeer?.mspId || 'N/A'
+										const extEndpoint = peer.node!.fabricPeer?.externalEndpoint || 'N/A'
 										return (
 											<div key={peer.node!.id} className="flex items-center space-x-3">
 												<Checkbox
@@ -121,9 +130,8 @@ export function AnchorPeerConfig({ organization, peers, currentAnchorPeers, onUp
 												/>
 												<Label htmlFor={`peer-${peer.node!.id}`} className="flex flex-col cursor-pointer">
 													<span className="font-medium">{peer.node!.name}</span>
-													<span className="text-sm text-muted-foreground">
-														{endpoint?.host}:{endpoint?.port}
-													</span>
+													<span className="text-xs text-muted-foreground">MSP: {mspId}</span>
+													<span className="text-xs text-muted-foreground">Endpoint: {extEndpoint}</span>
 												</Label>
 											</div>
 										)

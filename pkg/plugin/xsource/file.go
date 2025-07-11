@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	ptypes "github.com/chainlaunch/chainlaunch/pkg/plugin/types"
 )
 
 // FileValue represents a file x-source value
@@ -28,7 +30,7 @@ type FileTemplateValue struct {
 }
 
 // GetValue returns the path inside the container where the file will be mounted
-func (f *FileValue) GetValue(ctx context.Context) (interface{}, error) {
+func (f *FileValue) GetValue(ctx context.Context, spec ptypes.ParameterSpec) (interface{}, error) {
 	if err := f.Validate(ctx); err != nil {
 		return nil, err
 	}
@@ -75,6 +77,11 @@ func (f *FileValue) GetVolumeMounts(ctx context.Context) ([]VolumeMount, error) 
 			Description: fmt.Sprintf("Mounts file %s into the container", absPath),
 		},
 	}, nil
+}
+
+// NewFileHandler creates a new FileHandler
+func NewFileHandler() *FileHandler {
+	return &FileHandler{}
 }
 
 // FileHandler implements XSourceHandler for file type

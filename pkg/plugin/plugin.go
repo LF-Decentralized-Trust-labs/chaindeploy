@@ -170,7 +170,7 @@ func (pm *PluginManager) processXSourceParameters(ctx context.Context, plugin *p
 			}
 
 			// Get the processed value for templates
-			processedValue, err := xsourceValue.GetValue(ctx)
+			processedValue, err := xsourceValue.GetValue(ctx, spec)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to get x-source value for %s: %w", key, err)
 			}

@@ -22,7 +22,7 @@ export function FabricNodeChannels({ nodeId }: FabricNodeChannelsProps) {
 	}
 
 	if (error) {
-		return <div>Error loading channels: {(error as any).error.message}</div>
+		return <div>Error loading channels: {(error as any).message || (error as any)?.error?.message}</div>
 	}
 
 	if (!channels?.channels?.length) {

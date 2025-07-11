@@ -7,6 +7,7 @@ import (
 	"github.com/chainlaunch/chainlaunch/pkg/db"
 	key "github.com/chainlaunch/chainlaunch/pkg/keymanagement/service"
 	nodeservice "github.com/chainlaunch/chainlaunch/pkg/nodes/service"
+	ptypes "github.com/chainlaunch/chainlaunch/pkg/plugin/types"
 )
 
 // Registry manages x-source handlers
@@ -23,7 +24,7 @@ func NewRegistry(queries *db.Queries, nodeService *nodeservice.NodeService, keyM
 	// Register default handlers
 	r.Register(NewFabricKeyHandler(queries, nodeService, keyManagement))
 	r.Register(NewFabricPeerHandler(queries, nodeService))
-	r.Register(&FileHandler{})
+	r.Register(NewFileHandler())
 
 	return r
 }
@@ -58,7 +59,7 @@ func (r *Registry) ValidateAndProcess(ctx context.Context, xSourceType XSourceTy
 		return nil, err
 	}
 
-	return xSourceValue.GetValue(ctx)
+	return xSourceValue.GetValue(ctx, ptypes.ParameterSpec{})
 }
 
 // ListOptions returns the valid options for the specified x-source type

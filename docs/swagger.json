@@ -22,6 +22,406 @@
     "host": "localhost:8100",
     "basePath": "/api/v1",
     "paths": {
+        "/ai/boilerplates": {
+            "get": {
+                "description": "Returns a list of available boilerplates filtered by network platform",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ai"
+                ],
+                "summary": "Get available boilerplates",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Network ID to filter boilerplates by platform",
+                        "name": "network_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/boilerplates.BoilerplateConfig"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ai/models": {
+            "get": {
+                "description": "Returns a list of available AI models for code generation",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ai"
+                ],
+                "summary": "Get available AI models",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/ai.Model"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ai/{projectId}/chat": {
+            "post": {
+                "description": "Stream a conversation with the AI assistant using Server-Sent Events (SSE)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "ai"
+                ],
+                "summary": "Chat with AI assistant",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "projectId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Chat request containing project ID and messages",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ai.ChatRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "SSE stream of chat responses",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/ai/{projectId}/conversations": {
+            "get": {
+                "description": "Returns a list of all chat conversations associated with a specific project",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ai"
+                ],
+                "summary": "Get all conversations for a project",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "projectId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/ai.ConversationResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Creates a new empty conversation for the specified project",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ai"
+                ],
+                "summary": "Create a new conversation for a project",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "projectId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Optional conversation title",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/ai.CreateConversationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/ai.ConversationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ai/{projectId}/conversations/{conversationId}": {
+            "get": {
+                "description": "Get all messages in a conversation",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ai"
+                ],
+                "summary": "Get conversation messages",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "projectId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Conversation ID",
+                        "name": "conversationId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/ai.Message"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ai/{projectId}/conversations/{conversationId}/export": {
+            "get": {
+                "description": "Get detailed information about a conversation including all messages and metadata",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ai"
+                ],
+                "summary": "Get conversation detail",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "projectId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Conversation ID",
+                        "name": "conversationId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ai.ConversationDetail"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ai/{projectId}/conversations/{conversationId}/summarize": {
+            "post": {
+                "description": "Summarizes an existing conversation and starts a new one with a summary message",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ai"
+                ],
+                "summary": "Create a new conversation from an existing one with a summary",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "projectId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Conversation ID",
+                        "name": "conversationId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/response.DetailedResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.DetailedErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.DetailedErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.DetailedErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/audit/logs": {
             "get": {
                 "description": "Retrieves a paginated list of audit logs with optional filters",
@@ -1094,6 +1494,926 @@
                 }
             }
         },
+        "/chaincode-projects": {
+            "get": {
+                "description": "Get a list of all projects",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chaincode Projects"
+                ],
+                "summary": "List all projects",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/projects.ListProjectsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Create a new project, scaffold its directory, and store it in the DB",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chaincode Projects"
+                ],
+                "summary": "Create a project",
+                "parameters": [
+                    {
+                        "description": "Project info",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/projects.CreateProjectRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/projects.CreateProjectResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/chaincode-projects/{id}": {
+            "get": {
+                "description": "Get details of a project by its ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chaincode Projects"
+                ],
+                "summary": "Get a project by ID",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/projects.Project"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete a project and its associated files from the system",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chaincode Projects"
+                ],
+                "summary": "Delete a project",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/chaincode-projects/{id}/commits": {
+            "get": {
+                "description": "Get a paginated list of commits for a project, including added/removed/modified files",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chaincode Projects"
+                ],
+                "summary": "List project commits with file changes",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 20)",
+                        "name": "pageSize",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/projects.CommitsListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/chaincode-projects/{id}/commits/{commitHash}": {
+            "get": {
+                "description": "Get details for a single commit, including file changes",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chaincode Projects"
+                ],
+                "summary": "Get commit details",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commit hash",
+                        "name": "commitHash",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/projects.CommitDetailAPI"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/chaincode-projects/{id}/diff": {
+            "get": {
+                "description": "Get the diff of a file between two commits",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "Chaincode Projects"
+                ],
+                "summary": "Get file diff between two commits",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "File path (relative to project root)",
+                        "name": "file",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "From commit hash",
+                        "name": "from",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "To commit hash",
+                        "name": "to",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Diff",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/chaincode-projects/{id}/download": {
+            "get": {
+                "description": "Download a project and its associated files as a zip file, excluding common folders like node_modules, .vscode, etc.",
+                "produces": [
+                    "application/zip"
+                ],
+                "tags": [
+                    "Chaincode Projects"
+                ],
+                "summary": "Download a project as a zip file",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/chaincode-projects/{id}/endorsement-policy": {
+            "put": {
+                "description": "Update the endorsement policy of an existing project",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chaincode Projects"
+                ],
+                "summary": "Update a project's endorsement policy",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Update project endorsement policy request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/projects.UpdateProjectEndorsementPolicyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/projects.Project"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/chaincode-projects/{id}/file_at_commit": {
+            "get": {
+                "description": "Get the contents of a file at a specific commit hash",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "Chaincode Projects"
+                ],
+                "summary": "Get file contents at a specific commit",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "File path (relative to project root)",
+                        "name": "file",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commit hash",
+                        "name": "commit",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "File contents",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/chaincode-projects/{id}/invoke": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Invokes a transaction on the specified chaincode project",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chaincode Projects"
+                ],
+                "summary": "Invoke a chaincode transaction",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Chaincode Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Transaction parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/projects.HandlerRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Transaction result",
+                        "schema": {
+                            "$ref": "#/definitions/projects.HandlerResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Project not found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/chaincode-projects/{id}/logs": {
+            "get": {
+                "description": "Stream or return the logs for the project's running container",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "Chaincode Projects"
+                ],
+                "summary": "Get logs for a project server",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Logs",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/chaincode-projects/{id}/logs/stream": {
+            "get": {
+                "description": "Stream logs for the project's running container using SSE",
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "Chaincode Projects"
+                ],
+                "summary": "Stream real-time logs for a project server",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "SSE stream of logs",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/chaincode-projects/{id}/metadata": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Retrieves metadata for the specified chaincode project",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chaincode Projects"
+                ],
+                "summary": "Get project metadata",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Chaincode Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Project metadata",
+                        "schema": {
+                            "$ref": "#/definitions/projects.HandlerResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Project not found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/chaincode-projects/{id}/query": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Queries the state of the specified chaincode project",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chaincode Projects"
+                ],
+                "summary": "Query a chaincode transaction",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Chaincode Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Query parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/projects.HandlerRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Query result",
+                        "schema": {
+                            "$ref": "#/definitions/projects.HandlerResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Project not found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/chaincode-projects/{id}/start": {
+            "post": {
+                "description": "Start the server process for a given project using its boilerplate",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chaincode Projects"
+                ],
+                "summary": "Start the server for a project",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/chaincode-projects/{id}/stop": {
+            "post": {
+                "description": "Stop the server process for a given project",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chaincode Projects"
+                ],
+                "summary": "Stop the server for a project",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/dummy": {
             "post": {
                 "description": "Submit a signed config update proposal for execution",
@@ -1176,6 +2496,60 @@
                         "description": "Already Reported",
                         "schema": {
                             "$ref": "#/definitions/http.UpdateBatchTimeoutPayload"
+                        }
+                    },
+                    "209": {
+                        "description": "",
+                        "schema": {
+                            "$ref": "#/definitions/http.UpdateApplicationPolicyPayload"
+                        }
+                    },
+                    "210": {
+                        "description": "",
+                        "schema": {
+                            "$ref": "#/definitions/http.UpdateOrdererPolicyPayload"
+                        }
+                    },
+                    "211": {
+                        "description": "",
+                        "schema": {
+                            "$ref": "#/definitions/http.UpdateChannelPolicyPayload"
+                        }
+                    },
+                    "212": {
+                        "description": "",
+                        "schema": {
+                            "$ref": "#/definitions/http.UpdateChannelCapabilityOperation"
+                        }
+                    },
+                    "213": {
+                        "description": "",
+                        "schema": {
+                            "$ref": "#/definitions/http.UpdateOrdererCapabilityOperation"
+                        }
+                    },
+                    "214": {
+                        "description": "",
+                        "schema": {
+                            "$ref": "#/definitions/http.UpdateApplicationCapabilityOperation"
+                        }
+                    },
+                    "215": {
+                        "description": "",
+                        "schema": {
+                            "$ref": "#/definitions/http.AddOrdererOrgPayload"
+                        }
+                    },
+                    "216": {
+                        "description": "",
+                        "schema": {
+                            "$ref": "#/definitions/http.RemoveOrdererOrgPayload"
+                        }
+                    },
+                    "217": {
+                        "description": "",
+                        "schema": {
+                            "$ref": "#/definitions/http.UpdateOrdererOrgMSPPayload"
                         }
                     }
                 }
@@ -2386,6 +3760,60 @@
                 }
             }
         },
+        "/networks/besu/{id}/map": {
+            "get": {
+                "description": "Get a map of all nodes (peers/orderers/validators) for a network, including endpoints and optionally health status.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Fabric Networks",
+                    "Besu Networks"
+                ],
+                "summary": "Get network map",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Network ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Check node health (default: false)",
+                        "name": "checkHealth",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/service.NetworkMap"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/networks/fabric": {
             "get": {
                 "description": "Get a paginated list of Fabric networks",
@@ -2985,6 +4413,60 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/http.ChainInfoResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/networks/fabric/{id}/map": {
+            "get": {
+                "description": "Get a map of all nodes (peers/orderers/validators) for a network, including endpoints and optionally health status.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Fabric Networks",
+                    "Besu Networks"
+                ],
+                "summary": "Get network map",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Network ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Check node health (default: false)",
+                        "name": "checkHealth",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/service.NetworkMap"
                         }
                     },
                     "400": {
@@ -5429,6 +6911,326 @@
                 }
             }
         },
+        "/organizations/{id}/keys": {
+            "get": {
+                "description": "Get all keys associated with an organization",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Organizations"
+                ],
+                "summary": "List all keys for an organization",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Organization ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.ListKeysResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Create a new key with a specific role (admin or client) for an organization",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Organizations"
+                ],
+                "summary": "Create a new key for an organization",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Organization ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Key creation request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.CreateKeyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/handler.KeyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/organizations/{id}/keys/renew": {
+            "post": {
+                "description": "Renew a certificate for a specific key in an organization",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Organizations"
+                ],
+                "summary": "Renew a certificate for a key",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Organization ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Certificate renewal request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.RenewCertificateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.KeyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/organizations/{id}/keys/{keyId}": {
+            "get": {
+                "description": "Get a specific key by its ID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Organizations"
+                ],
+                "summary": "Get a specific key by ID",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Organization ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Key ID",
+                        "name": "keyId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.KeyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete a key and its associated certificate",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Organizations"
+                ],
+                "summary": "Delete a key",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Organization ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Key ID",
+                        "name": "keyId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/organizations/{id}/revoked-certificates": {
             "get": {
                 "description": "Get all revoked certificates for the organization",
@@ -5717,7 +7519,7 @@
                 }
             },
             "delete": {
-                "description": "Delete an existing plugin",
+                "description": "Delete a plugin (will stop it first if running)",
                 "consumes": [
                     "application/json"
                 ],
@@ -6036,6 +7838,650 @@
                 }
             }
         },
+        "/projects/{projectId}/dirs/create": {
+            "post": {
+                "description": "Create a new directory in a project",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "directories"
+                ],
+                "summary": "Create a directory",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "projectId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Directory create info",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dirs.CreateDirRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/dirs.CreateDirResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/projects/{projectId}/dirs/delete": {
+            "delete": {
+                "description": "Delete a directory in a project",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "directories"
+                ],
+                "summary": "Delete a directory",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "projectId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Project name",
+                        "name": "project",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Directory to delete, relative to project root",
+                        "name": "dir",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dirs.DeleteDirResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/projects/{projectId}/dirs/list": {
+            "get": {
+                "description": "List files and directories in a given project and directory. Large directories (e.g., node_modules) are summarized/skipped.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "directories"
+                ],
+                "summary": "List files and directories",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "projectId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Directory to list, relative to project root",
+                        "name": "dir",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dirs.ListEntriesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/projects/{projectId}/files/delete": {
+            "delete": {
+                "description": "Delete a file in a project",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "Delete a file",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "projectId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "File path relative to project root",
+                        "name": "path",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/files.DeleteFileResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/projects/{projectId}/files/entries": {
+            "get": {
+                "description": "List the full directory tree for a project, excluding large/ignored folders (e.g., node_modules, .git)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "List full project directory tree",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "projectId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/files.DirectoryTreeNode"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/projects/{projectId}/files/list": {
+            "get": {
+                "description": "List files in a given project and directory",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "List files",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "projectId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Directory to list, relative to project root",
+                        "name": "dir",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/files.ListFilesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/projects/{projectId}/files/read": {
+            "get": {
+                "description": "Get the contents of a file in a project",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "Read file contents",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "projectId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "File path relative to project root",
+                        "name": "path",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/files.ReadFileResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/projects/{projectId}/files/write": {
+            "post": {
+                "description": "Write or modify the contents of a file in a project",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "Write file contents",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Project ID",
+                        "name": "projectId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "File write info",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/files.WriteFileRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/files.WriteFileResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/sc/besu/deploy": {
             "post": {
                 "description": "Deploy a smart contract to a Besu (EVM) network",
@@ -6226,6 +8672,213 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/chainlaunchdeploy.CreateChaincodeDefinitionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/sc/fabric/chaincodes/{chaincodeId}/definitions/{definitionId}": {
+            "get": {
+                "description": "Get detailed information about a specific chaincode definition including its events",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chaincode"
+                ],
+                "summary": "Get chaincode definition details by ID",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Chaincode ID",
+                        "name": "chaincodeId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Chaincode Definition ID",
+                        "name": "definitionId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/chainlaunchdeploy.ChaincodeDefinitionDetailResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/sc/fabric/chaincodes/{chaincodeId}/invoke": {
+            "post": {
+                "description": "Invoke a transaction on a specific chaincode",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chaincode"
+                ],
+                "summary": "Invoke a chaincode",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Chaincode ID",
+                        "name": "chaincodeId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Invoke parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/chainlaunchdeploy.ChaincodeInvokeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/chainlaunchdeploy.ChaincodeInvokeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/sc/fabric/chaincodes/{chaincodeId}/metadata": {
+            "get": {
+                "description": "Get metadata for a specific chaincode by executing org.hyperledger.fabric:GetMetadata",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chaincode"
+                ],
+                "summary": "Get chaincode metadata",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Chaincode ID",
+                        "name": "chaincodeId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/chainlaunchdeploy.ChaincodeMetadataResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/sc/fabric/chaincodes/{chaincodeId}/query": {
+            "post": {
+                "description": "Query a specific chaincode",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chaincode"
+                ],
+                "summary": "Query a chaincode",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Chaincode ID",
+                        "name": "chaincodeId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Query parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/chainlaunchdeploy.ChaincodeQueryRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/chainlaunchdeploy.ChaincodeQueryResponse"
                         }
                     },
                     "400": {
@@ -6559,6 +9212,50 @@
                 }
             }
         },
+        "/sc/fabric/definitions/{definitionId}/docker-info": {
+            "get": {
+                "description": "Get Docker container info for a specific chaincode definition by ID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chaincode"
+                ],
+                "summary": "Get Docker info for a chaincode definition",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Chaincode Definition ID",
+                        "name": "definitionId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/chainlaunchdeploy.DockerContainerInfo"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/sc/fabric/definitions/{definitionId}/install": {
             "post": {
                 "description": "Install chaincode on peers for a given definition",
@@ -6662,6 +9359,53 @@
                 }
             }
         },
+        "/sc/fabric/definitions/{definitionId}/undeploy": {
+            "post": {
+                "description": "Remove the deployment (e.g., Docker container) for a given chaincode definition",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chaincode"
+                ],
+                "summary": "Remove deployment for a chaincode definition",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Chaincode Definition ID",
+                        "name": "definitionId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/sc/fabric/deploy": {
             "post": {
                 "description": "Deploy a chaincode to a Fabric network (install, approve, commit)",
@@ -6691,52 +9435,6 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/chainlaunchdeploy.FabricDeployResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/response.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/response.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/sc/fabric/docker-deploy": {
-            "post": {
-                "description": "Deploy a chaincode to a Fabric network using a Docker image, package ID, and port mapping. If host_port is empty, a free port is chosen. If container_port is empty, defaults to 7052.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "SmartContracts"
-                ],
-                "summary": "Deploy Fabric chaincode with Docker image",
-                "parameters": [
-                    {
-                        "description": "Fabric chaincode Docker deployment parameters (host_port: optional, container_port: optional, defaults to 7052)",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/chainlaunchdeploy.FabricChaincodeDockerDeployRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/chainlaunchdeploy.FabricChaincodeDockerDeployResponse"
                         }
                     },
                     "400": {
@@ -6896,6 +9594,64 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/chainlaunchdeploy.FabricInstallResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/sc/fabric/peer/{peerId}/chaincode/sequence": {
+            "get": {
+                "description": "Get the current sequence number for a chaincode",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SmartContracts"
+                ],
+                "summary": "Get Fabric chaincode sequence",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Peer ID",
+                        "name": "peerId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chaincode name",
+                        "name": "chaincodeName",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Channel name",
+                        "name": "channelName",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/chainlaunchdeploy.FabricSequenceResponse"
                         }
                     },
                     "400": {
@@ -7369,6 +10125,165 @@
         }
     },
     "definitions": {
+        "ai.ChatMessage": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string"
+                },
+                "parts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/ai.ChatMessagePart"
+                    }
+                },
+                "role": {
+                    "type": "string"
+                }
+            }
+        },
+        "ai.ChatMessagePart": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "ai.ChatRequest": {
+            "type": "object",
+            "properties": {
+                "conversationId": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "messages": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/ai.ChatMessage"
+                    }
+                },
+                "projectId": {
+                    "type": "string"
+                }
+            }
+        },
+        "ai.ConversationDetail": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "messages": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/ai.Message"
+                    }
+                },
+                "projectId": {
+                    "type": "integer"
+                },
+                "startedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "ai.ConversationResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "projectId": {
+                    "type": "integer"
+                },
+                "startedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "ai.CreateConversationRequest": {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "ai.Message": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string"
+                },
+                "conversationId": {
+                    "type": "integer"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "sender": {
+                    "type": "string"
+                },
+                "toolArguments": {
+                    "type": "string"
+                },
+                "toolCalls": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/ai.ToolCallAI"
+                    }
+                }
+            }
+        },
+        "ai.Model": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "maxTokens": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "ai.ToolCallAI": {
+            "type": "object",
+            "properties": {
+                "arguments": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "messageId": {
+                    "type": "integer"
+                },
+                "result": {
+                    "type": "string"
+                },
+                "toolName": {
+                    "type": "string"
+                }
+            }
+        },
         "audit.Event": {
             "type": "object",
             "properties": {
@@ -7723,6 +10638,51 @@
                 "CHAINCODE_PACKAGE"
             ]
         },
+        "boilerplates.BoilerplateConfig": {
+            "type": "object",
+            "properties": {
+                "args": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "command": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "description": "ID is the key in the configs map",
+                    "type": "string"
+                },
+                "image": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "platform": {
+                    "type": "string"
+                },
+                "repoName": {
+                    "type": "string"
+                },
+                "repoOwner": {
+                    "type": "string"
+                },
+                "repoPath": {
+                    "type": "string"
+                },
+                "systemPrompt": {
+                    "type": "string"
+                },
+                "validateCommand": {
+                    "type": "string"
+                }
+            }
+        },
         "chaincode.Gateway": {
             "type": "object"
         },
@@ -7839,17 +10799,25 @@
                 "id": {
                     "type": "integer"
                 },
-                "peer_statuses": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/chainlaunchdeploy.PeerStatus"
-                    }
-                },
                 "sequence": {
                     "type": "integer"
                 },
                 "version": {
                     "type": "string"
+                }
+            }
+        },
+        "chainlaunchdeploy.ChaincodeDefinitionDetailResponse": {
+            "type": "object",
+            "properties": {
+                "definition": {
+                    "$ref": "#/definitions/chainlaunchdeploy.ChaincodeDefinitionResponse"
+                },
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/chainlaunchdeploy.ChaincodeDefinitionEvent"
+                    }
                 }
             }
         },
@@ -7896,6 +10864,110 @@
                     "type": "integer"
                 },
                 "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "chainlaunchdeploy.ChaincodeInvokeRequest": {
+            "type": "object",
+            "properties": {
+                "args": {
+                    "description": "Arguments to pass to the chaincode function",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "channel": {
+                    "description": "Optional: Channel name",
+                    "type": "string"
+                },
+                "function": {
+                    "description": "Function name to invoke",
+                    "type": "string"
+                },
+                "key_id": {
+                    "description": "KeyID to use for signing",
+                    "type": "string"
+                },
+                "transient": {
+                    "description": "Optional: Transient data",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        }
+                    }
+                }
+            }
+        },
+        "chainlaunchdeploy.ChaincodeInvokeResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "result": {},
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "chainlaunchdeploy.ChaincodeMetadataResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "result": {},
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "chainlaunchdeploy.ChaincodeQueryRequest": {
+            "type": "object",
+            "properties": {
+                "args": {
+                    "description": "Arguments to pass to the chaincode function",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "channel": {
+                    "description": "Optional: Channel name",
+                    "type": "string"
+                },
+                "function": {
+                    "description": "Function name to query",
+                    "type": "string"
+                },
+                "key_id": {
+                    "description": "KeyID to use for signing/query",
+                    "type": "string"
+                },
+                "transient": {
+                    "description": "Optional: Transient data",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        }
+                    }
+                }
+            }
+        },
+        "chainlaunchdeploy.ChaincodeQueryResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "result": {},
+                "status": {
                     "type": "string"
                 }
             }
@@ -7991,17 +11063,7 @@
             }
         },
         "chainlaunchdeploy.DeployChaincodeByDefinitionRequest": {
-            "type": "object",
-            "properties": {
-                "container_port": {
-                    "description": "Container port to use (optional, default 7052)",
-                    "type": "string"
-                },
-                "host_port": {
-                    "description": "Host port to use (optional)",
-                    "type": "string"
-                }
-            }
+            "type": "object"
         },
         "chainlaunchdeploy.DeploymentResult": {
             "type": "object",
@@ -8032,6 +11094,10 @@
             "properties": {
                 "created": {
                     "type": "integer"
+                },
+                "docker_status": {
+                    "description": "direct from Docker inspect",
+                    "type": "string"
                 },
                 "id": {
                     "type": "string"
@@ -8176,57 +11242,6 @@
                     "items": {
                         "$ref": "#/definitions/chainlaunchdeploy.ChaincodeDefinition"
                     }
-                },
-                "docker_info": {
-                    "$ref": "#/definitions/chainlaunchdeploy.DockerContainerInfo"
-                }
-            }
-        },
-        "chainlaunchdeploy.FabricChaincodeDockerDeployRequest": {
-            "type": "object",
-            "required": [
-                "docker_image",
-                "name",
-                "package_id"
-            ],
-            "properties": {
-                "container_port": {
-                    "description": "optional, defaults to 7052",
-                    "type": "integer"
-                },
-                "docker_image": {
-                    "type": "string"
-                },
-                "host_port": {
-                    "description": "optional, if 0 a free port is chosen",
-                    "type": "integer"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "package_id": {
-                    "type": "string"
-                },
-                "slug": {
-                    "description": "optional, for updates",
-                    "type": "string"
-                }
-            }
-        },
-        "chainlaunchdeploy.FabricChaincodeDockerDeployResponse": {
-            "type": "object",
-            "properties": {
-                "message": {
-                    "type": "string"
-                },
-                "result": {
-                    "$ref": "#/definitions/chainlaunchdeploy.DeploymentResult"
-                },
-                "slug": {
-                    "type": "string"
-                },
-                "status": {
-                    "type": "string"
                 }
             }
         },
@@ -8346,6 +11361,26 @@
                 }
             }
         },
+        "chainlaunchdeploy.FabricSequenceResponse": {
+            "type": "object",
+            "properties": {
+                "chaincode_name": {
+                    "type": "string"
+                },
+                "channel_name": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "sequence": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
         "chainlaunchdeploy.InstallChaincodeByDefinitionRequest": {
             "type": "object",
             "properties": {
@@ -8377,27 +11412,6 @@
                     "items": {
                         "$ref": "#/definitions/chainlaunchdeploy.ChaincodeResponse"
                     }
-                }
-            }
-        },
-        "chainlaunchdeploy.PeerStatus": {
-            "type": "object",
-            "properties": {
-                "definition_id": {
-                    "type": "integer"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "last_updated": {
-                    "description": "ISO8601",
-                    "type": "string"
-                },
-                "peer_id": {
-                    "type": "integer"
-                },
-                "status": {
-                    "type": "string"
                 }
             }
         },
@@ -8466,6 +11480,151 @@
                 },
                 "status": {
                     "type": "string"
+                }
+            }
+        },
+        "dirs.CreateDirRequest": {
+            "type": "object",
+            "properties": {
+                "dir": {
+                    "type": "string",
+                    "example": "newdir"
+                },
+                "project": {
+                    "type": "string",
+                    "example": "myproject"
+                }
+            }
+        },
+        "dirs.CreateDirResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "created"
+                }
+            }
+        },
+        "dirs.DeleteDirResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "deleted"
+                }
+            }
+        },
+        "dirs.ListEntriesResponse": {
+            "description": "Unified response for listing files and directories in a directory",
+            "type": "object",
+            "properties": {
+                "directories": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "[\"src\"",
+                        "\"docs\"]"
+                    ]
+                },
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "[\"main.go\"",
+                        "\"README.md\"]"
+                    ]
+                },
+                "skipped": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "[\"node_modules\"]"
+                    ]
+                }
+            }
+        },
+        "files.DeleteFileResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "deleted"
+                }
+            }
+        },
+        "files.DirectoryTreeNode": {
+            "type": "object",
+            "properties": {
+                "children": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/files.DirectoryTreeNode"
+                    }
+                },
+                "isDir": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                }
+            }
+        },
+        "files.ListFilesResponse": {
+            "type": "object",
+            "properties": {
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "[\"main.go\"",
+                        "\"README.md\"]"
+                    ]
+                }
+            }
+        },
+        "files.ReadFileResponse": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "example": "file contents"
+                }
+            }
+        },
+        "files.WriteFileRequest": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "example": "new file contents"
+                },
+                "path": {
+                    "type": "string",
+                    "example": "main.go"
+                },
+                "project": {
+                    "type": "string",
+                    "example": "myproject"
+                }
+            }
+        },
+        "files.WriteFileResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "written"
                 }
             }
         },
@@ -8585,6 +11744,49 @@
                 }
             }
         },
+        "handler.CreateKeyRequest": {
+            "type": "object",
+            "required": [
+                "name",
+                "role"
+            ],
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "example": "New admin key for organization"
+                },
+                "dnsNames": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "admin.example.com"
+                    ]
+                },
+                "ipAddresses": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "192.168.1.100"
+                    ]
+                },
+                "name": {
+                    "type": "string",
+                    "example": "new-admin-key"
+                },
+                "role": {
+                    "type": "string",
+                    "enum": [
+                        "admin",
+                        "client"
+                    ],
+                    "example": "admin"
+                }
+            }
+        },
         "handler.CreateOrganizationRequest": {
             "type": "object",
             "required": [
@@ -8592,8 +11794,21 @@
                 "name"
             ],
             "properties": {
+                "country": {
+                    "description": "CA certificate properties",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "description": {
                     "type": "string"
+                },
+                "locality": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "mspId": {
                     "type": "string"
@@ -8601,8 +11816,26 @@
                 "name": {
                     "type": "string"
                 },
+                "postalCode": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "providerId": {
                     "type": "integer"
+                },
+                "province": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "streetAddress": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -8612,6 +11845,75 @@
                 "serialNumber": {
                     "description": "Hex string of the serial number",
                     "type": "string"
+                }
+            }
+        },
+        "handler.KeyResponse": {
+            "type": "object",
+            "properties": {
+                "algorithm": {
+                    "type": "string"
+                },
+                "certificate": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "ethereumAddress": {
+                    "type": "string"
+                },
+                "expiresAt": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "lastRotatedAt": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": "integer"
+                        },
+                        "name": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "publicKey": {
+                    "type": "string"
+                },
+                "sha1Fingerprint": {
+                    "type": "string"
+                },
+                "sha256Fingerprint": {
+                    "type": "string"
+                },
+                "signingKeyId": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "handler.ListKeysResponse": {
+            "type": "object",
+            "properties": {
+                "keys": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/handler.KeyResponse"
+                    }
                 }
             }
         },
@@ -8679,6 +11981,59 @@
                 },
                 "offset": {
                     "type": "integer"
+                }
+            }
+        },
+        "handler.RenewCertificateRequest": {
+            "type": "object",
+            "required": [
+                "caType",
+                "keyId",
+                "role"
+            ],
+            "properties": {
+                "caType": {
+                    "type": "string",
+                    "enum": [
+                        "tls",
+                        "sign"
+                    ],
+                    "example": "sign"
+                },
+                "dnsNames": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "admin.example.com"
+                    ]
+                },
+                "ipAddresses": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "192.168.1.100"
+                    ]
+                },
+                "keyId": {
+                    "type": "integer",
+                    "example": 123
+                },
+                "role": {
+                    "type": "string",
+                    "enum": [
+                        "admin",
+                        "client"
+                    ],
+                    "example": "admin"
+                },
+                "validFor": {
+                    "description": "Duration in Go format (e.g., \"8760h\" for 1 year)",
+                    "type": "string",
+                    "example": "8760h"
                 }
             }
         },
@@ -8769,6 +12124,41 @@
                         "peer",
                         "orderer"
                     ]
+                }
+            }
+        },
+        "http.AddOrdererOrgPayload": {
+            "type": "object",
+            "required": [
+                "msp_id",
+                "orderer_endpoints",
+                "root_certs",
+                "tls_root_certs"
+            ],
+            "properties": {
+                "msp_id": {
+                    "type": "string"
+                },
+                "orderer_endpoints": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "root_certs": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "tls_root_certs": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -9017,6 +12407,9 @@
                 "endorsementPlugin": {
                     "type": "string"
                 },
+                "endorsementPolicy": {
+                    "type": "string"
+                },
                 "initRequired": {
                     "type": "boolean"
                 },
@@ -9069,14 +12462,14 @@
             ],
             "properties": {
                 "payload": {
-                    "description": "Payload contains the operation-specific data\nThe structure depends on the operation type:\n- add_org: AddOrgPayload\n- remove_org: RemoveOrgPayload\n- update_org_msp: UpdateOrgMSPPayload\n- set_anchor_peers: SetAnchorPeersPayload\n- add_consenter: AddConsenterPayload\n- remove_consenter: RemoveConsenterPayload\n- update_consenter: UpdateConsenterPayload\n- update_etcd_raft_options: UpdateEtcdRaftOptionsPayload\n- update_batch_size: UpdateBatchSizePayload\n- update_batch_timeout: UpdateBatchTimeoutPayload\n@Description The payload for the configuration update operation\n@Description Can be one of:\n@Description - AddOrgPayload when type is \"add_org\"\n@Description - RemoveOrgPayload when type is \"remove_org\"\n@Description - UpdateOrgMSPPayload when type is \"update_org_msp\"\n@Description - SetAnchorPeersPayload when type is \"set_anchor_peers\"\n@Description - AddConsenterPayload when type is \"add_consenter\"\n@Description - RemoveConsenterPayload when type is \"remove_consenter\"\n@Description - UpdateConsenterPayload when type is \"update_consenter\"\n@Description - UpdateEtcdRaftOptionsPayload when type is \"update_etcd_raft_options\"\n@Description - UpdateBatchSizePayload when type is \"update_batch_size\"\n@Description - UpdateBatchTimeoutPayload when type is \"update_batch_timeout\"",
+                    "description": "Payload contains the operation-specific data\nThe structure depends on the operation type:\n- add_org: AddOrgPayload\n- remove_org: RemoveOrgPayload\n- update_org_msp: UpdateOrgMSPPayload\n- set_anchor_peers: SetAnchorPeersPayload\n- add_consenter: AddConsenterPayload\n- remove_consenter: RemoveConsenterPayload\n- update_consenter: UpdateConsenterPayload\n- update_etcd_raft_options: UpdateEtcdRaftOptionsPayload\n- update_batch_size: UpdateBatchSizePayload\n- update_batch_timeout: UpdateBatchTimeoutPayload\n- update_application_policy: UpdateApplicationPolicyPayload\n- update_orderer_policy: UpdateOrdererPolicyPayload\n- update_channel_policy: UpdateChannelPolicyPayload\n- update_channel_capability: UpdateChannelCapabilityOperation\n- update_orderer_capability: UpdateOrdererCapabilityOperation\n- update_application_capability: UpdateApplicationCapabilityOperation\n@Description The payload for the configuration update operation\n@Description Can be one of:\n@Description - AddOrgPayload when type is \"add_org\"\n@Description - RemoveOrgPayload when type is \"remove_org\"\n@Description - UpdateOrgMSPPayload when type is \"update_org_msp\"\n@Description - SetAnchorPeersPayload when type is \"set_anchor_peers\"\n@Description - AddConsenterPayload when type is \"add_consenter\"\n@Description - RemoveConsenterPayload when type is \"remove_consenter\"\n@Description - UpdateConsenterPayload when type is \"update_consenter\"\n@Description - UpdateEtcdRaftOptionsPayload when type is \"update_etcd_raft_options\"\n@Description - UpdateBatchSizePayload when type is \"update_batch_size\"\n@Description - UpdateBatchTimeoutPayload when type is \"update_batch_timeout\"\n@Description - UpdateApplicationPolicyPayload when type is \"update_application_policy\"\n@Description - UpdateOrdererPolicyPayload when type is \"update_orderer_policy\"\n@Description - UpdateChannelPolicyPayload when type is \"update_channel_policy\"\n@Description - UpdateChannelCapabilityPayload when type is \"update_channel_capability\"\n@Description - UpdateOrdererCapabilityPayload when type is \"update_orderer_capability\"\n@Description - UpdateApplicationCapabilityPayload when type is \"update_application_capability\"\n@Description - AddOrdererOrgPayload when type is \"add_orderer_org\"\n@Description - RemoveOrdererOrgPayload when type is \"remove_orderer_org\"\n@Description - UpdateOrdererOrgMSPPayload when type is \"update_orderer_org_msp\"",
                     "type": "array",
                     "items": {
                         "type": "integer"
                     }
                 },
                 "type": {
-                    "description": "Type is the type of configuration update operation\nenum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout",
+                    "description": "Type is the type of configuration update operation\nenum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout,update_application_policy,update_orderer_policy,update_channel_policy,add_orderer_org,remove_orderer_org,update_orderer_org_msp",
                     "type": "string",
                     "enum": [
                         "add_org",
@@ -9088,7 +12481,16 @@
                         "update_consenter",
                         "update_etcd_raft_options",
                         "update_batch_size",
-                        "update_batch_timeout"
+                        "update_batch_timeout",
+                        "update_application_policy",
+                        "update_orderer_policy",
+                        "update_channel_policy",
+                        "update_channel_capability",
+                        "update_orderer_capability",
+                        "update_application_capability",
+                        "add_orderer_org",
+                        "remove_orderer_org",
+                        "update_orderer_org_msp"
                     ]
                 }
             }
@@ -9121,17 +12523,6 @@
                     "type": "string"
                 },
                 "status": {
-                    "type": "string"
-                }
-            }
-        },
-        "http.ConsenterConfig": {
-            "type": "object",
-            "required": [
-                "id"
-            ],
-            "properties": {
-                "id": {
                     "type": "string"
                 }
             }
@@ -9448,40 +12839,20 @@
                 }
             }
         },
-        "http.ExternalOrgConfig": {
-            "type": "object",
-            "required": [
-                "id",
-                "mspid"
-            ],
-            "properties": {
-                "consenters": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/http.ConsenterConfig"
-                    }
-                },
-                "id": {
-                    "type": "string"
-                },
-                "mspid": {
-                    "type": "string"
-                }
-            }
-        },
         "http.FabricNetworkConfig": {
             "type": "object",
             "properties": {
-                "externalOrdererOrgs": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/http.ExternalOrgConfig"
+                "applicationPolicies": {
+                    "description": "Optional policies",
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/http.FabricPolicy"
                     }
                 },
-                "externalPeerOrgs": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/http.ExternalOrgConfig"
+                "channelPolicies": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/http.FabricPolicy"
                     }
                 },
                 "ordererOrganizations": {
@@ -9490,11 +12861,28 @@
                         "$ref": "#/definitions/http.OrganizationConfig"
                     }
                 },
+                "ordererPolicies": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/http.FabricPolicy"
+                    }
+                },
                 "peerOrganizations": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/http.OrganizationConfig"
                     }
+                }
+            }
+        },
+        "http.FabricPolicy": {
+            "type": "object",
+            "properties": {
+                "rule": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
                 }
             }
         },
@@ -9860,6 +13248,17 @@
                 }
             }
         },
+        "http.RemoveOrdererOrgPayload": {
+            "type": "object",
+            "required": [
+                "msp_id"
+            ],
+            "properties": {
+                "msp_id": {
+                    "type": "string"
+                }
+            }
+        },
         "http.RemoveOrgPayload": {
             "type": "object",
             "required": [
@@ -9913,7 +13312,7 @@
             "properties": {
                 "anchorPeers": {
                     "type": "array",
-                    "minItems": 1,
+                    "minItems": 0,
                     "items": {
                         "$ref": "#/definitions/http.AnchorPeer"
                     }
@@ -9961,6 +13360,33 @@
             "properties": {
                 "block": {
                     "$ref": "#/definitions/block.Block"
+                }
+            }
+        },
+        "http.UpdateApplicationCapabilityOperation": {
+            "type": "object",
+            "properties": {
+                "capability": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "http.UpdateApplicationPolicyPayload": {
+            "type": "object",
+            "required": [
+                "policy",
+                "policy_name"
+            ],
+            "properties": {
+                "policy": {
+                    "$ref": "#/definitions/http.FabricPolicy"
+                },
+                "policy_name": {
+                    "type": "string"
                 }
             }
         },
@@ -10102,6 +13528,9 @@
                 "metricsPort": {
                     "type": "integer"
                 },
+                "mode": {
+                    "type": "string"
+                },
                 "networkId": {
                     "type": "integer"
                 },
@@ -10116,6 +13545,33 @@
                 },
                 "rpcPort": {
                     "type": "integer"
+                }
+            }
+        },
+        "http.UpdateChannelCapabilityOperation": {
+            "type": "object",
+            "properties": {
+                "capability": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "http.UpdateChannelPolicyPayload": {
+            "type": "object",
+            "required": [
+                "policy",
+                "policy_name"
+            ],
+            "properties": {
+                "policy": {
+                    "$ref": "#/definitions/http.FabricPolicy"
+                },
+                "policy_name": {
+                    "type": "string"
                 }
             }
         },
@@ -10224,6 +13680,9 @@
                 "listenAddress": {
                     "type": "string"
                 },
+                "mode": {
+                    "type": "string"
+                },
                 "operationsListenAddress": {
                     "type": "string"
                 },
@@ -10265,6 +13724,9 @@
                 "listenAddress": {
                     "type": "string"
                 },
+                "mode": {
+                    "type": "string"
+                },
                 "operationsListenAddress": {
                     "type": "string"
                 },
@@ -10295,6 +13757,60 @@
                 },
                 "name": {
                     "description": "Common fields",
+                    "type": "string"
+                }
+            }
+        },
+        "http.UpdateOrdererCapabilityOperation": {
+            "type": "object",
+            "properties": {
+                "capability": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "http.UpdateOrdererOrgMSPPayload": {
+            "type": "object",
+            "required": [
+                "msp_id",
+                "root_certs",
+                "tls_root_certs"
+            ],
+            "properties": {
+                "msp_id": {
+                    "type": "string"
+                },
+                "root_certs": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "tls_root_certs": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "http.UpdateOrdererPolicyPayload": {
+            "type": "object",
+            "required": [
+                "policy",
+                "policy_name"
+            ],
+            "properties": {
+                "policy": {
+                    "$ref": "#/definitions/http.FabricPolicy"
+                },
+                "policy_name": {
                     "type": "string"
                 }
             }
@@ -10854,6 +14370,296 @@
                 }
             }
         },
+        "projects.CommitDetailAPI": {
+            "type": "object",
+            "properties": {
+                "added": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "author": {
+                    "type": "string"
+                },
+                "hash": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "modified": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "parent": {
+                    "type": "string"
+                },
+                "removed": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "timestamp": {
+                    "type": "string"
+                }
+            }
+        },
+        "projects.CommitWithFileChangesAPI": {
+            "type": "object",
+            "properties": {
+                "added": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "author": {
+                    "type": "string"
+                },
+                "hash": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "modified": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "parent": {
+                    "type": "string"
+                },
+                "removed": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "timestamp": {
+                    "type": "string"
+                }
+            }
+        },
+        "projects.CommitsListResponse": {
+            "type": "object",
+            "properties": {
+                "commits": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/projects.CommitWithFileChangesAPI"
+                    }
+                }
+            }
+        },
+        "projects.CreateProjectRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "boilerplate": {
+                    "type": "string",
+                    "example": "go-basic"
+                },
+                "description": {
+                    "type": "string",
+                    "example": "A sample project"
+                },
+                "endorsementPolicy": {
+                    "type": "string",
+                    "example": "OR('Org1MSP.member','Org2MSP.member')"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "myproject"
+                },
+                "networkId": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "projects.CreateProjectResponse": {
+            "type": "object",
+            "properties": {
+                "boilerplate": {
+                    "type": "string",
+                    "example": "go-basic"
+                },
+                "containerPort": {
+                    "type": "integer"
+                },
+                "description": {
+                    "type": "string",
+                    "example": "A sample project"
+                },
+                "endorsementPolicy": {
+                    "type": "string",
+                    "example": "OR('Org1MSP.member','Org2MSP.member')"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "name": {
+                    "type": "string",
+                    "example": "myproject"
+                },
+                "networkId": {
+                    "type": "integer"
+                },
+                "slug": {
+                    "type": "string",
+                    "example": "myproject-abc12"
+                }
+            }
+        },
+        "projects.HandlerRequest": {
+            "type": "object",
+            "properties": {
+                "args": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "[\"asset1\"",
+                        "\"100\"]"
+                    ]
+                },
+                "function": {
+                    "type": "string",
+                    "example": "createAsset"
+                },
+                "keyId": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "orgId": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "projects.HandlerResponse": {
+            "type": "object",
+            "properties": {
+                "args": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "blockNumber": {
+                    "type": "integer"
+                },
+                "chaincode": {
+                    "type": "string"
+                },
+                "channel": {
+                    "type": "string"
+                },
+                "code": {
+                    "type": "integer"
+                },
+                "function": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "project": {
+                    "type": "string"
+                },
+                "result": {},
+                "status": {
+                    "type": "string"
+                },
+                "transactionId": {
+                    "type": "string"
+                }
+            }
+        },
+        "projects.ListProjectsResponse": {
+            "type": "object",
+            "properties": {
+                "projects": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/projects.Project"
+                    }
+                }
+            }
+        },
+        "projects.Project": {
+            "type": "object",
+            "properties": {
+                "boilerplate": {
+                    "type": "string",
+                    "example": "go-basic"
+                },
+                "containerPort": {
+                    "type": "integer"
+                },
+                "description": {
+                    "type": "string",
+                    "example": "A sample project"
+                },
+                "endorsementPolicy": {
+                    "type": "string",
+                    "example": "OR('Org1MSP.member','Org2MSP.member')"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "lastStartedAt": {
+                    "type": "string"
+                },
+                "lastStoppedAt": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "myproject"
+                },
+                "networkId": {
+                    "type": "integer"
+                },
+                "networkName": {
+                    "type": "string"
+                },
+                "networkPlatform": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string",
+                    "example": "myproject-abc12"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "running"
+                }
+            }
+        },
+        "projects.UpdateProjectEndorsementPolicyRequest": {
+            "type": "object",
+            "required": [
+                "endorsementPolicy"
+            ],
+            "properties": {
+                "endorsementPolicy": {
+                    "type": "string",
+                    "example": "OR('Org1MSP.member','Org2MSP.member')"
+                }
+            }
+        },
         "registry.PluginMetadata": {
             "type": "object",
             "properties": {
@@ -10906,6 +14712,25 @@
                     "type": "string"
                 }
             }
+        },
+        "response.DetailedErrorResponse": {
+            "type": "object",
+            "properties": {
+                "details": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "error": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.DetailedResponse": {
+            "type": "object",
+            "additionalProperties": true
         },
         "response.ErrorResponse": {
             "type": "object",
@@ -11165,6 +14990,23 @@
                 "ModeDocker"
             ]
         },
+        "service.NetworkMap": {
+            "type": "object",
+            "properties": {
+                "networkId": {
+                    "type": "integer"
+                },
+                "nodes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/service.NodeMapInfo"
+                    }
+                },
+                "platform": {
+                    "type": "string"
+                }
+            }
+        },
         "service.NetworkNode": {
             "type": "object",
             "properties": {
@@ -11228,6 +15070,50 @@
                     "type": "string"
                 },
                 "serviceName": {
+                    "type": "string"
+                }
+            }
+        },
+        "service.NodeMapInfo": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "healthy": {
+                    "type": "boolean"
+                },
+                "host": {
+                    "type": "string"
+                },
+                "id": {
+                    "description": "host:port by default",
+                    "type": "string"
+                },
+                "latency": {
+                    "description": "e.g., \"1.2ms\"",
+                    "type": "string"
+                },
+                "latencyNs": {
+                    "description": "e.g., 1",
+                    "type": "integer"
+                },
+                "mine": {
+                    "type": "boolean"
+                },
+                "mspId": {
+                    "description": "Only for fabric and if mine",
+                    "type": "string"
+                },
+                "nodeId": {
+                    "description": "Only if mine",
+                    "type": "integer"
+                },
+                "port": {
+                    "type": "integer"
+                },
+                "role": {
+                    "description": "peer, orderer, validator, etc.",
                     "type": "string"
                 }
             }
@@ -11322,6 +15208,9 @@
             "type": "object",
             "properties": {
                 "besuTemplateCMD": {
+                    "type": "string"
+                },
+                "defaultNodeExposeIP": {
                     "type": "string"
                 },
                 "ordererTemplateCMD": {
@@ -12042,6 +15931,10 @@
         {
             "description": "Audit management operations",
             "name": "Audit"
+        },
+        {
+            "description": "Chaincode project management operations",
+            "name": "Chaincode Projects"
         },
         {
             "description": "User authentication and authorization operations",

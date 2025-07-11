@@ -127,7 +127,7 @@ export default function AuditLogDetailPage() {
 						{details && Object.keys(details).length > 0 && (
 							<div>
 								<h3 className="text-sm font-medium text-muted-foreground mb-2">Additional Details</h3>
-								<pre className="bg-muted p-4 rounded-lg overflow-auto">{JSON.stringify(details, null, 2)}</pre>
+								<pre className="bg-muted p-4 rounded-lg overflow-auto whitespace-pre-wrap">{JSON.stringify(details, null, 2)}</pre>
 							</div>
 						)}
 					</div>

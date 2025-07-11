@@ -82,6 +82,11 @@ export default function OrganizationsPage() {
 				mspId: data.mspId,
 				description: data.description,
 				providerId: data.providerId,
+				country: Array.isArray(data.caParams?.country) && data.caParams.country.length > 0 ? data.caParams.country : ['US'],
+				province: Array.isArray(data.caParams?.province) && data.caParams.province.length > 0 ? data.caParams.province : ['California'],
+				locality: Array.isArray(data.caParams?.locality) && data.caParams.locality.length > 0 ? data.caParams.locality : ['San Francisco'],
+				streetAddress: Array.isArray(data.caParams?.streetAddress) && data.caParams.streetAddress.length > 0 ? data.caParams.streetAddress : [''],
+				postalCode: Array.isArray(data.caParams?.postalCode) && data.caParams.postalCode.length > 0 ? data.caParams.postalCode : [],
 			},
 		})
 	}

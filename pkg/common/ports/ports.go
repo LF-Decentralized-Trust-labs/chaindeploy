@@ -33,6 +33,11 @@ var (
 			Start: 9545,
 			End:   9645,
 		},
+
+		"fabric-chaincode": {
+			Start: 40000,
+			End:   50000,
+		},
 	}
 
 	// Mutex to protect port allocation

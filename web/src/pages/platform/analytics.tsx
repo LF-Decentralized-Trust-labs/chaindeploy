@@ -41,11 +41,11 @@ export default function AnalyticsPage() {
 		},
 	})
 
-	const { data: prometheusStatus, isLoading: isStatusLoading } = useQuery({
+	const { data: prometheusStatus, isLoading: isStatusLoading, refetch: refetchPrometheusStatus } = useQuery({
 		...getMetricsStatusOptions({}),
 	})
 
-	const { data: nodes } = useQuery({
+	const { data: nodes, refetch: refetchNodes } = useQuery({
 		...getNodesOptions({
 			query: {
 				limit: 1000,
@@ -64,6 +64,8 @@ export default function AnalyticsPage() {
 			toast.success('Prometheus deployed successfully')
 			setIsSetupDialogOpen(false)
 			form.reset()
+			refetchPrometheusStatus()
+			refetchNodes()
 		},
 		onError: (error: any) => {
 			toast.error('Failed to deploy Prometheus', {

@@ -14,10 +14,42 @@ import { toast } from 'sonner'
 import * as z from 'zod'
 
 const formSchema = z.object({
+	defaultNodeExposeIP: z.string().optional(),
 	peerTemplateCMD: z.string().optional(),
 	ordererTemplateCMD: z.string().optional(),
 	besuTemplateCMD: z.string().optional(),
 })
+
+function ExternalIPSection({ form }: { form: any }) {
+	return (
+		<div className="space-y-6">
+			<div>
+				<h3 className="text-lg font-medium">External IP Management</h3>
+				<p className="text-sm text-muted-foreground">Configure the default external IP address used for node endpoints. This IP will be used as the default for external endpoints when creating new nodes.</p>
+			</div>
+			<Separator />
+			<FormField
+				control={form.control}
+				name="defaultNodeExposeIP"
+				render={({ field }) => (
+					<FormItem>
+						<FormLabel>Default External IP</FormLabel>
+						<FormControl>
+							<input
+								type="text"
+								placeholder="Enter external IP address..."
+								className="input w-full border border-border bg-background rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+								{...field}
+							/>
+						</FormControl>
+						<FormDescription>This IP will be used as the default for external endpoints.</FormDescription>
+						<FormMessage />
+					</FormItem>
+				)}
+			/>
+		</div>
+	)
+}
 
 function TemplatesSection({ form }: { form: any }) {
 	return (
@@ -85,6 +117,7 @@ export default function SettingsPage() {
 	const form = useForm<ServiceSettingConfig>({
 		resolver: zodResolver(formSchema),
 		values: settings?.config || {
+			defaultNodeExposeIP: '',
 			peerTemplateCMD: '',
 			ordererTemplateCMD: '',
 			besuTemplateCMD: '',
@@ -150,6 +183,7 @@ export default function SettingsPage() {
 							<CardContent>
 								<Form {...form}>
 									<form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+										<ExternalIPSection form={form} />
 										<TemplatesSection form={form} />
 										<Button type="submit" disabled={updateSettings.isPending}>
 											{updateSettings.isPending ? 'Saving...' : 'Save changes'}

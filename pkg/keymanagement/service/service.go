@@ -787,3 +787,8 @@ func parseCertificate(certPEM string) (*x509.Certificate, error) {
 
 	return cert, nil
 }
+
+// Exported wrapper for parseCertificate
+func ParseCertificate(certPEM string) (*x509.Certificate, error) {
+	return parseCertificate(certPEM)
+}

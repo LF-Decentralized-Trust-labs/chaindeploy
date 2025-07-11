@@ -3,6 +3,8 @@ package types
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/hyperledger/fabric-config/configtx"
 )
 
 // NetworkDeploymentStatus represents the current status of a network deployment
@@ -47,11 +49,16 @@ type ExternalNodeRef struct {
 }
 
 // FabricNetworkConfig represents the configuration for a Fabric network
+
+// FabricNetworkConfig represents the configuration for a Fabric network
 type FabricNetworkConfig struct {
-	BaseNetworkConfig
-	ChannelName          string         `json:"channelName"`
-	PeerOrganizations    []Organization `json:"peerOrganizations"`
-	OrdererOrganizations []Organization `json:"ordererOrganizations"`
+	BaseNetworkConfig    `json:",inline"`
+	ChannelName          string                     `json:"channel_name"`
+	PeerOrganizations    []Organization             `json:"peer_organizations"`
+	OrdererOrganizations []Organization             `json:"orderer_organizations"`
+	ApplicationPolicies  map[string]configtx.Policy `json:"application_policies,omitempty"`
+	OrdererPolicies      map[string]configtx.Policy `json:"orderer_policies,omitempty"`
+	ChannelPolicies      map[string]configtx.Policy `json:"channel_policies,omitempty"`
 }
 
 // Organization represents a Fabric organization configuration

@@ -1,5 +1,108 @@
 basePath: /api/v1
 definitions:
+  ai.ChatMessage:
+    properties:
+      content:
+        type: string
+      parts:
+        items:
+          $ref: '#/definitions/ai.ChatMessagePart'
+        type: array
+      role:
+        type: string
+    type: object
+  ai.ChatMessagePart:
+    properties:
+      text:
+        type: string
+      type:
+        type: string
+    type: object
+  ai.ChatRequest:
+    properties:
+      conversationId:
+        type: integer
+      id:
+        type: string
+      messages:
+        items:
+          $ref: '#/definitions/ai.ChatMessage'
+        type: array
+      projectId:
+        type: string
+    type: object
+  ai.ConversationDetail:
+    properties:
+      id:
+        type: integer
+      messages:
+        items:
+          $ref: '#/definitions/ai.Message'
+        type: array
+      projectId:
+        type: integer
+      startedAt:
+        type: string
+    type: object
+  ai.ConversationResponse:
+    properties:
+      id:
+        type: integer
+      projectId:
+        type: integer
+      startedAt:
+        type: string
+    type: object
+  ai.CreateConversationRequest:
+    properties:
+      title:
+        type: string
+    type: object
+  ai.Message:
+    properties:
+      content:
+        type: string
+      conversationId:
+        type: integer
+      createdAt:
+        type: string
+      id:
+        type: integer
+      sender:
+        type: string
+      toolArguments:
+        type: string
+      toolCalls:
+        items:
+          $ref: '#/definitions/ai.ToolCallAI'
+        type: array
+    type: object
+  ai.Model:
+    properties:
+      description:
+        type: string
+      maxTokens:
+        type: integer
+      name:
+        type: string
+    type: object
+  ai.ToolCallAI:
+    properties:
+      arguments:
+        type: string
+      createdAt:
+        type: string
+      error:
+        type: string
+      id:
+        type: integer
+      messageId:
+        type: integer
+      result:
+        type: string
+      toolName:
+        type: string
+    type: object
   audit.Event:
     properties:
       affectedResource:
@@ -240,6 +343,36 @@ definitions:
     - ORDERER_TRANSACTION
     - DELIVER_SEEK_INFO
     - CHAINCODE_PACKAGE
+  boilerplates.BoilerplateConfig:
+    properties:
+      args:
+        items:
+          type: string
+        type: array
+      command:
+        type: string
+      description:
+        type: string
+      id:
+        description: ID is the key in the configs map
+        type: string
+      image:
+        type: string
+      name:
+        type: string
+      platform:
+        type: string
+      repoName:
+        type: string
+      repoOwner:
+        type: string
+      repoPath:
+        type: string
+      systemPrompt:
+        type: string
+      validateCommand:
+        type: string
+    type: object
   chaincode.Gateway:
     type: object
   chaincode.Peer:
@@ -322,14 +455,19 @@ definitions:
         type: string
       id:
         type: integer
-      peer_statuses:
-        items:
-          $ref: '#/definitions/chainlaunchdeploy.PeerStatus'
-        type: array
       sequence:
         type: integer
       version:
         type: string
+    type: object
+  chainlaunchdeploy.ChaincodeDefinitionDetailResponse:
+    properties:
+      definition:
+        $ref: '#/definitions/chainlaunchdeploy.ChaincodeDefinitionResponse'
+      events:
+        items:
+          $ref: '#/definitions/chainlaunchdeploy.ChaincodeDefinitionEvent'
+        type: array
     type: object
   chainlaunchdeploy.ChaincodeDefinitionEvent:
     properties:
@@ -360,6 +498,78 @@ definitions:
       sequence:
         type: integer
       version:
+        type: string
+    type: object
+  chainlaunchdeploy.ChaincodeInvokeRequest:
+    properties:
+      args:
+        description: Arguments to pass to the chaincode function
+        items:
+          type: string
+        type: array
+      channel:
+        description: 'Optional: Channel name'
+        type: string
+      function:
+        description: Function name to invoke
+        type: string
+      key_id:
+        description: KeyID to use for signing
+        type: string
+      transient:
+        additionalProperties:
+          items:
+            type: integer
+          type: array
+        description: 'Optional: Transient data'
+        type: object
+    type: object
+  chainlaunchdeploy.ChaincodeInvokeResponse:
+    properties:
+      message:
+        type: string
+      result: {}
+      status:
+        type: string
+    type: object
+  chainlaunchdeploy.ChaincodeMetadataResponse:
+    properties:
+      message:
+        type: string
+      result: {}
+      status:
+        type: string
+    type: object
+  chainlaunchdeploy.ChaincodeQueryRequest:
+    properties:
+      args:
+        description: Arguments to pass to the chaincode function
+        items:
+          type: string
+        type: array
+      channel:
+        description: 'Optional: Channel name'
+        type: string
+      function:
+        description: Function name to query
+        type: string
+      key_id:
+        description: KeyID to use for signing/query
+        type: string
+      transient:
+        additionalProperties:
+          items:
+            type: integer
+          type: array
+        description: 'Optional: Transient data'
+        type: object
+    type: object
+  chainlaunchdeploy.ChaincodeQueryResponse:
+    properties:
+      message:
+        type: string
+      result: {}
+      status:
         type: string
     type: object
   chainlaunchdeploy.ChaincodeResponse:
@@ -438,13 +648,6 @@ definitions:
         $ref: '#/definitions/chainlaunchdeploy.ChaincodeResponse'
     type: object
   chainlaunchdeploy.DeployChaincodeByDefinitionRequest:
-    properties:
-      container_port:
-        description: Container port to use (optional, default 7052)
-        type: string
-      host_port:
-        description: Host port to use (optional)
-        type: string
     type: object
   chainlaunchdeploy.DeploymentResult:
     properties:
@@ -467,6 +670,9 @@ definitions:
     properties:
       created:
         type: integer
+      docker_status:
+        description: direct from Docker inspect
+        type: string
       id:
         type: string
       image:
@@ -562,41 +768,6 @@ definitions:
         items:
           $ref: '#/definitions/chainlaunchdeploy.ChaincodeDefinition'
         type: array
-      docker_info:
-        $ref: '#/definitions/chainlaunchdeploy.DockerContainerInfo'
-    type: object
-  chainlaunchdeploy.FabricChaincodeDockerDeployRequest:
-    properties:
-      container_port:
-        description: optional, defaults to 7052
-        type: integer
-      docker_image:
-        type: string
-      host_port:
-        description: optional, if 0 a free port is chosen
-        type: integer
-      name:
-        type: string
-      package_id:
-        type: string
-      slug:
-        description: optional, for updates
-        type: string
-    required:
-    - docker_image
-    - name
-    - package_id
-    type: object
-  chainlaunchdeploy.FabricChaincodeDockerDeployResponse:
-    properties:
-      message:
-        type: string
-      result:
-        $ref: '#/definitions/chainlaunchdeploy.DeploymentResult'
-      slug:
-        type: string
-      status:
-        type: string
     type: object
   chainlaunchdeploy.FabricChaincodeInstallParams:
     properties:
@@ -674,6 +845,19 @@ definitions:
       status:
         type: string
     type: object
+  chainlaunchdeploy.FabricSequenceResponse:
+    properties:
+      chaincode_name:
+        type: string
+      channel_name:
+        type: string
+      message:
+        type: string
+      sequence:
+        type: integer
+      status:
+        type: string
+    type: object
   chainlaunchdeploy.InstallChaincodeByDefinitionRequest:
     properties:
       peer_ids:
@@ -697,20 +881,6 @@ definitions:
         items:
           $ref: '#/definitions/chainlaunchdeploy.ChaincodeResponse'
         type: array
-    type: object
-  chainlaunchdeploy.PeerStatus:
-    properties:
-      definition_id:
-        type: integer
-      id:
-        type: integer
-      last_updated:
-        description: ISO8601
-        type: string
-      peer_id:
-        type: integer
-      status:
-        type: string
     type: object
   chainlaunchdeploy.UpdateChaincodeDefinitionRequest:
     properties:
@@ -763,6 +933,104 @@ definitions:
             type: string
         type: object
       status:
+        type: string
+    type: object
+  dirs.CreateDirRequest:
+    properties:
+      dir:
+        example: newdir
+        type: string
+      project:
+        example: myproject
+        type: string
+    type: object
+  dirs.CreateDirResponse:
+    properties:
+      status:
+        example: created
+        type: string
+    type: object
+  dirs.DeleteDirResponse:
+    properties:
+      status:
+        example: deleted
+        type: string
+    type: object
+  dirs.ListEntriesResponse:
+    description: Unified response for listing files and directories in a directory
+    properties:
+      directories:
+        example:
+        - '["src"'
+        - '"docs"]'
+        items:
+          type: string
+        type: array
+      files:
+        example:
+        - '["main.go"'
+        - '"README.md"]'
+        items:
+          type: string
+        type: array
+      skipped:
+        example:
+        - '["node_modules"]'
+        items:
+          type: string
+        type: array
+    type: object
+  files.DeleteFileResponse:
+    properties:
+      status:
+        example: deleted
+        type: string
+    type: object
+  files.DirectoryTreeNode:
+    properties:
+      children:
+        items:
+          $ref: '#/definitions/files.DirectoryTreeNode'
+        type: array
+      isDir:
+        type: boolean
+      name:
+        type: string
+      path:
+        type: string
+    type: object
+  files.ListFilesResponse:
+    properties:
+      files:
+        example:
+        - '["main.go"'
+        - '"README.md"]'
+        items:
+          type: string
+        type: array
+    type: object
+  files.ReadFileResponse:
+    properties:
+      content:
+        example: file contents
+        type: string
+    type: object
+  files.WriteFileRequest:
+    properties:
+      content:
+        example: new file contents
+        type: string
+      path:
+        example: main.go
+        type: string
+      project:
+        example: myproject
+        type: string
+    type: object
+  files.WriteFileResponse:
+    properties:
+      status:
+        example: written
         type: string
     type: object
   github_com_chainlaunch_chainlaunch_pkg_metrics_common.Status:
@@ -842,16 +1110,67 @@ definitions:
       protocol:
         type: string
     type: object
-  handler.CreateOrganizationRequest:
+  handler.CreateKeyRequest:
     properties:
       description:
+        example: New admin key for organization
         type: string
+      dnsNames:
+        example:
+        - admin.example.com
+        items:
+          type: string
+        type: array
+      ipAddresses:
+        example:
+        - 192.168.1.100
+        items:
+          type: string
+        type: array
+      name:
+        example: new-admin-key
+        type: string
+      role:
+        enum:
+        - admin
+        - client
+        example: admin
+        type: string
+    required:
+    - name
+    - role
+    type: object
+  handler.CreateOrganizationRequest:
+    properties:
+      country:
+        description: CA certificate properties
+        items:
+          type: string
+        type: array
+      description:
+        type: string
+      locality:
+        items:
+          type: string
+        type: array
       mspId:
         type: string
       name:
         type: string
+      postalCode:
+        items:
+          type: string
+        type: array
       providerId:
         type: integer
+      province:
+        items:
+          type: string
+        type: array
+      streetAddress:
+        items:
+          type: string
+        type: array
     required:
     - mspId
     - name
@@ -861,6 +1180,51 @@ definitions:
       serialNumber:
         description: Hex string of the serial number
         type: string
+    type: object
+  handler.KeyResponse:
+    properties:
+      algorithm:
+        type: string
+      certificate:
+        type: string
+      createdAt:
+        type: string
+      description:
+        type: string
+      ethereumAddress:
+        type: string
+      expiresAt:
+        type: string
+      id:
+        type: integer
+      lastRotatedAt:
+        type: string
+      name:
+        type: string
+      provider:
+        properties:
+          id:
+            type: integer
+          name:
+            type: string
+        type: object
+      publicKey:
+        type: string
+      sha1Fingerprint:
+        type: string
+      sha256Fingerprint:
+        type: string
+      signingKeyId:
+        type: integer
+      status:
+        type: string
+    type: object
+  handler.ListKeysResponse:
+    properties:
+      keys:
+        additionalProperties:
+          $ref: '#/definitions/handler.KeyResponse'
+        type: object
     type: object
   handler.OrganizationResponse:
     properties:
@@ -905,6 +1269,44 @@ definitions:
         type: integer
       offset:
         type: integer
+    type: object
+  handler.RenewCertificateRequest:
+    properties:
+      caType:
+        enum:
+        - tls
+        - sign
+        example: sign
+        type: string
+      dnsNames:
+        example:
+        - admin.example.com
+        items:
+          type: string
+        type: array
+      ipAddresses:
+        example:
+        - 192.168.1.100
+        items:
+          type: string
+        type: array
+      keyId:
+        example: 123
+        type: integer
+      role:
+        enum:
+        - admin
+        - client
+        example: admin
+        type: string
+      validFor:
+        description: Duration in Go format (e.g., "8760h" for 1 year)
+        example: 8760h
+        type: string
+    required:
+    - caType
+    - keyId
+    - role
     type: object
   handler.RevokeCertificateByPEMRequest:
     properties:
@@ -966,6 +1368,31 @@ definitions:
     required:
     - nodeId
     - role
+    type: object
+  http.AddOrdererOrgPayload:
+    properties:
+      msp_id:
+        type: string
+      orderer_endpoints:
+        items:
+          type: string
+        minItems: 1
+        type: array
+      root_certs:
+        items:
+          type: string
+        minItems: 1
+        type: array
+      tls_root_certs:
+        items:
+          type: string
+        minItems: 1
+        type: array
+    required:
+    - msp_id
+    - orderer_endpoints
+    - root_certs
+    - tls_root_certs
     type: object
   http.AddOrgPayload:
     properties:
@@ -1129,6 +1556,8 @@ definitions:
     properties:
       endorsementPlugin:
         type: string
+      endorsementPolicy:
+        type: string
       initRequired:
         type: boolean
       name:
@@ -1174,6 +1603,12 @@ definitions:
           - update_etcd_raft_options: UpdateEtcdRaftOptionsPayload
           - update_batch_size: UpdateBatchSizePayload
           - update_batch_timeout: UpdateBatchTimeoutPayload
+          - update_application_policy: UpdateApplicationPolicyPayload
+          - update_orderer_policy: UpdateOrdererPolicyPayload
+          - update_channel_policy: UpdateChannelPolicyPayload
+          - update_channel_capability: UpdateChannelCapabilityOperation
+          - update_orderer_capability: UpdateOrdererCapabilityOperation
+          - update_application_capability: UpdateApplicationCapabilityOperation
           @Description The payload for the configuration update operation
           @Description Can be one of:
           @Description - AddOrgPayload when type is "add_org"
@@ -1186,13 +1621,22 @@ definitions:
           @Description - UpdateEtcdRaftOptionsPayload when type is "update_etcd_raft_options"
           @Description - UpdateBatchSizePayload when type is "update_batch_size"
           @Description - UpdateBatchTimeoutPayload when type is "update_batch_timeout"
+          @Description - UpdateApplicationPolicyPayload when type is "update_application_policy"
+          @Description - UpdateOrdererPolicyPayload when type is "update_orderer_policy"
+          @Description - UpdateChannelPolicyPayload when type is "update_channel_policy"
+          @Description - UpdateChannelCapabilityPayload when type is "update_channel_capability"
+          @Description - UpdateOrdererCapabilityPayload when type is "update_orderer_capability"
+          @Description - UpdateApplicationCapabilityPayload when type is "update_application_capability"
+          @Description - AddOrdererOrgPayload when type is "add_orderer_org"
+          @Description - RemoveOrdererOrgPayload when type is "remove_orderer_org"
+          @Description - UpdateOrdererOrgMSPPayload when type is "update_orderer_org_msp"
         items:
           type: integer
         type: array
       type:
         description: |-
           Type is the type of configuration update operation
-          enum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout
+          enum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout,update_application_policy,update_orderer_policy,update_channel_policy,add_orderer_org,remove_orderer_org,update_orderer_org_msp
         enum:
         - add_org
         - remove_org
@@ -1204,6 +1648,15 @@ definitions:
         - update_etcd_raft_options
         - update_batch_size
         - update_batch_timeout
+        - update_application_policy
+        - update_orderer_policy
+        - update_channel_policy
+        - update_channel_capability
+        - update_orderer_capability
+        - update_application_capability
+        - add_orderer_org
+        - remove_orderer_org
+        - update_orderer_org_msp
         type: string
     required:
     - payload
@@ -1229,13 +1682,6 @@ definitions:
         type: string
       status:
         type: string
-    type: object
-  http.ConsenterConfig:
-    properties:
-      id:
-        type: string
-    required:
-    - id
     type: object
   http.CreateBackupRequest:
     properties:
@@ -1504,38 +1950,36 @@ definitions:
     - name
     - type
     type: object
-  http.ExternalOrgConfig:
-    properties:
-      consenters:
-        items:
-          $ref: '#/definitions/http.ConsenterConfig'
-        type: array
-      id:
-        type: string
-      mspid:
-        type: string
-    required:
-    - id
-    - mspid
-    type: object
   http.FabricNetworkConfig:
     properties:
-      externalOrdererOrgs:
-        items:
-          $ref: '#/definitions/http.ExternalOrgConfig'
-        type: array
-      externalPeerOrgs:
-        items:
-          $ref: '#/definitions/http.ExternalOrgConfig'
-        type: array
+      applicationPolicies:
+        additionalProperties:
+          $ref: '#/definitions/http.FabricPolicy'
+        description: Optional policies
+        type: object
+      channelPolicies:
+        additionalProperties:
+          $ref: '#/definitions/http.FabricPolicy'
+        type: object
       ordererOrganizations:
         items:
           $ref: '#/definitions/http.OrganizationConfig'
         type: array
+      ordererPolicies:
+        additionalProperties:
+          $ref: '#/definitions/http.FabricPolicy'
+        type: object
       peerOrganizations:
         items:
           $ref: '#/definitions/http.OrganizationConfig'
         type: array
+    type: object
+  http.FabricPolicy:
+    properties:
+      rule:
+        type: string
+      type:
+        type: string
     type: object
   http.GetNetworkNodesResponse:
     properties:
@@ -1777,6 +2221,13 @@ definitions:
     - host
     - port
     type: object
+  http.RemoveOrdererOrgPayload:
+    properties:
+      msp_id:
+        type: string
+    required:
+    - msp_id
+    type: object
   http.RemoveOrgPayload:
     properties:
       msp_id:
@@ -1812,7 +2263,7 @@ definitions:
       anchorPeers:
         items:
           $ref: '#/definitions/http.AnchorPeer'
-        minItems: 1
+        minItems: 0
         type: array
       organizationId:
         type: integer
@@ -1845,6 +2296,24 @@ definitions:
     properties:
       block:
         $ref: '#/definitions/block.Block'
+    type: object
+  http.UpdateApplicationCapabilityOperation:
+    properties:
+      capability:
+        items:
+          type: string
+        minItems: 1
+        type: array
+    type: object
+  http.UpdateApplicationPolicyPayload:
+    properties:
+      policy:
+        $ref: '#/definitions/http.FabricPolicy'
+      policy_name:
+        type: string
+    required:
+    - policy
+    - policy_name
     type: object
   http.UpdateBackupScheduleRequest:
     properties:
@@ -1936,6 +2405,8 @@ definitions:
         type: boolean
       metricsPort:
         type: integer
+      mode:
+        type: string
       networkId:
         type: integer
       p2pHost:
@@ -1952,6 +2423,24 @@ definitions:
     - p2pPort
     - rpcHost
     - rpcPort
+    type: object
+  http.UpdateChannelCapabilityOperation:
+    properties:
+      capability:
+        items:
+          type: string
+        minItems: 1
+        type: array
+    type: object
+  http.UpdateChannelPolicyPayload:
+    properties:
+      policy:
+        $ref: '#/definitions/http.FabricPolicy'
+      policy_name:
+        type: string
+    required:
+    - policy
+    - policy_name
     type: object
   http.UpdateConsenterPayload:
     properties:
@@ -2028,6 +2517,8 @@ definitions:
         type: string
       listenAddress:
         type: string
+      mode:
+        type: string
       operationsListenAddress:
         type: string
       version:
@@ -2055,6 +2546,8 @@ definitions:
         type: string
       listenAddress:
         type: string
+      mode:
+        type: string
       operationsListenAddress:
         type: string
       version:
@@ -2075,6 +2568,43 @@ definitions:
       name:
         description: Common fields
         type: string
+    type: object
+  http.UpdateOrdererCapabilityOperation:
+    properties:
+      capability:
+        items:
+          type: string
+        minItems: 1
+        type: array
+    type: object
+  http.UpdateOrdererOrgMSPPayload:
+    properties:
+      msp_id:
+        type: string
+      root_certs:
+        items:
+          type: string
+        minItems: 1
+        type: array
+      tls_root_certs:
+        items:
+          type: string
+        minItems: 1
+        type: array
+    required:
+    - msp_id
+    - root_certs
+    - tls_root_certs
+    type: object
+  http.UpdateOrdererPolicyPayload:
+    properties:
+      policy:
+        $ref: '#/definitions/http.FabricPolicy'
+      policy_name:
+        type: string
+    required:
+    - policy
+    - policy_name
     type: object
   http.UpdateOrgMSPPayload:
     properties:
@@ -2459,6 +2989,204 @@ definitions:
           type: string
         type: array
     type: object
+  projects.CommitDetailAPI:
+    properties:
+      added:
+        items:
+          type: string
+        type: array
+      author:
+        type: string
+      hash:
+        type: string
+      message:
+        type: string
+      modified:
+        items:
+          type: string
+        type: array
+      parent:
+        type: string
+      removed:
+        items:
+          type: string
+        type: array
+      timestamp:
+        type: string
+    type: object
+  projects.CommitWithFileChangesAPI:
+    properties:
+      added:
+        items:
+          type: string
+        type: array
+      author:
+        type: string
+      hash:
+        type: string
+      message:
+        type: string
+      modified:
+        items:
+          type: string
+        type: array
+      parent:
+        type: string
+      removed:
+        items:
+          type: string
+        type: array
+      timestamp:
+        type: string
+    type: object
+  projects.CommitsListResponse:
+    properties:
+      commits:
+        items:
+          $ref: '#/definitions/projects.CommitWithFileChangesAPI'
+        type: array
+    type: object
+  projects.CreateProjectRequest:
+    properties:
+      boilerplate:
+        example: go-basic
+        type: string
+      description:
+        example: A sample project
+        type: string
+      endorsementPolicy:
+        example: OR('Org1MSP.member','Org2MSP.member')
+        type: string
+      name:
+        example: myproject
+        type: string
+      networkId:
+        example: 1
+        type: integer
+    required:
+    - name
+    type: object
+  projects.CreateProjectResponse:
+    properties:
+      boilerplate:
+        example: go-basic
+        type: string
+      containerPort:
+        type: integer
+      description:
+        example: A sample project
+        type: string
+      endorsementPolicy:
+        example: OR('Org1MSP.member','Org2MSP.member')
+        type: string
+      id:
+        example: 1
+        type: integer
+      name:
+        example: myproject
+        type: string
+      networkId:
+        type: integer
+      slug:
+        example: myproject-abc12
+        type: string
+    type: object
+  projects.HandlerRequest:
+    properties:
+      args:
+        example:
+        - '["asset1"'
+        - '"100"]'
+        items:
+          type: string
+        type: array
+      function:
+        example: createAsset
+        type: string
+      keyId:
+        example: 1
+        type: integer
+      orgId:
+        example: 1
+        type: integer
+    type: object
+  projects.HandlerResponse:
+    properties:
+      args:
+        items:
+          type: string
+        type: array
+      blockNumber:
+        type: integer
+      chaincode:
+        type: string
+      channel:
+        type: string
+      code:
+        type: integer
+      function:
+        type: string
+      message:
+        type: string
+      project:
+        type: string
+      result: {}
+      status:
+        type: string
+      transactionId:
+        type: string
+    type: object
+  projects.ListProjectsResponse:
+    properties:
+      projects:
+        items:
+          $ref: '#/definitions/projects.Project'
+        type: array
+    type: object
+  projects.Project:
+    properties:
+      boilerplate:
+        example: go-basic
+        type: string
+      containerPort:
+        type: integer
+      description:
+        example: A sample project
+        type: string
+      endorsementPolicy:
+        example: OR('Org1MSP.member','Org2MSP.member')
+        type: string
+      id:
+        example: 1
+        type: integer
+      lastStartedAt:
+        type: string
+      lastStoppedAt:
+        type: string
+      name:
+        example: myproject
+        type: string
+      networkId:
+        type: integer
+      networkName:
+        type: string
+      networkPlatform:
+        type: string
+      slug:
+        example: myproject-abc12
+        type: string
+      status:
+        example: running
+        type: string
+    type: object
+  projects.UpdateProjectEndorsementPolicyRequest:
+    properties:
+      endorsementPolicy:
+        example: OR('Org1MSP.member','Org2MSP.member')
+        type: string
+    required:
+    - endorsementPolicy
+    type: object
   registry.PluginMetadata:
     properties:
       author:
@@ -2493,6 +3221,19 @@ definitions:
         type: string
       version:
         type: string
+    type: object
+  response.DetailedErrorResponse:
+    properties:
+      details:
+        additionalProperties: true
+        type: object
+      error:
+        type: string
+      message:
+        type: string
+    type: object
+  response.DetailedResponse:
+    additionalProperties: true
     type: object
   response.ErrorResponse:
     properties:
@@ -2667,6 +3408,17 @@ definitions:
     x-enum-varnames:
     - ModeService
     - ModeDocker
+  service.NetworkMap:
+    properties:
+      networkId:
+        type: integer
+      nodes:
+        items:
+          $ref: '#/definitions/service.NodeMapInfo'
+        type: array
+      platform:
+        type: string
+    type: object
   service.NetworkNode:
     properties:
       createdAt:
@@ -2709,6 +3461,37 @@ definitions:
       operationsListenAddress:
         type: string
       serviceName:
+        type: string
+    type: object
+  service.NodeMapInfo:
+    properties:
+      error:
+        type: string
+      healthy:
+        type: boolean
+      host:
+        type: string
+      id:
+        description: host:port by default
+        type: string
+      latency:
+        description: e.g., "1.2ms"
+        type: string
+      latencyNs:
+        description: e.g., 1
+        type: integer
+      mine:
+        type: boolean
+      mspId:
+        description: Only for fabric and if mine
+        type: string
+      nodeId:
+        description: Only if mine
+        type: integer
+      port:
+        type: integer
+      role:
+        description: peer, orderer, validator, etc.
         type: string
     type: object
   service.NodeResponse:
@@ -2769,6 +3552,8 @@ definitions:
   service.SettingConfig:
     properties:
       besuTemplateCMD:
+        type: string
+      defaultNodeExposeIP:
         type: string
       ordererTemplateCMD:
         type: string
@@ -3295,6 +4080,275 @@ info:
   title: ChainLaunch API
   version: "1.0"
 paths:
+  /ai/{projectId}/chat:
+    post:
+      consumes:
+      - application/json
+      description: Stream a conversation with the AI assistant using Server-Sent Events
+        (SSE)
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: integer
+      - description: Chat request containing project ID and messages
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/ai.ChatRequest'
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: SSE stream of chat responses
+          schema:
+            type: string
+        "400":
+          description: Invalid request
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      summary: Chat with AI assistant
+      tags:
+      - ai
+  /ai/{projectId}/conversations:
+    get:
+      description: Returns a list of all chat conversations associated with a specific
+        project
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/ai.ConversationResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get all conversations for a project
+      tags:
+      - ai
+    post:
+      consumes:
+      - application/json
+      description: Creates a new empty conversation for the specified project
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: integer
+      - description: Optional conversation title
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/ai.CreateConversationRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/ai.ConversationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Create a new conversation for a project
+      tags:
+      - ai
+  /ai/{projectId}/conversations/{conversationId}:
+    get:
+      description: Get all messages in a conversation
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: integer
+      - description: Conversation ID
+        in: path
+        name: conversationId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/ai.Message'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get conversation messages
+      tags:
+      - ai
+  /ai/{projectId}/conversations/{conversationId}/export:
+    get:
+      description: Get detailed information about a conversation including all messages
+        and metadata
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: integer
+      - description: Conversation ID
+        in: path
+        name: conversationId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/ai.ConversationDetail'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get conversation detail
+      tags:
+      - ai
+  /ai/{projectId}/conversations/{conversationId}/summarize:
+    post:
+      consumes:
+      - application/json
+      description: Summarizes an existing conversation and starts a new one with a
+        summary message
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: integer
+      - description: Conversation ID
+        in: path
+        name: conversationId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.DetailedResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.DetailedErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.DetailedErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.DetailedErrorResponse'
+      summary: Create a new conversation from an existing one with a summary
+      tags:
+      - ai
+  /ai/boilerplates:
+    get:
+      description: Returns a list of available boilerplates filtered by network platform
+      parameters:
+      - description: Network ID to filter boilerplates by platform
+        in: query
+        name: network_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/boilerplates.BoilerplateConfig'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get available boilerplates
+      tags:
+      - ai
+  /ai/models:
+    get:
+      description: Returns a list of available AI models for code generation
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/ai.Model'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get available AI models
+      tags:
+      - ai
   /audit/logs:
     get:
       consumes:
@@ -3999,6 +5053,615 @@ paths:
       summary: Update a backup target
       tags:
       - Backup Targets
+  /chaincode-projects:
+    get:
+      description: Get a list of all projects
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/projects.ListProjectsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: List all projects
+      tags:
+      - Chaincode Projects
+    post:
+      consumes:
+      - application/json
+      description: Create a new project, scaffold its directory, and store it in the
+        DB
+      parameters:
+      - description: Project info
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/projects.CreateProjectRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/projects.CreateProjectResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Create a project
+      tags:
+      - Chaincode Projects
+  /chaincode-projects/{id}:
+    delete:
+      description: Delete a project and its associated files from the system
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Delete a project
+      tags:
+      - Chaincode Projects
+    get:
+      description: Get details of a project by its ID
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/projects.Project'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get a project by ID
+      tags:
+      - Chaincode Projects
+  /chaincode-projects/{id}/commits:
+    get:
+      description: Get a paginated list of commits for a project, including added/removed/modified
+        files
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Page size (default 20)
+        in: query
+        name: pageSize
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/projects.CommitsListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: List project commits with file changes
+      tags:
+      - Chaincode Projects
+  /chaincode-projects/{id}/commits/{commitHash}:
+    get:
+      description: Get details for a single commit, including file changes
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Commit hash
+        in: path
+        name: commitHash
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/projects.CommitDetailAPI'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get commit details
+      tags:
+      - Chaincode Projects
+  /chaincode-projects/{id}/diff:
+    get:
+      description: Get the diff of a file between two commits
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: File path (relative to project root)
+        in: query
+        name: file
+        required: true
+        type: string
+      - description: From commit hash
+        in: query
+        name: from
+        required: true
+        type: string
+      - description: To commit hash
+        in: query
+        name: to
+        required: true
+        type: string
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: Diff
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get file diff between two commits
+      tags:
+      - Chaincode Projects
+  /chaincode-projects/{id}/download:
+    get:
+      description: Download a project and its associated files as a zip file, excluding
+        common folders like node_modules, .vscode, etc.
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/zip
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Download a project as a zip file
+      tags:
+      - Chaincode Projects
+  /chaincode-projects/{id}/endorsement-policy:
+    put:
+      consumes:
+      - application/json
+      description: Update the endorsement policy of an existing project
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update project endorsement policy request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/projects.UpdateProjectEndorsementPolicyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/projects.Project'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Update a project's endorsement policy
+      tags:
+      - Chaincode Projects
+  /chaincode-projects/{id}/file_at_commit:
+    get:
+      description: Get the contents of a file at a specific commit hash
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: File path (relative to project root)
+        in: query
+        name: file
+        required: true
+        type: string
+      - description: Commit hash
+        in: query
+        name: commit
+        required: true
+        type: string
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: File contents
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get file contents at a specific commit
+      tags:
+      - Chaincode Projects
+  /chaincode-projects/{id}/invoke:
+    post:
+      consumes:
+      - application/json
+      description: Invokes a transaction on the specified chaincode project
+      parameters:
+      - description: Chaincode Project ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Transaction parameters
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/projects.HandlerRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Transaction result
+          schema:
+            $ref: '#/definitions/projects.HandlerResponse'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "404":
+          description: Project not found
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Invoke a chaincode transaction
+      tags:
+      - Chaincode Projects
+  /chaincode-projects/{id}/logs:
+    get:
+      description: Stream or return the logs for the project's running container
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: Logs
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get logs for a project server
+      tags:
+      - Chaincode Projects
+  /chaincode-projects/{id}/logs/stream:
+    get:
+      description: Stream logs for the project's running container using SSE
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: SSE stream of logs
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Stream real-time logs for a project server
+      tags:
+      - Chaincode Projects
+  /chaincode-projects/{id}/metadata:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves metadata for the specified chaincode project
+      parameters:
+      - description: Chaincode Project ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Project metadata
+          schema:
+            $ref: '#/definitions/projects.HandlerResponse'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "404":
+          description: Project not found
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get project metadata
+      tags:
+      - Chaincode Projects
+  /chaincode-projects/{id}/query:
+    post:
+      consumes:
+      - application/json
+      description: Queries the state of the specified chaincode project
+      parameters:
+      - description: Chaincode Project ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Query parameters
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/projects.HandlerRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Query result
+          schema:
+            $ref: '#/definitions/projects.HandlerResponse'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "404":
+          description: Project not found
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Query a chaincode transaction
+      tags:
+      - Chaincode Projects
+  /chaincode-projects/{id}/start:
+    post:
+      description: Start the server process for a given project using its boilerplate
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Start the server for a project
+      tags:
+      - Chaincode Projects
+  /chaincode-projects/{id}/stop:
+    post:
+      description: Stop the server process for a given project
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Stop the server for a project
+      tags:
+      - Chaincode Projects
   /dummy:
     post:
       consumes:
@@ -4054,6 +5717,42 @@ paths:
           description: Already Reported
           schema:
             $ref: '#/definitions/http.UpdateBatchTimeoutPayload'
+        "209":
+          description: ""
+          schema:
+            $ref: '#/definitions/http.UpdateApplicationPolicyPayload'
+        "210":
+          description: ""
+          schema:
+            $ref: '#/definitions/http.UpdateOrdererPolicyPayload'
+        "211":
+          description: ""
+          schema:
+            $ref: '#/definitions/http.UpdateChannelPolicyPayload'
+        "212":
+          description: ""
+          schema:
+            $ref: '#/definitions/http.UpdateChannelCapabilityOperation'
+        "213":
+          description: ""
+          schema:
+            $ref: '#/definitions/http.UpdateOrdererCapabilityOperation'
+        "214":
+          description: ""
+          schema:
+            $ref: '#/definitions/http.UpdateApplicationCapabilityOperation'
+        "215":
+          description: ""
+          schema:
+            $ref: '#/definitions/http.AddOrdererOrgPayload'
+        "216":
+          description: ""
+          schema:
+            $ref: '#/definitions/http.RemoveOrdererOrgPayload'
+        "217":
+          description: ""
+          schema:
+            $ref: '#/definitions/http.UpdateOrdererOrgMSPPayload'
       summary: Submit config update proposal
       tags:
       - Fabric Networks
@@ -4829,6 +6528,43 @@ paths:
       summary: Get a Besu network by ID
       tags:
       - Besu Networks
+  /networks/besu/{id}/map:
+    get:
+      description: Get a map of all nodes (peers/orderers/validators) for a network,
+        including endpoints and optionally health status.
+      parameters:
+      - description: Network ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 'Check node health (default: false)'
+        in: query
+        name: checkHealth
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/service.NetworkMap'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+      summary: Get network map
+      tags:
+      - Fabric Networks
+      - Besu Networks
   /networks/besu/import:
     post:
       consumes:
@@ -5179,6 +6915,43 @@ paths:
       summary: Get Fabric chain information
       tags:
       - Fabric Networks
+  /networks/fabric/{id}/map:
+    get:
+      description: Get a map of all nodes (peers/orderers/validators) for a network,
+        including endpoints and optionally health status.
+      parameters:
+      - description: Network ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 'Check node health (default: false)'
+        in: query
+        name: checkHealth
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/service.NetworkMap'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+      summary: Get network map
+      tags:
+      - Fabric Networks
+      - Besu Networks
   /networks/fabric/{id}/nodes:
     get:
       description: Get all nodes associated with a network
@@ -6863,6 +8636,220 @@ paths:
       summary: Revoke a certificate using its serial number
       tags:
       - Organizations
+  /organizations/{id}/keys:
+    get:
+      consumes:
+      - application/json
+      description: Get all keys associated with an organization
+      parameters:
+      - description: Organization ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.ListKeysResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List all keys for an organization
+      tags:
+      - Organizations
+    post:
+      consumes:
+      - application/json
+      description: Create a new key with a specific role (admin or client) for an
+        organization
+      parameters:
+      - description: Organization ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Key creation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CreateKeyRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handler.KeyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a new key for an organization
+      tags:
+      - Organizations
+  /organizations/{id}/keys/{keyId}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a key and its associated certificate
+      parameters:
+      - description: Organization ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Key ID
+        in: path
+        name: keyId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete a key
+      tags:
+      - Organizations
+    get:
+      consumes:
+      - application/json
+      description: Get a specific key by its ID
+      parameters:
+      - description: Organization ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Key ID
+        in: path
+        name: keyId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.KeyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get a specific key by ID
+      tags:
+      - Organizations
+  /organizations/{id}/keys/renew:
+    post:
+      consumes:
+      - application/json
+      description: Renew a certificate for a specific key in an organization
+      parameters:
+      - description: Organization ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Certificate renewal request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.RenewCertificateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.KeyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Renew a certificate for a key
+      tags:
+      - Organizations
   /organizations/{id}/revoked-certificates:
     get:
       consumes:
@@ -6985,7 +8972,7 @@ paths:
     delete:
       consumes:
       - application/json
-      description: Delete an existing plugin
+      description: Delete a plugin (will stop it first if running)
       parameters:
       - description: Plugin name
         in: path
@@ -7298,6 +9285,436 @@ paths:
       summary: Refresh available plugins
       tags:
       - Plugins
+  /projects/{projectId}/dirs/create:
+    post:
+      consumes:
+      - application/json
+      description: Create a new directory in a project
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: integer
+      - description: Directory create info
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dirs.CreateDirRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dirs.CreateDirResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Create a directory
+      tags:
+      - directories
+  /projects/{projectId}/dirs/delete:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a directory in a project
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: integer
+      - description: Project name
+        in: query
+        name: project
+        required: true
+        type: string
+      - description: Directory to delete, relative to project root
+        in: query
+        name: dir
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dirs.DeleteDirResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Delete a directory
+      tags:
+      - directories
+  /projects/{projectId}/dirs/list:
+    get:
+      description: List files and directories in a given project and directory. Large
+        directories (e.g., node_modules) are summarized/skipped.
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: integer
+      - description: Directory to list, relative to project root
+        in: query
+        name: dir
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dirs.ListEntriesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: List files and directories
+      tags:
+      - directories
+  /projects/{projectId}/files/delete:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a file in a project
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: integer
+      - description: File path relative to project root
+        in: query
+        name: path
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/files.DeleteFileResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Delete a file
+      tags:
+      - files
+  /projects/{projectId}/files/entries:
+    get:
+      description: List the full directory tree for a project, excluding large/ignored
+        folders (e.g., node_modules, .git)
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/files.DirectoryTreeNode'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: List full project directory tree
+      tags:
+      - files
+  /projects/{projectId}/files/list:
+    get:
+      consumes:
+      - application/json
+      description: List files in a given project and directory
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: integer
+      - description: Directory to list, relative to project root
+        in: query
+        name: dir
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/files.ListFilesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: List files
+      tags:
+      - files
+  /projects/{projectId}/files/read:
+    get:
+      consumes:
+      - application/json
+      description: Get the contents of a file in a project
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: integer
+      - description: File path relative to project root
+        in: query
+        name: path
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/files.ReadFileResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Read file contents
+      tags:
+      - files
+  /projects/{projectId}/files/write:
+    post:
+      consumes:
+      - application/json
+      description: Write or modify the contents of a file in a project
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: integer
+      - description: File write info
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/files.WriteFileRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/files.WriteFileResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Write file contents
+      tags:
+      - files
   /sc/besu/deploy:
     post:
       consumes:
@@ -7432,6 +9849,144 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       summary: Create a chaincode definition
+      tags:
+      - Chaincode
+  /sc/fabric/chaincodes/{chaincodeId}/definitions/{definitionId}:
+    get:
+      consumes:
+      - application/json
+      description: Get detailed information about a specific chaincode definition
+        including its events
+      parameters:
+      - description: Chaincode ID
+        in: path
+        name: chaincodeId
+        required: true
+        type: integer
+      - description: Chaincode Definition ID
+        in: path
+        name: definitionId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/chainlaunchdeploy.ChaincodeDefinitionDetailResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: Get chaincode definition details by ID
+      tags:
+      - Chaincode
+  /sc/fabric/chaincodes/{chaincodeId}/invoke:
+    post:
+      consumes:
+      - application/json
+      description: Invoke a transaction on a specific chaincode
+      parameters:
+      - description: Chaincode ID
+        in: path
+        name: chaincodeId
+        required: true
+        type: integer
+      - description: Invoke parameters
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/chainlaunchdeploy.ChaincodeInvokeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/chainlaunchdeploy.ChaincodeInvokeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: Invoke a chaincode
+      tags:
+      - Chaincode
+  /sc/fabric/chaincodes/{chaincodeId}/metadata:
+    get:
+      consumes:
+      - application/json
+      description: Get metadata for a specific chaincode by executing org.hyperledger.fabric:GetMetadata
+      parameters:
+      - description: Chaincode ID
+        in: path
+        name: chaincodeId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/chainlaunchdeploy.ChaincodeMetadataResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: Get chaincode metadata
+      tags:
+      - Chaincode
+  /sc/fabric/chaincodes/{chaincodeId}/query:
+    post:
+      consumes:
+      - application/json
+      description: Query a specific chaincode
+      parameters:
+      - description: Chaincode ID
+        in: path
+        name: chaincodeId
+        required: true
+        type: integer
+      - description: Query parameters
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/chainlaunchdeploy.ChaincodeQueryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/chainlaunchdeploy.ChaincodeQueryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: Query a chaincode
       tags:
       - Chaincode
   /sc/fabric/chaincodes/{id}:
@@ -7644,6 +10199,36 @@ paths:
       summary: Deploy chaincode based on chaincode definition (Docker)
       tags:
       - Chaincode
+  /sc/fabric/definitions/{definitionId}/docker-info:
+    get:
+      consumes:
+      - application/json
+      description: Get Docker container info for a specific chaincode definition by
+        ID
+      parameters:
+      - description: Chaincode Definition ID
+        in: path
+        name: definitionId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/chainlaunchdeploy.DockerContainerInfo'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: Get Docker info for a chaincode definition
+      tags:
+      - Chaincode
   /sc/fabric/definitions/{definitionId}/install:
     post:
       consumes:
@@ -7713,6 +10298,38 @@ paths:
       summary: Get timeline of events for a chaincode definition
       tags:
       - Chaincode
+  /sc/fabric/definitions/{definitionId}/undeploy:
+    post:
+      consumes:
+      - application/json
+      description: Remove the deployment (e.g., Docker container) for a given chaincode
+        definition
+      parameters:
+      - description: Chaincode Definition ID
+        in: path
+        name: definitionId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: Remove deployment for a chaincode definition
+      tags:
+      - Chaincode
   /sc/fabric/deploy:
     post:
       consumes:
@@ -7741,39 +10358,6 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       summary: Deploy Fabric chaincode
-      tags:
-      - SmartContracts
-  /sc/fabric/docker-deploy:
-    post:
-      consumes:
-      - application/json
-      description: Deploy a chaincode to a Fabric network using a Docker image, package
-        ID, and port mapping. If host_port is empty, a free port is chosen. If container_port
-        is empty, defaults to 7052.
-      parameters:
-      - description: 'Fabric chaincode Docker deployment parameters (host_port: optional,
-          container_port: optional, defaults to 7052)'
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/chainlaunchdeploy.FabricChaincodeDockerDeployRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/chainlaunchdeploy.FabricChaincodeDockerDeployResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/response.Response'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/response.Response'
-      summary: Deploy Fabric chaincode with Docker image
       tags:
       - SmartContracts
   /sc/fabric/peer/{peerId}/chaincode/approve:
@@ -7879,6 +10463,45 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       summary: Install Fabric chaincode
+      tags:
+      - SmartContracts
+  /sc/fabric/peer/{peerId}/chaincode/sequence:
+    get:
+      consumes:
+      - application/json
+      description: Get the current sequence number for a chaincode
+      parameters:
+      - description: Peer ID
+        in: path
+        name: peerId
+        required: true
+        type: string
+      - description: Chaincode name
+        in: query
+        name: chaincodeName
+        required: true
+        type: string
+      - description: Channel name
+        in: query
+        name: channelName
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/chainlaunchdeploy.FabricSequenceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: Get Fabric chaincode sequence
       tags:
       - SmartContracts
   /settings:
@@ -8186,6 +10809,8 @@ swagger: "2.0"
 tags:
 - description: Audit management operations
   name: Audit
+- description: Chaincode project management operations
+  name: Chaincode Projects
 - description: User authentication and authorization operations
   name: Authentication
 - description: Backup schedule configuration and management

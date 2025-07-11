@@ -12,11 +12,11 @@ import (
 	"github.com/chainlaunch/chainlaunch/pkg/errors"
 	"github.com/chainlaunch/chainlaunch/pkg/http/response"
 	"github.com/chainlaunch/chainlaunch/pkg/logger"
+	networkService "github.com/chainlaunch/chainlaunch/pkg/networks/service"
 	nodeService "github.com/chainlaunch/chainlaunch/pkg/nodes/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
-	"github.com/hyperledger/fabric-gateway/pkg/client"
 )
 
 // Handler handles HTTP requests for smart contract deployment
@@ -26,11 +26,12 @@ type Handler struct {
 	besuDeployer     DeployerWithAudit
 	validate         *validator.Validate
 	nodeService      *nodeService.NodeService
+	networkService   *networkService.NetworkService
 	chaincodeService *ChaincodeService
 }
 
 // NewHandler creates a new smart contract deploy handler
-func NewHandler(auditService *audit.AuditService, logger *logger.Logger, besuDeployer DeployerWithAudit, nodeService *nodeService.NodeService, chaincodeService *ChaincodeService) *Handler {
+func NewHandler(auditService *audit.AuditService, logger *logger.Logger, besuDeployer DeployerWithAudit, nodeService *nodeService.NodeService, chaincodeService *ChaincodeService, networkService *networkService.NetworkService) *Handler {
 	SetFabricAuditService(auditService)
 	if besuDeployer != nil {
 		besuDeployer.SetAuditService(auditService)
@@ -41,6 +42,7 @@ func NewHandler(auditService *audit.AuditService, logger *logger.Logger, besuDep
 		besuDeployer:     besuDeployer,
 		validate:         validator.New(),
 		nodeService:      nodeService,
+		networkService:   networkService,
 		chaincodeService: chaincodeService,
 	}
 }
@@ -52,14 +54,17 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Post("/peer/{peerId}/chaincode/install", response.Middleware(h.InstallFabricChaincode))
 		r.Post("/peer/{peerId}/chaincode/approve", response.Middleware(h.ApproveFabricChaincode))
 		r.Post("/peer/{peerId}/chaincode/commit", response.Middleware(h.CommitFabricChaincode))
-		r.Post("/docker-deploy", response.Middleware(h.DeployFabricChaincodeWithDockerImage))
+		r.Get("/peer/{peerId}/chaincode/sequence", response.Middleware(h.GetFabricChaincodeSequence))
 		r.Get("/chaincodes", response.Middleware(h.ListFabricChaincodes))
 		r.Get("/chaincodes/{id}", response.Middleware(h.GetFabricChaincodeDetailByID))
+		r.Get("/chaincodes/{chaincodeId}/metadata", response.Middleware(h.GetChaincodeMetadata))
 
-		// --- MISSING ENDPOINTS ---
 		r.Post("/chaincodes", response.Middleware(h.CreateChaincode))
 		r.Post("/chaincodes/{chaincodeId}/definitions", response.Middleware(h.CreateChaincodeDefinition))
 		r.Get("/chaincodes/{chaincodeId}/definitions", response.Middleware(h.ListChaincodeDefinitions))
+		r.Get("/chaincodes/{chaincodeId}/definitions/{definitionId}", response.Middleware(h.GetChaincodeDefinitionDetailByID))
+		r.Post("/chaincodes/{chaincodeId}/invoke", response.Middleware(h.InvokeChaincode))
+		r.Post("/chaincodes/{chaincodeId}/query", response.Middleware(h.QueryChaincode))
 	})
 
 	r.Route("/sc/fabric/definitions", func(r chi.Router) {
@@ -67,9 +72,11 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Post("/{definitionId}/approve", response.Middleware(h.ApproveChaincodeByDefinition))
 		r.Post("/{definitionId}/commit", response.Middleware(h.CommitChaincodeByDefinition))
 		r.Post("/{definitionId}/deploy", response.Middleware(h.DeployChaincodeByDefinition))
+		r.Post("/{definitionId}/undeploy", response.Middleware(h.RemoveDeploymentByDefinition))
 		r.Put("/{definitionId}", response.Middleware(h.UpdateChaincodeDefinition))
 		r.Get("/{definitionId}/timeline", response.Middleware(h.GetChaincodeDefinitionTimeline))
 		r.Delete("/{definitionId}", response.Middleware(h.DeleteChaincodeDefinition))
+		r.Get("/{definitionId}/docker-info", response.Middleware(h.GetChaincodeDefinitionDockerInfo))
 	})
 
 	r.Route("/sc/besu", func(r chi.Router) {
@@ -98,6 +105,13 @@ type FabricInstallResponse struct {
 	Status  string           `json:"status"`
 	Message string           `json:"message"`
 	Result  DeploymentResult `json:"result"`
+}
+type FabricSequenceResponse struct {
+	Status        string `json:"status"`
+	Message       string `json:"message"`
+	ChaincodeName string `json:"chaincode_name"`
+	ChannelName   string `json:"channel_name"`
+	Sequence      int64  `json:"sequence"`
 }
 
 // FabricApproveRequest represents the request body for Fabric chaincode approve
@@ -299,6 +313,74 @@ func (h *Handler) InstallFabricChaincode(w http.ResponseWriter, r *http.Request)
 		Status:  "success",
 		Message: "Chaincode installed successfully",
 		Result:  result,
+	}
+	return response.WriteJSON(w, http.StatusOK, resp)
+}
+
+// GetFabricChaincodeSequence handles Fabric chaincode sequence requests
+// @Summary Get Fabric chaincode sequence
+// @Description Get the current sequence number for a chaincode
+// @Tags SmartContracts
+// @Accept json
+// @Produce json
+// @Param peerId path string true "Peer ID"
+// @Param chaincodeName query string true "Chaincode name"
+// @Param channelName query string true "Channel name"
+// @Success 200 {object} FabricSequenceResponse
+// @Failure 400 {object} response.Response
+// @Failure 500 {object} response.Response
+// @Router /sc/fabric/peer/{peerId}/chaincode/sequence [get]
+func (h *Handler) GetFabricChaincodeSequence(w http.ResponseWriter, r *http.Request) error {
+	peerId := chi.URLParam(r, "peerId")
+	peerIdInt, err := strconv.ParseInt(peerId, 10, 64)
+	if err != nil {
+		h.logger.Error("Invalid peer ID", "peerId", peerId)
+		return errors.NewValidationError("invalid peer ID", map[string]interface{}{
+			"detail": "Invalid peer ID",
+			"code":   "INVALID_PEER_ID",
+		})
+	}
+
+	chaincodeName := r.URL.Query().Get("chaincodeName")
+	if chaincodeName == "" {
+		h.logger.Error("Missing chaincode name")
+		return errors.NewValidationError("missing chaincode name", map[string]interface{}{
+			"detail": "Chaincode name is required",
+			"code":   "MISSING_CHAINCODE_NAME",
+		})
+	}
+
+	channelName := r.URL.Query().Get("channelName")
+	if channelName == "" {
+		h.logger.Error("Missing channel name")
+		return errors.NewValidationError("missing channel name", map[string]interface{}{
+			"detail": "Channel name is required",
+			"code":   "MISSING_CHANNEL_NAME",
+		})
+	}
+
+	peerGateway, peerConn, err := h.nodeService.GetFabricPeerGateway(r.Context(), peerIdInt)
+	if err != nil {
+		h.logger.Error("Node not found", "peerId", peerId)
+		return errors.NewValidationError("node not found", map[string]interface{}{
+			"detail": "Node not found",
+			"code":   "NODE_NOT_FOUND",
+		})
+	}
+	defer peerConn.Close()
+
+	result, err := GetCurrentChaincodeSequence(r.Context(), peerGateway, channelName, chaincodeName)
+	if err != nil {
+		h.logger.Error("Fabric chaincode sequence retrieval failed", "error", err)
+		return errors.NewInternalError("sequence retrieval failed", err, nil)
+	}
+
+	resp := FabricSequenceResponse{
+		Status:        "success",
+		Message:       "Chaincode sequence retrieved successfully",
+		ChaincodeName: chaincodeName,
+		ChannelName:   channelName,
+		Sequence:      result,
 	}
 	return response.WriteJSON(w, http.StatusOK, resp)
 }
@@ -527,85 +609,6 @@ func (h *Handler) ListFabricChaincodes(w http.ResponseWriter, r *http.Request) e
 	return response.WriteJSON(w, http.StatusOK, resp)
 }
 
-// DeployFabricChaincodeWithDockerImage handles Fabric chaincode Docker deployment requests
-// @Summary Deploy Fabric chaincode with Docker image
-// @Description Deploy a chaincode to a Fabric network using a Docker image, package ID, and port mapping. If host_port is empty, a free port is chosen. If container_port is empty, defaults to 7052.
-// @Tags SmartContracts
-// @Accept json
-// @Produce json
-// @Param request body FabricChaincodeDockerDeployRequest true "Fabric chaincode Docker deployment parameters (host_port: optional, container_port: optional, defaults to 7052)"
-// @Success 200 {object} FabricChaincodeDockerDeployResponse
-// @Failure 400 {object} response.Response
-// @Failure 500 {object} response.Response
-// @Router /sc/fabric/docker-deploy [post]
-func (h *Handler) DeployFabricChaincodeWithDockerImage(w http.ResponseWriter, r *http.Request) error {
-	var req FabricChaincodeDockerDeployRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.logger.Error("Invalid Fabric Docker deploy request body", "error", err)
-		return errors.NewValidationError("invalid request body", map[string]interface{}{
-			"detail": err.Error(),
-			"code":   "INVALID_REQUEST_BODY",
-		})
-	}
-	if err := h.validate.Struct(req); err != nil {
-		validationErrors := make(map[string]string)
-		for _, err := range err.(validator.ValidationErrors) {
-			validationErrors[err.Field()] = err.Tag()
-		}
-		return errors.NewValidationError("validation failed", map[string]interface{}{
-			"detail": "Request validation failed",
-			"code":   "VALIDATION_ERROR",
-			"errors": validationErrors,
-		})
-	}
-
-	hostPort := ""
-	if req.HostPort != 0 {
-		hostPort = fmt.Sprintf("%d", req.HostPort)
-	}
-	containerPort := ""
-	if req.ContainerPort != 0 {
-		containerPort = fmt.Sprintf("%d", req.ContainerPort)
-	}
-
-	reporter := NewInMemoryDeploymentStatusReporter()
-	result, err := DeployChaincodeWithDockerImage(req.DockerImage, req.PackageID, hostPort, containerPort, reporter)
-	if err != nil {
-		h.logger.Error("Fabric chaincode Docker deployment failed", "error", err)
-		return errors.NewInternalError("docker deployment failed", err, nil)
-	}
-
-	slug := req.Slug
-	if slug == "" {
-		slug = generateUniqueSlug(req.Name)
-	}
-
-	// Try to update if slug exists, else insert
-	// TODO: Implement slug-based lookup and upsert in the new service layer
-	// chaincode, err := h.chaincodeService.GetChaincodeBySlug(r.Context(), slug)
-	// if err == nil && chaincode != nil && chaincode.ID > 0 {
-	// 	chaincode, err = h.chaincodeService.UpdateChaincodeBySlug(r.Context(), slug, req.DockerImage, req.PackageID, hostPort, containerPort, "running")
-	// 	if err != nil {
-	// 		h.logger.Error("Failed to update fabric chaincode record", "error", err)
-	// 		return errors.NewInternalError("failed to update chaincode record", err, nil)
-	// 	}
-	// } else {
-	// 	chaincode, err = h.chaincodeService.InsertChaincode(r.Context(), req.Name, slug, req.PackageID, req.DockerImage, hostPort, containerPort, "running")
-	// 	if err != nil {
-	// 		h.logger.Error("Failed to insert fabric chaincode record", "error", err)
-	// 		return errors.NewInternalError("failed to insert chaincode record", err, nil)
-	// 	}
-	// }
-
-	resp := FabricChaincodeDockerDeployResponse{
-		Status:  "success",
-		Message: "Chaincode Docker container started successfully",
-		Slug:    slug,
-		Result:  result,
-	}
-	return response.WriteJSON(w, http.StatusOK, resp)
-}
-
 // generateUniqueSlug creates a slug from the name and a random suffix if needed
 func generateUniqueSlug(name string) string {
 	base := strings.ToLower(regexp.MustCompile(`[^a-zA-Z0-9]+`).ReplaceAllString(name, "-"))
@@ -640,7 +643,6 @@ func (h *Handler) GetFabricChaincodeDetailByID(w http.ResponseWriter, r *http.Re
 	resp := FabricChaincodeDetail{
 		Chaincode:   detail.Chaincode,
 		Definitions: detail.Definitions,
-		DockerInfo:  detail.DockerInfo,
 	}
 	return response.WriteJSON(w, http.StatusOK, resp)
 }
@@ -881,12 +883,6 @@ func (h *Handler) ApproveChaincodeByDefinition(w http.ResponseWriter, r *http.Re
 	// Call service layer to approve chaincode using the given peer
 	err = h.chaincodeService.ApproveChaincodeByDefinition(r.Context(), definitionId, req.PeerID)
 	if err != nil {
-		endorseErr, ok := err.(*client.EndorseError)
-		if ok {
-			h.logger.Error("Failed to approve chaincode by definition", "error", endorseErr.Error())
-			errMessage := fmt.Sprintf("Failed to approve chaincode by definition: %s", endorseErr.TransactionError.Error())
-			return errors.NewValidationError("failed to approve chaincode by definition", map[string]interface{}{"detail": errMessage})
-		}
 		h.logger.Error("Failed to approve chaincode by definition", "error", err)
 		return errors.NewInternalError("failed to approve chaincode by definition", err, nil)
 	}
@@ -1060,4 +1056,328 @@ func (h *Handler) DeleteChaincodeDefinition(w http.ResponseWriter, r *http.Reque
 		return errors.NewInternalError("failed to delete chaincode definition", err, nil)
 	}
 	return response.WriteJSON(w, http.StatusOK, map[string]string{"status": "deleted", "definitionId": definitionIdStr})
+}
+
+// ChaincodeDefinitionDetailResponse represents the response for getting chaincode definition details
+type ChaincodeDefinitionDetailResponse struct {
+	Definition ChaincodeDefinitionResponse `json:"definition"`
+	Events     []*ChaincodeDefinitionEvent `json:"events"`
+}
+
+// @Summary Get chaincode definition details by ID
+// @Description Get detailed information about a specific chaincode definition including its events
+// @Tags Chaincode
+// @Accept json
+// @Produce json
+// @Param chaincodeId path int true "Chaincode ID"
+// @Param definitionId path int true "Chaincode Definition ID"
+// @Success 200 {object} ChaincodeDefinitionDetailResponse
+// @Failure 400 {object} response.Response
+// @Failure 404 {object} response.Response
+// @Failure 500 {object} response.Response
+// @Router /sc/fabric/chaincodes/{chaincodeId}/definitions/{definitionId} [get]
+func (h *Handler) GetChaincodeDefinitionDetailByID(w http.ResponseWriter, r *http.Request) error {
+	chaincodeIdStr := chi.URLParam(r, "chaincodeId")
+	definitionIdStr := chi.URLParam(r, "definitionId")
+
+	chaincodeId, err := strconv.ParseInt(chaincodeIdStr, 10, 64)
+	if err != nil {
+		h.logger.Error("Invalid chaincode ID", "chaincodeId", chaincodeIdStr)
+		return errors.NewValidationError("invalid chaincode ID", map[string]interface{}{"detail": "Invalid chaincode ID"})
+	}
+
+	definitionId, err := strconv.ParseInt(definitionIdStr, 10, 64)
+	if err != nil {
+		h.logger.Error("Invalid definition ID", "definitionId", definitionIdStr)
+		return errors.NewValidationError("invalid definition ID", map[string]interface{}{"detail": "Invalid definition ID"})
+	}
+
+	// Get the definition details
+	def, err := h.chaincodeService.GetChaincodeDefinition(r.Context(), definitionId)
+	if err != nil {
+		h.logger.Error("Failed to get chaincode definition", "error", err)
+		return errors.NewInternalError("failed to get chaincode definition", err, nil)
+	}
+	if def == nil {
+		return response.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "Chaincode definition not found"})
+	}
+
+	// Verify the definition belongs to the specified chaincode
+	if def.ChaincodeID != chaincodeId {
+		return response.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "Chaincode definition not found for the specified chaincode"})
+	}
+
+	// Get the events for this definition
+	events, err := h.chaincodeService.ListChaincodeDefinitionEvents(r.Context(), definitionId)
+	if err != nil {
+		h.logger.Error("Failed to get chaincode definition events", "error", err)
+		return errors.NewInternalError("failed to get chaincode definition events", err, nil)
+	}
+
+	resp := ChaincodeDefinitionDetailResponse{
+		Definition: mapChaincodeDefinitionToResponse(def),
+		Events:     events,
+	}
+
+	return response.WriteJSON(w, http.StatusOK, resp)
+}
+
+// @Summary Remove deployment for a chaincode definition
+// @Description Remove the deployment (e.g., Docker container) for a given chaincode definition
+// @Tags Chaincode
+// @Accept json
+// @Produce json
+// @Param definitionId path int true "Chaincode Definition ID"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} response.Response
+// @Failure 500 {object} response.Response
+// @Router /sc/fabric/definitions/{definitionId}/undeploy [post]
+func (h *Handler) RemoveDeploymentByDefinition(w http.ResponseWriter, r *http.Request) error {
+	definitionIdStr := chi.URLParam(r, "definitionId")
+	definitionId, err := strconv.ParseInt(definitionIdStr, 10, 64)
+	if err != nil {
+		h.logger.Error("Invalid definition ID", "definitionId", definitionIdStr)
+		return errors.NewValidationError("invalid definition ID", map[string]interface{}{"detail": "Invalid definition ID"})
+	}
+	err = h.chaincodeService.RemoveDeploymentByDefinition(r.Context(), definitionId)
+	if err != nil {
+		h.logger.Error("Failed to remove deployment by definition", "error", err)
+		return errors.NewInternalError("failed to remove deployment by definition", err, nil)
+	}
+	return response.WriteJSON(w, http.StatusOK, map[string]string{"status": "undeploy success", "definitionId": definitionIdStr})
+}
+
+// --- Invoke/Query HTTP structs ---
+
+type ChaincodeInvokeRequest struct {
+	// Arguments to pass to the chaincode function
+	Args []string `json:"args"`
+	// Function name to invoke
+	Function string `json:"function"`
+	// Optional: Channel name
+	Channel string `json:"channel"`
+	// Optional: Transient data
+	Transient map[string][]byte `json:"transient"`
+	// KeyID to use for signing
+	KeyID string `json:"key_id"`
+}
+
+type ChaincodeInvokeResponse struct {
+	Status  string      `json:"status"`
+	Message string      `json:"message"`
+	Result  interface{} `json:"result"`
+}
+
+type ChaincodeQueryRequest struct {
+	// Arguments to pass to the chaincode function
+	Args []string `json:"args"`
+	// Function name to query
+	Function string `json:"function"`
+	// Optional: Channel name
+	Channel string `json:"channel"`
+	// Optional: Transient data
+	Transient map[string][]byte `json:"transient"`
+	// KeyID to use for signing/query
+	KeyID string `json:"key_id"`
+}
+
+type ChaincodeQueryResponse struct {
+	Status  string      `json:"status"`
+	Message string      `json:"message"`
+	Result  interface{} `json:"result"`
+}
+
+// @Summary Invoke a chaincode
+// @Description Invoke a transaction on a specific chaincode
+// @Tags Chaincode
+// @Accept json
+// @Produce json
+// @Param chaincodeId path int true "Chaincode ID"
+// @Param request body ChaincodeInvokeRequest true "Invoke parameters"
+// @Success 200 {object} ChaincodeInvokeResponse
+// @Failure 400 {object} response.Response
+// @Failure 500 {object} response.Response
+// @Router /sc/fabric/chaincodes/{chaincodeId}/invoke [post]
+func (h *Handler) InvokeChaincode(w http.ResponseWriter, r *http.Request) error {
+	chaincodeIdStr := chi.URLParam(r, "chaincodeId")
+	chaincodeId, err := strconv.ParseInt(chaincodeIdStr, 10, 64)
+	if err != nil {
+		h.logger.Error("Invalid chaincode ID", "chaincodeId", chaincodeIdStr)
+		return errors.NewValidationError("invalid chaincode ID", map[string]interface{}{"detail": "Invalid chaincode ID"})
+	}
+	var req ChaincodeInvokeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.Error("Invalid invoke chaincode request body", "error", err)
+		return errors.NewValidationError("invalid request body", map[string]interface{}{"detail": err.Error()})
+	}
+	keyID, err := strconv.ParseInt(req.KeyID, 10, 64)
+	if err != nil {
+		h.logger.Error("Invalid key ID", "keyID", req.KeyID)
+		return errors.NewValidationError("invalid key ID", map[string]interface{}{"detail": "Invalid key ID"})
+	}
+	result, err := h.chaincodeService.InvokeChaincode(r.Context(), chaincodeId, req.Function, req.Args, req.Channel, req.Transient, keyID)
+	if err != nil {
+		h.logger.Error("Failed to invoke chaincode", "error", err)
+		return errors.NewInternalError("failed to invoke chaincode", err, nil)
+	}
+	resp := ChaincodeInvokeResponse{
+		Status:  "success",
+		Message: "Chaincode invoked successfully",
+		Result:  result,
+	}
+	return response.WriteJSON(w, http.StatusOK, resp)
+}
+
+// @Summary Query a chaincode
+// @Description Query a specific chaincode
+// @Tags Chaincode
+// @Accept json
+// @Produce json
+// @Param chaincodeId path int true "Chaincode ID"
+// @Param request body ChaincodeQueryRequest true "Query parameters"
+// @Success 200 {object} ChaincodeQueryResponse
+// @Failure 400 {object} response.Response
+// @Failure 500 {object} response.Response
+// @Router /sc/fabric/chaincodes/{chaincodeId}/query [post]
+func (h *Handler) QueryChaincode(w http.ResponseWriter, r *http.Request) error {
+	chaincodeIdStr := chi.URLParam(r, "chaincodeId")
+	chaincodeId, err := strconv.ParseInt(chaincodeIdStr, 10, 64)
+	if err != nil {
+		h.logger.Error("Invalid chaincode ID", "chaincodeId", chaincodeIdStr)
+		return errors.NewValidationError("invalid chaincode ID", map[string]interface{}{"detail": "Invalid chaincode ID"})
+	}
+	var req ChaincodeQueryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.Error("Invalid query chaincode request body", "error", err)
+		return errors.NewValidationError("invalid request body", map[string]interface{}{"detail": err.Error()})
+	}
+	// TODO: Pass req.KeyID to service layer when supported
+	keyID, err := strconv.ParseInt(req.KeyID, 10, 64)
+	if err != nil {
+		h.logger.Error("Invalid key ID", "keyID", req.KeyID)
+		return errors.NewValidationError("invalid key ID", map[string]interface{}{"detail": "Invalid key ID"})
+	}
+	result, err := h.chaincodeService.QueryChaincode(r.Context(), chaincodeId, req.Function, req.Args, req.Channel, req.Transient, keyID)
+	if err != nil {
+		h.logger.Error("Failed to query chaincode", "error", err)
+		return errors.NewInternalError("failed to query chaincode", err, nil)
+	}
+	resp := ChaincodeQueryResponse{
+		Status:  "success",
+		Message: "Chaincode queried successfully",
+		Result:  result,
+	}
+	return response.WriteJSON(w, http.StatusOK, resp)
+}
+
+type ChaincodeMetadataResponse struct {
+	Status  string      `json:"status"`
+	Message string      `json:"message"`
+	Result  interface{} `json:"result"`
+}
+
+// @Summary Get chaincode metadata
+// @Description Get metadata for a specific chaincode by executing org.hyperledger.fabric:GetMetadata
+// @Tags Chaincode
+// @Accept json
+// @Produce json
+// @Param chaincodeId path int true "Chaincode ID"
+// @Success 200 {object} ChaincodeMetadataResponse
+// @Failure 400 {object} response.Response
+// @Failure 500 {object} response.Response
+// @Router /sc/fabric/chaincodes/{chaincodeId}/metadata [get]
+func (h *Handler) GetChaincodeMetadata(w http.ResponseWriter, r *http.Request) error {
+	chaincodeIdStr := chi.URLParam(r, "chaincodeId")
+	chaincodeId, err := strconv.ParseInt(chaincodeIdStr, 10, 64)
+	if err != nil {
+		h.logger.Error("Invalid chaincode ID", "chaincodeId", chaincodeIdStr)
+		return errors.NewValidationError("invalid chaincode ID", map[string]interface{}{"detail": "Invalid chaincode ID"})
+	}
+
+	// Use the chaincode's network name as the channel
+	cc, err := h.chaincodeService.GetChaincode(r.Context(), chaincodeId)
+	if err != nil {
+		h.logger.Error("Failed to get chaincode", "error", err)
+		return errors.NewInternalError("failed to get chaincode", err, nil)
+	}
+	if cc == nil {
+		return response.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "Chaincode not found"})
+	}
+	channelName := cc.NetworkName
+
+	// Get all nodes for the network and select a peer
+	networkNodeResp, err := h.networkService.GetNetworkNodes(r.Context(), cc.NetworkID)
+	if err != nil {
+		h.logger.Error("Failed to get nodes for network", "error", err)
+		return errors.NewInternalError("failed to get nodes for network", err, nil)
+	}
+	var keyID int64
+	foundPeer := false
+	for _, node := range networkNodeResp {
+		if node.Node.NodeType == "FABRIC_PEER" && node.Node.Platform == "FABRIC" && node.Node.FabricPeer != nil {
+			orgID := node.Node.FabricPeer.OrganizationID
+			keyID, err = h.nodeService.GetFabricClientIdentityForOrganization(r.Context(), orgID)
+			if err != nil {
+				h.logger.Error("Failed to get organization", "error", err)
+				return errors.NewInternalError("failed to get organization", err, nil)
+			}
+			foundPeer = true
+			break
+		}
+	}
+	if !foundPeer {
+		return response.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "No peer found for network"})
+	}
+
+	// Prepare the query for org.hyperledger.fabric:GetMetadata
+	function := "org.hyperledger.fabric:GetMetadata"
+	args := []string{}
+	// Use the service layer to invoke the system chaincode method with the selected keyID
+	metadata, err := h.chaincodeService.QueryChaincode(r.Context(), chaincodeId, function, args, channelName, nil, keyID)
+	if err != nil {
+		h.logger.Error("Failed to get chaincode metadata", "error", err)
+		return errors.NewInternalError("failed to get chaincode metadata", err, nil)
+	}
+	resp := ChaincodeMetadataResponse{
+		Status:  "success",
+		Message: "Chaincode metadata retrieved successfully",
+		Result:  metadata,
+	}
+	return response.WriteJSON(w, http.StatusOK, resp)
+}
+
+// @Summary Get Docker info for a chaincode definition
+// @Description Get Docker container info for a specific chaincode definition by ID
+// @Tags Chaincode
+// @Accept json
+// @Produce json
+// @Param definitionId path int true "Chaincode Definition ID"
+// @Success 200 {object} DockerContainerInfo
+// @Failure 404 {object} response.Response
+// @Failure 500 {object} response.Response
+// @Router /sc/fabric/definitions/{definitionId}/docker-info [get]
+func (h *Handler) GetChaincodeDefinitionDockerInfo(w http.ResponseWriter, r *http.Request) error {
+	definitionIdStr := chi.URLParam(r, "definitionId")
+	definitionId, err := strconv.ParseInt(definitionIdStr, 10, 64)
+	if err != nil {
+		h.logger.Error("Invalid definition ID", "definitionId", definitionIdStr)
+		return errors.NewValidationError("invalid definition ID", map[string]interface{}{"detail": "Invalid definition ID"})
+	}
+	def, err := h.chaincodeService.GetChaincodeDefinition(r.Context(), definitionId)
+	if err != nil {
+		h.logger.Error("Failed to get chaincode definition", "error", err)
+		return errors.NewInternalError("failed to get chaincode definition", err, nil)
+	}
+	if def == nil {
+		return response.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "Chaincode definition not found"})
+	}
+	dockerInfo, err := getDockerInfoForDefinition(r.Context(), def)
+	if err != nil {
+		h.logger.Error("Failed to get Docker info for definition", "error", err)
+		return errors.NewInternalError("failed to get Docker info for definition", err, nil)
+	}
+	if dockerInfo == nil {
+		return response.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "Docker info not found for definition"})
+	}
+	return response.WriteJSON(w, http.StatusOK, dockerInfo)
 }

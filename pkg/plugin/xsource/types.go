@@ -3,6 +3,8 @@ package xsource
 import (
 	"context"
 	"fmt"
+
+	"github.com/chainlaunch/chainlaunch/pkg/plugin/types"
 )
 
 // XSourceType represents the type of x-source
@@ -30,7 +32,7 @@ type XSourceValue interface {
 	// Validate checks if the value is valid for this x-source type
 	Validate(ctx context.Context) error
 	// GetValue returns the processed value that can be used in templates
-	GetValue(ctx context.Context) (interface{}, error)
+	GetValue(ctx context.Context, spec types.ParameterSpec) (interface{}, error)
 	// GetValidationValue returns the value used for validation
 	GetValidationValue() string
 	// GetVolumeMounts returns the volume mounts needed for this x-source

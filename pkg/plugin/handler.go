@@ -238,7 +238,7 @@ func (h *Handler) updatePlugin(w http.ResponseWriter, r *http.Request) error {
 }
 
 // @Summary Delete a plugin
-// @Description Delete an existing plugin
+// @Description Delete a plugin (will stop it first if running)
 // @Tags Plugins
 // @Accept json
 // @Produce json
@@ -249,7 +249,10 @@ func (h *Handler) updatePlugin(w http.ResponseWriter, r *http.Request) error {
 // @Router /plugins/{name} [delete]
 func (h *Handler) deletePlugin(w http.ResponseWriter, r *http.Request) error {
 	name := chi.URLParam(r, "name")
-	if err := h.store.DeletePlugin(r.Context(), name); err != nil {
+
+	// First, check if the plugin exists
+	plugin, err := h.store.GetPlugin(r.Context(), name)
+	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			return errors.NewNotFoundError("plugin not found", map[string]interface{}{
 				"detail":      "The requested plugin does not exist",
@@ -257,9 +260,34 @@ func (h *Handler) deletePlugin(w http.ResponseWriter, r *http.Request) error {
 				"plugin_name": name,
 			})
 		}
+		return errors.NewInternalError("failed to get plugin", err, nil)
+	}
+
+	// Check if plugin is currently running
+	deploymentStatus, err := h.store.GetDeploymentStatus(r.Context(), name)
+	if err != nil {
+		// If we can't get deployment status, log it but continue with deletion
+		h.logger.Warnf("Failed to get deployment status for plugin %s: %v", name, err)
+	} else {
+		// If plugin is running, stop it first
+		if deploymentStatus == "deployed" || deploymentStatus == "deploying" {
+			h.logger.Infof("Plugin %s is currently running, stopping it before deletion", name)
+
+			if err := h.pm.StopPlugin(r.Context(), plugin, h.store); err != nil {
+				h.logger.Errorf("Failed to stop plugin %s before deletion: %v", name, err)
+			}
+			if err == nil {
+				h.logger.Infof("Successfully stopped plugin %s before deletion", name)
+			}
+		}
+	}
+
+	// Now delete the plugin
+	if err := h.store.DeletePlugin(r.Context(), name); err != nil {
 		return errors.NewInternalError("failed to delete plugin", err, nil)
 	}
 
+	h.logger.Infof("Successfully deleted plugin %s", name)
 	return response.WriteJSON(w, http.StatusNoContent, nil)
 }
 

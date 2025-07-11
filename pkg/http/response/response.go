@@ -18,6 +18,19 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
+// DetailedErrorResponse represents an error response with dynamic details
+// Use this for errors that need to return extra fields (e.g., model, tokenCount, etc.)
+type DetailedErrorResponse struct {
+	Error   string                 `json:"error"`
+	Message string                 `json:"message,omitempty"`
+	Details map[string]interface{} `json:"details,omitempty"`
+}
+
+// DetailedResponse represents a flexible response with dynamic fields
+// Use this for cases where the response structure is not known at compile time
+// or when you want to return arbitrary key-value pairs.
+type DetailedResponse map[string]interface{}
+
 // JSON sends a JSON response
 func JSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")

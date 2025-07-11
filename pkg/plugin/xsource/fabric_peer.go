@@ -10,6 +10,7 @@ import (
 	"github.com/chainlaunch/chainlaunch/pkg/db"
 	nodeservice "github.com/chainlaunch/chainlaunch/pkg/nodes/service"
 	"github.com/chainlaunch/chainlaunch/pkg/nodes/types"
+	ptypes "github.com/chainlaunch/chainlaunch/pkg/plugin/types"
 )
 
 // FabricPeerValue represents a fabric-peer x-source value
@@ -123,7 +124,7 @@ func (v *FabricPeerValue) Validate(ctx context.Context) error {
 	return nil
 }
 
-func (v *FabricPeerValue) GetValue(ctx context.Context) (interface{}, error) {
+func (v *FabricPeerValue) GetValue(ctx context.Context, spec ptypes.ParameterSpec) (interface{}, error) {
 	var details []*FabricPeerDetails
 
 	for _, peerIDStr := range v.PeerIDs {
@@ -143,7 +144,7 @@ func (v *FabricPeerValue) GetValue(ctx context.Context) (interface{}, error) {
 
 		// Define the TLS cert path inside the container
 		tlsCertPath := fmt.Sprintf("/etc/chainlaunch/peers/%d/tls/cert.pem", peerID)
-
+		tlsCACertPath := fmt.Sprintf("/etc/chainlaunch/peers/%d/tls/ca.pem", peerID)
 		details = append(details, &FabricPeerDetails{
 			ID:               peerID,
 			Name:             peer.Name,
@@ -152,14 +153,17 @@ func (v *FabricPeerValue) GetValue(ctx context.Context) (interface{}, error) {
 			MspID:            peer.FabricPeer.MSPID,
 			OrgID:            peer.FabricPeer.OrganizationID,
 			TLSCertPath:      tlsCertPath,
+			TLSCACertPath:    tlsCACertPath,
 		})
 	}
 
-	// If there's only one peer, return it directly
+	// Return array if spec type is array, otherwise return single peer if available
+	if spec.Type == "array" {
+		return details, nil
+	}
 	if len(details) == 1 {
 		return details[0], nil
 	}
-
 	return details, nil
 }
 
@@ -193,6 +197,11 @@ func (v *FabricPeerValue) GetVolumeMounts(ctx context.Context) ([]VolumeMount, e
 			return nil, fmt.Errorf("failed to write TLS cert: %w", err)
 		}
 
+		caCertPath := filepath.Join(tempDir, "ca.pem")
+		if err := os.WriteFile(caCertPath, []byte(peer.FabricPeer.TLSCACert), 0644); err != nil {
+			return nil, fmt.Errorf("failed to write TLS CA cert: %w", err)
+		}
+
 		// Add volume mount for the TLS cert
 		mounts = append(mounts, VolumeMount{
 			Source:      certPath,
@@ -200,6 +209,13 @@ func (v *FabricPeerValue) GetVolumeMounts(ctx context.Context) ([]VolumeMount, e
 			Type:        "bind",
 			ReadOnly:    true,
 			Description: fmt.Sprintf("TLS certificate for peer %s", peer.Name),
+		})
+		mounts = append(mounts, VolumeMount{
+			Source:      caCertPath,
+			Target:      fmt.Sprintf("/etc/chainlaunch/peers/%d/tls/ca.pem", peerID),
+			Type:        "bind",
+			ReadOnly:    true,
+			Description: fmt.Sprintf("TLS CA certificate for peer %s", peer.Name),
 		})
 	}
 
@@ -215,4 +231,5 @@ type FabricPeerDetails struct {
 	MspID            string
 	OrgID            int64
 	TLSCertPath      string // Path inside the container
+	TLSCACertPath    string // Path inside the container
 }

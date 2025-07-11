@@ -202,6 +202,7 @@ type UpdateFabricPeerRequest struct {
 	Env                     map[string]string       `json:"env,omitempty"`
 	AddressOverrides        []types.AddressOverride `json:"addressOverrides,omitempty"`
 	Version                 *string                 `json:"version,omitempty"`
+	Mode                    string                  `json:"mode,omitempty"`
 }
 
 // UpdateFabricOrdererRequest represents the configuration for updating a Fabric orderer node
@@ -213,6 +214,7 @@ type UpdateFabricOrdererRequest struct {
 	DomainNames             []string          `json:"domainNames,omitempty"`
 	Env                     map[string]string `json:"env,omitempty"`
 	Version                 *string           `json:"version,omitempty"`
+	Mode                    string            `json:"mode,omitempty"`
 }
 
 // UpdateBesuNodeRequest represents the configuration for updating a Besu node
@@ -228,6 +230,7 @@ type UpdateBesuNodeRequest struct {
 	Env            map[string]string `json:"env,omitempty"`
 	MetricsEnabled bool              `json:"metricsEnabled"`
 	MetricsPort    int64             `json:"metricsPort"`
+	Mode           string            `json:"mode,omitempty"`
 }
 
 type BesuNodeDefaultsResponse struct {

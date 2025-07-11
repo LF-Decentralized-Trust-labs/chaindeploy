@@ -18,11 +18,20 @@ import (
 	"github.com/chainlaunch/chainlaunch/pkg/nodes/types"
 	"github.com/chainlaunch/chainlaunch/pkg/nodes/utils"
 	"github.com/hyperledger/fabric-admin-sdk/pkg/chaincode"
+	"github.com/hyperledger/fabric-gateway/pkg/client"
 	"google.golang.org/grpc"
 )
 
 // GetFabricPeerDefaults returns default values for a Fabric peer node
 func (s *NodeService) GetFabricPeerDefaults() *NodeDefaults {
+	// Fetch default IP from settings
+	defaultIP := "127.0.0.1"
+	if setting, err := s.settingsService.GetSetting(context.Background()); err == nil {
+		if setting.Config.DefaultNodeExposeIP != "" {
+			defaultIP = setting.Config.DefaultNodeExposeIP
+		}
+	}
+	loopbackAddress := "0.0.0.0"
 	// Get available ports for peer services
 	listen, chaincode, events, operations, err := GetPeerPorts(7051)
 	if err != nil {
@@ -32,11 +41,11 @@ func (s *NodeService) GetFabricPeerDefaults() *NodeDefaults {
 			s.logger.Error("Failed to get available ports for peer", "error", err)
 			// Fall back to default ports if all attempts fail
 			return &NodeDefaults{
-				ListenAddress:           "0.0.0.0:7051",
-				ExternalEndpoint:        "localhost:7051",
-				ChaincodeAddress:        "0.0.0.0:7052",
-				EventsAddress:           "0.0.0.0:7053",
-				OperationsListenAddress: "0.0.0.0:9443",
+				ListenAddress:           fmt.Sprintf("%s:%d", loopbackAddress, 7051),
+				ExternalEndpoint:        fmt.Sprintf("%s:%d", defaultIP, 7051),
+				ChaincodeAddress:        fmt.Sprintf("%s:%d", loopbackAddress, 7052),
+				EventsAddress:           fmt.Sprintf("%s:%d", loopbackAddress, 7053),
+				OperationsListenAddress: fmt.Sprintf("%s:%d", loopbackAddress, 9443),
 				Mode:                    ModeService,
 				ServiceName:             "fabric-peer",
 				LogPath:                 "/var/log/fabric/peer.log",
@@ -46,11 +55,11 @@ func (s *NodeService) GetFabricPeerDefaults() *NodeDefaults {
 	}
 
 	return &NodeDefaults{
-		ListenAddress:           fmt.Sprintf("0.0.0.0:%d", listen),
-		ExternalEndpoint:        fmt.Sprintf("localhost:%d", listen),
-		ChaincodeAddress:        fmt.Sprintf("0.0.0.0:%d", chaincode),
-		EventsAddress:           fmt.Sprintf("0.0.0.0:%d", events),
-		OperationsListenAddress: fmt.Sprintf("0.0.0.0:%d", operations),
+		ListenAddress:           fmt.Sprintf("%s:%d", loopbackAddress, listen),
+		ExternalEndpoint:        fmt.Sprintf("%s:%d", defaultIP, listen),
+		ChaincodeAddress:        fmt.Sprintf("%s:%d", loopbackAddress, chaincode),
+		EventsAddress:           fmt.Sprintf("%s:%d", loopbackAddress, events),
+		OperationsListenAddress: fmt.Sprintf("%s:%d", loopbackAddress, operations),
 		Mode:                    ModeService,
 		ServiceName:             "fabric-peer",
 		LogPath:                 "/var/log/fabric/peer.log",
@@ -60,6 +69,14 @@ func (s *NodeService) GetFabricPeerDefaults() *NodeDefaults {
 
 // GetFabricOrdererDefaults returns default values for a Fabric orderer node
 func (s *NodeService) GetFabricOrdererDefaults() *NodeDefaults {
+	// Fetch default IP from settings
+	defaultIP := "127.0.0.1"
+	if setting, err := s.settingsService.GetSetting(context.Background()); err == nil {
+		if setting.Config.DefaultNodeExposeIP != "" {
+			defaultIP = setting.Config.DefaultNodeExposeIP
+		}
+	}
+	loopbackAddress := "0.0.0.0"
 	// Get available ports for orderer services
 	listen, admin, operations, err := GetOrdererPorts(7050)
 	if err != nil {
@@ -69,10 +86,10 @@ func (s *NodeService) GetFabricOrdererDefaults() *NodeDefaults {
 			s.logger.Error("Failed to get available ports for orderer", "error", err)
 			// Fall back to default ports if all attempts fail
 			return &NodeDefaults{
-				ListenAddress:           "0.0.0.0:7050",
-				ExternalEndpoint:        "localhost:7050",
-				AdminAddress:            "0.0.0.0:7053",
-				OperationsListenAddress: "0.0.0.0:8443",
+				ListenAddress:           fmt.Sprintf("%s:%d", loopbackAddress, 7050),
+				ExternalEndpoint:        fmt.Sprintf("%s:%d", defaultIP, 7050),
+				AdminAddress:            fmt.Sprintf("%s:%d", loopbackAddress, 7053),
+				OperationsListenAddress: fmt.Sprintf("%s:%d", loopbackAddress, 8443),
 				Mode:                    ModeService,
 				ServiceName:             "fabric-orderer",
 				LogPath:                 "/var/log/fabric/orderer.log",
@@ -82,10 +99,10 @@ func (s *NodeService) GetFabricOrdererDefaults() *NodeDefaults {
 	}
 
 	return &NodeDefaults{
-		ListenAddress:           fmt.Sprintf("0.0.0.0:%d", listen),
-		ExternalEndpoint:        fmt.Sprintf("localhost:%d", listen),
-		AdminAddress:            fmt.Sprintf("0.0.0.0:%d", admin),
-		OperationsListenAddress: fmt.Sprintf("0.0.0.0:%d", operations),
+		ListenAddress:           fmt.Sprintf("%s:%d", loopbackAddress, listen),
+		ExternalEndpoint:        fmt.Sprintf("%s:%d", defaultIP, listen),
+		AdminAddress:            fmt.Sprintf("%s:%d", loopbackAddress, admin),
+		OperationsListenAddress: fmt.Sprintf("%s:%d", loopbackAddress, operations),
 		Mode:                    ModeService,
 		ServiceName:             "fabric-orderer",
 		LogPath:                 "/var/log/fabric/orderer.log",
@@ -108,6 +125,14 @@ const (
 
 // GetFabricNodesDefaults returns default values for multiple nodes with guaranteed non-overlapping ports
 func (s *NodeService) GetFabricNodesDefaults(params NodesDefaultsParams) (*NodesDefaultsResult, error) {
+	// Fetch default IP from settings
+	defaultIP := "127.0.0.1"
+	loopbackAddress := "0.0.0.0"
+	if setting, err := s.settingsService.GetSetting(context.Background()); err == nil {
+		if setting.Config.DefaultNodeExposeIP != "" {
+			defaultIP = setting.Config.DefaultNodeExposeIP
+		}
+	}
 	// Validate node counts
 	if params.PeerCount > 15 {
 		return nil, fmt.Errorf("peer count exceeds maximum supported nodes (15)")
@@ -142,11 +167,11 @@ func (s *NodeService) GetFabricNodesDefaults(params NodesDefaultsParams) (*Nodes
 		}
 
 		result.Peers[i] = NodeDefaults{
-			ListenAddress:           fmt.Sprintf("0.0.0.0:%d", listen),
-			ExternalEndpoint:        fmt.Sprintf("localhost:%d", listen),
-			ChaincodeAddress:        fmt.Sprintf("0.0.0.0:%d", chaincode),
-			EventsAddress:           fmt.Sprintf("0.0.0.0:%d", events),
-			OperationsListenAddress: fmt.Sprintf("0.0.0.0:%d", operations),
+			ListenAddress:           fmt.Sprintf("%s:%d", loopbackAddress, listen),
+			ExternalEndpoint:        fmt.Sprintf("%s:%d", defaultIP, listen),
+			ChaincodeAddress:        fmt.Sprintf("%s:%d", loopbackAddress, chaincode),
+			EventsAddress:           fmt.Sprintf("%s:%d", loopbackAddress, events),
+			OperationsListenAddress: fmt.Sprintf("%s:%d", loopbackAddress, operations),
 			Mode:                    params.Mode,
 			ServiceName:             fmt.Sprintf("fabric-peer-%d", i+1),
 			LogPath:                 fmt.Sprintf("/var/log/fabric/peer%d.log", i+1),
@@ -176,10 +201,10 @@ func (s *NodeService) GetFabricNodesDefaults(params NodesDefaultsParams) (*Nodes
 		}
 
 		result.Orderers[i] = NodeDefaults{
-			ListenAddress:           fmt.Sprintf("0.0.0.0:%d", listen),
-			ExternalEndpoint:        fmt.Sprintf("localhost:%d", listen),
-			AdminAddress:            fmt.Sprintf("0.0.0.0:%d", admin),
-			OperationsListenAddress: fmt.Sprintf("0.0.0.0:%d", operations),
+			ListenAddress:           fmt.Sprintf("%s:%d", loopbackAddress, listen),
+			ExternalEndpoint:        fmt.Sprintf("%s:%d", defaultIP, listen),
+			AdminAddress:            fmt.Sprintf("%s:%d", loopbackAddress, admin),
+			OperationsListenAddress: fmt.Sprintf("%s:%d", loopbackAddress, operations),
 			Mode:                    params.Mode,
 			ServiceName:             fmt.Sprintf("fabric-orderer-%d", i+1),
 			LogPath:                 fmt.Sprintf("/var/log/fabric/orderer%d.log", i+1),
@@ -482,36 +507,48 @@ func (s *NodeService) UpdateFabricPeer(ctx context.Context, opts UpdateFabricPee
 		return nil, fmt.Errorf("invalid deployment config type")
 	}
 
+	// --- MODE CHANGE LOGIC ---
+	modeChanged := false
+	var newMode string
+	if opts.Mode != "" {
+		if opts.Mode != peerConfig.Mode {
+			modeChanged = true
+			newMode = opts.Mode
+		}
+	}
+	// If mode is changing, stop the node first
+	if modeChanged {
+		if err := s.stopFabricPeer(ctx, node); err != nil {
+			s.logger.Warn("Failed to stop peer before mode change", "error", err)
+		}
+		peerConfig.Mode = newMode
+		deployPeerConfig.Mode = newMode
+	}
+
 	// Update configuration fields if provided
 	if opts.ExternalEndpoint != "" && opts.ExternalEndpoint != peerConfig.ExternalEndpoint {
 		peerConfig.ExternalEndpoint = opts.ExternalEndpoint
+		deployPeerConfig.ExternalEndpoint = opts.ExternalEndpoint
 	}
 	if opts.ListenAddress != "" && opts.ListenAddress != peerConfig.ListenAddress {
-		if err := s.validateAddress(opts.ListenAddress); err != nil {
-			return nil, fmt.Errorf("invalid listen address: %w", err)
-		}
 		peerConfig.ListenAddress = opts.ListenAddress
+		deployPeerConfig.ListenAddress = opts.ListenAddress
 	}
 	if opts.EventsAddress != "" && opts.EventsAddress != peerConfig.EventsAddress {
-		if err := s.validateAddress(opts.EventsAddress); err != nil {
-			return nil, fmt.Errorf("invalid events address: %w", err)
-		}
 		peerConfig.EventsAddress = opts.EventsAddress
+		deployPeerConfig.EventsAddress = opts.EventsAddress
 	}
 	if opts.OperationsListenAddress != "" && opts.OperationsListenAddress != peerConfig.OperationsListenAddress {
-		if err := s.validateAddress(opts.OperationsListenAddress); err != nil {
-			return nil, fmt.Errorf("invalid operations listen address: %w", err)
-		}
 		peerConfig.OperationsListenAddress = opts.OperationsListenAddress
+		deployPeerConfig.OperationsListenAddress = opts.OperationsListenAddress
 	}
 	if opts.ChaincodeAddress != "" && opts.ChaincodeAddress != peerConfig.ChaincodeAddress {
-		if err := s.validateAddress(opts.ChaincodeAddress); err != nil {
-			return nil, fmt.Errorf("invalid chaincode address: %w", err)
-		}
 		peerConfig.ChaincodeAddress = opts.ChaincodeAddress
+		deployPeerConfig.ChaincodeAddress = opts.ChaincodeAddress
 	}
 	if opts.DomainNames != nil {
 		peerConfig.DomainNames = opts.DomainNames
+		deployPeerConfig.DomainNames = opts.DomainNames
 	}
 	if opts.Env != nil {
 		peerConfig.Env = opts.Env
@@ -524,17 +561,24 @@ func (s *NodeService) UpdateFabricPeer(ctx context.Context, opts UpdateFabricPee
 		peerConfig.Version = opts.Version
 		deployPeerConfig.Version = opts.Version
 	}
-
-	// Validate all addresses together for port conflicts
-	if err := s.validateFabricPeerAddresses(peerConfig); err != nil {
-		return nil, err
+	if opts.AddressOverrides != nil {
+		peerConfig.AddressOverrides = opts.AddressOverrides
+		deployPeerConfig.AddressOverrides = opts.AddressOverrides
 	}
+
+	// Validate the updated configuration
+	if err := s.validateFabricPeerConfig(peerConfig); err != nil {
+		return nil, fmt.Errorf("invalid peer configuration: %w", err)
+	}
+
+	// In UpdateFabricPeer, before validation
+	peerConfig.DomainNames = s.ensureExternalEndpointInDomains(peerConfig.ExternalEndpoint, peerConfig.DomainNames)
 
 	configBytes, err := utils.StoreNodeConfig(nodeConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to store node config: %w", err)
 	}
-	node, err = s.db.UpdateNodeConfig(ctx, &db.UpdateNodeConfigParams{
+	_, err = s.db.UpdateNodeConfig(ctx, &db.UpdateNodeConfigParams{
 		ID: opts.NodeID,
 		NodeConfig: sql.NullString{
 			String: string(configBytes),
@@ -544,24 +588,33 @@ func (s *NodeService) UpdateFabricPeer(ctx context.Context, opts UpdateFabricPee
 	if err != nil {
 		return nil, fmt.Errorf("failed to update node config: %w", err)
 	}
-
 	// Update the deployment config in the database
 	deploymentConfigBytes, err := json.Marshal(deployPeerConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal updated deployment config: %w", err)
 	}
 
-	node, err = s.db.UpdateDeploymentConfig(ctx, &db.UpdateDeploymentConfigParams{
+	_, err = s.db.UpdateDeploymentConfig(ctx, &db.UpdateDeploymentConfigParams{
 		ID: opts.NodeID,
 		DeploymentConfig: sql.NullString{
 			String: string(deploymentConfigBytes),
 			Valid:  true,
 		},
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to update deployment config: %w", err)
+	}
 
 	// Synchronize the peer config
 	if err := s.SynchronizePeerConfig(ctx, opts.NodeID); err != nil {
 		return nil, fmt.Errorf("failed to synchronize peer config: %w", err)
+	}
+
+	// If mode changed, start the node with the new mode
+	if modeChanged {
+		if err := s.startFabricPeer(ctx, node); err != nil {
+			s.logger.Warn("Failed to start peer after mode change", "error", err)
+		}
 	}
 
 	// Return updated node response
@@ -610,30 +663,43 @@ func (s *NodeService) UpdateFabricOrderer(ctx context.Context, opts UpdateFabric
 		}
 	}
 
+	// --- MODE CHANGE LOGIC ---
+	modeChanged := false
+	var newMode string
+	if opts.Mode != "" {
+		if opts.Mode != ordererConfig.Mode {
+			modeChanged = true
+			newMode = opts.Mode
+		}
+	}
+	if modeChanged {
+		if err := s.stopFabricOrderer(ctx, node); err != nil {
+			s.logger.Warn("Failed to stop orderer before mode change", "error", err)
+		}
+		ordererConfig.Mode = newMode
+		deployOrdererConfig.Mode = newMode
+	}
+
 	// Update configuration fields if provided
 	if opts.ExternalEndpoint != "" && opts.ExternalEndpoint != ordererConfig.ExternalEndpoint {
 		ordererConfig.ExternalEndpoint = opts.ExternalEndpoint
+		deployOrdererConfig.ExternalEndpoint = opts.ExternalEndpoint
 	}
 	if opts.ListenAddress != "" && opts.ListenAddress != ordererConfig.ListenAddress {
-		if err := s.validateAddress(opts.ListenAddress); err != nil {
-			return nil, fmt.Errorf("invalid listen address: %w", err)
-		}
 		ordererConfig.ListenAddress = opts.ListenAddress
+		deployOrdererConfig.ListenAddress = opts.ListenAddress
 	}
 	if opts.AdminAddress != "" && opts.AdminAddress != ordererConfig.AdminAddress {
-		if err := s.validateAddress(opts.AdminAddress); err != nil {
-			return nil, fmt.Errorf("invalid admin address: %w", err)
-		}
 		ordererConfig.AdminAddress = opts.AdminAddress
+		deployOrdererConfig.AdminAddress = opts.AdminAddress
 	}
 	if opts.OperationsListenAddress != "" && opts.OperationsListenAddress != ordererConfig.OperationsListenAddress {
-		if err := s.validateAddress(opts.OperationsListenAddress); err != nil {
-			return nil, fmt.Errorf("invalid operations listen address: %w", err)
-		}
 		ordererConfig.OperationsListenAddress = opts.OperationsListenAddress
+		deployOrdererConfig.OperationsListenAddress = opts.OperationsListenAddress
 	}
 	if opts.DomainNames != nil {
 		ordererConfig.DomainNames = opts.DomainNames
+		deployOrdererConfig.DomainNames = opts.DomainNames
 	}
 	if opts.Env != nil {
 		ordererConfig.Env = opts.Env
@@ -642,6 +708,14 @@ func (s *NodeService) UpdateFabricOrderer(ctx context.Context, opts UpdateFabric
 		ordererConfig.Version = opts.Version
 		deployOrdererConfig.Version = opts.Version
 	}
+
+	// Validate the updated configuration
+	if err := s.validateFabricOrdererConfig(ordererConfig); err != nil {
+		return nil, fmt.Errorf("invalid orderer configuration: %w", err)
+	}
+
+	// In UpdateFabricOrderer, before validation
+	ordererConfig.DomainNames = s.ensureExternalEndpointInDomains(ordererConfig.ExternalEndpoint, ordererConfig.DomainNames)
 
 	configBytes, err := utils.StoreNodeConfig(nodeConfig)
 	if err != nil {
@@ -671,6 +745,13 @@ func (s *NodeService) UpdateFabricOrderer(ctx context.Context, opts UpdateFabric
 			Valid:  true,
 		},
 	})
+
+	// If mode changed, start the node with the new mode
+	if modeChanged {
+		if err := s.startFabricOrderer(ctx, node); err != nil {
+			s.logger.Warn("Failed to start orderer after mode change", "error", err)
+		}
+	}
 
 	// Return updated node response
 	_, nodeResponse := s.mapDBNodeToServiceNode(node)
@@ -1095,6 +1176,49 @@ func (s *NodeService) GetFabricPeerGateway(ctx context.Context, peerID int64) (*
 	return gateway, peerConn, nil
 }
 
+func (s *NodeService) GetFabricClientIdentityForOrganization(ctx context.Context, orgID int64) (int64, error) {
+	org, err := s.orgService.GetOrganization(ctx, orgID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get organization: %w", err)
+	}
+
+	return org.ClientSignKeyID.Int64, nil
+}
+
+// GetPeerGateway returns a chaincode.Gateway for a peer
+func (s *NodeService) GetFabricPeerClientGateway(ctx context.Context, peerID int64, keyID int64) (*client.Gateway, *grpc.ClientConn, error) {
+	// Get the peer node from database
+	node, err := s.db.GetNode(ctx, peerID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil, errors.NewNotFoundError("peer not found", map[string]interface{}{
+				"id": peerID,
+			})
+		}
+		return nil, nil, fmt.Errorf("failed to get peer: %w", err)
+	}
+
+	// Validate node is a Fabric peer
+	if node.Platform != string(types.PlatformFabric) || node.NodeType.String != string(types.NodeTypeFabricPeer) {
+		return nil, nil, errors.NewValidationError("invalid node type", map[string]interface{}{
+			"detail": fmt.Sprintf("Node must be a Fabric peer, got %s", node.NodeType.String),
+			"code":   "INVALID_NODE_TYPE",
+		})
+	}
+
+	localPeer, err := s.GetFabricPeer(ctx, node.ID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get peer: %w", err)
+	}
+
+	gateway, peerConn, err := localPeer.GetGatewayClient(ctx, keyID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get gateway: %w", err)
+	}
+
+	return gateway, peerConn, nil
+}
+
 // GetPeerGateway returns a chaincode.Gateway for a peer
 func (s *NodeService) GetFabricPeerService(ctx context.Context, peerID int64) (*chaincode.Peer, *grpc.ClientConn, error) {
 	// Get the peer node from database
@@ -1127,4 +1251,21 @@ func (s *NodeService) GetFabricPeerService(ctx context.Context, peerID int64) (*
 	}
 
 	return gateway, peerConn, nil
+}
+
+// ensureExternalEndpointInDomains ensures that the external endpoint is included in the domain names
+func (s *NodeService) ensureExternalEndpointInDomains(externalEndpoint string, domainNames []string) []string {
+	// Split host:port to get just the host part
+	host, _, err := net.SplitHostPort(externalEndpoint)
+	if err != nil {
+		// If SplitHostPort fails, assume the entire string is the host
+		host = externalEndpoint
+	}
+
+	for _, domain := range domainNames {
+		if domain == host {
+			return domainNames
+		}
+	}
+	return append(domainNames, host)
 }
