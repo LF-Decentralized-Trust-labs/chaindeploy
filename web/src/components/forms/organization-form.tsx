@@ -4,15 +4,27 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
+import { ArrayFieldInput } from './ArrayFieldInput'
 
 const formSchema = z.object({
 	mspId: z.string().min(1, 'MSP ID is required'),
 	description: z.string().optional(),
 	providerId: z.number().optional(),
+	caParams: z
+		.object({
+			commonName: z.string().optional(),
+			country: z.array(z.string()).optional(),
+			province: z.array(z.string()).optional(),
+			locality: z.array(z.string()).optional(),
+			streetAddress: z.array(z.string()).optional(),
+			postalCode: z.array(z.string()).optional(),
+		})
+		.optional(),
 })
 
 export type OrganizationFormValues = z.infer<typeof formSchema>
@@ -30,8 +42,11 @@ export function OrganizationForm({ onSubmit, isSubmitting, providers }: Organiza
 			mspId: '',
 			description: '',
 			providerId: providers && providers.length > 0 ? providers[0].id : undefined,
+			caParams: undefined,
 		},
 	})
+
+	const caEnabled = useMemo(() => form.watch('caParams') !== undefined, [form.watch('caParams')])
 
 	// Set the first provider as default when providers are loaded
 	useEffect(() => {
@@ -42,7 +57,7 @@ export function OrganizationForm({ onSubmit, isSubmitting, providers }: Organiza
 
 	return (
 		<Form {...form}>
-			<form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+			<form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
 				<FormField
 					control={form.control}
 					name="mspId"
@@ -96,6 +111,53 @@ export function OrganizationForm({ onSubmit, isSubmitting, providers }: Organiza
 							</FormItem>
 						)}
 					/>
+				)}
+
+				{/* CA Parameters Switch */}
+				<div className="flex items-center gap-2">
+					<FormLabel>Customize CA Parameters</FormLabel>
+					<FormControl>
+						<Switch
+							checked={caEnabled}
+							onCheckedChange={(checked) => {
+								if (checked) {
+									form.setValue('caParams', {
+										commonName: '',
+										country: [],
+										province: [],
+										locality: [],
+										streetAddress: [],
+										postalCode: [],
+									})
+								} else {
+									form.setValue('caParams', undefined)
+								}
+							}}
+						/>
+					</FormControl>
+				</div>
+
+				{caEnabled && (
+					<div className="space-y-4 border rounded-lg p-4 bg-muted/20">
+						<FormField
+							control={form.control}
+							name="caParams.commonName"
+							render={({ field }) => (
+								<FormItem>
+									<FormLabel>Common Name</FormLabel>
+									<FormControl>
+										<Input placeholder="Enter Common Name" {...field} />
+									</FormControl>
+									<FormMessage />
+								</FormItem>
+							)}
+						/>
+						<ArrayFieldInput control={form.control} name="caParams.country" label="Country" placeholder="Enter country" />
+						<ArrayFieldInput control={form.control} name="caParams.province" label="Province" placeholder="Enter province" />
+						<ArrayFieldInput control={form.control} name="caParams.locality" label="Locality" placeholder="Enter locality" />
+						<ArrayFieldInput control={form.control} name="caParams.streetAddress" label="Street Address" placeholder="Enter street address" />
+						<ArrayFieldInput control={form.control} name="caParams.postalCode" label="Postal Code" placeholder="Enter postal code" />
+					</div>
 				)}
 
 				<Button disabled={isSubmitting} type="submit" className="w-full">

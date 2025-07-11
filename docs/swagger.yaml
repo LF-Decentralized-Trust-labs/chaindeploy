@@ -368,6 +368,8 @@ definitions:
         type: string
       repoPath:
         type: string
+      systemPrompt:
+        type: string
       validateCommand:
         type: string
     type: object
@@ -1140,14 +1142,37 @@ definitions:
     type: object
   handler.CreateOrganizationRequest:
     properties:
+      commonName:
+        description: CA certificate properties
+        type: string
+      country:
+        items:
+          type: string
+        type: array
       description:
         type: string
+      locality:
+        items:
+          type: string
+        type: array
       mspId:
         type: string
       name:
         type: string
+      postalCode:
+        items:
+          type: string
+        type: array
       providerId:
         type: integer
+      province:
+        items:
+          type: string
+        type: array
+      streetAddress:
+        items:
+          type: string
+        type: array
     required:
     - mspId
     - name

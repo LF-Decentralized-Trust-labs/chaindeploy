@@ -114,6 +114,13 @@ func (h *OrganizationHandler) CreateOrganization(w http.ResponseWriter, r *http.
 		Name:        req.Name,
 		Description: req.Description,
 		ProviderID:  req.ProviderID,
+		// Pass CA certificate properties
+		CommonName:    req.CommonName,
+		Country:       req.Country,
+		Province:      req.Province,
+		Locality:      req.Locality,
+		StreetAddress: req.StreetAddress,
+		PostalCode:    req.PostalCode,
 	}
 
 	org, err := h.service.CreateOrganization(r.Context(), params)

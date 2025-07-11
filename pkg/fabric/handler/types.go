@@ -12,6 +12,14 @@ type CreateOrganizationRequest struct {
 	Name        string `json:"name" validate:"required"`
 	Description string `json:"description"`
 	ProviderID  int64  `json:"providerId"`
+
+	// CA certificate properties
+	CommonName    string   `json:"commonName"`
+	Country       []string `json:"country"`
+	Province      []string `json:"province"`
+	Locality      []string `json:"locality"`
+	StreetAddress []string `json:"streetAddress"`
+	PostalCode    []string `json:"postalCode"`
 }
 
 type UpdateOrganizationRequest struct {

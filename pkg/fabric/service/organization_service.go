@@ -52,6 +52,14 @@ type CreateOrganizationParams struct {
 	Name        string `validate:"required"`
 	Description string
 	ProviderID  int64
+
+	// CA certificate properties
+	CommonName    string
+	Country       []string
+	Province      []string
+	Locality      []string
+	StreetAddress []string
+	PostalCode    []string
 }
 
 // UpdateOrganizationParams represents the service layer update parameters
@@ -194,12 +202,14 @@ func (s *OrganizationService) CreateOrganization(ctx context.Context, params Cre
 		ProviderID:  &providerID,
 		IsCA:        &isCA,
 		Certificate: &models.CertificateRequest{
-			CommonName:         fmt.Sprintf("%s-sign-ca", params.MspID),
+			CommonName:         params.CommonName,
 			Organization:       []string{params.Name},
 			OrganizationalUnit: []string{"SIGN"},
-			Country:            []string{"US"},
-			Locality:           []string{"San Francisco"},
-			Province:           []string{"California"},
+			Country:            params.Country,
+			Locality:           params.Locality,
+			Province:           params.Province,
+			StreetAddress:      params.StreetAddress,
+			PostalCode:         params.PostalCode,
 		},
 	}
 	signKey, err := s.keyManagement.CreateKey(ctx, signKeyReq, providerID)
@@ -228,9 +238,11 @@ func (s *OrganizationService) CreateOrganization(ctx context.Context, params Cre
 		CommonName:         fmt.Sprintf("%s-sign-admin", params.MspID),
 		Organization:       []string{params.Name},
 		OrganizationalUnit: []string{"admin"},
-		Country:            []string{"US"},
-		Locality:           []string{"San Francisco"},
-		Province:           []string{"California"},
+		Country:            params.Country,
+		Locality:           params.Locality,
+		Province:           params.Province,
+		StreetAddress:      params.StreetAddress,
+		PostalCode:         params.PostalCode,
 		KeyUsage:           x509.KeyUsageCertSign,
 	})
 	if err != nil {
@@ -260,9 +272,11 @@ func (s *OrganizationService) CreateOrganization(ctx context.Context, params Cre
 		CommonName:         fmt.Sprintf("%s-sign-client", params.MspID),
 		Organization:       []string{params.Name},
 		OrganizationalUnit: []string{"client"},
-		Country:            []string{"US"},
-		Locality:           []string{"San Francisco"},
-		Province:           []string{"California"},
+		Country:            params.Country,
+		Locality:           params.Locality,
+		Province:           params.Province,
+		StreetAddress:      params.StreetAddress,
+		PostalCode:         params.PostalCode,
 		KeyUsage:           x509.KeyUsageCertSign,
 	})
 	if err != nil {
@@ -286,9 +300,11 @@ func (s *OrganizationService) CreateOrganization(ctx context.Context, params Cre
 			CommonName:         fmt.Sprintf("%s-tls-ca", params.MspID),
 			Organization:       []string{params.Name},
 			OrganizationalUnit: []string{"TLS"},
-			Country:            []string{"US"},
-			Locality:           []string{"San Francisco"},
-			Province:           []string{"California"},
+			Country:            params.Country,
+			Locality:           params.Locality,
+			Province:           params.Province,
+			StreetAddress:      params.StreetAddress,
+			PostalCode:         params.PostalCode,
 		},
 	}
 	tlsKey, err := s.keyManagement.CreateKey(ctx, tlsKeyReq, providerID)
@@ -324,8 +340,12 @@ func (s *OrganizationService) CreateOrganization(ctx context.Context, params Cre
 		CommonName:         fmt.Sprintf("%s-tls-admin", params.MspID),
 		Organization:       []string{params.Name},
 		OrganizationalUnit: []string{"admin"},
-		Country:            []string{"US"},
-		Locality:           []string{"San Francisco"},
+		Country:            params.Country,
+		Locality:           params.Locality,
+		Province:           params.Province,
+		StreetAddress:      params.StreetAddress,
+		PostalCode:         params.PostalCode,
+		KeyUsage:           x509.KeyUsageCertSign,
 	})
 	if err != nil {
 		_ = s.keyManagement.DeleteKey(ctx, signKey.ID)

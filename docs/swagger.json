@@ -10675,6 +10675,9 @@
                 "repoPath": {
                     "type": "string"
                 },
+                "systemPrompt": {
+                    "type": "string"
+                },
                 "validateCommand": {
                     "type": "string"
                 }
@@ -11791,8 +11794,24 @@
                 "name"
             ],
             "properties": {
+                "commonName": {
+                    "description": "CA certificate properties",
+                    "type": "string"
+                },
+                "country": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "description": {
                     "type": "string"
+                },
+                "locality": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "mspId": {
                     "type": "string"
@@ -11800,8 +11819,26 @@
                 "name": {
                     "type": "string"
                 },
+                "postalCode": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "providerId": {
                     "type": "integer"
+                },
+                "province": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "streetAddress": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
