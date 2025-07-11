@@ -17,7 +17,6 @@ const formSchema = z.object({
 	providerId: z.number().optional(),
 	caParams: z
 		.object({
-			commonName: z.string().optional(),
 			country: z.array(z.string()).optional(),
 			province: z.array(z.string()).optional(),
 			locality: z.array(z.string()).optional(),
@@ -122,7 +121,6 @@ export function OrganizationForm({ onSubmit, isSubmitting, providers }: Organiza
 							onCheckedChange={(checked) => {
 								if (checked) {
 									form.setValue('caParams', {
-										commonName: '',
 										country: [],
 										province: [],
 										locality: [],
@@ -139,19 +137,6 @@ export function OrganizationForm({ onSubmit, isSubmitting, providers }: Organiza
 
 				{caEnabled && (
 					<div className="space-y-4 border rounded-lg p-4 bg-muted/20">
-						<FormField
-							control={form.control}
-							name="caParams.commonName"
-							render={({ field }) => (
-								<FormItem>
-									<FormLabel>Common Name</FormLabel>
-									<FormControl>
-										<Input placeholder="Enter Common Name" {...field} />
-									</FormControl>
-									<FormMessage />
-								</FormItem>
-							)}
-						/>
 						<ArrayFieldInput control={form.control} name="caParams.country" label="Country" placeholder="Enter country" />
 						<ArrayFieldInput control={form.control} name="caParams.province" label="Province" placeholder="Enter province" />
 						<ArrayFieldInput control={form.control} name="caParams.locality" label="Locality" placeholder="Enter locality" />

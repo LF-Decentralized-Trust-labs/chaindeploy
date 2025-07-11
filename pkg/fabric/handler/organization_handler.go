@@ -115,7 +115,6 @@ func (h *OrganizationHandler) CreateOrganization(w http.ResponseWriter, r *http.
 		Description: req.Description,
 		ProviderID:  req.ProviderID,
 		// Pass CA certificate properties
-		CommonName:    req.CommonName,
 		Country:       req.Country,
 		Province:      req.Province,
 		Locality:      req.Locality,

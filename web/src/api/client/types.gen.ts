@@ -765,7 +765,6 @@ export type HandlerCreateOrganizationRequest = {
     /**
      * CA certificate properties
      */
-    commonName?: string;
     country?: Array<string>;
     description?: string;
     locality?: Array<string>;

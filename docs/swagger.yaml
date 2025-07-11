@@ -1142,10 +1142,8 @@ definitions:
     type: object
   handler.CreateOrganizationRequest:
     properties:
-      commonName:
-        description: CA certificate properties
-        type: string
       country:
+        description: CA certificate properties
         items:
           type: string
         type: array

@@ -14,7 +14,6 @@ type CreateOrganizationRequest struct {
 	ProviderID  int64  `json:"providerId"`
 
 	// CA certificate properties
-	CommonName    string   `json:"commonName"`
 	Country       []string `json:"country"`
 	Province      []string `json:"province"`
 	Locality      []string `json:"locality"`

@@ -11794,11 +11794,8 @@
                 "name"
             ],
             "properties": {
-                "commonName": {
-                    "description": "CA certificate properties",
-                    "type": "string"
-                },
                 "country": {
+                    "description": "CA certificate properties",
                     "type": "array",
                     "items": {
                         "type": "string"

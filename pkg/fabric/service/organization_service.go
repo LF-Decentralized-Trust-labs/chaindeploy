@@ -54,7 +54,6 @@ type CreateOrganizationParams struct {
 	ProviderID  int64
 
 	// CA certificate properties
-	CommonName    string
 	Country       []string
 	Province      []string
 	Locality      []string
@@ -202,7 +201,7 @@ func (s *OrganizationService) CreateOrganization(ctx context.Context, params Cre
 		ProviderID:  &providerID,
 		IsCA:        &isCA,
 		Certificate: &models.CertificateRequest{
-			CommonName:         params.CommonName,
+			CommonName:         fmt.Sprintf("%s-sign-ca", params.MspID),
 			Organization:       []string{params.Name},
 			OrganizationalUnit: []string{"SIGN"},
 			Country:            params.Country,
