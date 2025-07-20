@@ -943,6 +943,12 @@ export type HttpBackupTargetResponse = {
     updatedAt?: string;
 };
 
+export type HttpBatchSize = {
+    absoluteMaxBytes?: number;
+    maxMessageCount?: number;
+    preferredMaxBytes?: number;
+};
+
 export type HttpBesuNetworkResponse = {
     chainId?: number;
     config?: Array<number>;
@@ -1043,13 +1049,14 @@ export type HttpConfigUpdateOperationRequest = {
      * @Description - AddOrdererOrgPayload when type is "add_orderer_org"
      * @Description - RemoveOrdererOrgPayload when type is "remove_orderer_org"
      * @Description - UpdateOrdererOrgMSPPayload when type is "update_orderer_org_msp"
+     * @Description - UpdateApplicationACLPayload when type is "update_application_acl"
      */
     payload: Array<number>;
     /**
      * Type is the type of configuration update operation
-     * enum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout,update_application_policy,update_orderer_policy,update_channel_policy,add_orderer_org,remove_orderer_org,update_orderer_org_msp
+     * enum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout,update_application_policy,update_orderer_policy,update_channel_policy,add_orderer_org,remove_orderer_org,update_orderer_org_msp,update_application_acl
      */
-    type: 'add_org' | 'remove_org' | 'update_org_msp' | 'set_anchor_peers' | 'add_consenter' | 'remove_consenter' | 'update_consenter' | 'update_etcd_raft_options' | 'update_batch_size' | 'update_batch_timeout' | 'update_application_policy' | 'update_orderer_policy' | 'update_channel_policy' | 'update_channel_capability' | 'update_orderer_capability' | 'update_application_capability' | 'add_orderer_org' | 'remove_orderer_org' | 'update_orderer_org_msp';
+    type: 'add_org' | 'remove_org' | 'update_org_msp' | 'set_anchor_peers' | 'add_consenter' | 'remove_consenter' | 'update_consenter' | 'update_etcd_raft_options' | 'update_batch_size' | 'update_batch_timeout' | 'update_application_policy' | 'update_orderer_policy' | 'update_channel_policy' | 'update_channel_capability' | 'update_orderer_capability' | 'update_application_capability' | 'add_orderer_org' | 'remove_orderer_org' | 'update_orderer_org_msp' | 'update_application_acl';
 };
 
 export type HttpConfigUpdateResponse = {
@@ -1286,6 +1293,14 @@ export type HttpCreateProviderRequest = {
     type: 'SMTP';
 };
 
+export type HttpEtcdRaftOptions = {
+    electionTick?: number;
+    heartbeatTick?: number;
+    maxInflightBlocks?: number;
+    snapshotIntervalSize?: number;
+    tickInterval?: string;
+};
+
 export type HttpFabricNetworkConfig = {
     /**
      * Optional policies
@@ -1293,14 +1308,29 @@ export type HttpFabricNetworkConfig = {
     applicationPolicies?: {
         [key: string]: HttpFabricPolicy;
     };
+    /**
+     * Batch configuration
+     */
+    batchSize?: HttpBatchSize;
+    /**
+     * e.g., "2s"
+     */
+    batchTimeout?: string;
     channelPolicies?: {
         [key: string]: HttpFabricPolicy;
     };
+    /**
+     * Consensus configuration
+     */
+    consensusType?: string;
+    etcdRaftOptions?: HttpEtcdRaftOptions;
     ordererOrganizations?: Array<HttpOrganizationConfig>;
     ordererPolicies?: {
         [key: string]: HttpFabricPolicy;
     };
     peerOrganizations?: Array<HttpOrganizationConfig>;
+    smartBFTConsenters?: Array<HttpSmartBftConsenter>;
+    smartBFTOptions?: HttpSmartBftOptions;
 };
 
 export type HttpFabricPolicy = {
@@ -1310,6 +1340,11 @@ export type HttpFabricPolicy = {
 
 export type HttpGetNetworkNodesResponse = {
     nodes?: Array<ServiceNetworkNode>;
+};
+
+export type HttpHostPort = {
+    host?: string;
+    port?: number;
 };
 
 export type HttpImportBesuNetworkRequest = {
@@ -1458,6 +1493,36 @@ export type HttpSetAnchorPeersResponse = {
     transactionId?: string;
 };
 
+export type HttpSmartBftConsenter = {
+    address?: HttpHostPort;
+    clientTLSCert?: string;
+    id?: number;
+    identity?: string;
+    mspId?: string;
+    serverTLSCert?: string;
+};
+
+export type HttpSmartBftOptions = {
+    collectTimeout?: string;
+    decisionsPerLeader?: number;
+    incomingMessageBufferSize?: number;
+    leaderHeartbeatCount?: number;
+    leaderHeartbeatTimeout?: string;
+    leaderRotation?: string;
+    requestAutoRemoveTimeout?: string;
+    requestBatchMaxBytes?: number;
+    requestBatchMaxCount?: number;
+    requestBatchMaxInterval?: string;
+    requestComplainTimeout?: string;
+    requestForwardTimeout?: string;
+    requestMaxBytes?: number;
+    requestPoolSize?: number;
+    speedUpViewChange?: boolean;
+    syncOnStart?: boolean;
+    viewChangeResendInterval?: string;
+    viewChangeTimeout?: string;
+};
+
 export type HttpTestProviderRequest = {
     testEmail: string;
 };
@@ -1470,6 +1535,11 @@ export type HttpTestProviderResponse = {
 
 export type HttpTransactionResponse = {
     block?: BlockBlock;
+};
+
+export type HttpUpdateApplicationAclPayload = {
+    acl_name: string;
+    policy: 'Readers' | 'Writers';
 };
 
 export type HttpUpdateApplicationCapabilityOperation = {
@@ -4289,6 +4359,7 @@ export type PostDummyResponses = {
     215: HttpAddOrdererOrgPayload;
     216: HttpRemoveOrdererOrgPayload;
     217: HttpUpdateOrdererOrgMspPayload;
+    218: HttpUpdateApplicationAclPayload;
 };
 
 export type PostDummyResponse = PostDummyResponses[keyof PostDummyResponses];
@@ -9051,6 +9122,42 @@ export type PostScFabricChaincodesByChaincodeIdQueryResponses = {
 };
 
 export type PostScFabricChaincodesByChaincodeIdQueryResponse = PostScFabricChaincodesByChaincodeIdQueryResponses[keyof PostScFabricChaincodesByChaincodeIdQueryResponses];
+
+export type DeleteScFabricChaincodesByIdData = {
+    body?: never;
+    path: {
+        /**
+         * Chaincode ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/sc/fabric/chaincodes/{id}';
+};
+
+export type DeleteScFabricChaincodesByIdErrors = {
+    /**
+     * Bad Request
+     */
+    400: ResponseResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ResponseResponse;
+};
+
+export type DeleteScFabricChaincodesByIdError = DeleteScFabricChaincodesByIdErrors[keyof DeleteScFabricChaincodesByIdErrors];
+
+export type DeleteScFabricChaincodesByIdResponses = {
+    /**
+     * OK
+     */
+    200: {
+        [key: string]: string;
+    };
+};
+
+export type DeleteScFabricChaincodesByIdResponse = DeleteScFabricChaincodesByIdResponses[keyof DeleteScFabricChaincodesByIdResponses];
 
 export type GetScFabricChaincodesByIdData = {
     body?: never;

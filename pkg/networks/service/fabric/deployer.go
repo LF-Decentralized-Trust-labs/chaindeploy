@@ -73,6 +73,7 @@ const (
 	ConfigUpdateOperationTypeAddOrdererOrg       ConfigUpdateOperationType = "add_orderer_org"
 	ConfigUpdateOperationTypeRemoveOrdererOrg    ConfigUpdateOperationType = "remove_orderer_org"
 	ConfigUpdateOperationTypeUpdateOrdererOrgMSP ConfigUpdateOperationType = "update_orderer_org_msp"
+	OpUpdateApplicationACL                       ConfigUpdateOperationType = "update_application_acl"
 )
 
 // ConfigUpdateOperation represents a configuration update operation with its associated data
@@ -696,6 +697,12 @@ func CreateConfigModifier(operation ConfigUpdateOperation) (ConfigModifier, erro
 			return nil, fmt.Errorf("failed to unmarshal remove_orderer_org operation: %v", err)
 		}
 		return &op, nil
+	case OpUpdateApplicationACL:
+		var op UpdateApplicationACLOperation
+		if err := json.Unmarshal(operation.Payload, &op); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal update application acl operation: %v", err)
+		}
+		return &op, nil
 	default:
 		return nil, fmt.Errorf("unsupported operation type: %s", operation.Type)
 	}
@@ -1149,6 +1156,70 @@ func (d *FabricDeployer) CreateGenesisBlock(networkID int64, config interface{})
 			}
 		}
 	}
+	// Convert SmartBFT consenters if present
+	var smartBFTConsenters []channel.SmartBFTConsenter
+	if fabricConfig.SmartBFTConsenters != nil {
+		for _, cons := range fabricConfig.SmartBFTConsenters {
+			smartBFTConsenters = append(smartBFTConsenters, channel.SmartBFTConsenter{
+				Address: channel.HostPort{
+					Host: cons.Address.Host,
+					Port: cons.Address.Port,
+				},
+				ClientTLSCert: cons.ClientTLSCert,
+				ServerTLSCert: cons.ServerTLSCert,
+				Identity:      cons.Identity,
+				ID:            cons.ID,
+				MSPID:         cons.MSPID,
+			})
+		}
+	}
+
+	// Convert SmartBFT options if present
+	var smartBFTOptions *channel.SmartBFTOptions
+	if fabricConfig.SmartBFTOptions != nil {
+		smartBFTOptions = &channel.SmartBFTOptions{
+			RequestBatchMaxCount:      fabricConfig.SmartBFTOptions.RequestBatchMaxCount,
+			RequestBatchMaxBytes:      fabricConfig.SmartBFTOptions.RequestBatchMaxBytes,
+			RequestBatchMaxInterval:   fabricConfig.SmartBFTOptions.RequestBatchMaxInterval,
+			IncomingMessageBufferSize: fabricConfig.SmartBFTOptions.IncomingMessageBufferSize,
+			RequestPoolSize:           fabricConfig.SmartBFTOptions.RequestPoolSize,
+			RequestForwardTimeout:     fabricConfig.SmartBFTOptions.RequestForwardTimeout,
+			RequestComplainTimeout:    fabricConfig.SmartBFTOptions.RequestComplainTimeout,
+			RequestAutoRemoveTimeout:  fabricConfig.SmartBFTOptions.RequestAutoRemoveTimeout,
+			RequestMaxBytes:           fabricConfig.SmartBFTOptions.RequestMaxBytes,
+			ViewChangeResendInterval:  fabricConfig.SmartBFTOptions.ViewChangeResendInterval,
+			ViewChangeTimeout:         fabricConfig.SmartBFTOptions.ViewChangeTimeout,
+			LeaderHeartbeatTimeout:    fabricConfig.SmartBFTOptions.LeaderHeartbeatTimeout,
+			LeaderHeartbeatCount:      fabricConfig.SmartBFTOptions.LeaderHeartbeatCount,
+			CollectTimeout:            fabricConfig.SmartBFTOptions.CollectTimeout,
+			SyncOnStart:               fabricConfig.SmartBFTOptions.SyncOnStart,
+			SpeedUpViewChange:         fabricConfig.SmartBFTOptions.SpeedUpViewChange,
+			LeaderRotation:            fabricConfig.SmartBFTOptions.LeaderRotation,
+			DecisionsPerLeader:        fabricConfig.SmartBFTOptions.DecisionsPerLeader,
+		}
+	}
+
+	// Convert EtcdRaft options if present
+	var etcdRaftOptions *channel.EtcdRaftOptions
+	if fabricConfig.EtcdRaftOptions != nil {
+		etcdRaftOptions = &channel.EtcdRaftOptions{
+			TickInterval:         fabricConfig.EtcdRaftOptions.TickInterval,
+			ElectionTick:         fabricConfig.EtcdRaftOptions.ElectionTick,
+			HeartbeatTick:        fabricConfig.EtcdRaftOptions.HeartbeatTick,
+			MaxInflightBlocks:    fabricConfig.EtcdRaftOptions.MaxInflightBlocks,
+			SnapshotIntervalSize: fabricConfig.EtcdRaftOptions.SnapshotIntervalSize,
+		}
+	}
+
+	// Convert batch size if present
+	var batchSize *channel.BatchSize
+	if fabricConfig.BatchSize != nil {
+		batchSize = &channel.BatchSize{
+			MaxMessageCount:   fabricConfig.BatchSize.MaxMessageCount,
+			AbsoluteMaxBytes:  fabricConfig.BatchSize.AbsoluteMaxBytes,
+			PreferredMaxBytes: fabricConfig.BatchSize.PreferredMaxBytes,
+		}
+	}
 
 	createReq := channel.CreateChannelInput{
 		Name:        fabricConfig.ChannelName,
@@ -1159,6 +1230,14 @@ func (d *FabricDeployer) CreateGenesisBlock(networkID int64, config interface{})
 		ApplicationPolicies: fabricConfig.ApplicationPolicies,
 		OrdererPolicies:     fabricConfig.OrdererPolicies,
 		ChannelPolicies:     fabricConfig.ChannelPolicies,
+		// Consensus configuration
+		ConsensusType:      channel.ConsensusType(fabricConfig.ConsensusType),
+		SmartBFTConsenters: smartBFTConsenters,
+		SmartBFTOptions:    smartBFTOptions,
+		EtcdRaftOptions:    etcdRaftOptions,
+		// Batch configuration
+		BatchSize:    batchSize,
+		BatchTimeout: fabricConfig.BatchTimeout,
 	}
 	d.logger.Debug("Creating channel with request: %+v", createReq)
 	channel, err := d.channelService.CreateChannel(createReq)
@@ -3123,6 +3202,53 @@ func (op *UpdateOrdererCapabilityOperation) Modify(ctx context.Context, c *confi
 	}
 	for _, cap := range op.Capabilities {
 		orderer.AddCapability(cap)
+	}
+
+	return nil
+}
+
+// UpdateApplicationACLOperation represents an operation to update application ACLs
+type UpdateApplicationACLOperation struct {
+	ACLName string `json:"acl_name"`
+	Policy  string `json:"policy"`
+}
+
+// Type returns the type of the operation
+func (op *UpdateApplicationACLOperation) Type() ConfigUpdateOperationType {
+	return OpUpdateApplicationACL
+}
+
+// Validate validates the operation
+func (op *UpdateApplicationACLOperation) Validate() error {
+	if op.ACLName == "" {
+		return fmt.Errorf("ACL name cannot be empty")
+	}
+	if op.Policy != "Readers" && op.Policy != "Writers" {
+		return fmt.Errorf("policy must be either 'Readers' or 'Writers', got: %s", op.Policy)
+	}
+	return nil
+}
+
+// Modify applies the operation to the given config
+func (op *UpdateApplicationACLOperation) Modify(ctx context.Context, c *configtx.ConfigTx) error {
+	// Get the current ACLs from the application configuration
+	app := c.Application()
+
+	// Create the policy path for the ACL
+	acls, err := app.ACLs()
+	if err != nil {
+		return fmt.Errorf("failed to get application ACLs: %w", err)
+	}
+	// Update the ACL in the configuration
+	if acls == nil {
+		acls = make(map[string]string)
+	}
+	acls[op.ACLName] = op.Policy
+
+	// Set the updated application configuration
+	err = app.SetACLs(acls)
+	if err != nil {
+		return fmt.Errorf("failed to update application ACL %s to policy %s: %w", op.ACLName, op.Policy, err)
 	}
 
 	return nil

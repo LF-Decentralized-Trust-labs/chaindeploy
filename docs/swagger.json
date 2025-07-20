@@ -1,26 +1,8 @@
 {
-    "schemes": [
-        "http",
-        "https"
-    ],
     "swagger": "2.0",
     "info": {
-        "description": "ChainLaunch API provides services for managing blockchain networks and cryptographic keys",
-        "title": "ChainLaunch API",
-        "termsOfService": "http://swagger.io/terms/",
-        "contact": {
-            "name": "API Support",
-            "url": "http://chainlaunch.dev/support",
-            "email": "support@chainlaunch.dev"
-        },
-        "license": {
-            "name": "Apache 2.0",
-            "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
-        },
-        "version": "1.0"
+        "contact": {}
     },
-    "host": "localhost:8100",
-    "basePath": "/api/v1",
     "paths": {
         "/ai/boilerplates": {
             "get": {
@@ -2550,6 +2532,12 @@
                         "description": "",
                         "schema": {
                             "$ref": "#/definitions/http.UpdateOrdererOrgMSPPayload"
+                        }
+                    },
+                    "218": {
+                        "description": "",
+                        "schema": {
+                            "$ref": "#/definitions/http.UpdateApplicationACLPayload"
                         }
                     }
                 }
@@ -8938,6 +8926,51 @@
                         }
                     }
                 }
+            },
+            "delete": {
+                "description": "Delete a chaincode by ID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chaincode"
+                ],
+                "summary": "Delete a chaincode",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Chaincode ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
             }
         },
         "/sc/fabric/definitions/{definitionId}": {
@@ -12313,6 +12346,20 @@
                 }
             }
         },
+        "http.BatchSize": {
+            "type": "object",
+            "properties": {
+                "absoluteMaxBytes": {
+                    "type": "integer"
+                },
+                "maxMessageCount": {
+                    "type": "integer"
+                },
+                "preferredMaxBytes": {
+                    "type": "integer"
+                }
+            }
+        },
         "http.BesuNetworkResponse": {
             "type": "object",
             "properties": {
@@ -12462,14 +12509,14 @@
             ],
             "properties": {
                 "payload": {
-                    "description": "Payload contains the operation-specific data\nThe structure depends on the operation type:\n- add_org: AddOrgPayload\n- remove_org: RemoveOrgPayload\n- update_org_msp: UpdateOrgMSPPayload\n- set_anchor_peers: SetAnchorPeersPayload\n- add_consenter: AddConsenterPayload\n- remove_consenter: RemoveConsenterPayload\n- update_consenter: UpdateConsenterPayload\n- update_etcd_raft_options: UpdateEtcdRaftOptionsPayload\n- update_batch_size: UpdateBatchSizePayload\n- update_batch_timeout: UpdateBatchTimeoutPayload\n- update_application_policy: UpdateApplicationPolicyPayload\n- update_orderer_policy: UpdateOrdererPolicyPayload\n- update_channel_policy: UpdateChannelPolicyPayload\n- update_channel_capability: UpdateChannelCapabilityOperation\n- update_orderer_capability: UpdateOrdererCapabilityOperation\n- update_application_capability: UpdateApplicationCapabilityOperation\n@Description The payload for the configuration update operation\n@Description Can be one of:\n@Description - AddOrgPayload when type is \"add_org\"\n@Description - RemoveOrgPayload when type is \"remove_org\"\n@Description - UpdateOrgMSPPayload when type is \"update_org_msp\"\n@Description - SetAnchorPeersPayload when type is \"set_anchor_peers\"\n@Description - AddConsenterPayload when type is \"add_consenter\"\n@Description - RemoveConsenterPayload when type is \"remove_consenter\"\n@Description - UpdateConsenterPayload when type is \"update_consenter\"\n@Description - UpdateEtcdRaftOptionsPayload when type is \"update_etcd_raft_options\"\n@Description - UpdateBatchSizePayload when type is \"update_batch_size\"\n@Description - UpdateBatchTimeoutPayload when type is \"update_batch_timeout\"\n@Description - UpdateApplicationPolicyPayload when type is \"update_application_policy\"\n@Description - UpdateOrdererPolicyPayload when type is \"update_orderer_policy\"\n@Description - UpdateChannelPolicyPayload when type is \"update_channel_policy\"\n@Description - UpdateChannelCapabilityPayload when type is \"update_channel_capability\"\n@Description - UpdateOrdererCapabilityPayload when type is \"update_orderer_capability\"\n@Description - UpdateApplicationCapabilityPayload when type is \"update_application_capability\"\n@Description - AddOrdererOrgPayload when type is \"add_orderer_org\"\n@Description - RemoveOrdererOrgPayload when type is \"remove_orderer_org\"\n@Description - UpdateOrdererOrgMSPPayload when type is \"update_orderer_org_msp\"",
+                    "description": "Payload contains the operation-specific data\nThe structure depends on the operation type:\n- add_org: AddOrgPayload\n- remove_org: RemoveOrgPayload\n- update_org_msp: UpdateOrgMSPPayload\n- set_anchor_peers: SetAnchorPeersPayload\n- add_consenter: AddConsenterPayload\n- remove_consenter: RemoveConsenterPayload\n- update_consenter: UpdateConsenterPayload\n- update_etcd_raft_options: UpdateEtcdRaftOptionsPayload\n- update_batch_size: UpdateBatchSizePayload\n- update_batch_timeout: UpdateBatchTimeoutPayload\n- update_application_policy: UpdateApplicationPolicyPayload\n- update_orderer_policy: UpdateOrdererPolicyPayload\n- update_channel_policy: UpdateChannelPolicyPayload\n- update_channel_capability: UpdateChannelCapabilityOperation\n- update_orderer_capability: UpdateOrdererCapabilityOperation\n- update_application_capability: UpdateApplicationCapabilityOperation\n@Description The payload for the configuration update operation\n@Description Can be one of:\n@Description - AddOrgPayload when type is \"add_org\"\n@Description - RemoveOrgPayload when type is \"remove_org\"\n@Description - UpdateOrgMSPPayload when type is \"update_org_msp\"\n@Description - SetAnchorPeersPayload when type is \"set_anchor_peers\"\n@Description - AddConsenterPayload when type is \"add_consenter\"\n@Description - RemoveConsenterPayload when type is \"remove_consenter\"\n@Description - UpdateConsenterPayload when type is \"update_consenter\"\n@Description - UpdateEtcdRaftOptionsPayload when type is \"update_etcd_raft_options\"\n@Description - UpdateBatchSizePayload when type is \"update_batch_size\"\n@Description - UpdateBatchTimeoutPayload when type is \"update_batch_timeout\"\n@Description - UpdateApplicationPolicyPayload when type is \"update_application_policy\"\n@Description - UpdateOrdererPolicyPayload when type is \"update_orderer_policy\"\n@Description - UpdateChannelPolicyPayload when type is \"update_channel_policy\"\n@Description - UpdateChannelCapabilityPayload when type is \"update_channel_capability\"\n@Description - UpdateOrdererCapabilityPayload when type is \"update_orderer_capability\"\n@Description - UpdateApplicationCapabilityPayload when type is \"update_application_capability\"\n@Description - AddOrdererOrgPayload when type is \"add_orderer_org\"\n@Description - RemoveOrdererOrgPayload when type is \"remove_orderer_org\"\n@Description - UpdateOrdererOrgMSPPayload when type is \"update_orderer_org_msp\"\n@Description - UpdateApplicationACLPayload when type is \"update_application_acl\"",
                     "type": "array",
                     "items": {
                         "type": "integer"
                     }
                 },
                 "type": {
-                    "description": "Type is the type of configuration update operation\nenum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout,update_application_policy,update_orderer_policy,update_channel_policy,add_orderer_org,remove_orderer_org,update_orderer_org_msp",
+                    "description": "Type is the type of configuration update operation\nenum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout,update_application_policy,update_orderer_policy,update_channel_policy,add_orderer_org,remove_orderer_org,update_orderer_org_msp,update_application_acl",
                     "type": "string",
                     "enum": [
                         "add_org",
@@ -12490,7 +12537,8 @@
                         "update_application_capability",
                         "add_orderer_org",
                         "remove_orderer_org",
-                        "update_orderer_org_msp"
+                        "update_orderer_org_msp",
+                        "update_application_acl"
                     ]
                 }
             }
@@ -12839,6 +12887,26 @@
                 }
             }
         },
+        "http.EtcdRaftOptions": {
+            "type": "object",
+            "properties": {
+                "electionTick": {
+                    "type": "integer"
+                },
+                "heartbeatTick": {
+                    "type": "integer"
+                },
+                "maxInflightBlocks": {
+                    "type": "integer"
+                },
+                "snapshotIntervalSize": {
+                    "type": "integer"
+                },
+                "tickInterval": {
+                    "type": "string"
+                }
+            }
+        },
         "http.FabricNetworkConfig": {
             "type": "object",
             "properties": {
@@ -12849,11 +12917,30 @@
                         "$ref": "#/definitions/http.FabricPolicy"
                     }
                 },
+                "batchSize": {
+                    "description": "Batch configuration",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/http.BatchSize"
+                        }
+                    ]
+                },
+                "batchTimeout": {
+                    "description": "e.g., \"2s\"",
+                    "type": "string"
+                },
                 "channelPolicies": {
                     "type": "object",
                     "additionalProperties": {
                         "$ref": "#/definitions/http.FabricPolicy"
                     }
+                },
+                "consensusType": {
+                    "description": "Consensus configuration",
+                    "type": "string"
+                },
+                "etcdRaftOptions": {
+                    "$ref": "#/definitions/http.EtcdRaftOptions"
                 },
                 "ordererOrganizations": {
                     "type": "array",
@@ -12872,6 +12959,15 @@
                     "items": {
                         "$ref": "#/definitions/http.OrganizationConfig"
                     }
+                },
+                "smartBFTConsenters": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/http.SmartBFTConsenter"
+                    }
+                },
+                "smartBFTOptions": {
+                    "$ref": "#/definitions/http.SmartBFTOptions"
                 }
             }
         },
@@ -12894,6 +12990,17 @@
                     "items": {
                         "$ref": "#/definitions/service.NetworkNode"
                     }
+                }
+            }
+        },
+        "http.HostPort": {
+            "type": "object",
+            "properties": {
+                "host": {
+                    "type": "string"
+                },
+                "port": {
+                    "type": "integer"
                 }
             }
         },
@@ -13330,6 +13437,88 @@
                 }
             }
         },
+        "http.SmartBFTConsenter": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "$ref": "#/definitions/http.HostPort"
+                },
+                "clientTLSCert": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "identity": {
+                    "type": "string"
+                },
+                "mspId": {
+                    "type": "string"
+                },
+                "serverTLSCert": {
+                    "type": "string"
+                }
+            }
+        },
+        "http.SmartBFTOptions": {
+            "type": "object",
+            "properties": {
+                "collectTimeout": {
+                    "type": "string"
+                },
+                "decisionsPerLeader": {
+                    "type": "integer"
+                },
+                "incomingMessageBufferSize": {
+                    "type": "integer"
+                },
+                "leaderHeartbeatCount": {
+                    "type": "integer"
+                },
+                "leaderHeartbeatTimeout": {
+                    "type": "string"
+                },
+                "leaderRotation": {
+                    "type": "string"
+                },
+                "requestAutoRemoveTimeout": {
+                    "type": "string"
+                },
+                "requestBatchMaxBytes": {
+                    "type": "integer"
+                },
+                "requestBatchMaxCount": {
+                    "type": "integer"
+                },
+                "requestBatchMaxInterval": {
+                    "type": "string"
+                },
+                "requestComplainTimeout": {
+                    "type": "string"
+                },
+                "requestForwardTimeout": {
+                    "type": "string"
+                },
+                "requestMaxBytes": {
+                    "type": "integer"
+                },
+                "requestPoolSize": {
+                    "type": "integer"
+                },
+                "speedUpViewChange": {
+                    "type": "boolean"
+                },
+                "syncOnStart": {
+                    "type": "boolean"
+                },
+                "viewChangeResendInterval": {
+                    "type": "string"
+                },
+                "viewChangeTimeout": {
+                    "type": "string"
+                }
+            }
+        },
         "http.TestProviderRequest": {
             "type": "object",
             "required": [
@@ -13360,6 +13549,25 @@
             "properties": {
                 "block": {
                     "$ref": "#/definitions/block.Block"
+                }
+            }
+        },
+        "http.UpdateApplicationACLPayload": {
+            "type": "object",
+            "required": [
+                "acl_name",
+                "policy"
+            ],
+            "properties": {
+                "acl_name": {
+                    "type": "string"
+                },
+                "policy": {
+                    "type": "string",
+                    "enum": [
+                        "Readers",
+                        "Writers"
+                    ]
                 }
             }
         },
@@ -15916,89 +16124,5 @@
                 "KeyUsageDecipherOnly"
             ]
         }
-    },
-    "securityDefinitions": {
-        "BasicAuth": {
-            "type": "basic"
-        },
-        "CookieAuth": {
-            "type": "apiKey",
-            "name": "session_id",
-            "in": "cookie"
-        }
-    },
-    "tags": [
-        {
-            "description": "Audit management operations",
-            "name": "Audit"
-        },
-        {
-            "description": "Chaincode project management operations",
-            "name": "Chaincode Projects"
-        },
-        {
-            "description": "User authentication and authorization operations",
-            "name": "Authentication"
-        },
-        {
-            "description": "Backup schedule configuration and management",
-            "name": "Backup Schedules"
-        },
-        {
-            "description": "Backup target location configuration and management",
-            "name": "Backup Targets"
-        },
-        {
-            "description": "Backup management operations",
-            "name": "Backups"
-        },
-        {
-            "description": "Hyperledger Besu network management operations",
-            "name": "Besu Networks"
-        },
-        {
-            "description": "Hyperledger Fabric network management operations",
-            "name": "Fabric Networks"
-        },
-        {
-            "description": "Cryptographic key management operations",
-            "name": "Keys"
-        },
-        {
-            "description": "Metrics management operations",
-            "name": "Metrics"
-        },
-        {
-            "description": "Network node management operations",
-            "name": "Nodes"
-        },
-        {
-            "description": "System notification configuration and management",
-            "name": "Notifications"
-        },
-        {
-            "description": "Organization management operations",
-            "name": "Organizations"
-        },
-        {
-            "description": "Plugin management operations",
-            "name": "Plugins"
-        },
-        {
-            "description": "Key provider management operations",
-            "name": "Providers"
-        },
-        {
-            "description": "Settings management operations",
-            "name": "Settings"
-        },
-        {
-            "description": "Smart contract management operations",
-            "name": "SmartContracts"
-        },
-        {
-            "description": "User account management operations",
-            "name": "Users"
-        }
-    ]
+    }
 }

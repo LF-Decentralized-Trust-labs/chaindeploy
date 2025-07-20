@@ -32,7 +32,7 @@ require (
 	github.com/anthropics/anthropic-sdk-go v1.4.0
 	github.com/google/go-github/v45 v45.2.0
 	github.com/hyperledger/fabric-gateway v1.5.0
-	github.com/hyperledger/fabric-protos-go-apiv2 v0.3.3
+	github.com/hyperledger/fabric-protos-go-apiv2 v0.3.7
 	github.com/lithammer/shortuuid/v4 v4.2.0
 	github.com/openai/openai-go v1.5.0
 	github.com/opencontainers/image-spec v1.1.1
@@ -316,3 +316,5 @@ require (
 )
 
 replace github.com/hyperledger/fabric-admin-sdk => github.com/kfsoftware/fabric-admin-sdk v0.0.0-20250705205658-948f43b6a15d
+
+replace github.com/hyperledger/fabric-config => github.com/kfsoftware/fabric-config v0.0.0-20250718182749-9507b45ddcca

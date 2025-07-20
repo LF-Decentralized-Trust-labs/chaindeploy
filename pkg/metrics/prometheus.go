@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -9,7 +8,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"text/template"
 	"time"
 
 	"github.com/chainlaunch/chainlaunch/pkg/db"
@@ -110,7 +108,7 @@ func (d *DockerPrometheusDeployer) Start(ctx context.Context) error {
 	}
 
 	// Generate prometheus.yml
-	configData, err := d.generateConfig()
+	configData, err := d.buildPrometheusConfig(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to generate Prometheus config: %w", err)
 	}
@@ -399,29 +397,88 @@ func (d *DockerPrometheusDeployer) GetStatus(ctx context.Context) (string, error
 	return container.State.Status, nil
 }
 
-// generateConfig generates the Prometheus configuration file content
-func (d *DockerPrometheusDeployer) generateConfig() (string, error) {
-	tmpl := `global:
-  scrape_interval: {{ .ScrapeInterval }}
-
-scrape_configs:
-  - job_name: 'prometheus'
-    static_configs:
-      - targets: ['localhost:9090']
-`
-
-	t, err := template.New("prometheus").Parse(tmpl)
+// buildPrometheusConfig builds the Prometheus YAML config from current state (peers, orderers, besu, etc.)
+func (d *DockerPrometheusDeployer) buildPrometheusConfig(ctx context.Context) (string, error) {
+	// Get peer, orderer, and besu nodes
+	peerNodes, err := d.getPeerNodes(ctx)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse template: %w", err)
+		return "", fmt.Errorf("failed to get peer nodes: %w", err)
+	}
+	ordererNodes, err := d.getOrdererNodes(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get orderer nodes: %w", err)
+	}
+	besuNodes, err := d.getBesuNodes(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get Besu nodes: %w", err)
 	}
 
-	var buf bytes.Buffer
-	if err := t.Execute(&buf, d.config); err != nil {
-		return "", fmt.Errorf("failed to execute template: %w", err)
+	config := &PrometheusConfig{
+		Global: GlobalConfig{
+			ScrapeInterval: d.config.ScrapeInterval.String(),
+		},
+		ScrapeConfigs: []ScrapeConfig{
+			{
+				JobName:       "prometheus",
+				StaticConfigs: []StaticConfig{{Targets: []string{"localhost:9090"}}},
+			},
+		},
 	}
-
-	return buf.String(), nil
+	// Add peer node targets
+	for _, node := range peerNodes {
+		jobName := slugify(fmt.Sprintf("%s-%s", node.ID, node.Name))
+		config.ScrapeConfigs = append(config.ScrapeConfigs, ScrapeConfig{
+			JobName:       jobName,
+			StaticConfigs: []StaticConfig{{Targets: []string{node.OperationAddress}}},
+		})
+	}
+	// Add orderer node targets
+	for _, node := range ordererNodes {
+		jobName := slugify(fmt.Sprintf("%s-%s", node.ID, node.Name))
+		config.ScrapeConfigs = append(config.ScrapeConfigs, ScrapeConfig{
+			JobName:       jobName,
+			StaticConfigs: []StaticConfig{{Targets: []string{node.OperationAddress}}},
+		})
+	}
+	// Add Besu node targets
+	for _, node := range besuNodes {
+		jobName := slugify(fmt.Sprintf("%s-%s", node.ID, node.Name))
+		config.ScrapeConfigs = append(config.ScrapeConfigs, ScrapeConfig{
+			JobName:       jobName,
+			StaticConfigs: []StaticConfig{{Targets: []string{node.OperationAddress}}},
+		})
+	}
+	configData, err := yaml.Marshal(config)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal config: %w", err)
+	}
+	return string(configData), nil
 }
+
+// generateConfig is deprecated, use buildPrometheusConfig instead
+// generateConfig generates the Prometheus configuration file content
+// func (d *DockerPrometheusDeployer) generateConfig() (string, error) {
+//   tmpl := `global:
+//   scrape_interval: {{ .ScrapeInterval }}
+
+// scrape_configs:
+//   - job_name: 'prometheus'
+//     static_configs:
+//       - targets: ['localhost:9090']
+// `
+
+//   t, err := template.New("prometheus").Parse(tmpl)
+//   if err != nil {
+//     return "", fmt.Errorf("failed to parse template: %w", err)
+//   }
+
+//   var buf bytes.Buffer
+//   if err := t.Execute(&buf, d.config); err != nil {
+//     return "", fmt.Errorf("failed to execute template: %w", err)
+//   }
+
+//   return buf.String(), nil
+// }
 
 // PrometheusManager handles the lifecycle of a Prometheus instance
 type PrometheusManager struct {
@@ -452,90 +509,9 @@ func NewPrometheusManager(config *common.Config, db *db.Queries, nodeService *no
 func (d *DockerPrometheusDeployer) Reload(ctx context.Context) error {
 	containerName := "chainlaunch-prometheus"
 
-	// Get peer nodes from the database
-	peerNodes, err := d.getPeerNodes(ctx)
+	configData, err := d.buildPrometheusConfig(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get peer nodes: %w", err)
-	}
-
-	// Get orderer nodes from the database
-	ordererNodes, err := d.getOrdererNodes(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get orderer nodes: %w", err)
-	}
-
-	// Get Besu nodes from the database
-	besuNodes, err := d.getBesuNodes(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get Besu nodes: %w", err)
-	}
-
-	// Generate new config with peer targets
-	config := &PrometheusConfig{
-		Global: GlobalConfig{
-			ScrapeInterval: d.config.ScrapeInterval.String(),
-		},
-		ScrapeConfigs: []ScrapeConfig{
-			{
-				JobName: "prometheus",
-				StaticConfigs: []StaticConfig{
-					{
-						Targets: []string{"localhost:9090"},
-					},
-				},
-			},
-		},
-	}
-
-	// Add peer node targets
-	if len(peerNodes) > 0 {
-		for _, node := range peerNodes {
-			jobName := slugify(fmt.Sprintf("%s-%s", node.ID, node.Name))
-			config.ScrapeConfigs = append(config.ScrapeConfigs, ScrapeConfig{
-				JobName: jobName,
-				StaticConfigs: []StaticConfig{
-					{
-						Targets: []string{node.OperationAddress},
-					},
-				},
-			})
-		}
-	}
-
-	// Add orderer node targets
-	if len(ordererNodes) > 0 {
-		for _, node := range ordererNodes {
-			jobName := slugify(fmt.Sprintf("%s-%s", node.ID, node.Name))
-			config.ScrapeConfigs = append(config.ScrapeConfigs, ScrapeConfig{
-				JobName: jobName,
-				StaticConfigs: []StaticConfig{
-					{
-						Targets: []string{node.OperationAddress},
-					},
-				},
-			})
-		}
-	}
-
-	// Add Besu node targets
-	if len(besuNodes) > 0 {
-		for _, node := range besuNodes {
-			jobName := slugify(fmt.Sprintf("%s-%s", node.ID, node.Name))
-			config.ScrapeConfigs = append(config.ScrapeConfigs, ScrapeConfig{
-				JobName: jobName,
-				StaticConfigs: []StaticConfig{
-					{
-						Targets: []string{node.OperationAddress},
-					},
-				},
-			})
-		}
-	}
-
-	// Marshal config to YAML
-	configData, err := yaml.Marshal(config)
-	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
+		return fmt.Errorf("failed to build Prometheus config: %w", err)
 	}
 
 	// Create config file in the config volume

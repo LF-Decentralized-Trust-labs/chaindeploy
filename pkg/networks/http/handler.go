@@ -164,7 +164,11 @@ func (h *Handler) FabricNetworkCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "validation_failed", err.Error())
 		return
 	}
-
+	// Validate orderer requirements based on consensus type
+	consensusType := req.Config.ConsensusType
+	if consensusType == "" {
+		consensusType = "etcdraft" // default to etcdraft
+	}
 	// Validate that at least 3 orderer nodes are specified
 	ordererCount := 0
 
@@ -183,8 +187,19 @@ func (h *Handler) FabricNetworkCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if ordererCount < 3 {
-		writeError(w, http.StatusBadRequest, "insufficient_orderers", "At least 3 orderer nodes are required for a Fabric network")
+	// Count SmartBFT consenters if using SmartBFT
+	if consensusType == "smartbft" && req.Config.SmartBFTConsenters != nil {
+		ordererCount += len(req.Config.SmartBFTConsenters)
+	}
+
+	// Validate minimum orderer requirements
+	minOrderers := 3
+	if consensusType == "smartbft" {
+		minOrderers = 4 // SmartBFT requires at least 4 consenters
+	}
+
+	if ordererCount < minOrderers {
+		writeError(w, http.StatusBadRequest, "insufficient_orderers", fmt.Sprintf("At least %d orderer nodes are required for %s consensus", minOrderers, consensusType))
 		return
 	}
 
@@ -250,6 +265,65 @@ func (h *Handler) FabricNetworkCreate(w http.ResponseWriter, r *http.Request) {
 			NodeIDs: org.NodeIDs,
 		}
 	}
+
+	// Add consensus configuration
+	fabricConfig.ConsensusType = req.Config.ConsensusType
+	if req.Config.SmartBFTConsenters != nil {
+		smartBFTConsenters := make([]types.SmartBFTConsenter, len(req.Config.SmartBFTConsenters))
+		for i, cons := range req.Config.SmartBFTConsenters {
+			smartBFTConsenters[i] = types.SmartBFTConsenter{
+				Address: types.HostPort{
+					Host: cons.Address.Host,
+					Port: cons.Address.Port,
+				},
+				ClientTLSCert: cons.ClientTLSCert,
+				ServerTLSCert: cons.ServerTLSCert,
+				Identity:      cons.Identity,
+				ID:            cons.ID,
+				MSPID:         cons.MSPID,
+			}
+		}
+		fabricConfig.SmartBFTConsenters = smartBFTConsenters
+	}
+	if req.Config.SmartBFTOptions != nil {
+		fabricConfig.SmartBFTOptions = &types.SmartBFTOptions{
+			RequestBatchMaxCount:      req.Config.SmartBFTOptions.RequestBatchMaxCount,
+			RequestBatchMaxBytes:      req.Config.SmartBFTOptions.RequestBatchMaxBytes,
+			RequestBatchMaxInterval:   req.Config.SmartBFTOptions.RequestBatchMaxInterval,
+			IncomingMessageBufferSize: req.Config.SmartBFTOptions.IncomingMessageBufferSize,
+			RequestPoolSize:           req.Config.SmartBFTOptions.RequestPoolSize,
+			RequestForwardTimeout:     req.Config.SmartBFTOptions.RequestForwardTimeout,
+			RequestComplainTimeout:    req.Config.SmartBFTOptions.RequestComplainTimeout,
+			RequestAutoRemoveTimeout:  req.Config.SmartBFTOptions.RequestAutoRemoveTimeout,
+			RequestMaxBytes:           req.Config.SmartBFTOptions.RequestMaxBytes,
+			ViewChangeResendInterval:  req.Config.SmartBFTOptions.ViewChangeResendInterval,
+			ViewChangeTimeout:         req.Config.SmartBFTOptions.ViewChangeTimeout,
+			LeaderHeartbeatTimeout:    req.Config.SmartBFTOptions.LeaderHeartbeatTimeout,
+			LeaderHeartbeatCount:      req.Config.SmartBFTOptions.LeaderHeartbeatCount,
+			CollectTimeout:            req.Config.SmartBFTOptions.CollectTimeout,
+			SyncOnStart:               req.Config.SmartBFTOptions.SyncOnStart,
+			SpeedUpViewChange:         req.Config.SmartBFTOptions.SpeedUpViewChange,
+			LeaderRotation:            req.Config.SmartBFTOptions.LeaderRotation,
+			DecisionsPerLeader:        req.Config.SmartBFTOptions.DecisionsPerLeader,
+		}
+	}
+	if req.Config.EtcdRaftOptions != nil {
+		fabricConfig.EtcdRaftOptions = &types.EtcdRaftOptions{
+			TickInterval:         req.Config.EtcdRaftOptions.TickInterval,
+			ElectionTick:         req.Config.EtcdRaftOptions.ElectionTick,
+			HeartbeatTick:        req.Config.EtcdRaftOptions.HeartbeatTick,
+			MaxInflightBlocks:    req.Config.EtcdRaftOptions.MaxInflightBlocks,
+			SnapshotIntervalSize: req.Config.EtcdRaftOptions.SnapshotIntervalSize,
+		}
+	}
+	if req.Config.BatchSize != nil {
+		fabricConfig.BatchSize = &types.BatchSize{
+			MaxMessageCount:   req.Config.BatchSize.MaxMessageCount,
+			AbsoluteMaxBytes:  req.Config.BatchSize.AbsoluteMaxBytes,
+			PreferredMaxBytes: req.Config.BatchSize.PreferredMaxBytes,
+		}
+	}
+	fabricConfig.BatchTimeout = req.Config.BatchTimeout
 
 	// Marshal the config to bytes
 	configBytes, err := json.Marshal(fabricConfig)
@@ -1258,8 +1332,8 @@ func (h *Handler) ImportBesuNetwork(w http.ResponseWriter, r *http.Request) {
 // @Description A single configuration update operation
 type ConfigUpdateOperationRequest struct {
 	// Type is the type of configuration update operation
-	// enum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout,update_application_policy,update_orderer_policy,update_channel_policy,add_orderer_org,remove_orderer_org,update_orderer_org_msp
-	Type string `json:"type" validate:"required,oneof=add_org remove_org update_org_msp set_anchor_peers add_consenter remove_consenter update_consenter update_etcd_raft_options update_batch_size update_batch_timeout update_application_policy update_orderer_policy update_channel_policy update_channel_capability update_orderer_capability update_application_capability add_orderer_org remove_orderer_org update_orderer_org_msp"`
+	// enum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout,update_application_policy,update_orderer_policy,update_channel_policy,add_orderer_org,remove_orderer_org,update_orderer_org_msp,update_application_acl
+	Type string `json:"type" validate:"required,oneof=add_org remove_org update_org_msp set_anchor_peers add_consenter remove_consenter update_consenter update_etcd_raft_options update_batch_size update_batch_timeout update_application_policy update_orderer_policy update_channel_policy update_channel_capability update_orderer_capability update_application_capability add_orderer_org remove_orderer_org update_orderer_org_msp update_application_acl"`
 
 	// Payload contains the operation-specific data
 	// The structure depends on the operation type:
@@ -1300,6 +1374,7 @@ type ConfigUpdateOperationRequest struct {
 	// @Description - AddOrdererOrgPayload when type is "add_orderer_org"
 	// @Description - RemoveOrdererOrgPayload when type is "remove_orderer_org"
 	// @Description - UpdateOrdererOrgMSPPayload when type is "update_orderer_org_msp"
+	// @Description - UpdateApplicationACLPayload when type is "update_application_acl"
 	Payload json.RawMessage `json:"payload" validate:"required"`
 }
 
@@ -1316,6 +1391,11 @@ type AddOrgPayload struct {
 	MSPID        string   `json:"msp_id" validate:"required"`
 	TLSRootCerts []string `json:"tls_root_certs" validate:"required,min=1"`
 	RootCerts    []string `json:"root_certs" validate:"required,min=1"`
+}
+
+type UpdateApplicationACLPayload struct {
+	ACLName string `json:"acl_name" validate:"required"`
+	Policy  string `json:"policy" validate:"required,oneof=Readers Writers"`
 }
 
 // Example:
@@ -1536,6 +1616,7 @@ type UpdateFabricNetworkRequest struct {
 // @Success 215 {object} AddOrdererOrgPayload
 // @Success 216 {object} RemoveOrdererOrgPayload
 // @Success 217 {object} UpdateOrdererOrgMSPPayload
+// @Success 218 {object} UpdateApplicationACLPayload
 // @Router /dummy [post]
 func (h *Handler) DummyHandler(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusBadRequest, "dummy_error", "Dummy error")
@@ -1774,6 +1855,16 @@ func (h *Handler) FabricUpdateChannelConfig(w http.ResponseWriter, r *http.Reque
 			}
 		case "update_orderer_org_msp":
 			var payload UpdateOrdererOrgMSPPayload
+			if err := json.Unmarshal(op.Payload, &payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_payload", fmt.Sprintf("Invalid payload for operation %d: %s", i, err.Error()))
+				return
+			}
+			if err := h.validate.Struct(payload); err != nil {
+				writeError(w, http.StatusBadRequest, "validation_error", fmt.Sprintf("Invalid payload for operation %d: %s", i, err.Error()))
+				return
+			}
+		case "update_application_acl":
+			var payload UpdateApplicationACLPayload
 			if err := json.Unmarshal(op.Payload, &payload); err != nil {
 				writeError(w, http.StatusBadRequest, "invalid_payload", fmt.Sprintf("Invalid payload for operation %d: %s", i, err.Error()))
 				return

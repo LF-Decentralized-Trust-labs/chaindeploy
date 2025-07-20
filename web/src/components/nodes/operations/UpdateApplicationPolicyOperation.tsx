@@ -6,6 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Trash2 } from 'lucide-react'
 import { useFormContext } from 'react-hook-form'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useEffect } from 'react'
 
 interface UpdateApplicationPolicyOperationProps {
 	index: number
@@ -17,6 +18,60 @@ export function UpdateApplicationPolicyOperation({ index, onRemove, channelConfi
 	const form = useFormContext()
 	const policyType = form.watch(`operations.${index}.payload.policy.type`)
 	const signatureOperator = form.watch(`operations.${index}.payload.policy.signatureOperator`)
+	const selectedPolicyName = form.watch(`operations.${index}.payload.policy_name`)
+
+	// Get current policy from channel config
+	const getCurrentPolicy = (policyName: string) => {
+		const policies = channelConfig?.config?.data?.data?.[0]?.payload?.data?.config?.channel_group?.groups?.Application?.policies || {}
+		return policies[policyName]
+	}
+
+	// Populate form with current policy values when policy name changes
+	useEffect(() => {
+		if (selectedPolicyName && channelConfig) {
+			const currentPolicy = getCurrentPolicy(selectedPolicyName)
+			if (currentPolicy?.policy) {
+				const policy = currentPolicy.policy
+
+				// Set policy type
+				if (policy.type === 1) {
+					form.setValue(`operations.${index}.payload.policy.type`, 'Signature')
+
+					// Parse signature policy
+					const rule = policy.value?.rule
+					if (rule?.n_out_of) {
+						const n = rule.n_out_of.n
+						const rules = rule.n_out_of.rules || []
+
+						if (n === 1 && rules.length === 1) {
+							form.setValue(`operations.${index}.payload.policy.signatureOperator`, 'OR')
+						} else if (n === rules.length) {
+							form.setValue(`operations.${index}.payload.policy.signatureOperator`, 'AND')
+						} else {
+							form.setValue(`operations.${index}.payload.policy.signatureOperator`, 'OUTOF')
+							form.setValue(`operations.${index}.payload.policy.signatureN`, n)
+						}
+
+						// Extract organization MSP IDs
+						const orgs = rules.filter((r: any) => r.signed_by !== undefined).map((r: any) => r.signed_by)
+						form.setValue(`operations.${index}.payload.policy.organizations`, orgs)
+					}
+				} else if (policy.type === 3) {
+					form.setValue(`operations.${index}.payload.policy.type`, 'ImplicitMeta')
+
+					// Parse implicit meta policy
+					const rule = policy.value?.rule
+					if (rule) {
+						const parts = rule.split(' ')
+						if (parts.length === 2) {
+							form.setValue(`operations.${index}.payload.policy.implicitMetaOperator`, parts[0])
+							form.setValue(`operations.${index}.payload.policy.implicitMetaRole`, parts[1])
+						}
+					}
+				}
+			}
+		}
+	}, [selectedPolicyName, channelConfig, form, index])
 
 	return (
 		<Card>
@@ -47,6 +102,31 @@ export function UpdateApplicationPolicyOperation({ index, onRemove, channelConfi
 									<SelectItem value="Endorsement">Endorsement</SelectItem>
 								</SelectContent>
 							</Select>
+							{selectedPolicyName && (
+								<div className="text-sm text-muted-foreground mt-1">
+									Current:{' '}
+									{(() => {
+										const currentPolicy = getCurrentPolicy(selectedPolicyName)
+										if (currentPolicy?.policy?.type === 1) {
+											const rule = currentPolicy.policy.value?.rule
+											if (rule?.n_out_of) {
+												const n = rule.n_out_of.n
+												const rules = rule.n_out_of.rules || []
+												if (n === 1 && rules.length === 1) {
+													return `OR(${rules[0]?.signed_by || 'unknown'})`
+												} else if (n === rules.length) {
+													return `AND(${rules.map((r: any) => r.signed_by).join(', ')})`
+												} else {
+													return `OutOf(${n}, ${rules.map((r: any) => r.signed_by).join(', ')})`
+												}
+											}
+										} else if (currentPolicy?.policy?.type === 3) {
+											return currentPolicy.policy.value?.rule || 'Unknown'
+										}
+										return 'Unknown policy type'
+									})()}
+								</div>
+							)}
 							<FormMessage />
 						</FormItem>
 					)}
@@ -155,16 +235,9 @@ export function UpdateApplicationPolicyOperation({ index, onRemove, channelConfi
 									<FormItem>
 										<FormLabel>Number of Required Signatures</FormLabel>
 										<FormControl>
-											<Input
-												type="number"
-												min={1}
-												value={field.value}
-												onChange={(e) => field.onChange(parseInt(e.target.value))}
-											/>
+											<Input type="number" min={1} value={field.value} onChange={(e) => field.onChange(parseInt(e.target.value))} />
 										</FormControl>
-										<FormDescription>
-											Number of organizations that must sign
-										</FormDescription>
+										<FormDescription>Number of organizations that must sign</FormDescription>
 										<FormMessage />
 									</FormItem>
 								)}
@@ -178,22 +251,22 @@ export function UpdateApplicationPolicyOperation({ index, onRemove, channelConfi
 								<FormItem>
 									<FormLabel>Organizations</FormLabel>
 									<div className="space-y-2">
-										{Object.entries(channelConfig?.config?.data?.data?.[0]?.payload?.data?.config?.channel_group?.groups?.Application?.groups || {}).map(([mspId, org]: [string, any]) => (
-											<FormItem key={mspId} className="flex items-center gap-2">
-												<FormControl>
-													<Checkbox
-														checked={field.value?.includes(mspId)}
-														onCheckedChange={(checked) => {
-															const value = checked
-																? [...(field.value || []), mspId]
-																: (field.value || []).filter((id: string) => id !== mspId)
-															field.onChange(value)
-														}}
-													/>
-												</FormControl>
-												<FormLabel className="!mt-0">{mspId}</FormLabel>
-											</FormItem>
-										))}
+										{Object.entries(channelConfig?.config?.data?.data?.[0]?.payload?.data?.config?.channel_group?.groups?.Application?.groups || {}).map(
+											([mspId, org]: [string, any]) => (
+												<FormItem key={mspId} className="flex items-center gap-2">
+													<FormControl>
+														<Checkbox
+															checked={field.value?.includes(mspId)}
+															onCheckedChange={(checked) => {
+																const value = checked ? [...(field.value || []), mspId] : (field.value || []).filter((id: string) => id !== mspId)
+																field.onChange(value)
+															}}
+														/>
+													</FormControl>
+													<FormLabel className="!mt-0">{mspId}</FormLabel>
+												</FormItem>
+											)
+										)}
 									</div>
 									<FormMessage />
 								</FormItem>
@@ -204,4 +277,4 @@ export function UpdateApplicationPolicyOperation({ index, onRemove, channelConfi
 			</CardContent>
 		</Card>
 	)
-} 
+}

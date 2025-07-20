@@ -65,6 +65,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Get("/chaincodes/{chaincodeId}/definitions/{definitionId}", response.Middleware(h.GetChaincodeDefinitionDetailByID))
 		r.Post("/chaincodes/{chaincodeId}/invoke", response.Middleware(h.InvokeChaincode))
 		r.Post("/chaincodes/{chaincodeId}/query", response.Middleware(h.QueryChaincode))
+		r.Delete("/chaincodes/{id}", response.Middleware(h.DeleteChaincode))
 	})
 
 	r.Route("/sc/fabric/definitions", func(r chi.Router) {
@@ -645,6 +646,31 @@ func (h *Handler) GetFabricChaincodeDetailByID(w http.ResponseWriter, r *http.Re
 		Definitions: detail.Definitions,
 	}
 	return response.WriteJSON(w, http.StatusOK, resp)
+}
+
+// @Summary Delete a chaincode
+// @Description Delete a chaincode by ID
+// @Tags Chaincode
+// @Accept json
+// @Produce json
+// @Param id path int true "Chaincode ID"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} response.Response
+// @Failure 500 {object} response.Response
+// @Router /sc/fabric/chaincodes/{id} [delete]
+func (h *Handler) DeleteChaincode(w http.ResponseWriter, r *http.Request) error {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		h.logger.Error("Invalid chaincode ID", "id", idStr)
+		return errors.NewValidationError("invalid chaincode ID", map[string]interface{}{"detail": "Invalid chaincode ID"})
+	}
+	err = h.chaincodeService.DeleteChaincode(r.Context(), id)
+	if err != nil {
+		h.logger.Error("Failed to delete chaincode", "error", err)
+		return errors.NewInternalError("failed to delete chaincode", err, nil)
+	}
+	return response.WriteJSON(w, http.StatusOK, map[string]string{"status": "deleted", "id": idStr})
 }
 
 // --- HTTP structs for new endpoints ---

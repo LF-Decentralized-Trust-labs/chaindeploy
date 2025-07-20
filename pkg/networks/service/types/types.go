@@ -59,6 +59,16 @@ type FabricNetworkConfig struct {
 	ApplicationPolicies  map[string]configtx.Policy `json:"application_policies,omitempty"`
 	OrdererPolicies      map[string]configtx.Policy `json:"orderer_policies,omitempty"`
 	ChannelPolicies      map[string]configtx.Policy `json:"channel_policies,omitempty"`
+
+	// Consensus configuration
+	ConsensusType      string              `json:"consensus_type,omitempty"` // "etcdraft" or "smartbft"
+	SmartBFTConsenters []SmartBFTConsenter `json:"smartbft_consenters,omitempty"`
+	SmartBFTOptions    *SmartBFTOptions    `json:"smartbft_options,omitempty"`
+	EtcdRaftOptions    *EtcdRaftOptions    `json:"etcdraft_options,omitempty"`
+	// Batch configuration
+	BatchSize    *BatchSize `json:"batch_size,omitempty"`
+	BatchTimeout string     `json:"batch_timeout,omitempty"` // e.g., "2s"
+
 }
 
 // Organization represents a Fabric organization configuration
@@ -183,4 +193,52 @@ type NetworkDeployer interface {
 	CreateGenesisBlock(networkID int64, config interface{}) ([]byte, error)
 	JoinNode(networkID int64, genesisBlock []byte, nodeID int64) error
 	GetStatus(networkID int64) (*NetworkDeploymentStatus, error)
+}
+
+// SmartBFTConsenter represents a SmartBFT consenter with additional fields
+type SmartBFTConsenter struct {
+	Address       HostPort `json:"address"`
+	ClientTLSCert string   `json:"clientTLSCert"`
+	ServerTLSCert string   `json:"serverTLSCert"`
+	Identity      string   `json:"identity"`
+	ID            uint64   `json:"id"`
+	MSPID         string   `json:"mspId"`
+}
+
+// SmartBFTOptions represents SmartBFT configuration options
+type SmartBFTOptions struct {
+	RequestBatchMaxCount      uint64 `json:"requestBatchMaxCount"`
+	RequestBatchMaxBytes      uint64 `json:"requestBatchMaxBytes"`
+	RequestBatchMaxInterval   string `json:"requestBatchMaxInterval"`
+	IncomingMessageBufferSize uint64 `json:"incomingMessageBufferSize"`
+	RequestPoolSize           uint64 `json:"requestPoolSize"`
+	RequestForwardTimeout     string `json:"requestForwardTimeout"`
+	RequestComplainTimeout    string `json:"requestComplainTimeout"`
+	RequestAutoRemoveTimeout  string `json:"requestAutoRemoveTimeout"`
+	RequestMaxBytes           uint64 `json:"requestMaxBytes"`
+	ViewChangeResendInterval  string `json:"viewChangeResendInterval"`
+	ViewChangeTimeout         string `json:"viewChangeTimeout"`
+	LeaderHeartbeatTimeout    string `json:"leaderHeartbeatTimeout"`
+	LeaderHeartbeatCount      uint64 `json:"leaderHeartbeatCount"`
+	CollectTimeout            string `json:"collectTimeout"`
+	SyncOnStart               bool   `json:"syncOnStart"`
+	SpeedUpViewChange         bool   `json:"speedUpViewChange"`
+	LeaderRotation            string `json:"leaderRotation"`
+	DecisionsPerLeader        uint64 `json:"decisionsPerLeader"`
+}
+
+// EtcdRaftOptions represents etcdraft configuration options
+type EtcdRaftOptions struct {
+	TickInterval         string `json:"tickInterval"`
+	ElectionTick         uint32 `json:"electionTick"`
+	HeartbeatTick        uint32 `json:"heartbeatTick"`
+	MaxInflightBlocks    uint32 `json:"maxInflightBlocks"`
+	SnapshotIntervalSize uint32 `json:"snapshotIntervalSize"`
+}
+
+// BatchSize represents batch size configuration
+type BatchSize struct {
+	MaxMessageCount   uint32 `json:"maxMessageCount"`
+	AbsoluteMaxBytes  uint32 `json:"absoluteMaxBytes"`
+	PreferredMaxBytes uint32 `json:"preferredMaxBytes"`
 }
