@@ -1302,6 +1302,7 @@ export type HttpEtcdRaftOptions = {
 };
 
 export type HttpFabricNetworkConfig = {
+    applicationCapabilities?: Array<string>;
     /**
      * Optional policies
      */
@@ -1316,6 +1317,10 @@ export type HttpFabricNetworkConfig = {
      * e.g., "2s"
      */
     batchTimeout?: string;
+    /**
+     * Capabilities configuration
+     */
+    channelCapabilities?: Array<string>;
     channelPolicies?: {
         [key: string]: HttpFabricPolicy;
     };
@@ -1324,6 +1329,7 @@ export type HttpFabricNetworkConfig = {
      */
     consensusType?: string;
     etcdRaftOptions?: HttpEtcdRaftOptions;
+    ordererCapabilities?: Array<string>;
     ordererOrganizations?: Array<HttpOrganizationConfig>;
     ordererPolicies?: {
         [key: string]: HttpFabricPolicy;
@@ -10026,3 +10032,7 @@ export type PutUsersByIdRoleResponses = {
 };
 
 export type PutUsersByIdRoleResponse = PutUsersByIdRoleResponses[keyof PutUsersByIdRoleResponses];
+
+export type ClientOptions = {
+    baseUrl: 'http://localhost:8100' | (string & {});
+};

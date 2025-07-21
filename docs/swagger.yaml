@@ -1617,6 +1617,10 @@ definitions:
           - update_channel_capability: UpdateChannelCapabilityOperation
           - update_orderer_capability: UpdateOrdererCapabilityOperation
           - update_application_capability: UpdateApplicationCapabilityOperation
+          - add_orderer_org: AddOrdererOrgPayload
+          - remove_orderer_org: RemoveOrdererOrgPayload
+          - update_orderer_org_msp: UpdateOrdererOrgMSPPayload
+          - update_application_acl: UpdateApplicationACLPayload
           @Description The payload for the configuration update operation
           @Description Can be one of:
           @Description - AddOrgPayload when type is "add_org"
@@ -1975,6 +1979,10 @@ definitions:
     type: object
   http.FabricNetworkConfig:
     properties:
+      applicationCapabilities:
+        items:
+          type: string
+        type: array
       applicationPolicies:
         additionalProperties:
           $ref: '#/definitions/http.FabricPolicy'
@@ -1987,6 +1995,11 @@ definitions:
       batchTimeout:
         description: e.g., "2s"
         type: string
+      channelCapabilities:
+        description: Capabilities configuration
+        items:
+          type: string
+        type: array
       channelPolicies:
         additionalProperties:
           $ref: '#/definitions/http.FabricPolicy'
@@ -1996,6 +2009,10 @@ definitions:
         type: string
       etcdRaftOptions:
         $ref: '#/definitions/http.EtcdRaftOptions'
+      ordererCapabilities:
+        items:
+          type: string
+        type: array
       ordererOrganizations:
         items:
           $ref: '#/definitions/http.OrganizationConfig'
@@ -2404,9 +2421,6 @@ definitions:
       acl_name:
         type: string
       policy:
-        enum:
-        - Readers
-        - Writers
         type: string
     required:
     - acl_name
@@ -7499,6 +7513,16 @@ paths:
         - update_etcd_raft_options: Update etcd raft options for the orderer
         - update_batch_size: Update batch size for the orderer
         - update_batch_timeout: Update batch timeout for the orderer
+        - update_application_policy: Update application policy for the channel
+        - update_orderer_policy: Update orderer policy for the channel
+        - update_channel_policy: Update channel policy for the channel
+        - update_channel_capability: Update channel capability for the channel
+        - update_orderer_capability: Update orderer capability for the channel
+        - update_application_capability: Update application capability for the channel
+        - add_orderer_org: Add a new orderer organization to the channel
+        - remove_orderer_org: Remove an orderer organization from the channel
+        - update_orderer_org_msp: Update an orderer organization's MSP configuration
+        - update_application_acl: Update application ACL for the channel
       parameters:
       - description: Network ID
         in: path

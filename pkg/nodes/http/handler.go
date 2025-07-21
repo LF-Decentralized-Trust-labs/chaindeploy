@@ -688,6 +688,7 @@ func toNodeResponse(node *service.NodeResponse) NodeResponse {
 		BlockchainPlatform: node.Platform,
 		NodeType:           string(node.NodeType),
 		Status:             string(node.Status),
+		ErrorMessage:       node.ErrorMessage,
 		Endpoint:           node.Endpoint,
 		CreatedAt:          node.CreatedAt,
 		UpdatedAt:          node.UpdatedAt,

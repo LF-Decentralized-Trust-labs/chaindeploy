@@ -5113,7 +5113,7 @@
         },
         "/networks/fabric/{id}/update-config": {
             "post": {
-                "description": "Prepare a config update proposal for a Fabric network using the provided operations.\nThe following operation types are supported:\n- add_org: Add a new organization to the channel\n- remove_org: Remove an organization from the channel\n- update_org_msp: Update an organization's MSP configuration\n- set_anchor_peers: Set anchor peers for an organization\n- add_consenter: Add a new consenter to the orderer\n- remove_consenter: Remove a consenter from the orderer\n- update_consenter: Update a consenter in the orderer\n- update_etcd_raft_options: Update etcd raft options for the orderer\n- update_batch_size: Update batch size for the orderer\n- update_batch_timeout: Update batch timeout for the orderer",
+                "description": "Prepare a config update proposal for a Fabric network using the provided operations.\nThe following operation types are supported:\n- add_org: Add a new organization to the channel\n- remove_org: Remove an organization from the channel\n- update_org_msp: Update an organization's MSP configuration\n- set_anchor_peers: Set anchor peers for an organization\n- add_consenter: Add a new consenter to the orderer\n- remove_consenter: Remove a consenter from the orderer\n- update_consenter: Update a consenter in the orderer\n- update_etcd_raft_options: Update etcd raft options for the orderer\n- update_batch_size: Update batch size for the orderer\n- update_batch_timeout: Update batch timeout for the orderer\n- update_application_policy: Update application policy for the channel\n- update_orderer_policy: Update orderer policy for the channel\n- update_channel_policy: Update channel policy for the channel\n- update_channel_capability: Update channel capability for the channel\n- update_orderer_capability: Update orderer capability for the channel\n- update_application_capability: Update application capability for the channel\n- add_orderer_org: Add a new orderer organization to the channel\n- remove_orderer_org: Remove an orderer organization from the channel\n- update_orderer_org_msp: Update an orderer organization's MSP configuration\n- update_application_acl: Update application ACL for the channel",
                 "consumes": [
                     "application/json"
                 ],
@@ -12509,7 +12509,7 @@
             ],
             "properties": {
                 "payload": {
-                    "description": "Payload contains the operation-specific data\nThe structure depends on the operation type:\n- add_org: AddOrgPayload\n- remove_org: RemoveOrgPayload\n- update_org_msp: UpdateOrgMSPPayload\n- set_anchor_peers: SetAnchorPeersPayload\n- add_consenter: AddConsenterPayload\n- remove_consenter: RemoveConsenterPayload\n- update_consenter: UpdateConsenterPayload\n- update_etcd_raft_options: UpdateEtcdRaftOptionsPayload\n- update_batch_size: UpdateBatchSizePayload\n- update_batch_timeout: UpdateBatchTimeoutPayload\n- update_application_policy: UpdateApplicationPolicyPayload\n- update_orderer_policy: UpdateOrdererPolicyPayload\n- update_channel_policy: UpdateChannelPolicyPayload\n- update_channel_capability: UpdateChannelCapabilityOperation\n- update_orderer_capability: UpdateOrdererCapabilityOperation\n- update_application_capability: UpdateApplicationCapabilityOperation\n@Description The payload for the configuration update operation\n@Description Can be one of:\n@Description - AddOrgPayload when type is \"add_org\"\n@Description - RemoveOrgPayload when type is \"remove_org\"\n@Description - UpdateOrgMSPPayload when type is \"update_org_msp\"\n@Description - SetAnchorPeersPayload when type is \"set_anchor_peers\"\n@Description - AddConsenterPayload when type is \"add_consenter\"\n@Description - RemoveConsenterPayload when type is \"remove_consenter\"\n@Description - UpdateConsenterPayload when type is \"update_consenter\"\n@Description - UpdateEtcdRaftOptionsPayload when type is \"update_etcd_raft_options\"\n@Description - UpdateBatchSizePayload when type is \"update_batch_size\"\n@Description - UpdateBatchTimeoutPayload when type is \"update_batch_timeout\"\n@Description - UpdateApplicationPolicyPayload when type is \"update_application_policy\"\n@Description - UpdateOrdererPolicyPayload when type is \"update_orderer_policy\"\n@Description - UpdateChannelPolicyPayload when type is \"update_channel_policy\"\n@Description - UpdateChannelCapabilityPayload when type is \"update_channel_capability\"\n@Description - UpdateOrdererCapabilityPayload when type is \"update_orderer_capability\"\n@Description - UpdateApplicationCapabilityPayload when type is \"update_application_capability\"\n@Description - AddOrdererOrgPayload when type is \"add_orderer_org\"\n@Description - RemoveOrdererOrgPayload when type is \"remove_orderer_org\"\n@Description - UpdateOrdererOrgMSPPayload when type is \"update_orderer_org_msp\"\n@Description - UpdateApplicationACLPayload when type is \"update_application_acl\"",
+                    "description": "Payload contains the operation-specific data\nThe structure depends on the operation type:\n- add_org: AddOrgPayload\n- remove_org: RemoveOrgPayload\n- update_org_msp: UpdateOrgMSPPayload\n- set_anchor_peers: SetAnchorPeersPayload\n- add_consenter: AddConsenterPayload\n- remove_consenter: RemoveConsenterPayload\n- update_consenter: UpdateConsenterPayload\n- update_etcd_raft_options: UpdateEtcdRaftOptionsPayload\n- update_batch_size: UpdateBatchSizePayload\n- update_batch_timeout: UpdateBatchTimeoutPayload\n- update_application_policy: UpdateApplicationPolicyPayload\n- update_orderer_policy: UpdateOrdererPolicyPayload\n- update_channel_policy: UpdateChannelPolicyPayload\n- update_channel_capability: UpdateChannelCapabilityOperation\n- update_orderer_capability: UpdateOrdererCapabilityOperation\n- update_application_capability: UpdateApplicationCapabilityOperation\n- add_orderer_org: AddOrdererOrgPayload\n- remove_orderer_org: RemoveOrdererOrgPayload\n- update_orderer_org_msp: UpdateOrdererOrgMSPPayload\n- update_application_acl: UpdateApplicationACLPayload\n@Description The payload for the configuration update operation\n@Description Can be one of:\n@Description - AddOrgPayload when type is \"add_org\"\n@Description - RemoveOrgPayload when type is \"remove_org\"\n@Description - UpdateOrgMSPPayload when type is \"update_org_msp\"\n@Description - SetAnchorPeersPayload when type is \"set_anchor_peers\"\n@Description - AddConsenterPayload when type is \"add_consenter\"\n@Description - RemoveConsenterPayload when type is \"remove_consenter\"\n@Description - UpdateConsenterPayload when type is \"update_consenter\"\n@Description - UpdateEtcdRaftOptionsPayload when type is \"update_etcd_raft_options\"\n@Description - UpdateBatchSizePayload when type is \"update_batch_size\"\n@Description - UpdateBatchTimeoutPayload when type is \"update_batch_timeout\"\n@Description - UpdateApplicationPolicyPayload when type is \"update_application_policy\"\n@Description - UpdateOrdererPolicyPayload when type is \"update_orderer_policy\"\n@Description - UpdateChannelPolicyPayload when type is \"update_channel_policy\"\n@Description - UpdateChannelCapabilityPayload when type is \"update_channel_capability\"\n@Description - UpdateOrdererCapabilityPayload when type is \"update_orderer_capability\"\n@Description - UpdateApplicationCapabilityPayload when type is \"update_application_capability\"\n@Description - AddOrdererOrgPayload when type is \"add_orderer_org\"\n@Description - RemoveOrdererOrgPayload when type is \"remove_orderer_org\"\n@Description - UpdateOrdererOrgMSPPayload when type is \"update_orderer_org_msp\"\n@Description - UpdateApplicationACLPayload when type is \"update_application_acl\"",
                     "type": "array",
                     "items": {
                         "type": "integer"
@@ -12910,6 +12910,12 @@
         "http.FabricNetworkConfig": {
             "type": "object",
             "properties": {
+                "applicationCapabilities": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "applicationPolicies": {
                     "description": "Optional policies",
                     "type": "object",
@@ -12929,6 +12935,13 @@
                     "description": "e.g., \"2s\"",
                     "type": "string"
                 },
+                "channelCapabilities": {
+                    "description": "Capabilities configuration",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "channelPolicies": {
                     "type": "object",
                     "additionalProperties": {
@@ -12941,6 +12954,12 @@
                 },
                 "etcdRaftOptions": {
                     "$ref": "#/definitions/http.EtcdRaftOptions"
+                },
+                "ordererCapabilities": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "ordererOrganizations": {
                     "type": "array",
@@ -13563,11 +13582,7 @@
                     "type": "string"
                 },
                 "policy": {
-                    "type": "string",
-                    "enum": [
-                        "Readers",
-                        "Writers"
-                    ]
+                    "type": "string"
                 }
             }
         },

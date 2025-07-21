@@ -130,6 +130,10 @@ type CreateChannelInput struct {
 	ChannelPolicies     map[string]configtx.Policy `json:"channelPolicies,omitempty"`
 	ApplicationPolicies map[string]configtx.Policy `json:"applicationPolicies,omitempty"`
 	OrdererPolicies     map[string]configtx.Policy `json:"ordererPolicies,omitempty"`
+	// Capabilities configuration
+	ChannelCapabilities     []string `json:"channelCapabilities,omitempty"`
+	ApplicationCapabilities []string `json:"applicationCapabilities,omitempty"`
+	OrdererCapabilities     []string `json:"ordererCapabilities,omitempty"`
 }
 
 // SetAnchorPeersInput represents the input for setting anchor peers
@@ -637,6 +641,12 @@ func (s *ChannelService) parseAndCreateChannel(input CreateChannelInput) ([]byte
 			batchSize.PreferredMaxBytes = input.BatchSize.PreferredMaxBytes
 		}
 
+		// Set orderer capabilities - default to V2_0 if not specified
+		ordererCapabilities := input.OrdererCapabilities
+		if ordererCapabilities == nil || len(ordererCapabilities) == 0 {
+			ordererCapabilities = []string{"V2_0"}
+		}
+
 		ordererConfig = configtx.Orderer{
 			OrdererType:      string(orderer.ConsensusTypeBFT),
 			BatchTimeout:     batchTimeout,
@@ -644,7 +654,7 @@ func (s *ChannelService) parseAndCreateChannel(input CreateChannelInput) ([]byte
 			ConsenterMapping: consenterMapping,
 			SmartBFT:         smartBFTOptions,
 			Organizations:    ordererOrgs,
-			Capabilities:     []string{"V2_0"},
+			Capabilities:     ordererCapabilities,
 			Policies:         ordererPolicies,
 			BatchSize:        batchSize,
 		}
@@ -696,6 +706,12 @@ func (s *ChannelService) parseAndCreateChannel(input CreateChannelInput) ([]byte
 			}
 		}
 
+		// Set orderer capabilities - default to V2_0 if not specified
+		ordererCapabilities := input.OrdererCapabilities
+		if ordererCapabilities == nil || len(ordererCapabilities) == 0 {
+			ordererCapabilities = []string{"V2_0"}
+		}
+
 		ordererConfig = configtx.Orderer{
 			OrdererType:  orderer.ConsensusTypeEtcdRaft,
 			BatchTimeout: batchTimeout,
@@ -706,21 +722,33 @@ func (s *ChannelService) parseAndCreateChannel(input CreateChannelInput) ([]byte
 				Options:    etcdRaftOptions,
 			},
 			Organizations: ordererOrgs,
-			Capabilities:  []string{"V2_0"},
+			Capabilities:  ordererCapabilities,
 			Policies:      ordererPolicies,
 		}
+	}
+
+	// Set application capabilities - default to V2_0 if not specified
+	applicationCapabilities := input.ApplicationCapabilities
+	if applicationCapabilities == nil || len(applicationCapabilities) == 0 {
+		applicationCapabilities = []string{"V2_0"}
+	}
+
+	// Set channel capabilities - default to V2_0 if not specified
+	channelCapabilities := input.ChannelCapabilities
+	if channelCapabilities == nil || len(channelCapabilities) == 0 {
+		channelCapabilities = []string{"V2_0"}
 	}
 
 	channelConfig := configtx.Channel{
 		Consortiums: nil, // Not needed for application channels
 		Application: configtx.Application{
 			Organizations: peerOrgs,
-			Capabilities:  []string{"V2_0"},
+			Capabilities:  applicationCapabilities,
 			ACLs:          defaultACLs(),
 			Policies:      appPolicies,
 		},
 		Orderer:      ordererConfig,
-		Capabilities: []string{"V2_0"},
+		Capabilities: channelCapabilities,
 		Policies:     channelPolicies,
 	}
 

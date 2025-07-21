@@ -1226,6 +1226,11 @@ func (d *FabricDeployer) CreateGenesisBlock(networkID int64, config interface{})
 		Consenters:  consenters,
 		PeerOrgs:    peerOrgs,
 		OrdererOrgs: ordererOrgs,
+
+		// Pass capabilities if present
+		ChannelCapabilities:     fabricConfig.ChannelCapabilities,
+		ApplicationCapabilities: fabricConfig.ApplicationCapabilities,
+		OrdererCapabilities:     fabricConfig.OrdererCapabilities,
 		// Pass policies if present
 		ApplicationPolicies: fabricConfig.ApplicationPolicies,
 		OrdererPolicies:     fabricConfig.OrdererPolicies,

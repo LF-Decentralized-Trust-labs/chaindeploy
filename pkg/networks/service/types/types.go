@@ -60,6 +60,11 @@ type FabricNetworkConfig struct {
 	OrdererPolicies      map[string]configtx.Policy `json:"orderer_policies,omitempty"`
 	ChannelPolicies      map[string]configtx.Policy `json:"channel_policies,omitempty"`
 
+	// Capabilities configuration
+	ChannelCapabilities     []string `json:"channelCapabilities,omitempty"`
+	ApplicationCapabilities []string `json:"applicationCapabilities,omitempty"`
+	OrdererCapabilities     []string `json:"ordererCapabilities,omitempty"`
+
 	// Consensus configuration
 	ConsensusType      string              `json:"consensus_type,omitempty"` // "etcdraft" or "smartbft"
 	SmartBFTConsenters []SmartBFTConsenter `json:"smartbft_consenters,omitempty"`

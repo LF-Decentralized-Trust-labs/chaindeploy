@@ -10,10 +10,11 @@ import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
+import { Toggle } from '@/components/ui/toggle'
 import { cn } from '@/lib/utils'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { AlertCircle, TriangleAlert, Settings, Network, Users } from 'lucide-react'
+import { AlertCircle, TriangleAlert, Settings, Network, Users, Globe, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
@@ -39,6 +40,10 @@ const channelFormSchema = z
 		),
 		// Consensus configuration
 		consensusType: z.enum(['etcdraft', 'smartbft']).default('etcdraft'),
+		// Capabilities configuration
+		channelCapabilities: z.array(z.string()).optional(),
+		applicationCapabilities: z.array(z.string()).optional(),
+		ordererCapabilities: z.array(z.string()).optional(),
 		// Batch configuration
 		batchSize: z
 			.object({
@@ -116,18 +121,20 @@ const channelFormSchema = z
 	)
 	.refine(
 		(data) => {
-			const enabledOrdererOrgs = data.organizations.filter((org) => org.enabled && org.isOrderer)
-
-			// At least one orderer organization must have consenters
-			return enabledOrdererOrgs.some((org) => org.consenters.length > 0)
+			// For SmartBFT, we need at least 4 consenters
+			if (data.consensusType === 'smartbft') {
+				const totalConsenters = [...data.organizations.filter((org) => org.enabled && org.isOrderer).flatMap((org) => org.consenters)].length
+				return totalConsenters >= 4
+			}
+			return true
 		},
-		{ message: 'At least one orderer organization with consenters is required' }
+		{ message: 'SmartBFT requires at least 4 consenters' }
 	)
 	.refine(
 		(data) => {
 			// For SmartBFT, we need at least 4 consenters
 			if (data.consensusType === 'smartbft') {
-				const totalConsenters = data.organizations.filter((org) => org.enabled && org.isOrderer).flatMap((org) => org.consenters).length
+				const totalConsenters = [...data.organizations.filter((org) => org.enabled && org.isOrderer).flatMap((org) => org.consenters)].length
 				return totalConsenters >= 4
 			}
 			return true
@@ -168,6 +175,9 @@ export default function FabricCreateChannel() {
 			name: '',
 			organizations: [],
 			consensusType: 'etcdraft',
+			channelCapabilities: ['V2_0', 'V3_0'],
+			applicationCapabilities: ['V2_0', 'V2_5'],
+			ordererCapabilities: ['V2_0'],
 			batchSize: {
 				maxMessageCount: 500,
 				absoluteMaxBytes: 103809024,
@@ -250,6 +260,11 @@ export default function FabricCreateChannel() {
 			const config: HttpFabricNetworkConfig = {
 				// Consensus configuration
 				consensusType: data.consensusType,
+
+				// Capabilities configuration
+				channelCapabilities: data.channelCapabilities,
+				applicationCapabilities: data.applicationCapabilities,
+				ordererCapabilities: data.ordererCapabilities,
 
 				// Batch configuration
 				batchSize: data.batchSize,
@@ -539,6 +554,135 @@ export default function FabricCreateChannel() {
 											<FormMessage />
 										</FormItem>
 									)}
+								/>
+							</CardContent>
+						</Card>
+
+						<Card>
+							<CardHeader>
+								<div className="flex items-center gap-2">
+									<Settings className="h-5 w-5 text-muted-foreground" />
+									<div>
+										<CardTitle>Capabilities Configuration</CardTitle>
+										<CardDescription>Configure channel, application, and orderer capabilities</CardDescription>
+									</div>
+								</div>
+							</CardHeader>
+							<CardContent className="space-y-6">
+								{/* Channel Capabilities */}
+								<FormField
+									control={form.control}
+									name="channelCapabilities"
+									render={({ field }) => {
+										const consensusType = form.watch('consensusType')
+										const isSmartBFT = consensusType === 'smartbft'
+
+										const capabilities = ['V2_0', 'V3_0']
+
+										return (
+											<FormItem>
+												<FormLabel>Channel Capabilities</FormLabel>
+												<FormDescription>
+													{isSmartBFT
+														? 'SmartBFT requires V3_0 channel capabilities. V3_0 is automatically selected and cannot be removed.'
+														: 'Select channel capabilities. V2_0 and V3_0 are available.'}
+												</FormDescription>
+												<div className="flex flex-wrap gap-2 mt-2">
+													{capabilities.map((capability) => (
+														<Toggle
+															key={capability}
+															pressed={field.value?.includes(capability)}
+															onPressedChange={(pressed) => {
+																if (pressed) {
+																	field.onChange([...(field.value || []), capability])
+																} else if (!(isSmartBFT && capability === 'V3_0')) {
+																	field.onChange((field.value || []).filter((c) => c !== capability))
+																}
+															}}
+															disabled={isSmartBFT && capability === 'V3_0'}
+															variant="outline"
+															className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+														>
+															{capability}
+														</Toggle>
+													))}
+												</div>
+												<FormMessage />
+											</FormItem>
+										)
+									}}
+								/>
+
+								{/* Application Capabilities */}
+								<FormField
+									control={form.control}
+									name="applicationCapabilities"
+									render={({ field }) => {
+										const capabilities = ['V2_0', 'V2_5']
+
+										return (
+											<FormItem>
+												<FormLabel>Application Capabilities</FormLabel>
+												<FormDescription>Select application capabilities for the channel. By default, both V2_0 and V2_5 are enabled.</FormDescription>
+												<div className="flex flex-wrap gap-2 mt-2">
+													{capabilities.map((capability) => (
+														<Toggle
+															key={capability}
+															pressed={field.value?.includes(capability)}
+															onPressedChange={(pressed) => {
+																if (pressed) {
+																	field.onChange([...(field.value || []), capability])
+																} else {
+																	field.onChange((field.value || []).filter((c) => c !== capability))
+																}
+															}}
+															variant="outline"
+															className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+														>
+															{capability}
+														</Toggle>
+													))}
+												</div>
+												<FormMessage />
+											</FormItem>
+										)
+									}}
+								/>
+
+								{/* Orderer Capabilities */}
+								<FormField
+									control={form.control}
+									name="ordererCapabilities"
+									render={({ field }) => {
+										const capabilities = ['V2_0']
+
+										return (
+											<FormItem>
+												<FormLabel>Orderer Capabilities</FormLabel>
+												<FormDescription>Select orderer capabilities for the channel. By default, V2_0 is enabled.</FormDescription>
+												<div className="flex flex-wrap gap-2 mt-2">
+													{capabilities.map((capability) => (
+														<Toggle
+															key={capability}
+															pressed={field.value?.includes(capability)}
+															onPressedChange={(pressed) => {
+																if (pressed) {
+																	field.onChange([...(field.value || []), capability])
+																} else {
+																	field.onChange((field.value || []).filter((c) => c !== capability))
+																}
+															}}
+															variant="outline"
+															className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+														>
+															{capability}
+														</Toggle>
+													))}
+												</div>
+												<FormMessage />
+											</FormItem>
+										)
+									}}
 								/>
 							</CardContent>
 						</Card>

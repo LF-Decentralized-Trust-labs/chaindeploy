@@ -373,6 +373,12 @@ export default function NodeDetailPage() {
 								<p className="text-sm font-medium text-muted-foreground">Status</p>
 								<Badge variant="default">{node.status}</Badge>
 							</div>
+							{node.errorMessage && (
+								<div>
+									<p className="text-sm font-medium text-muted-foreground">Error Message</p>
+									<p>{node.errorMessage}</p>
+								</div>
+							)}
 							<div>
 								<p className="text-sm font-medium text-muted-foreground">Platform</p>
 								<p>{isFabricNode(node) ? 'Fabric' : 'Besu'}</p>

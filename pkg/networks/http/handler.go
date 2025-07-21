@@ -242,12 +242,15 @@ func (h *Handler) FabricNetworkCreate(w http.ResponseWriter, r *http.Request) {
 		BaseNetworkConfig: types.BaseNetworkConfig{
 			Type: types.NetworkTypeFabric,
 		},
-		ChannelName:          req.Name,
-		PeerOrganizations:    make([]types.Organization, len(req.Config.PeerOrganizations)),
-		OrdererOrganizations: make([]types.Organization, len(req.Config.OrdererOrganizations)),
-		ApplicationPolicies:  appPolicies,
-		OrdererPolicies:      ordererPolicies,
-		ChannelPolicies:      channelPolicies,
+		ChannelName:             req.Name,
+		PeerOrganizations:       make([]types.Organization, len(req.Config.PeerOrganizations)),
+		OrdererOrganizations:    make([]types.Organization, len(req.Config.OrdererOrganizations)),
+		ApplicationPolicies:     appPolicies,
+		OrdererPolicies:         ordererPolicies,
+		ChannelPolicies:         channelPolicies,
+		ChannelCapabilities:     req.Config.ChannelCapabilities,
+		ApplicationCapabilities: req.Config.ApplicationCapabilities,
+		OrdererCapabilities:     req.Config.OrdererCapabilities,
 	}
 
 	// Convert peer organizations
@@ -1353,6 +1356,10 @@ type ConfigUpdateOperationRequest struct {
 	// - update_channel_capability: UpdateChannelCapabilityOperation
 	// - update_orderer_capability: UpdateOrdererCapabilityOperation
 	// - update_application_capability: UpdateApplicationCapabilityOperation
+	// - add_orderer_org: AddOrdererOrgPayload
+	// - remove_orderer_org: RemoveOrdererOrgPayload
+	// - update_orderer_org_msp: UpdateOrdererOrgMSPPayload
+	// - update_application_acl: UpdateApplicationACLPayload
 	// @Description The payload for the configuration update operation
 	// @Description Can be one of:
 	// @Description - AddOrgPayload when type is "add_org"
@@ -1395,7 +1402,7 @@ type AddOrgPayload struct {
 
 type UpdateApplicationACLPayload struct {
 	ACLName string `json:"acl_name" validate:"required"`
-	Policy  string `json:"policy" validate:"required,oneof=Readers Writers"`
+	Policy  string `json:"policy" validate:"required"`
 }
 
 // Example:
@@ -1635,6 +1642,16 @@ func (h *Handler) DummyHandler(w http.ResponseWriter, r *http.Request) {
 // @Description - update_etcd_raft_options: Update etcd raft options for the orderer
 // @Description - update_batch_size: Update batch size for the orderer
 // @Description - update_batch_timeout: Update batch timeout for the orderer
+// @Description - update_application_policy: Update application policy for the channel
+// @Description - update_orderer_policy: Update orderer policy for the channel
+// @Description - update_channel_policy: Update channel policy for the channel
+// @Description - update_channel_capability: Update channel capability for the channel
+// @Description - update_orderer_capability: Update orderer capability for the channel
+// @Description - update_application_capability: Update application capability for the channel
+// @Description - add_orderer_org: Add a new orderer organization to the channel
+// @Description - remove_orderer_org: Remove an orderer organization from the channel
+// @Description - update_orderer_org_msp: Update an orderer organization's MSP configuration
+// @Description - update_application_acl: Update application ACL for the channel
 // @Tags Fabric Networks
 // @Accept json
 // @Produce json
