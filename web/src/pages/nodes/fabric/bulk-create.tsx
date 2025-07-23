@@ -67,7 +67,7 @@ export default function BulkCreateNodesPage() {
 	}>({ current: 0, total: 0, currentNode: null })
 
 	const { data: organizations, isLoading: isLoadingOrgs } = useQuery({
-		...getOrganizationsOptions(),
+		...getOrganizationsOptions({query: {limit:1000}}),
 	})
 
 	const form = useForm<BulkCreateValues>({

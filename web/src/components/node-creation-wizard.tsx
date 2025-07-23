@@ -152,7 +152,7 @@ function ConfigurationStep({ form, onNext, onBack }: StepProps) {
 
 	// Fabric queries
 	const { data: organizations } = useQuery({
-		...getOrganizationsOptions(),
+		...getOrganizationsOptions({query: {limit:1000}}),
 		enabled: protocol === 'fabric',
 	})
 

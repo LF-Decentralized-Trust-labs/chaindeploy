@@ -166,7 +166,7 @@ export function ChaincodeManagement({ networkNodes, network, channelConfig }: Ch
 	const { theme } = useTheme();
 
 	const { data: fabricOrgs } = useQuery({
-		...getOrganizationsOptions(),
+		...getOrganizationsOptions({query: {limit:1000}}),
 	})
 
 	const peerOrgs = useMemo(

@@ -17,7 +17,7 @@ export const FabricKeySelect = ({ value, onChange, disabled }: FabricKeySelectPr
 
 	// Fetch organizations
 	const { data: organizations } = useQuery({
-		...getOrganizationsOptions(),
+		...getOrganizationsOptions({query: {limit:1000}}),
 	})
 
 	// Get the selected organization

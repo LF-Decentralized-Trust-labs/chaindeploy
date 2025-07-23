@@ -1,4 +1,4 @@
-import { HandlerOrganizationResponse, HttpNodeResponse, HttpFabricNetworkConfig, HttpFabricPolicy, HttpBatchSize, HttpEtcdRaftOptions, HttpSmartBftOptions, HttpSmartBftConsenter } from '@/api/client'
+import { HandlerOrganizationResponse, HttpFabricNetworkConfig, HttpFabricPolicy, HttpNodeResponse, HttpSmartBftConsenter } from '@/api/client'
 import { getNodesOptions, getOrganizationsOptions, postNetworksFabricMutation } from '@/api/client/@tanstack/react-query.gen'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Checkbox } from '@/components/ui/checkbox'
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
@@ -14,13 +15,12 @@ import { Toggle } from '@/components/ui/toggle'
 import { cn } from '@/lib/utils'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { AlertCircle, TriangleAlert, Settings, Network, Users, Globe, X } from 'lucide-react'
+import { AlertCircle, Network, Settings, TriangleAlert, Users } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import * as z from 'zod'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 interface OrganizationWithNodes extends HandlerOrganizationResponse {
 	orderers: HttpNodeResponse[]
@@ -146,7 +146,11 @@ type ChannelFormValues = z.infer<typeof channelFormSchema>
 
 export default function FabricCreateChannel() {
 	const { data: organizations, isLoading: isLoadingOrgs } = useQuery({
-		...getOrganizationsOptions(),
+		...getOrganizationsOptions({
+			query: {
+				limit: 1000,
+			},
+		}),
 	})
 	const { data: nodes, isLoading: isLoadingNodes } = useQuery({
 		...getNodesOptions({
@@ -222,12 +226,13 @@ export default function FabricCreateChannel() {
 			const defaultOrgs = organizations.items?.map((org) => {
 				const orderers = nodes.items?.filter((node) => node.platform === 'FABRIC' && node.nodeType === 'FABRIC_ORDERER' && node.fabricOrderer?.mspId === org.mspId)
 				const peers = nodes.items?.filter((node) => node.platform === 'FABRIC' && node.nodeType === 'FABRIC_PEER' && node.fabricPeer?.mspId === org.mspId)
-
+				const isPeer = peers && peers.length > 0
+				const isOrderer = orderers && orderers.length > 0
 				return {
 					id: org.id!,
-					enabled: true,
-					isPeer: peers && peers.length > 0,
-					isOrderer: orderers && orderers.length > 0,
+					enabled: isPeer || isOrderer,
+					isPeer,
+					isOrderer,
 					consenters: orderers?.map((orderer) => orderer.id!) || [],
 				}
 			})
@@ -510,8 +515,6 @@ export default function FabricCreateChannel() {
 				<Form {...form}>
 					<form
 						onSubmit={form.handleSubmit(onSubmit, (errors) => {
-							console.error('Form validation errors:', errors)
-
 							// Create a more specific error message based on the actual validation errors
 							const errorMessages: string[] = []
 							Object.entries(errors).forEach(([key, value]) => {

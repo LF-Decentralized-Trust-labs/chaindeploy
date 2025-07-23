@@ -50,9 +50,26 @@ export function CertificateViewer({ label, certificate, className }: Certificate
 	let status = 'Valid'
 	let isExpired = false
 	let isNotYetValid = false
+	let decodedCertificate = certificate
+
+	// Try to decode base64 certificate
+	try {
+		// Check if it's base64 encoded (no PEM headers/footers)
+		if (!certificate.includes('-----BEGIN') && !certificate.includes('-----END')) {
+			// Try to decode as base64
+			const decoded = atob(certificate)
+			// Check if decoded content looks like a PEM certificate
+			if (decoded.includes('-----BEGIN') && decoded.includes('-----END')) {
+				decodedCertificate = decoded
+			}
+		}
+	} catch (e) {
+		// If base64 decoding fails, use original certificate
+		console.warn('Failed to decode base64 certificate, using original:', e)
+	}
 
 	try {
-		cert = new X509Certificate(certificate)
+		cert = new X509Certificate(decodedCertificate)
 		const now = new Date()
 		isExpired = now > cert.notAfter
 		isNotYetValid = now < cert.notBefore
@@ -77,7 +94,7 @@ export function CertificateViewer({ label, certificate, className }: Certificate
 
 	const copyToClipboard = async () => {
 		try {
-			await navigator.clipboard.writeText(certificate)
+			await navigator.clipboard.writeText(decodedCertificate)
 			toast.success('Certificate copied to clipboard')
 		} catch (error) {
 			toast.error('Failed to copy certificate')
@@ -86,7 +103,7 @@ export function CertificateViewer({ label, certificate, className }: Certificate
 
 	const downloadCertificate = () => {
 		try {
-			const blob = new Blob([certificate], { type: 'text/plain' })
+			const blob = new Blob([decodedCertificate], { type: 'text/plain' })
 			const url = window.URL.createObjectURL(blob)
 			const a = document.createElement('a')
 			a.href = url
@@ -275,7 +292,7 @@ export function CertificateViewer({ label, certificate, className }: Certificate
 				</div>
 
 				<div className="p-4 font-mono text-xs">
-					<pre className="whitespace-pre-wrap break-all bg-muted p-4 rounded-md">{certificate}</pre>
+					<pre className="whitespace-pre-wrap break-all bg-muted p-4 rounded-md">{decodedCertificate}</pre>
 				</div>
 			</Card>
 
