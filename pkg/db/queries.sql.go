@@ -130,6 +130,17 @@ func (q *Queries) CountBackupsByTarget(ctx context.Context, targetID int64) (int
 	return count, err
 }
 
+const CountFabricOrganizations = `-- name: CountFabricOrganizations :one
+SELECT COUNT(*) FROM fabric_organizations
+`
+
+func (q *Queries) CountFabricOrganizations(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, CountFabricOrganizations)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const CountNetworks = `-- name: CountNetworks :one
 SELECT COUNT(*) FROM networks
 `
@@ -1903,17 +1914,6 @@ func (q *Queries) GetChaincodeDefinition(ctx context.Context, id int64) (*Fabric
 		&i.ChaincodeAddress,
 		&i.CreatedAt,
 	)
-	return &i, err
-}
-
-const GetConversation = `-- name: GetConversation :one
-SELECT id, project_id, started_at FROM conversations WHERE id = ? LIMIT 1
-`
-
-func (q *Queries) GetConversation(ctx context.Context, id int64) (*Conversation, error) {
-	row := q.db.QueryRowContext(ctx, GetConversation, id)
-	var i Conversation
-	err := row.Scan(&i.ID, &i.ProjectID, &i.StartedAt)
 	return &i, err
 }
 

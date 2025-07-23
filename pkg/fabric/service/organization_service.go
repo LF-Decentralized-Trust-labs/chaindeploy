@@ -491,6 +491,14 @@ func (s *OrganizationService) ListOrganizations(ctx context.Context, params Pagi
 	return dtos, nil
 }
 
+func (s *OrganizationService) CountOrganizations(ctx context.Context) (int64, error) {
+	count, err := s.queries.CountFabricOrganizations(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count organizations: %w", err)
+	}
+	return count, nil
+}
+
 // GetCRL returns the current CRL for the organization in PEM format
 func (s *OrganizationService) GetCRL(ctx context.Context, orgID int64) ([]byte, error) {
 	// Get organization details

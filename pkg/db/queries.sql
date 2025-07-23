@@ -1192,3 +1192,6 @@ RETURNING id, name, network_id;
 SELECT id, name, network_id
 FROM fabric_chaincodes
 WHERE name = ? AND network_id = ?;
+
+-- name: CountFabricOrganizations :one
+SELECT COUNT(*) FROM fabric_organizations;
