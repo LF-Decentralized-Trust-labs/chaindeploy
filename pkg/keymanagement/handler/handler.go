@@ -86,6 +86,7 @@ func (h *KeyManagementHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/{id}", h.GetKey)
 		r.Delete("/{id}", h.DeleteKey)
 		r.Post("/{keyID}/sign", h.SignCertificate)
+		r.Post("/{keyID}/sign-data", h.SignData)
 		r.Get("/filter", h.FilterKeys)
 	})
 
@@ -387,6 +388,48 @@ func (h *KeyManagementHandler) FilterKeys(w http.ResponseWriter, r *http.Request
 
 	// Call service method with filters
 	resp, err := h.service.FilterKeys(r.Context(), algorithm, curve, page, pageSize)
+	if err != nil {
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, map[string]string{"error": err.Error()})
+		return
+	}
+
+	render.JSON(w, r, resp)
+}
+
+// @Summary Sign data using a key
+// @Description Sign data using a specific key with configurable parameters
+// @Tags Keys
+// @Accept json
+// @Produce json
+// @Param keyID path int true "Key ID to use for signing"
+// @Param request body models.SignRequest true "Signing request"
+// @Success 200 {object} models.SignResponse
+// @Failure 400 {object} map[string]string "Invalid request"
+// @Failure 404 {object} map[string]string "Key not found"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /keys/{keyID}/sign-data [post]
+// @BasePath /api/v1
+func (h *KeyManagementHandler) SignData(w http.ResponseWriter, r *http.Request) {
+	// Get key ID from URL
+	keyIDStr := chi.URLParam(r, "keyID")
+	keyID, err := strconv.Atoi(keyIDStr)
+	if err != nil {
+		render.Status(r, http.StatusBadRequest)
+		render.JSON(w, r, map[string]string{"error": "Invalid key ID"})
+		return
+	}
+
+	// Parse request body
+	var req models.SignRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		render.Status(r, http.StatusBadRequest)
+		render.JSON(w, r, map[string]string{"error": "Invalid request body"})
+		return
+	}
+
+	// Sign the data
+	resp, err := h.service.SignData(r.Context(), keyID, req)
 	if err != nil {
 		render.Status(r, http.StatusInternalServerError)
 		render.JSON(w, r, map[string]string{"error": err.Error()})

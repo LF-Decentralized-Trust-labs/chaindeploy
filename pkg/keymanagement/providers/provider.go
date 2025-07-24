@@ -21,4 +21,8 @@ type Provider interface {
 	SignCertificate(ctx context.Context, req types.SignCertificateRequest) (*models.KeyResponse, error)
 	// GetDecryptedPrivateKey retrieves and decrypts the private key for a given key ID
 	GetDecryptedPrivateKey(id int) (string, error)
+	// SignData signs data using a key with the specified parameters
+	SignData(ctx context.Context, keyID int, req models.SignRequest) (*models.SignResponse, error)
+	// BatchSignData signs multiple data items in a batch using a key
+	BatchSignData(ctx context.Context, keyID int, req models.BatchSignRequest) (*models.BatchSignResponse, error)
 }

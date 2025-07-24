@@ -3138,6 +3138,74 @@
                 }
             }
         },
+        "/keys/{keyID}/sign-data": {
+            "post": {
+                "description": "Sign data using a specific key with configurable parameters",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Keys"
+                ],
+                "summary": "Sign data using a key",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Key ID to use for signing",
+                        "name": "keyID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Signing request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.SignRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.SignResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Key not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/metrics/deploy": {
             "post": {
                 "description": "Deploys a new Prometheus instance with the specified configuration",
@@ -14504,6 +14572,86 @@
                 },
                 "type": {
                     "$ref": "#/definitions/models.KeyProviderType"
+                }
+            }
+        },
+        "models.SignRequest": {
+            "description": "Request to sign data using a key",
+            "type": "object",
+            "required": [
+                "input"
+            ],
+            "properties": {
+                "context": {
+                    "description": "Context for key derivation (base64 encoded)",
+                    "type": "string",
+                    "example": "Y29udGV4dA=="
+                },
+                "hash_algorithm": {
+                    "description": "Hash algorithm to use for signing",
+                    "type": "string",
+                    "example": "sha2-256"
+                },
+                "input": {
+                    "description": "Base64 encoded input data to sign",
+                    "type": "string",
+                    "example": "SGVsbG8gV29ybGQ="
+                },
+                "key_version": {
+                    "description": "Key version to use for signing (0 means latest)",
+                    "type": "integer",
+                    "example": 0
+                },
+                "marshaling_algorithm": {
+                    "description": "Marshaling algorithm for ECDSA (asn1 or jws)",
+                    "type": "string",
+                    "example": "asn1"
+                },
+                "prehashed": {
+                    "description": "Whether input is already hashed",
+                    "type": "boolean",
+                    "example": false
+                },
+                "reference": {
+                    "description": "Reference string for batch operations",
+                    "type": "string",
+                    "example": "batch-ref-1"
+                },
+                "salt_length": {
+                    "description": "Salt length for RSA PSS (auto, hash, or integer)",
+                    "type": "string",
+                    "example": "auto"
+                },
+                "signature_algorithm": {
+                    "description": "RSA signature algorithm (pss or pkcs1v15)",
+                    "type": "string",
+                    "example": "pss"
+                },
+                "signature_context": {
+                    "description": "Signature context for Ed25519ctx and Ed25519ph signatures",
+                    "type": "string",
+                    "example": "c2lnbmF0dXJlLWNvbnRleHQ="
+                }
+            }
+        },
+        "models.SignResponse": {
+            "description": "Response from a signing operation",
+            "type": "object",
+            "properties": {
+                "key_version": {
+                    "description": "Key version used for signing",
+                    "type": "integer",
+                    "example": 1
+                },
+                "reference": {
+                    "description": "Reference from the request (for batch operations)",
+                    "type": "string",
+                    "example": "batch-ref-1"
+                },
+                "signature": {
+                    "description": "Base64 encoded signature",
+                    "type": "string",
+                    "example": "c2lnbmF0dXJlLWJhc2U2NA=="
                 }
             }
         },

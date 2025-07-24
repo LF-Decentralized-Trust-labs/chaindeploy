@@ -3061,6 +3061,68 @@ definitions:
       type:
         $ref: '#/definitions/models.KeyProviderType'
     type: object
+  models.SignRequest:
+    description: Request to sign data using a key
+    properties:
+      context:
+        description: Context for key derivation (base64 encoded)
+        example: Y29udGV4dA==
+        type: string
+      hash_algorithm:
+        description: Hash algorithm to use for signing
+        example: sha2-256
+        type: string
+      input:
+        description: Base64 encoded input data to sign
+        example: SGVsbG8gV29ybGQ=
+        type: string
+      key_version:
+        description: Key version to use for signing (0 means latest)
+        example: 0
+        type: integer
+      marshaling_algorithm:
+        description: Marshaling algorithm for ECDSA (asn1 or jws)
+        example: asn1
+        type: string
+      prehashed:
+        description: Whether input is already hashed
+        example: false
+        type: boolean
+      reference:
+        description: Reference string for batch operations
+        example: batch-ref-1
+        type: string
+      salt_length:
+        description: Salt length for RSA PSS (auto, hash, or integer)
+        example: auto
+        type: string
+      signature_algorithm:
+        description: RSA signature algorithm (pss or pkcs1v15)
+        example: pss
+        type: string
+      signature_context:
+        description: Signature context for Ed25519ctx and Ed25519ph signatures
+        example: c2lnbmF0dXJlLWNvbnRleHQ=
+        type: string
+    required:
+    - input
+    type: object
+  models.SignResponse:
+    description: Response from a signing operation
+    properties:
+      key_version:
+        description: Key version used for signing
+        example: 1
+        type: integer
+      reference:
+        description: Reference from the request (for batch operations)
+        example: batch-ref-1
+        type: string
+      signature:
+        description: Base64 encoded signature
+        example: c2lnbmF0dXJlLWJhc2U2NA==
+        type: string
+    type: object
   notifications.ProviderType:
     enum:
     - SMTP
@@ -6199,6 +6261,51 @@ paths:
               type: string
             type: object
       summary: Sign a certificate
+      tags:
+      - Keys
+  /keys/{keyID}/sign-data:
+    post:
+      consumes:
+      - application/json
+      description: Sign data using a specific key with configurable parameters
+      parameters:
+      - description: Key ID to use for signing
+        in: path
+        name: keyID
+        required: true
+        type: integer
+      - description: Signing request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.SignRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.SignResponse'
+        "400":
+          description: Invalid request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Key not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Sign data using a key
       tags:
       - Keys
   /keys/all:
