@@ -792,3 +792,43 @@ func parseCertificate(certPEM string) (*x509.Certificate, error) {
 func ParseCertificate(certPEM string) (*x509.Certificate, error) {
 	return parseCertificate(certPEM)
 }
+
+// SignData signs data using a key with the specified parameters
+func (s *KeyManagementService) SignData(ctx context.Context, keyID int, req models.SignRequest) (*models.SignResponse, error) {
+	// Validate request
+	if err := req.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid sign request: %w", err)
+	}
+
+	// Get the key
+	key, err := s.queries.GetKey(ctx, int64(keyID))
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("key not found")
+		}
+		return nil, fmt.Errorf("failed to get key: %w", err)
+	}
+
+	// Check if key is active
+	if key.Status != "active" {
+		return nil, fmt.Errorf("key is not active (status: %s)", key.Status)
+	}
+	provider, err := s.providerFactory.GetProvider(providers.ProviderTypeDatabase)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get provider: %w", err)
+	}
+
+	// Get the private key
+
+	// Sign the data
+	signature, err := provider.SignData(ctx, keyID, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign data: %w", err)
+	}
+
+	return &models.SignResponse{
+		Signature:  signature.Signature,
+		KeyVersion: 1, // For now, we only support version 1
+		Reference:  req.Reference,
+	}, nil
+}

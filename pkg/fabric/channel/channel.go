@@ -16,10 +16,67 @@ import (
 	"github.com/hyperledger/fabric-config/configtx/orderer"
 	"github.com/hyperledger/fabric-config/protolator"
 	cb "github.com/hyperledger/fabric-protos-go-apiv2/common"
+	sb "github.com/hyperledger/fabric-protos-go-apiv2/orderer/smartbft"
 
 	"github.com/chainlaunch/chainlaunch/internal/protoutil"
 	"google.golang.org/protobuf/proto"
 )
+
+// ConsensusType represents the type of consensus algorithm
+type ConsensusType string
+
+const (
+	ConsensusTypeEtcdRaft ConsensusType = "etcdraft"
+	ConsensusTypeSmartBFT ConsensusType = "smartbft"
+)
+
+// SmartBFTConsenter represents a SmartBFT consenter with additional fields
+type SmartBFTConsenter struct {
+	Address       HostPort `json:"address"`
+	ClientTLSCert string   `json:"clientTLSCert"`
+	ServerTLSCert string   `json:"serverTLSCert"`
+	Identity      string   `json:"identity"`
+	ID            uint64   `json:"id"`
+	MSPID         string   `json:"mspId"`
+}
+
+// SmartBFTOptions represents SmartBFT configuration options
+type SmartBFTOptions struct {
+	RequestBatchMaxCount      uint64 `json:"requestBatchMaxCount"`
+	RequestBatchMaxBytes      uint64 `json:"requestBatchMaxBytes"`
+	RequestBatchMaxInterval   string `json:"requestBatchMaxInterval"`
+	IncomingMessageBufferSize uint64 `json:"incomingMessageBufferSize"`
+	RequestPoolSize           uint64 `json:"requestPoolSize"`
+	RequestForwardTimeout     string `json:"requestForwardTimeout"`
+	RequestComplainTimeout    string `json:"requestComplainTimeout"`
+	RequestAutoRemoveTimeout  string `json:"requestAutoRemoveTimeout"`
+	RequestMaxBytes           uint64 `json:"requestMaxBytes"`
+	ViewChangeResendInterval  string `json:"viewChangeResendInterval"`
+	ViewChangeTimeout         string `json:"viewChangeTimeout"`
+	LeaderHeartbeatTimeout    string `json:"leaderHeartbeatTimeout"`
+	LeaderHeartbeatCount      uint64 `json:"leaderHeartbeatCount"`
+	CollectTimeout            string `json:"collectTimeout"`
+	SyncOnStart               bool   `json:"syncOnStart"`
+	SpeedUpViewChange         bool   `json:"speedUpViewChange"`
+	LeaderRotation            string `json:"leaderRotation"`
+	DecisionsPerLeader        uint64 `json:"decisionsPerLeader"`
+}
+
+// EtcdRaftOptions represents etcdraft configuration options
+type EtcdRaftOptions struct {
+	TickInterval         string `json:"tickInterval"`
+	ElectionTick         uint32 `json:"electionTick"`
+	HeartbeatTick        uint32 `json:"heartbeatTick"`
+	MaxInflightBlocks    uint32 `json:"maxInflightBlocks"`
+	SnapshotIntervalSize uint32 `json:"snapshotIntervalSize"`
+}
+
+// BatchSize represents batch size configuration
+type BatchSize struct {
+	MaxMessageCount   uint32 `json:"maxMessageCount"`
+	AbsoluteMaxBytes  uint32 `json:"absoluteMaxBytes"`
+	PreferredMaxBytes uint32 `json:"preferredMaxBytes"`
+}
 
 // ChannelService handles channel operations
 type ChannelService struct {
@@ -59,10 +116,24 @@ type CreateChannelInput struct {
 	PeerOrgs    []Organization     `json:"peerOrgs"`
 	OrdererOrgs []Organization     `json:"ordererOrgs"`
 	Consenters  []AddressWithCerts `json:"consenters"`
+	// SmartBFT specific fields
+	SmartBFTConsenters []SmartBFTConsenter `json:"smartBFTConsenters,omitempty"`
+	SmartBFTOptions    *SmartBFTOptions    `json:"smartBFTOptions,omitempty"`
+	// EtcdRaft specific fields
+	EtcdRaftOptions *EtcdRaftOptions `json:"etcdRaftOptions,omitempty"`
+	// Consensus type - defaults to etcdraft if not specified
+	ConsensusType ConsensusType `json:"consensusType,omitempty"`
+	// Batch configuration
+	BatchSize    *BatchSize `json:"batchSize,omitempty"`
+	BatchTimeout string     `json:"batchTimeout,omitempty"` // e.g., "2s"
 	// Optional policies
 	ChannelPolicies     map[string]configtx.Policy `json:"channelPolicies,omitempty"`
 	ApplicationPolicies map[string]configtx.Policy `json:"applicationPolicies,omitempty"`
 	OrdererPolicies     map[string]configtx.Policy `json:"ordererPolicies,omitempty"`
+	// Capabilities configuration
+	ChannelCapabilities     []string `json:"channelCapabilities,omitempty"`
+	ApplicationCapabilities []string `json:"applicationCapabilities,omitempty"`
+	OrdererCapabilities     []string `json:"ordererCapabilities,omitempty"`
 }
 
 // SetAnchorPeersInput represents the input for setting anchor peers
@@ -473,38 +544,211 @@ func (s *ChannelService) parseAndCreateChannel(input CreateChannelInput) ([]byte
 		}
 	}
 
+	// Determine consensus type - default to etcdraft if not specified
+	consensusType := input.ConsensusType
+	if consensusType == "" {
+		consensusType = ConsensusTypeEtcdRaft
+	}
+
+	// Build orderer configuration based on consensus type
+	var ordererConfig configtx.Orderer
+
+	if consensusType == ConsensusTypeSmartBFT {
+		// Validate SmartBFT requirements
+		if len(input.SmartBFTConsenters) < 4 {
+			return nil, fmt.Errorf("SmartBFT requires at least 4 consenters, got %d", len(input.SmartBFTConsenters))
+		}
+
+		// Parse SmartBFT consenters
+		consenterMapping := []cb.Consenter{}
+		for _, cons := range input.SmartBFTConsenters {
+			identityCert, err := parseCertificate(cons.Identity)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse identity cert for SmartBFT consenter %s: %w", cons.Address.Host, err)
+			}
+			clientTLSCert, err := parseCertificate(cons.ClientTLSCert)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse client TLS cert for SmartBFT consenter %s: %w", cons.Address.Host, err)
+			}
+			serverTLSCert, err := parseCertificate(cons.ServerTLSCert)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse server TLS cert for SmartBFT consenter %s: %w", cons.Address.Host, err)
+			}
+
+			consenterMapping = append(consenterMapping, cb.Consenter{
+				Id:            uint32(cons.ID),
+				Host:          cons.Address.Host,
+				Port:          uint32(cons.Address.Port),
+				MspId:         cons.MSPID,
+				Identity:      encodeX509Certificate(identityCert),
+				ClientTlsCert: encodeX509Certificate(clientTLSCert),
+				ServerTlsCert: encodeX509Certificate(serverTLSCert),
+			})
+		}
+
+		// Build SmartBFT options
+		var smartBFTOptions *sb.Options
+		if input.SmartBFTOptions != nil {
+			leaderRotation := sb.Options_ROTATION_ON
+			switch input.SmartBFTOptions.LeaderRotation {
+			case "ROTATION_ON":
+				leaderRotation = sb.Options_ROTATION_ON
+			case "ROTATION_OFF":
+				leaderRotation = sb.Options_ROTATION_OFF
+			default:
+				leaderRotation = sb.Options_ROTATION_UNSPECIFIED
+			}
+
+			smartBFTOptions = &sb.Options{
+				RequestBatchMaxCount:      input.SmartBFTOptions.RequestBatchMaxCount,
+				RequestBatchMaxBytes:      input.SmartBFTOptions.RequestBatchMaxBytes,
+				RequestBatchMaxInterval:   input.SmartBFTOptions.RequestBatchMaxInterval,
+				IncomingMessageBufferSize: input.SmartBFTOptions.IncomingMessageBufferSize,
+				RequestPoolSize:           input.SmartBFTOptions.RequestPoolSize,
+				RequestForwardTimeout:     input.SmartBFTOptions.RequestForwardTimeout,
+				RequestComplainTimeout:    input.SmartBFTOptions.RequestComplainTimeout,
+				RequestAutoRemoveTimeout:  input.SmartBFTOptions.RequestAutoRemoveTimeout,
+				RequestMaxBytes:           input.SmartBFTOptions.RequestMaxBytes,
+				ViewChangeResendInterval:  input.SmartBFTOptions.ViewChangeResendInterval,
+				ViewChangeTimeout:         input.SmartBFTOptions.ViewChangeTimeout,
+				LeaderHeartbeatTimeout:    input.SmartBFTOptions.LeaderHeartbeatTimeout,
+				LeaderHeartbeatCount:      input.SmartBFTOptions.LeaderHeartbeatCount,
+				CollectTimeout:            input.SmartBFTOptions.CollectTimeout,
+				SyncOnStart:               input.SmartBFTOptions.SyncOnStart,
+				SpeedUpViewChange:         input.SmartBFTOptions.SpeedUpViewChange,
+				LeaderRotation:            leaderRotation,
+				DecisionsPerLeader:        input.SmartBFTOptions.DecisionsPerLeader,
+			}
+		}
+
+		// Parse batch timeout for SmartBFT
+		batchTimeout := 2 * time.Second
+		if input.BatchTimeout != "" {
+			if parsedTimeout, err := time.ParseDuration(input.BatchTimeout); err == nil {
+				batchTimeout = parsedTimeout
+			}
+		}
+
+		// Set batch size for SmartBFT
+		batchSize := orderer.BatchSize{
+			MaxMessageCount:   500,
+			AbsoluteMaxBytes:  10 * 1024 * 1024,
+			PreferredMaxBytes: 2 * 1024 * 1024,
+		}
+		if input.BatchSize != nil {
+			batchSize.MaxMessageCount = input.BatchSize.MaxMessageCount
+			batchSize.AbsoluteMaxBytes = input.BatchSize.AbsoluteMaxBytes
+			batchSize.PreferredMaxBytes = input.BatchSize.PreferredMaxBytes
+		}
+
+		// Set orderer capabilities - default to V2_0 if not specified
+		ordererCapabilities := input.OrdererCapabilities
+		if ordererCapabilities == nil || len(ordererCapabilities) == 0 {
+			ordererCapabilities = []string{"V2_0"}
+		}
+
+		ordererConfig = configtx.Orderer{
+			OrdererType:      string(orderer.ConsensusTypeBFT),
+			BatchTimeout:     batchTimeout,
+			State:            orderer.ConsensusStateNormal,
+			ConsenterMapping: consenterMapping,
+			SmartBFT:         smartBFTOptions,
+			Organizations:    ordererOrgs,
+			Capabilities:     ordererCapabilities,
+			Policies:         ordererPolicies,
+			BatchSize:        batchSize,
+		}
+	} else {
+		// Default to etcdraft
+		// Parse batch timeout
+		batchTimeout := 2 * time.Second
+		if input.BatchTimeout != "" {
+			if parsedTimeout, err := time.ParseDuration(input.BatchTimeout); err == nil {
+				batchTimeout = parsedTimeout
+			}
+		}
+
+		// Set batch size
+		batchSize := orderer.BatchSize{
+			MaxMessageCount:   500,
+			AbsoluteMaxBytes:  10 * 1024 * 1024,
+			PreferredMaxBytes: 2 * 1024 * 1024,
+		}
+		if input.BatchSize != nil {
+			batchSize.MaxMessageCount = input.BatchSize.MaxMessageCount
+			batchSize.AbsoluteMaxBytes = input.BatchSize.AbsoluteMaxBytes
+			batchSize.PreferredMaxBytes = input.BatchSize.PreferredMaxBytes
+		}
+
+		// Set etcdraft options
+		etcdRaftOptions := orderer.EtcdRaftOptions{
+			TickInterval:         "500ms",
+			ElectionTick:         10,
+			HeartbeatTick:        1,
+			MaxInflightBlocks:    5,
+			SnapshotIntervalSize: 16 * 1024 * 1024, // 16 MB
+		}
+		if input.EtcdRaftOptions != nil {
+			if input.EtcdRaftOptions.TickInterval != "" {
+				etcdRaftOptions.TickInterval = input.EtcdRaftOptions.TickInterval
+			}
+			if input.EtcdRaftOptions.ElectionTick > 0 {
+				etcdRaftOptions.ElectionTick = input.EtcdRaftOptions.ElectionTick
+			}
+			if input.EtcdRaftOptions.HeartbeatTick > 0 {
+				etcdRaftOptions.HeartbeatTick = input.EtcdRaftOptions.HeartbeatTick
+			}
+			if input.EtcdRaftOptions.MaxInflightBlocks > 0 {
+				etcdRaftOptions.MaxInflightBlocks = input.EtcdRaftOptions.MaxInflightBlocks
+			}
+			if input.EtcdRaftOptions.SnapshotIntervalSize > 0 {
+				etcdRaftOptions.SnapshotIntervalSize = input.EtcdRaftOptions.SnapshotIntervalSize
+			}
+		}
+
+		// Set orderer capabilities - default to V2_0 if not specified
+		ordererCapabilities := input.OrdererCapabilities
+		if ordererCapabilities == nil || len(ordererCapabilities) == 0 {
+			ordererCapabilities = []string{"V2_0"}
+		}
+
+		ordererConfig = configtx.Orderer{
+			OrdererType:  orderer.ConsensusTypeEtcdRaft,
+			BatchTimeout: batchTimeout,
+			State:        orderer.ConsensusStateNormal,
+			BatchSize:    batchSize,
+			EtcdRaft: orderer.EtcdRaft{
+				Consenters: consenters,
+				Options:    etcdRaftOptions,
+			},
+			Organizations: ordererOrgs,
+			Capabilities:  ordererCapabilities,
+			Policies:      ordererPolicies,
+		}
+	}
+
+	// Set application capabilities - default to V2_0 if not specified
+	applicationCapabilities := input.ApplicationCapabilities
+	if applicationCapabilities == nil || len(applicationCapabilities) == 0 {
+		applicationCapabilities = []string{"V2_0"}
+	}
+
+	// Set channel capabilities - default to V2_0 if not specified
+	channelCapabilities := input.ChannelCapabilities
+	if channelCapabilities == nil || len(channelCapabilities) == 0 {
+		channelCapabilities = []string{"V2_0"}
+	}
+
 	channelConfig := configtx.Channel{
 		Consortiums: nil, // Not needed for application channels
 		Application: configtx.Application{
 			Organizations: peerOrgs,
-			Capabilities:  []string{"V2_0"},
+			Capabilities:  applicationCapabilities,
 			ACLs:          defaultACLs(),
 			Policies:      appPolicies,
 		},
-		Orderer: configtx.Orderer{
-			OrdererType:  orderer.ConsensusTypeEtcdRaft,
-			BatchTimeout: 2 * time.Second,
-			State:        orderer.ConsensusStateNormal,
-			BatchSize: orderer.BatchSize{
-				MaxMessageCount:   500,
-				AbsoluteMaxBytes:  10 * 1024 * 1024,
-				PreferredMaxBytes: 2 * 1024 * 1024,
-			},
-			EtcdRaft: orderer.EtcdRaft{
-				Consenters: consenters,
-				Options: orderer.EtcdRaftOptions{
-					TickInterval:         "500ms",
-					ElectionTick:         10,
-					HeartbeatTick:        1,
-					MaxInflightBlocks:    5,
-					SnapshotIntervalSize: 16 * 1024 * 1024, // 16 MB
-				},
-			},
-			Organizations: ordererOrgs,
-			Capabilities:  []string{"V2_0"},
-			Policies:      ordererPolicies,
-		},
-		Capabilities: []string{"V2_0"},
+		Orderer:      ordererConfig,
+		Capabilities: channelCapabilities,
 		Policies:     channelPolicies,
 	}
 
@@ -536,6 +780,14 @@ func parseCertificate(certPEM string) (*x509.Certificate, error) {
 	}
 
 	return cert, nil
+}
+
+// Helper function to encode X509 certificate to PEM format
+func encodeX509Certificate(cert *x509.Certificate) []byte {
+	return pem.EncodeToMemory(&pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: cert.Raw,
+	})
 }
 
 func defaultACLs() map[string]string {

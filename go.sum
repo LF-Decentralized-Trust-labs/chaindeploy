@@ -415,6 +415,8 @@ github.com/hyperledger/fabric-gateway v1.5.0 h1:JChlqtJNm2479Q8YWJ6k8wwzOiu2IRrV
 github.com/hyperledger/fabric-gateway v1.5.0/go.mod h1:v13OkXAp7pKi4kh6P6epn27SyivRbljr8Gkfy8JlbtM=
 github.com/hyperledger/fabric-protos-go-apiv2 v0.3.3 h1:Xpd6fzG/KjAOHJsq7EQXY2l+qi/y8muxBaY7R6QWABk=
 github.com/hyperledger/fabric-protos-go-apiv2 v0.3.3/go.mod h1:2pq0ui6ZWA0cC8J+eCErgnMDCS1kPOEYVY+06ZAK0qE=
+github.com/hyperledger/fabric-protos-go-apiv2 v0.3.7 h1:sQ5qv8vQQfwewa1JlCiSCC8dLElmaU2/frLolpgibEY=
+github.com/hyperledger/fabric-protos-go-apiv2 v0.3.7/go.mod h1:bJnwzfv03oZQeCc863pdGTDgf5nmCy6Za3RAE7d2XsQ=
 github.com/in-toto/in-toto-golang v0.9.0 h1:tHny7ac4KgtsfrG6ybU8gVOZux2H8jN05AXJ9EBM1XU=
 github.com/in-toto/in-toto-golang v0.9.0/go.mod h1:xsBVrVsHNsB61++S6Dy2vWosKhuA3lUTQd+eF9HdeMo=
 github.com/inconshreveable/mousetrap v1.0.0/go.mod h1:PxqpIevigyE2G7u3NXJIT2ANytuPF1OarO4DADm73n8=
@@ -455,6 +457,8 @@ github.com/kfsoftware/fabric-admin-sdk v0.0.0-20250405175109-fd063100bb3f h1:w8F
 github.com/kfsoftware/fabric-admin-sdk v0.0.0-20250405175109-fd063100bb3f/go.mod h1:lg28l2L1QhpsdKTfGLMmz0Ug+ZTbJOX6nhM7YhzcVgE=
 github.com/kfsoftware/fabric-admin-sdk v0.0.0-20250705205658-948f43b6a15d h1:HbgAECHhnbW8lJQBtZ+qJFm6eH1F9wjcMMlWCxNy4Sc=
 github.com/kfsoftware/fabric-admin-sdk v0.0.0-20250705205658-948f43b6a15d/go.mod h1:lg28l2L1QhpsdKTfGLMmz0Ug+ZTbJOX6nhM7YhzcVgE=
+github.com/kfsoftware/fabric-config v0.0.0-20250718182749-9507b45ddcca h1:ODn87IWYSLQEgqJdooLtFLxrFAkPpm0b+zywxkXwDkI=
+github.com/kfsoftware/fabric-config v0.0.0-20250718182749-9507b45ddcca/go.mod h1:zbNQU9T2gGyLRwOwjUUl6+7pUiGR1O0G62fb+aqNBEM=
 github.com/kisielk/errcheck v1.5.0/go.mod h1:pFxgyoBC7bSaBwPgfKdkLd5X25qrDl4LWUI2bnpBCr8=
 github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+oQHNcck=
 github.com/klauspost/compress v1.18.0 h1:c/Cqfb0r+Yi+JtIEq73FWXVkRonBlf0CRNYc8Zttxdo=

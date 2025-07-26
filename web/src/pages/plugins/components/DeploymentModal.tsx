@@ -42,7 +42,7 @@ const FabricKeySelect = ({ value, onChange, disabled }: FabricKeySelectProps) =>
 	const [isLoading, setIsLoading] = useState(false)
 
 	const { data: organizations } = useQuery({
-		...getOrganizationsOptions(),
+		...getOrganizationsOptions({query: {limit:1000}}),
 	})
 	// Get the selected organization
 	const selectedOrg = useMemo(() => organizations?.items?.find((org) => org.id === selectedOrgId), [organizations, selectedOrgId])
@@ -240,7 +240,7 @@ const FileInput = ({ value, onChange, disabled }: { value?: string; onChange: (v
 const DeploymentModal = ({ isOpen, onClose, onDeploy, parameters }: DeploymentModalProps) => {
 	// Fetch data for x-source fields
 	const { data: organizations } = useQuery({
-		...getOrganizationsOptions(),
+		...getOrganizationsOptions({query: {limit:1000}}),
 	})
 
 	const { data: nodes } = useQuery({

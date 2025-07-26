@@ -1,4 +1,3 @@
-basePath: /api/v1
 definitions:
   ai.ChatMessage:
     properties:
@@ -250,6 +249,8 @@ definitions:
     type: object
   block.Block:
     properties:
+      base64Data:
+        type: string
       createdAt:
         type: string
       dataHash:
@@ -1495,6 +1496,15 @@ definitions:
       updatedAt:
         type: string
     type: object
+  http.BatchSize:
+    properties:
+      absoluteMaxBytes:
+        type: integer
+      maxMessageCount:
+        type: integer
+      preferredMaxBytes:
+        type: integer
+    type: object
   http.BesuNetworkResponse:
     properties:
       chainId:
@@ -1609,6 +1619,10 @@ definitions:
           - update_channel_capability: UpdateChannelCapabilityOperation
           - update_orderer_capability: UpdateOrdererCapabilityOperation
           - update_application_capability: UpdateApplicationCapabilityOperation
+          - add_orderer_org: AddOrdererOrgPayload
+          - remove_orderer_org: RemoveOrdererOrgPayload
+          - update_orderer_org_msp: UpdateOrdererOrgMSPPayload
+          - update_application_acl: UpdateApplicationACLPayload
           @Description The payload for the configuration update operation
           @Description Can be one of:
           @Description - AddOrgPayload when type is "add_org"
@@ -1630,13 +1644,14 @@ definitions:
           @Description - AddOrdererOrgPayload when type is "add_orderer_org"
           @Description - RemoveOrdererOrgPayload when type is "remove_orderer_org"
           @Description - UpdateOrdererOrgMSPPayload when type is "update_orderer_org_msp"
+          @Description - UpdateApplicationACLPayload when type is "update_application_acl"
         items:
           type: integer
         type: array
       type:
         description: |-
           Type is the type of configuration update operation
-          enum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout,update_application_policy,update_orderer_policy,update_channel_policy,add_orderer_org,remove_orderer_org,update_orderer_org_msp
+          enum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout,update_application_policy,update_orderer_policy,update_channel_policy,add_orderer_org,remove_orderer_org,update_orderer_org_msp,update_application_acl
         enum:
         - add_org
         - remove_org
@@ -1657,6 +1672,7 @@ definitions:
         - add_orderer_org
         - remove_orderer_org
         - update_orderer_org_msp
+        - update_application_acl
         type: string
     required:
     - payload
@@ -1950,17 +1966,55 @@ definitions:
     - name
     - type
     type: object
+  http.EtcdRaftOptions:
+    properties:
+      electionTick:
+        type: integer
+      heartbeatTick:
+        type: integer
+      maxInflightBlocks:
+        type: integer
+      snapshotIntervalSize:
+        type: integer
+      tickInterval:
+        type: string
+    type: object
   http.FabricNetworkConfig:
     properties:
+      applicationCapabilities:
+        items:
+          type: string
+        type: array
       applicationPolicies:
         additionalProperties:
           $ref: '#/definitions/http.FabricPolicy'
         description: Optional policies
         type: object
+      batchSize:
+        allOf:
+        - $ref: '#/definitions/http.BatchSize'
+        description: Batch configuration
+      batchTimeout:
+        description: e.g., "2s"
+        type: string
+      channelCapabilities:
+        description: Capabilities configuration
+        items:
+          type: string
+        type: array
       channelPolicies:
         additionalProperties:
           $ref: '#/definitions/http.FabricPolicy'
         type: object
+      consensusType:
+        description: Consensus configuration
+        type: string
+      etcdRaftOptions:
+        $ref: '#/definitions/http.EtcdRaftOptions'
+      ordererCapabilities:
+        items:
+          type: string
+        type: array
       ordererOrganizations:
         items:
           $ref: '#/definitions/http.OrganizationConfig'
@@ -1973,6 +2027,12 @@ definitions:
         items:
           $ref: '#/definitions/http.OrganizationConfig'
         type: array
+      smartBFTConsenters:
+        items:
+          $ref: '#/definitions/http.SmartBFTConsenter'
+        type: array
+      smartBFTOptions:
+        $ref: '#/definitions/http.SmartBFTOptions'
     type: object
   http.FabricPolicy:
     properties:
@@ -1987,6 +2047,13 @@ definitions:
         items:
           $ref: '#/definitions/service.NetworkNode'
         type: array
+    type: object
+  http.HostPort:
+    properties:
+      host:
+        type: string
+      port:
+        type: integer
     type: object
   http.ImportBesuNetworkRequest:
     properties:
@@ -2276,6 +2343,60 @@ definitions:
       transactionId:
         type: string
     type: object
+  http.SmartBFTConsenter:
+    properties:
+      address:
+        $ref: '#/definitions/http.HostPort'
+      clientTLSCert:
+        type: string
+      id:
+        type: integer
+      identity:
+        type: string
+      mspId:
+        type: string
+      serverTLSCert:
+        type: string
+    type: object
+  http.SmartBFTOptions:
+    properties:
+      collectTimeout:
+        type: string
+      decisionsPerLeader:
+        type: integer
+      incomingMessageBufferSize:
+        type: integer
+      leaderHeartbeatCount:
+        type: integer
+      leaderHeartbeatTimeout:
+        type: string
+      leaderRotation:
+        type: string
+      requestAutoRemoveTimeout:
+        type: string
+      requestBatchMaxBytes:
+        type: integer
+      requestBatchMaxCount:
+        type: integer
+      requestBatchMaxInterval:
+        type: string
+      requestComplainTimeout:
+        type: string
+      requestForwardTimeout:
+        type: string
+      requestMaxBytes:
+        type: integer
+      requestPoolSize:
+        type: integer
+      speedUpViewChange:
+        type: boolean
+      syncOnStart:
+        type: boolean
+      viewChangeResendInterval:
+        type: string
+      viewChangeTimeout:
+        type: string
+    type: object
   http.TestProviderRequest:
     properties:
       testEmail:
@@ -2296,6 +2417,16 @@ definitions:
     properties:
       block:
         $ref: '#/definitions/block.Block'
+    type: object
+  http.UpdateApplicationACLPayload:
+    properties:
+      acl_name:
+        type: string
+      policy:
+        type: string
+    required:
+    - acl_name
+    - policy
     type: object
   http.UpdateApplicationCapabilityOperation:
     properties:
@@ -2931,6 +3062,68 @@ definitions:
         type: string
       type:
         $ref: '#/definitions/models.KeyProviderType'
+    type: object
+  models.SignRequest:
+    description: Request to sign data using a key
+    properties:
+      context:
+        description: Context for key derivation (base64 encoded)
+        example: Y29udGV4dA==
+        type: string
+      hash_algorithm:
+        description: Hash algorithm to use for signing
+        example: sha2-256
+        type: string
+      input:
+        description: Base64 encoded input data to sign
+        example: SGVsbG8gV29ybGQ=
+        type: string
+      key_version:
+        description: Key version to use for signing (0 means latest)
+        example: 0
+        type: integer
+      marshaling_algorithm:
+        description: Marshaling algorithm for ECDSA (asn1 or jws)
+        example: asn1
+        type: string
+      prehashed:
+        description: Whether input is already hashed
+        example: false
+        type: boolean
+      reference:
+        description: Reference string for batch operations
+        example: batch-ref-1
+        type: string
+      salt_length:
+        description: Salt length for RSA PSS (auto, hash, or integer)
+        example: auto
+        type: string
+      signature_algorithm:
+        description: RSA signature algorithm (pss or pkcs1v15)
+        example: pss
+        type: string
+      signature_context:
+        description: Signature context for Ed25519ctx and Ed25519ph signatures
+        example: c2lnbmF0dXJlLWNvbnRleHQ=
+        type: string
+    required:
+    - input
+    type: object
+  models.SignResponse:
+    description: Response from a signing operation
+    properties:
+      key_version:
+        description: Key version used for signing
+        example: 1
+        type: integer
+      reference:
+        description: Reference from the request (for batch operations)
+        example: batch-ref-1
+        type: string
+      signature:
+        description: Base64 encoded signature
+        example: c2lnbmF0dXJlLWJhc2U2NA==
+        type: string
     type: object
   notifications.ProviderType:
     enum:
@@ -4065,20 +4258,8 @@ definitions:
     - KeyUsageCRLSign
     - KeyUsageEncipherOnly
     - KeyUsageDecipherOnly
-host: localhost:8100
 info:
-  contact:
-    email: support@chainlaunch.dev
-    name: API Support
-    url: http://chainlaunch.dev/support
-  description: ChainLaunch API provides services for managing blockchain networks
-    and cryptographic keys
-  license:
-    name: Apache 2.0
-    url: http://www.apache.org/licenses/LICENSE-2.0.html
-  termsOfService: http://swagger.io/terms/
-  title: ChainLaunch API
-  version: "1.0"
+  contact: {}
 paths:
   /ai/{projectId}/chat:
     post:
@@ -5753,6 +5934,10 @@ paths:
           description: ""
           schema:
             $ref: '#/definitions/http.UpdateOrdererOrgMSPPayload'
+        "218":
+          description: ""
+          schema:
+            $ref: '#/definitions/http.UpdateApplicationACLPayload'
       summary: Submit config update proposal
       tags:
       - Fabric Networks
@@ -6078,6 +6263,51 @@ paths:
               type: string
             type: object
       summary: Sign a certificate
+      tags:
+      - Keys
+  /keys/{keyID}/sign-data:
+    post:
+      consumes:
+      - application/json
+      description: Sign data using a specific key with configurable parameters
+      parameters:
+      - description: Key ID to use for signing
+        in: path
+        name: keyID
+        required: true
+        type: integer
+      - description: Signing request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.SignRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.SignResponse'
+        "400":
+          description: Invalid request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Key not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Sign data using a key
       tags:
       - Keys
   /keys/all:
@@ -7392,6 +7622,16 @@ paths:
         - update_etcd_raft_options: Update etcd raft options for the orderer
         - update_batch_size: Update batch size for the orderer
         - update_batch_timeout: Update batch timeout for the orderer
+        - update_application_policy: Update application policy for the channel
+        - update_orderer_policy: Update orderer policy for the channel
+        - update_channel_policy: Update channel policy for the channel
+        - update_channel_capability: Update channel capability for the channel
+        - update_orderer_capability: Update orderer capability for the channel
+        - update_application_capability: Update application capability for the channel
+        - add_orderer_org: Add a new orderer organization to the channel
+        - remove_orderer_org: Remove an orderer organization from the channel
+        - update_orderer_org_msp: Update an orderer organization's MSP configuration
+        - update_application_acl: Update application ACL for the channel
       parameters:
       - description: Network ID
         in: path
@@ -9990,6 +10230,36 @@ paths:
       tags:
       - Chaincode
   /sc/fabric/chaincodes/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a chaincode by ID
+      parameters:
+      - description: Chaincode ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: Delete a chaincode
+      tags:
+      - Chaincode
     get:
       consumes:
       - application/json
@@ -10795,51 +11065,4 @@ paths:
       summary: Update user role
       tags:
       - Users
-schemes:
-- http
-- https
-securityDefinitions:
-  BasicAuth:
-    type: basic
-  CookieAuth:
-    in: cookie
-    name: session_id
-    type: apiKey
 swagger: "2.0"
-tags:
-- description: Audit management operations
-  name: Audit
-- description: Chaincode project management operations
-  name: Chaincode Projects
-- description: User authentication and authorization operations
-  name: Authentication
-- description: Backup schedule configuration and management
-  name: Backup Schedules
-- description: Backup target location configuration and management
-  name: Backup Targets
-- description: Backup management operations
-  name: Backups
-- description: Hyperledger Besu network management operations
-  name: Besu Networks
-- description: Hyperledger Fabric network management operations
-  name: Fabric Networks
-- description: Cryptographic key management operations
-  name: Keys
-- description: Metrics management operations
-  name: Metrics
-- description: Network node management operations
-  name: Nodes
-- description: System notification configuration and management
-  name: Notifications
-- description: Organization management operations
-  name: Organizations
-- description: Plugin management operations
-  name: Plugins
-- description: Key provider management operations
-  name: Providers
-- description: Settings management operations
-  name: Settings
-- description: Smart contract management operations
-  name: SmartContracts
-- description: User account management operations
-  name: Users

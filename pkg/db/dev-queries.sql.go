@@ -74,6 +74,17 @@ func (q *Queries) DeleteProject(ctx context.Context, id int64) error {
 	return err
 }
 
+const GetConversation = `-- name: GetConversation :one
+SELECT id, project_id, started_at FROM conversations WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetConversation(ctx context.Context, id int64) (*Conversation, error) {
+	row := q.db.QueryRowContext(ctx, GetConversation, id)
+	var i Conversation
+	err := row.Scan(&i.ID, &i.ProjectID, &i.StartedAt)
+	return &i, err
+}
+
 const GetDefaultConversationForProject = `-- name: GetDefaultConversationForProject :one
 SELECT id, project_id, started_at FROM conversations WHERE project_id = ? ORDER BY started_at ASC LIMIT 1
 `

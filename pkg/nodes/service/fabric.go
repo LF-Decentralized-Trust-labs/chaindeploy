@@ -838,7 +838,7 @@ func (s *NodeService) validateFabricPeerAddresses(config *types.FabricPeerConfig
 		usedPorts[port] = addrType
 
 		// Only validate port availability if it's not already in use by this peer
-		if err := s.validateAddress(addr); err != nil {
+		if err := s.validateAddressAvailability(addr, addrType); err != nil {
 			// Check if the error is due to the port being in use by this peer
 			if strings.Contains(err.Error(), "address already in use") {
 				continue
@@ -853,17 +853,17 @@ func (s *NodeService) validateFabricPeerAddresses(config *types.FabricPeerConfig
 // validateFabricOrdererAddresses validates all addresses used by a Fabric orderer
 func (s *NodeService) validateFabricOrdererAddresses(config *types.FabricOrdererConfig) error {
 	// Validate listen address
-	if err := s.validateAddress(config.ListenAddress); err != nil {
+	if err := s.validateAddressAvailability(config.ListenAddress, "listen"); err != nil {
 		return fmt.Errorf("invalid listen address: %w", err)
 	}
 
 	// Validate admin address
-	if err := s.validateAddress(config.AdminAddress); err != nil {
+	if err := s.validateAddressAvailability(config.AdminAddress, "admin"); err != nil {
 		return fmt.Errorf("invalid admin address: %w", err)
 	}
 
 	// Validate operations listen address
-	if err := s.validateAddress(config.OperationsListenAddress); err != nil {
+	if err := s.validateAddressAvailability(config.OperationsListenAddress, "operations"); err != nil {
 		return fmt.Errorf("invalid operations listen address: %w", err)
 	}
 

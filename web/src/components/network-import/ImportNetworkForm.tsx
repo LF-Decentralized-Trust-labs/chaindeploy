@@ -63,7 +63,7 @@ export function ImportNetworkForm() {
 	const [fabricImportMethod, setFabricImportMethod] = useState<'genesis' | 'organization'>('organization')
 
 	const { data: organizations } = useQuery({
-		...getOrganizationsOptions(),
+		...getOrganizationsOptions({query: {limit:1000}}),
 	})
 
 	const importFabricNetwork = useMutation({

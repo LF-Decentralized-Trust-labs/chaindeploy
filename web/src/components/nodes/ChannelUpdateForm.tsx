@@ -31,6 +31,7 @@ import { UpdateOrdererCapabilityOperation } from './operations/UpdateOrdererCapa
 import { UpdateApplicationCapabilityOperation } from './operations/UpdateApplicationCapabilityOperation'
 import { AddOrdererOrgOperation } from './operations/AddOrdererOrgOperation'
 import { RemoveOrdererOrgOperation } from './operations/RemoveOrdererOrgOperation'
+import { UpdateApplicationACLOperation } from './operations/UpdateApplicationACLOperation'
 
 // Operation type mapping
 const operationTypes = {
@@ -51,6 +52,7 @@ const operationTypes = {
 	update_channel_capability: 'Update Channel Capability',
 	update_orderer_capability: 'Update Orderer Capability',
 	update_application_capability: 'Update Application Capability',
+	update_application_acl: 'Update Application ACL',
 } as const
 
 type OperationType = keyof typeof operationTypes
@@ -118,6 +120,8 @@ const getDefaultPayloadForType = (type: OperationType) => {
 			return { capability: [] }
 		case 'update_application_capability':
 			return { capability: [] }
+		case 'update_application_acl':
+			return { acl_name: '', policy: '' }
 		default:
 			return {}
 	}
@@ -147,6 +151,7 @@ const formSchema = z.object({
 					'update_channel_capability',
 					'update_orderer_capability',
 					'update_application_capability',
+					'update_application_acl',
 				]) as z.ZodType<HttpConfigUpdateOperationRequest['type']>,
 				payload: z.any(),
 			})
@@ -304,6 +309,8 @@ export function ChannelUpdateForm({ network, onSuccess, channelConfig }: Channel
 				return <UpdateOrdererCapabilityOperation key={index} index={index} onRemove={() => remove(index)} channelConfig={channelConfig} />
 			case 'update_application_capability':
 				return <UpdateApplicationCapabilityOperation key={index} index={index} onRemove={() => remove(index)} channelConfig={channelConfig} />
+			case 'update_application_acl':
+				return <UpdateApplicationACLOperation key={index} index={index} onRemove={() => remove(index)} channelConfig={channelConfig} />
 			default:
 				return null
 		}

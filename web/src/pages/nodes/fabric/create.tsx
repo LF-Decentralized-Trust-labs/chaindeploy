@@ -12,7 +12,7 @@ export default function CreateFabricNodePage() {
 	const [nodeType, setNodeType] = useState<'FABRIC_PEER' | 'FABRIC_ORDERER'>('FABRIC_PEER')
 
 	const { data: organizations } = useQuery({
-		...getOrganizationsOptions(),
+		...getOrganizationsOptions({query: {limit:1000}}),
 	})
 
 	const { data: peerDefaults } = useQuery({

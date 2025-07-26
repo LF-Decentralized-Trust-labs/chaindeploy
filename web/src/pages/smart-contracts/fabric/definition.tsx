@@ -1,20 +1,22 @@
 import { getNetworksFabricByIdNodesOptions, getScFabricChaincodesByIdOptions } from '@/api/client/@tanstack/react-query.gen'
-import { getScFabricPeerByPeerIdChaincodeSequence, postScFabricChaincodesByChaincodeIdDefinitions } from '@/api/client/sdk.gen'
+import { deleteScFabricChaincodesById, getScFabricPeerByPeerIdChaincodeSequence, postScFabricChaincodesByChaincodeIdDefinitions } from '@/api/client/sdk.gen'
 import { ChaincodeDefinitionCard } from '@/components/fabric/ChaincodeDefinitionCard'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Play, Plus } from 'lucide-react'
+import { MoreVertical, Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import * as z from 'zod'
 
@@ -38,6 +40,8 @@ export default function FabricChaincodeDefinitionDetail() {
 	const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
 	const [sequenceLoading, setSequenceLoading] = useState(false)
 	const [sequenceError, setSequenceError] = useState<string | null>(null)
+	const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+	const [isDeleting, setIsDeleting] = useState(false)
 
 	// Fetch chaincode details
 	const {
@@ -102,6 +106,24 @@ export default function FabricChaincodeDefinitionDetail() {
 			toast.error(message)
 		},
 	})
+
+	const handleDeleteChaincode = async () => {
+		if (!id) return
+		setIsDeleting(true)
+		try {
+			await toast.promise(deleteScFabricChaincodesById({ path: { id: Number(id) } }), {
+				loading: 'Deleting chaincode...',
+				success: 'Chaincode deleted successfully',
+				error: (e) => `Failed to delete chaincode: ${e.message}`,
+			})
+			navigate('/smart-contracts/fabric')
+		} catch (e) {
+			// error handled by toast
+		} finally {
+			setIsDeleting(false)
+			setIsDeleteDialogOpen(false)
+		}
+	}
 
 	const onSubmit = async (data: VersionFormValues) => {
 		toast.promise(createDefinitionMutation.mutateAsync(data), {
@@ -222,21 +244,61 @@ export default function FabricChaincodeDefinitionDetail() {
 			<div className="flex items-center justify-between mb-6">
 				<div className="flex items-end gap-2">
 					<div className="font-bold text-2xl">{def.name}</div>
-					<Badge
-						variant="outline"
-						className="text-xs  h-5"
-					>
+					<Badge variant="outline" className="text-xs  h-5">
 						{def.network_name}
 					</Badge>
 				</div>
-				{def?.id && (
-					<Link to={`/smart-contracts/fabric/${def.id}/playground`}>
-						<Button variant="outline">
-							<Play className="w-4 h-4 mr-2" />
-							Playground
-						</Button>
-					</Link>
-				)}
+				<div className="flex items-center gap-2">
+					<DropdownMenu>
+						<DropdownMenuTrigger asChild>
+							<Button variant="ghost" size="icon">
+								<MoreVertical className="w-5 h-5" />
+							</Button>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent align="end">
+							<DropdownMenuItem
+								onSelect={(e) => {
+									e.preventDefault()
+									navigate(`/smart-contracts/fabric/${def.id}/playground`)
+								}}
+							>
+								Playground
+							</DropdownMenuItem>
+							<DropdownMenuItem
+								onSelect={(e) => {
+									e.preventDefault()
+									setIsAddDialogOpen(true)
+								}}
+							>
+								Add Definition
+							</DropdownMenuItem>
+							<DropdownMenuSeparator />
+							<DropdownMenuItem
+								className="text-destructive"
+								onSelect={(e) => {
+									e.preventDefault()
+									setIsDeleteDialogOpen(true)
+								}}
+							>
+								Delete
+							</DropdownMenuItem>
+						</DropdownMenuContent>
+					</DropdownMenu>
+					<AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+						<AlertDialogContent>
+							<AlertDialogHeader>
+								<AlertDialogTitle>Delete Chaincode</AlertDialogTitle>
+								<AlertDialogDescription>Are you sure you want to delete this chaincode? This action cannot be undone.</AlertDialogDescription>
+							</AlertDialogHeader>
+							<AlertDialogFooter>
+								<AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+								<AlertDialogAction destructive disabled={isDeleting} onClick={handleDeleteChaincode}>
+									{isDeleting ? 'Deleting...' : 'Delete'}
+								</AlertDialogAction>
+							</AlertDialogFooter>
+						</AlertDialogContent>
+					</AlertDialog>
+				</div>
 			</div>
 
 			<div className="flex items-center justify-between mb-4">

@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/ecdsa"
@@ -11,9 +12,11 @@ import (
 	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/sha256"
+	"crypto/sha512"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"database/sql"
+	"encoding/asn1"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -22,13 +25,14 @@ import (
 	"io"
 	"math/big"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/chainlaunch/chainlaunch/pkg/db"
 	"github.com/chainlaunch/chainlaunch/pkg/keymanagement/models"
 	"github.com/chainlaunch/chainlaunch/pkg/keymanagement/providers/types"
-	"github.com/ethereum/go-ethereum/crypto"
+	ethereumcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/sirupsen/logrus"
 )
 
@@ -487,16 +491,16 @@ func (s *DatabaseProvider) generateECKeyPair(req models.CreateKeyRequest) (*KeyP
 		}
 		privateKeyBytes, err = x509.MarshalPKCS8PrivateKey(privateKey)
 	case "secp256k1":
-		privateKey, err = crypto.GenerateKey()
+		privateKey, err = ethereumcrypto.GenerateKey()
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate secp256k1 key: %w", err)
 		}
 		publicKey := privateKey.Public().(*ecdsa.PublicKey)
 		// Handle public key separately for secp256k1
-		publicKeyBytes := crypto.FromECDSAPub(publicKey)
+		publicKeyBytes := ethereumcrypto.FromECDSAPub(publicKey)
 		publicKeyHex := hex.EncodeToString(publicKeyBytes)
 
-		privateKeyBytes := crypto.FromECDSA(privateKey)
+		privateKeyBytes := ethereumcrypto.FromECDSA(privateKey)
 		privateKeyHex := hex.EncodeToString(privateKeyBytes)
 
 		var ethereumAddress string
@@ -508,7 +512,7 @@ func (s *DatabaseProvider) generateECKeyPair(req models.CreateKeyRequest) (*KeyP
 			}
 
 			// Generate Ethereum address
-			address := crypto.PubkeyToAddress(*publicKeyECDSA)
+			address := ethereumcrypto.PubkeyToAddress(*publicKeyECDSA)
 			ethereumAddress = strings.ToLower(address.Hex())
 		}
 
@@ -550,7 +554,7 @@ func (s *DatabaseProvider) generateECKeyPair(req models.CreateKeyRequest) (*KeyP
 		}
 
 		// Generate Ethereum address
-		address := crypto.PubkeyToAddress(*publicKeyECDSA)
+		address := ethereumcrypto.PubkeyToAddress(*publicKeyECDSA)
 		ethereumAddress = strings.ToLower(address.Hex())
 	}
 
@@ -800,4 +804,379 @@ func (p *DatabaseProvider) SignCertificate(ctx context.Context, req types.SignCe
 
 	logrus.Debugf("Updated key %d with new certificate", req.KeyID)
 	return mapDBKeyToResponse(updatedKey), nil
+}
+
+// SignData signs data using a key with the specified parameters
+func (p *DatabaseProvider) SignData(ctx context.Context, keyID int, req models.SignRequest) (*models.SignResponse, error) {
+	// Validate request
+	if err := req.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid sign request: %w", err)
+	}
+
+	// Get the key from database
+	key, err := p.queries.GetKey(ctx, int64(keyID))
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("key not found")
+		}
+		return nil, fmt.Errorf("failed to get key: %w", err)
+	}
+
+	// Check if key is active
+	if key.Status != "active" {
+		return nil, fmt.Errorf("key is not active (status: %s)", key.Status)
+	}
+
+	// Get the decrypted private key
+	privateKeyPEM, err := p.GetDecryptedPrivateKey(keyID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get private key: %w", err)
+	}
+
+	// Parse the private key
+	privateKey, err := p.parsePrivateKey(privateKeyPEM, models.KeyAlgorithm(key.Algorithm))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse private key: %w", err)
+	}
+
+	// Decode the input data
+	inputData, err := base64.StdEncoding.DecodeString(req.Input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode input data: %w", err)
+	}
+
+	// Determine hash algorithm
+	hashAlgorithm := "sha2-256" // default
+	if req.HashAlgorithm != nil {
+		hashAlgorithm = *req.HashAlgorithm
+	}
+
+	// Handle prehashed input
+	if req.Prehashed != nil && *req.Prehashed {
+		// Input is already hashed, use it directly
+		if hashAlgorithm == "none" {
+			// For "none" hash algorithm, input should be raw data
+			inputData = []byte(req.Input)
+		}
+	} else {
+		// Hash the input data
+		if hashAlgorithm != "none" {
+			inputData, err = p.hashData(inputData, hashAlgorithm)
+			if err != nil {
+				return nil, fmt.Errorf("failed to hash data: %w", err)
+			}
+		}
+	}
+
+	// Sign the data
+	signature, err := p.signData(privateKey, inputData, req, models.KeyAlgorithm(key.Algorithm))
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign data: %w", err)
+	}
+
+	// Encode signature as base64
+	signatureBase64 := base64.StdEncoding.EncodeToString(signature)
+
+	return &models.SignResponse{
+		Signature:  signatureBase64,
+		KeyVersion: 1, // For now, we only support version 1
+		Reference:  req.Reference,
+	}, nil
+}
+
+// BatchSignData signs multiple data items in a batch
+func (p *DatabaseProvider) BatchSignData(ctx context.Context, keyID int, req models.BatchSignRequest) (*models.BatchSignResponse, error) {
+	// Validate request
+	if err := req.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid batch sign request: %w", err)
+	}
+
+	// Process each item in the batch
+	results := make([]models.BatchSignResult, len(req.BatchInput))
+	for i, item := range req.BatchInput {
+		result := models.BatchSignResult{
+			Reference: item.Reference,
+		}
+
+		// Sign the individual item
+		signResp, err := p.SignData(ctx, keyID, item)
+		if err != nil {
+			errorMsg := err.Error()
+			result.Error = &errorMsg
+		} else {
+			result.Signature = &signResp.Signature
+			result.KeyVersion = &signResp.KeyVersion
+		}
+
+		results[i] = result
+	}
+
+	return &models.BatchSignResponse{
+		BatchResults: results,
+	}, nil
+}
+
+// parsePrivateKey parses a PEM-encoded private key
+func (p *DatabaseProvider) parsePrivateKey(privateKeyPEM string, algorithm models.KeyAlgorithm) (interface{}, error) {
+	block, _ := pem.Decode([]byte(privateKeyPEM))
+	if block == nil {
+		return nil, fmt.Errorf("failed to decode PEM block")
+	}
+
+	switch algorithm {
+	case models.KeyAlgorithmRSA:
+		privateKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse RSA private key: %w", err)
+		}
+		rsaKey, ok := privateKey.(*rsa.PrivateKey)
+		if !ok {
+			return nil, fmt.Errorf("private key is not an RSA key")
+		}
+		return rsaKey, nil
+
+	case models.KeyAlgorithmEC:
+		privateKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse EC private key: %w", err)
+		}
+		ecKey, ok := privateKey.(*ecdsa.PrivateKey)
+		if !ok {
+			return nil, fmt.Errorf("private key is not an EC key")
+		}
+		return ecKey, nil
+
+	case models.KeyAlgorithmED25519:
+		privateKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse ED25519 private key: %w", err)
+		}
+		edKey, ok := privateKey.(ed25519.PrivateKey)
+		if !ok {
+			return nil, fmt.Errorf("private key is not an ED25519 key")
+		}
+		return edKey, nil
+
+	default:
+		return nil, fmt.Errorf("unsupported algorithm: %s", algorithm)
+	}
+}
+
+// hashData hashes data using the specified algorithm
+func (p *DatabaseProvider) hashData(data []byte, algorithm string) ([]byte, error) {
+	switch algorithm {
+	case models.HashAlgorithmSHA1:
+		hash := sha1.Sum(data)
+		return hash[:], nil
+	case models.HashAlgorithmSHA2_224:
+		hash := sha256.Sum224(data)
+		return hash[:], nil
+	case models.HashAlgorithmSHA2_256:
+		hash := sha256.Sum256(data)
+		return hash[:], nil
+	case models.HashAlgorithmSHA2_384:
+		hash := sha512.Sum384(data)
+		return hash[:], nil
+	case models.HashAlgorithmSHA2_512:
+		hash := sha512.Sum512(data)
+		return hash[:], nil
+	case models.HashAlgorithmSHA3_224:
+		// Note: This would require golang.org/x/crypto/sha3
+		// For now, we'll return an error
+		return nil, fmt.Errorf("SHA3 algorithms not yet implemented")
+	case models.HashAlgorithmSHA3_256:
+		return nil, fmt.Errorf("SHA3 algorithms not yet implemented")
+	case models.HashAlgorithmSHA3_384:
+		return nil, fmt.Errorf("SHA3 algorithms not yet implemented")
+	case models.HashAlgorithmSHA3_512:
+		return nil, fmt.Errorf("SHA3 algorithms not yet implemented")
+	case models.HashAlgorithmNone:
+		return data, nil
+	default:
+		return nil, fmt.Errorf("unsupported hash algorithm: %s", algorithm)
+	}
+}
+
+// signData signs data using the appropriate algorithm
+func (p *DatabaseProvider) signData(privateKey interface{}, data []byte, req models.SignRequest, algorithm models.KeyAlgorithm) ([]byte, error) {
+	switch algorithm {
+	case models.KeyAlgorithmRSA:
+		return p.signRSA(privateKey.(*rsa.PrivateKey), data, req)
+	case models.KeyAlgorithmEC:
+		return p.signECDSA(privateKey.(*ecdsa.PrivateKey), data, req)
+	case models.KeyAlgorithmED25519:
+		return p.signED25519(privateKey.(ed25519.PrivateKey), data, req)
+	default:
+		return nil, fmt.Errorf("unsupported algorithm: %s", algorithm)
+	}
+}
+
+// signRSA signs data using RSA
+func (p *DatabaseProvider) signRSA(privateKey *rsa.PrivateKey, data []byte, req models.SignRequest) ([]byte, error) {
+	signatureAlgorithm := models.SignatureAlgorithmPSS // default
+	if req.SignatureAlgorithm != nil {
+		signatureAlgorithm = *req.SignatureAlgorithm
+	}
+
+	switch signatureAlgorithm {
+	case models.SignatureAlgorithmPSS:
+		// Determine salt length
+		saltLength := rsa.PSSSaltLengthAuto // default
+		if req.SaltLength != nil {
+			switch *req.SaltLength {
+			case models.SaltLengthAuto:
+				saltLength = rsa.PSSSaltLengthAuto
+			case models.SaltLengthHash:
+				saltLength = rsa.PSSSaltLengthEqualsHash
+			default:
+				// Try to parse as integer
+				if saltLen, err := strconv.Atoi(*req.SaltLength); err == nil {
+					saltLength = saltLen
+				}
+			}
+		}
+
+		// Determine hash function
+		var hashFunc crypto.Hash
+		if req.HashAlgorithm != nil {
+			switch *req.HashAlgorithm {
+			case models.HashAlgorithmSHA1:
+				hashFunc = crypto.SHA1
+			case models.HashAlgorithmSHA2_224:
+				hashFunc = crypto.SHA224
+			case models.HashAlgorithmSHA2_256:
+				hashFunc = crypto.SHA256
+			case models.HashAlgorithmSHA2_384:
+				hashFunc = crypto.SHA384
+			case models.HashAlgorithmSHA2_512:
+				hashFunc = crypto.SHA512
+			default:
+				hashFunc = crypto.SHA256 // default
+			}
+		} else {
+			hashFunc = crypto.SHA256 // default
+		}
+
+		opts := &rsa.PSSOptions{
+			SaltLength: saltLength,
+			Hash:       hashFunc,
+		}
+
+		signature, err := rsa.SignPSS(rand.Reader, privateKey, hashFunc, data, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to sign with RSA PSS: %w", err)
+		}
+		return signature, nil
+
+	case models.SignatureAlgorithmPKCS1V15:
+		// Determine hash function
+		var hashFunc crypto.Hash
+		if req.HashAlgorithm != nil {
+			switch *req.HashAlgorithm {
+			case models.HashAlgorithmSHA1:
+				hashFunc = crypto.SHA1
+			case models.HashAlgorithmSHA2_224:
+				hashFunc = crypto.SHA224
+			case models.HashAlgorithmSHA2_256:
+				hashFunc = crypto.SHA256
+			case models.HashAlgorithmSHA2_384:
+				hashFunc = crypto.SHA384
+			case models.HashAlgorithmSHA2_512:
+				hashFunc = crypto.SHA512
+			case models.HashAlgorithmNone:
+				// For "none", we need to handle this specially
+				if req.Prehashed != nil && *req.Prehashed {
+					// Use PKCS1v15 with no hash
+					signature, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.Hash(0), data)
+					if err != nil {
+						return nil, fmt.Errorf("failed to sign with RSA PKCS1v15 (no hash): %w", err)
+					}
+					return signature, nil
+				}
+				hashFunc = crypto.SHA256 // fallback
+			default:
+				hashFunc = crypto.SHA256 // default
+			}
+		} else {
+			hashFunc = crypto.SHA256 // default
+		}
+
+		signature, err := rsa.SignPKCS1v15(rand.Reader, privateKey, hashFunc, data)
+		if err != nil {
+			return nil, fmt.Errorf("failed to sign with RSA PKCS1v15: %w", err)
+		}
+		return signature, nil
+
+	default:
+		return nil, fmt.Errorf("unsupported signature algorithm: %s", signatureAlgorithm)
+	}
+}
+
+// signECDSA signs data using ECDSA
+func (p *DatabaseProvider) signECDSA(privateKey *ecdsa.PrivateKey, data []byte, req models.SignRequest) ([]byte, error) {
+	// Determine marshaling algorithm
+	marshalingAlgorithm := models.MarshalingAlgorithmASN1 // default
+	if req.MarshalingAlgorithm != nil {
+		marshalingAlgorithm = *req.MarshalingAlgorithm
+	}
+
+	// Sign the data
+	r, s, err := ecdsa.Sign(rand.Reader, privateKey, data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign with ECDSA: %w", err)
+	}
+
+	switch marshalingAlgorithm {
+	case models.MarshalingAlgorithmASN1:
+		// ASN.1 DER encoding (default)
+		signature, err := asn1.Marshal(struct {
+			R, S *big.Int
+		}{r, s})
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal ECDSA signature: %w", err)
+		}
+		return signature, nil
+
+	case models.MarshalingAlgorithmJWS:
+		// JWS encoding (R and S as big-endian integers, concatenated)
+		// Each component should be the same length as the key size
+		keySize := privateKey.Curve.Params().BitSize / 8
+		if privateKey.Curve.Params().BitSize%8 != 0 {
+			keySize++
+		}
+
+		rBytes := r.Bytes()
+		sBytes := s.Bytes()
+
+		// Pad to key size
+		if len(rBytes) < keySize {
+			rBytes = append(make([]byte, keySize-len(rBytes)), rBytes...)
+		}
+		if len(sBytes) < keySize {
+			sBytes = append(make([]byte, keySize-len(sBytes)), sBytes...)
+		}
+
+		// Concatenate R and S
+		signature := append(rBytes, sBytes...)
+		return signature, nil
+
+	default:
+		return nil, fmt.Errorf("unsupported marshaling algorithm: %s", marshalingAlgorithm)
+	}
+}
+
+// signED25519 signs data using ED25519
+func (p *DatabaseProvider) signED25519(privateKey ed25519.PrivateKey, data []byte, req models.SignRequest) ([]byte, error) {
+	// Handle Ed25519ph (prehashed) if requested
+	if req.Prehashed != nil && *req.Prehashed {
+		if req.HashAlgorithm != nil && *req.HashAlgorithm == models.HashAlgorithmSHA2_512 {
+			// Ed25519ph with SHA-512
+			signature := ed25519.Sign(privateKey, data)
+			return signature, nil
+		}
+	}
+
+	// Standard Ed25519 signing
+	signature := ed25519.Sign(privateKey, data)
+	return signature, nil
 }

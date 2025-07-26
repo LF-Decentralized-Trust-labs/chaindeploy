@@ -23,7 +23,12 @@ export default function ChaincodeProjectDetailPage() {
 	const navigate = useNavigate()
 	const projectId = parseInt(id || '0', 10)
 
-	const { data: project, isLoading, error, refetch } = useQuery({
+	const {
+		data: project,
+		isLoading,
+		error,
+		refetch,
+	} = useQuery({
 		...getChaincodeProjectsByIdOptions({ path: { id: projectId } }),
 		enabled: !!projectId,
 	})
@@ -59,9 +64,7 @@ export default function ChaincodeProjectDetailPage() {
 			setUpdating(false)
 		}
 	}
-	const deleteChaincodeProjectMutation = useMutation({
-		...deleteChaincodeProjectsByIdMutation(),
-	})
+	const deleteChaincodeProjectMutation = useMutation(deleteChaincodeProjectsByIdMutation())
 	const handleDelete = async () => {
 		setDeleting(true)
 		try {
@@ -96,14 +99,9 @@ export default function ChaincodeProjectDetailPage() {
 							</Button>
 						</DropdownMenuTrigger>
 						<DropdownMenuContent align="end">
-							<DropdownMenuItem onClick={() => setIsDialogOpen(true)}>
-								Update Endorsement Policy
-							</DropdownMenuItem>
+							<DropdownMenuItem onClick={() => setIsDialogOpen(true)}>Update Endorsement Policy</DropdownMenuItem>
 							<DropdownMenuSeparator />
-							<DropdownMenuItem 
-								className="text-destructive" 
-								onClick={() => setIsDeleteDialogOpen(true)}
-							>
+							<DropdownMenuItem className="text-destructive" onClick={() => setIsDeleteDialogOpen(true)}>
 								<Trash2 className="mr-2 h-4 w-4" />
 								Delete Chaincode Project
 							</DropdownMenuItem>
@@ -188,7 +186,6 @@ export default function ChaincodeProjectDetailPage() {
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>
-
 		</div>
 	)
-} 
+}

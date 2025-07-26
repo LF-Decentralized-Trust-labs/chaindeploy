@@ -457,33 +457,6 @@ func (s *NodeService) determineNodeType(req CreateNodeRequest) types.NodeType {
 	return ""
 }
 
-// validateAddress checks if an address:port is valid and available
-func (s *NodeService) validateAddress(address string) error {
-	host, portStr, err := net.SplitHostPort(address)
-	if err != nil {
-		return fmt.Errorf("invalid address format %s: %w", address, err)
-	}
-
-	// Validate port
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		return fmt.Errorf("invalid port number %s: %w", portStr, err)
-	}
-	if port < 1 || port > 65535 {
-		return fmt.Errorf("port number %d out of range (1-65535)", port)
-	}
-
-	// Check if port is in use
-	addr := fmt.Sprintf("%s:%d", host, port)
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		return fmt.Errorf("address %s is not available: %w", addr, err)
-	}
-	listener.Close()
-
-	return nil
-}
-
 // generateSlug creates a URL-friendly slug from a string
 func (s *NodeService) generateSlug(name string) string {
 	// Convert to lowercase
@@ -642,6 +615,18 @@ func (s *NodeService) CreateNode(ctx context.Context, req CreateNodeRequest) (*N
 	if err := s.startNode(ctx, node); err != nil {
 		return nil, fmt.Errorf("failed to start node: %w", err)
 	}
+
+	// Use default validation timeout of 60 seconds
+	validationTimeout := 60 * time.Second
+
+	// Validate node connectivity with retry and exponential backoff
+	if err := s.validateNodeConnectivityWithRetry(ctx, node, validationTimeout); err != nil {
+		s.logger.Error("Node connectivity validation failed after retries", "node_id", node.ID, "error", err)
+		// Update node status to error if validation fails
+		s.updateNodeStatusWithError(ctx, node.ID, types.NodeStatusError, fmt.Sprintf("Node connectivity validation failed after retries: %v", err))
+		return nil, fmt.Errorf("node connectivity validation failed after retries: %w", err)
+	}
+
 	node, err = s.db.GetNode(ctx, node.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get node: %w", err)
@@ -1068,6 +1053,7 @@ func (s *NodeService) StartNode(ctx context.Context, id int64) (*NodeResponse, e
 	if err := s.startNode(ctx, node); err != nil {
 		return nil, err
 	}
+
 	_, nodeResponse := s.mapDBNodeToServiceNode(node)
 	return nodeResponse, nil
 }
@@ -1792,4 +1778,285 @@ func (s *NodeService) GetExternalIP() (string, error) {
 
 	// Fallback to localhost if no suitable interface is found
 	return "127.0.0.1", nil
+}
+
+// validateNodeConnectivity validates that a node is working by checking its addresses
+func (s *NodeService) validateNodeConnectivity(ctx context.Context, node *db.Node) error {
+	s.logger.Info("Validating node connectivity", "node_id", node.ID, "name", node.Name)
+
+	// Load node config
+	nodeConfig, err := utils.LoadNodeConfig([]byte(node.NodeConfig.String))
+	if err != nil {
+		return fmt.Errorf("failed to load node config: %w", err)
+	}
+
+	// Load deployment config
+	deploymentConfig, err := utils.DeserializeDeploymentConfig(node.DeploymentConfig.String)
+	if err != nil {
+		return fmt.Errorf("failed to deserialize deployment config: %w", err)
+	}
+
+	switch types.NodeType(node.NodeType.String) {
+	case types.NodeTypeFabricPeer:
+		return s.validateFabricPeerConnectivity(ctx, node, nodeConfig, deploymentConfig)
+	case types.NodeTypeFabricOrderer:
+		return s.validateFabricOrdererConnectivity(ctx, node, nodeConfig, deploymentConfig)
+	case types.NodeTypeBesuFullnode:
+		return s.validateBesuNodeConnectivity(ctx, node, nodeConfig, deploymentConfig)
+	default:
+		return fmt.Errorf("unsupported node type for connectivity validation: %s", node.NodeType.String)
+	}
+}
+
+// validateFabricPeerConnectivity validates that a Fabric peer is working
+func (s *NodeService) validateFabricPeerConnectivity(ctx context.Context, node *db.Node, nodeConfig types.NodeConfig, deploymentConfig types.NodeDeploymentConfig) error {
+	peerConfig, ok := nodeConfig.(*types.FabricPeerConfig)
+	if !ok {
+		return fmt.Errorf("failed to assert node config to FabricPeerConfig")
+	}
+
+	s.logger.Info("Validating Fabric peer connectivity",
+		"node_id", node.ID,
+		"listen_address", peerConfig.ListenAddress,
+		"operations_address", peerConfig.OperationsListenAddress)
+
+	// Validate listen address
+	if err := s.validateAddressAvailability(peerConfig.ListenAddress, "peer listen"); err != nil {
+		return fmt.Errorf("peer listen address validation failed: %w", err)
+	}
+
+	// Validate operations address
+	if err := s.validateAddressAvailability(peerConfig.OperationsListenAddress, "peer operations"); err != nil {
+		return fmt.Errorf("peer operations address validation failed: %w", err)
+	}
+
+	// Validate chaincode address
+	if err := s.validateAddressAvailability(peerConfig.ChaincodeAddress, "peer chaincode"); err != nil {
+		return fmt.Errorf("peer chaincode address validation failed: %w", err)
+	}
+
+	// Validate events address
+	if err := s.validateAddressAvailability(peerConfig.EventsAddress, "peer events"); err != nil {
+		return fmt.Errorf("peer events address validation failed: %w", err)
+	}
+
+	// Try to connect to the peer's gRPC endpoint
+	if err := s.validateGRPCConnection(ctx, peerConfig.ListenAddress, "peer"); err != nil {
+		return fmt.Errorf("peer gRPC connection validation failed: %w", err)
+	}
+
+	s.logger.Info("Fabric peer connectivity validation successful", "node_id", node.ID)
+	return nil
+}
+
+// validateFabricOrdererConnectivity validates that a Fabric orderer is working
+func (s *NodeService) validateFabricOrdererConnectivity(ctx context.Context, node *db.Node, nodeConfig types.NodeConfig, deploymentConfig types.NodeDeploymentConfig) error {
+	ordererConfig, ok := nodeConfig.(*types.FabricOrdererConfig)
+	if !ok {
+		return fmt.Errorf("failed to assert node config to FabricOrdererConfig")
+	}
+
+	s.logger.Info("Validating Fabric orderer connectivity",
+		"node_id", node.ID,
+		"listen_address", ordererConfig.ListenAddress,
+		"admin_address", ordererConfig.AdminAddress,
+		"operations_address", ordererConfig.OperationsListenAddress)
+
+	// Validate listen address
+	if err := s.validateAddressAvailability(ordererConfig.ListenAddress, "orderer listen"); err != nil {
+		return fmt.Errorf("orderer listen address validation failed: %w", err)
+	}
+
+	// Validate admin address
+	if err := s.validateAddressAvailability(ordererConfig.AdminAddress, "orderer admin"); err != nil {
+		return fmt.Errorf("orderer admin address validation failed: %w", err)
+	}
+
+	// Validate operations address
+	if err := s.validateAddressAvailability(ordererConfig.OperationsListenAddress, "orderer operations"); err != nil {
+		return fmt.Errorf("orderer operations address validation failed: %w", err)
+	}
+
+	// Try to connect to the orderer's gRPC endpoint
+	if err := s.validateGRPCConnection(ctx, ordererConfig.ListenAddress, "orderer"); err != nil {
+		return fmt.Errorf("orderer gRPC connection validation failed: %w", err)
+	}
+
+	s.logger.Info("Fabric orderer connectivity validation successful", "node_id", node.ID)
+	return nil
+}
+
+// validateBesuNodeConnectivity validates that a Besu node is working
+func (s *NodeService) validateBesuNodeConnectivity(ctx context.Context, node *db.Node, nodeConfig types.NodeConfig, deploymentConfig types.NodeDeploymentConfig) error {
+	besuConfig, ok := nodeConfig.(*types.BesuNodeConfig)
+	if !ok {
+		return fmt.Errorf("failed to assert node config to BesuNodeConfig")
+	}
+
+	s.logger.Info("Validating Besu node connectivity",
+		"node_id", node.ID,
+		"p2p_host", besuConfig.P2PHost,
+		"p2p_port", besuConfig.P2PPort,
+		"rpc_host", besuConfig.RPCHost,
+		"rpc_port", besuConfig.RPCPort)
+
+	// Validate P2P address
+	p2pAddress := fmt.Sprintf("%s:%d", besuConfig.P2PHost, besuConfig.P2PPort)
+	if err := s.validateAddressAvailability(p2pAddress, "besu P2P"); err != nil {
+		return fmt.Errorf("besu P2P address validation failed: %w", err)
+	}
+
+	// Validate RPC address
+	rpcAddress := fmt.Sprintf("%s:%d", besuConfig.RPCHost, besuConfig.RPCPort)
+	if err := s.validateAddressAvailability(rpcAddress, "besu RPC"); err != nil {
+		return fmt.Errorf("besu RPC address validation failed: %w", err)
+	}
+
+	// Try to connect to the Besu RPC endpoint
+	if err := s.validateHTTPConnection(ctx, rpcAddress, "besu RPC"); err != nil {
+		return fmt.Errorf("besu RPC connection validation failed: %w", err)
+	}
+
+	s.logger.Info("Besu node connectivity validation successful", "node_id", node.ID)
+	return nil
+}
+
+// validateAddressAvailability checks if an address is available for binding
+func (s *NodeService) validateAddressAvailability(address, addressType string) error {
+	host, portStr, err := net.SplitHostPort(address)
+	if err != nil {
+		return fmt.Errorf("invalid %s address format %s: %w", addressType, address, err)
+	}
+
+	// Replace 0.0.0.0 with localhost for binding check
+	if host == "0.0.0.0" {
+		host = "localhost"
+	}
+
+	// Validate port
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return fmt.Errorf("invalid %s port number %s: %w", addressType, portStr, err)
+	}
+	if port < 1 || port > 65535 {
+		return fmt.Errorf("%s port number %d out of range (1-65535)", addressType, port)
+	}
+
+	// Check if port is available for binding
+	addr := fmt.Sprintf("%s:%d", host, port)
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("%s address %s is not available: %w", addressType, addr, err)
+	}
+	listener.Close()
+
+	s.logger.Debug("Address validation successful", "address_type", addressType, "address", addr)
+	return nil
+}
+
+// validateGRPCConnection attempts to establish a gRPC connection to validate the service is working
+func (s *NodeService) validateGRPCConnection(ctx context.Context, address, serviceType string) error {
+	// Replace 0.0.0.0 with localhost for connection check
+	host, portStr, err := net.SplitHostPort(address)
+	if err == nil && host == "0.0.0.0" {
+		address = fmt.Sprintf("localhost:%s", portStr)
+	}
+	// Try to establish a TCP connection first
+	conn, err := net.DialTimeout("tcp", address, 3*time.Second)
+	if err != nil {
+		return fmt.Errorf("failed to establish TCP connection to %s at %s: %w", serviceType, address, err)
+	}
+	defer conn.Close()
+
+	s.logger.Debug("gRPC connection validation successful", "service_type", serviceType, "address", address)
+	return nil
+}
+
+// validateHTTPConnection attempts to establish an HTTP connection to validate the service is working
+func (s *NodeService) validateHTTPConnection(ctx context.Context, address, serviceType string) error {
+	// Replace 0.0.0.0 with localhost for connection check
+	host, portStr, err := net.SplitHostPort(address)
+	if err == nil && host == "0.0.0.0" {
+		address = fmt.Sprintf("localhost:%s", portStr)
+	}
+	// Try to establish a TCP connection
+	conn, err := net.DialTimeout("tcp", address, 3*time.Second)
+	if err != nil {
+		return fmt.Errorf("failed to establish TCP connection to %s at %s: %w", serviceType, address, err)
+	}
+	defer conn.Close()
+
+	s.logger.Debug("HTTP connection validation successful", "service_type", serviceType, "address", address)
+	return nil
+}
+
+// ValidateNodeConnectivity validates that an existing node is working by checking its addresses
+func (s *NodeService) ValidateNodeConnectivity(ctx context.Context, nodeID int64) error {
+	// Get the node from database
+	node, err := s.db.GetNode(ctx, nodeID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return errors.NewNotFoundError("node not found", map[string]interface{}{
+				"id": nodeID,
+			})
+		}
+		return fmt.Errorf("failed to get node: %w", err)
+	}
+
+	// Check if node is running
+	if types.NodeStatus(node.Status) != types.NodeStatusRunning {
+		return fmt.Errorf("node is not running (status: %s)", node.Status)
+	}
+
+	// Validate node connectivity
+	return s.validateNodeConnectivity(ctx, node)
+}
+
+// validateNodeConnectivityWithRetry validates node connectivity with exponential backoff retry
+func (s *NodeService) validateNodeConnectivityWithRetry(ctx context.Context, node *db.Node, timeout time.Duration) error {
+	startTime := time.Now()
+	initialDelay := 500 * time.Millisecond
+	maxDelay := 5 * time.Second
+	currentDelay := initialDelay
+
+	s.logger.Info("Starting node connectivity validation with retry",
+		"node_id", node.ID,
+		"name", node.Name,
+		"timeout", timeout)
+
+	for {
+		// Check if we've exceeded the timeout
+		if time.Since(startTime) > timeout {
+			return fmt.Errorf("node connectivity validation timed out after %v", timeout)
+		}
+
+		// Try to validate connectivity
+		if err := s.validateNodeConnectivity(ctx, node); err == nil {
+			s.logger.Info("Node connectivity validation successful",
+				"node_id", node.ID,
+				"name", node.Name,
+				"duration", time.Since(startTime))
+			return nil
+		} else {
+			s.logger.Debug("Node connectivity validation attempt failed, retrying",
+				"node_id", node.ID,
+				"name", node.Name,
+				"error", err,
+				"delay", currentDelay)
+		}
+
+		// Wait before retry with exponential backoff
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("context cancelled during node connectivity validation: %w", ctx.Err())
+		case <-time.After(currentDelay):
+			// Continue to next iteration
+		}
+
+		// Increase delay with exponential backoff, but cap it
+		currentDelay = time.Duration(float64(currentDelay) * 1.5)
+		if currentDelay > maxDelay {
+			currentDelay = maxDelay
+		}
+	}
 }

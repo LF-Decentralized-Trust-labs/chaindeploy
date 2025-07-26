@@ -16,6 +16,7 @@ type Querier interface {
 	CountAuditLogs(ctx context.Context, arg *CountAuditLogsParams) (int64, error)
 	CountBackupsBySchedule(ctx context.Context, scheduleID sql.NullInt64) (int64, error)
 	CountBackupsByTarget(ctx context.Context, targetID int64) (int64, error)
+	CountFabricOrganizations(ctx context.Context) (int64, error)
 	CountNetworks(ctx context.Context) (int64, error)
 	CountNodeEvents(ctx context.Context, nodeID int64) (int64, error)
 	CountNodes(ctx context.Context) (int64, error)

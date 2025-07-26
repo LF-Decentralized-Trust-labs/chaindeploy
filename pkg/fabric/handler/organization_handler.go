@@ -312,12 +312,17 @@ func (h *OrganizationHandler) ListOrganizations(w http.ResponseWriter, r *http.R
 		orgResponses[i] = toOrganizationResponse(&org)
 	}
 
+	count, err := h.service.CountOrganizations(r.Context())
+	if err != nil {
+		return errors.NewInternalError("failed to count organizations", err, nil)
+	}
+
 	// Optionally, you can return pagination info in the response
 	resp := PaginatedOrganizationsResponse{
 		Items:  orgResponses,
 		Limit:  limit,
 		Offset: offset,
-		Count:  len(orgResponses),
+		Count:  int(count),
 	}
 
 	return response.WriteJSON(w, http.StatusOK, resp)

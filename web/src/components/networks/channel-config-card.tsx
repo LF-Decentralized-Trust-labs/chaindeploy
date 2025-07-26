@@ -125,13 +125,6 @@ export function ChannelConfigCard({ config }: ChannelConfigCardProps) {
 		}
 	}
 
-	const formatCertificate = (cert: string) => {
-		if (!cert) return ''
-		const decoded = decodeBase64Certificate(cert)
-		const lines = decoded.split('\n')
-		return lines.join('\n')
-	}
-
 	const renderOrganizations = (organizations: any) => {
 		if (!organizations) return null
 		return Object.entries(organizations).map(([mspId, org]: [string, any]) => (
