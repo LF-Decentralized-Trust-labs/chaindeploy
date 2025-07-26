@@ -35,7 +35,7 @@ jobs:
         needs: build-chainlaunch-ui
         strategy:
             matrix:
-                arch: [amd64, arm64]
+                arch: [amd64]
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
@@ -153,26 +153,6 @@ jobs:
                   upload_url: ${{ steps.create_release.outputs.upload_url }}
                   asset_path: ./artifacts/chainlaunch-linux-amd64/chainlaunch-linux-amd64.zip
                   asset_name: chainlaunch-linux-amd64.zip
-                  asset_content_type: application/zip
-
-            - name: Upload Linux ARM64 binary
-              uses: actions/upload-release-asset@v1
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              with:
-                  upload_url: ${{ steps.create_release.outputs.upload_url }}
-                  asset_path: ./artifacts/chainlaunch-linux-arm64/chainlaunch-linux-arm64
-                  asset_name: chainlaunch-linux-arm64
-                  asset_content_type: application/octet-stream
-
-            - name: Upload Linux ARM64 zip
-              uses: actions/upload-release-asset@v1
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              with:
-                  upload_url: ${{ steps.create_release.outputs.upload_url }}
-                  asset_path: ./artifacts/chainlaunch-linux-arm64/chainlaunch-linux-arm64.zip
-                  asset_name: chainlaunch-linux-arm64.zip
                   asset_content_type: application/zip
 
             - name: Upload Darwin AMD64 binary
