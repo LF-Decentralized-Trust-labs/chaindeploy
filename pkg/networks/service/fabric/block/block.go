@@ -1,10 +1,13 @@
 package block
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/hex"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
+	"github.com/hyperledger/fabric-config/protolator"
 	"github.com/hyperledger/fabric-protos-go-apiv2/common"
 	"github.com/hyperledger/fabric-protos-go-apiv2/peer"
 
@@ -61,6 +64,7 @@ type Block struct {
 	DataHash     string         `json:"dataHash"`
 	Transactions []*Transaction `json:"transactions"`
 	CreatedAt    *time.Time     `json:"createdAt"`
+	Base64Data   string         `json:"base64Data"`
 }
 
 func UnmarshalTransaction(txBytes []byte) (*peer.Transaction, error) {
@@ -75,9 +79,15 @@ func UnmarshalChannelHeader(bytes []byte) (*common.ChannelHeader, error) {
 }
 
 func MapBlock(block *common.Block) (*Block, error) {
+	var buf bytes.Buffer
+	err := protolator.DeepMarshalJSON(&buf, block)
+	if err != nil {
+		return nil, err
+	}
 	blk := &Block{
-		Number:   int(block.Header.Number),
-		DataHash: hex.EncodeToString(block.Header.DataHash),
+		Number:     int(block.Header.Number),
+		DataHash:   hex.EncodeToString(block.Header.DataHash),
+		Base64Data: base64.StdEncoding.EncodeToString(buf.Bytes()),
 	}
 
 	blk.Transactions = []*Transaction{}

@@ -249,6 +249,8 @@ definitions:
     type: object
   block.Block:
     properties:
+      base64Data:
+        type: string
       createdAt:
         type: string
       dataHash:

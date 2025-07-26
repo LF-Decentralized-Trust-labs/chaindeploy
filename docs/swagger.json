@@ -10603,6 +10603,9 @@
         "block.Block": {
             "type": "object",
             "properties": {
+                "base64Data": {
+                    "type": "string"
+                },
                 "createdAt": {
                     "type": "string"
                 },
