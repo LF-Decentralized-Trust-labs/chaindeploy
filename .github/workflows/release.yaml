@@ -30,9 +30,12 @@ jobs:
                   path: web/dist
 
     build-linux:
-        name: Build Linux Binary
+        name: Build Linux Binaries
         runs-on: ubuntu-latest
         needs: build-chainlaunch-ui
+        strategy:
+            matrix:
+                arch: [amd64, arm64]
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
@@ -53,13 +56,19 @@ jobs:
 
             - name: Build Linux binary
               run: |
-                CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags="-X 'github.com/chainlaunch/chainlaunch/pkg/version.Version=${{ github.ref_name }}' -X 'github.com/chainlaunch/chainlaunch/pkg/version.GitCommit=${{ github.sha }}' -X 'github.com/chainlaunch/chainlaunch/pkg/version.BuildTime=$(date -u +'%Y-%m-%dT%H:%M:%SZ')'" -o chainlaunch-linux-amd64 main.go
+                CGO_ENABLED=1 GOOS=linux GOARCH=${{ matrix.arch }} go build -ldflags="-X 'github.com/chainlaunch/chainlaunch/pkg/version.Version=${{ github.ref_name }}' -X 'github.com/chainlaunch/chainlaunch/pkg/version.GitCommit=${{ github.sha }}' -X 'github.com/chainlaunch/chainlaunch/pkg/version.BuildTime=$(date -u +'%Y-%m-%dT%H:%M:%SZ')'" -o chainlaunch-linux-${{ matrix.arch }} main.go
 
-            - name: Upload Linux binary as artifact
+            - name: Create zip archive
+              run: |
+                zip chainlaunch-linux-${{ matrix.arch }}.zip chainlaunch-linux-${{ matrix.arch }}
+
+            - name: Upload Linux binary and zip as artifacts
               uses: actions/upload-artifact@v4
               with:
-                  name: chainlaunch-linux-amd64
-                  path: ./chainlaunch-linux-amd64
+                  name: chainlaunch-linux-${{ matrix.arch }}
+                  path: |
+                    ./chainlaunch-linux-${{ matrix.arch }}
+                    ./chainlaunch-linux-${{ matrix.arch }}.zip
 
     build-darwin:
         name: Build Darwin Binaries
@@ -90,11 +99,17 @@ jobs:
               run: |
                 CGO_ENABLED=1 GOOS=darwin GOARCH=${{ matrix.arch }} go build -ldflags="-X 'github.com/chainlaunch/chainlaunch/pkg/version.Version=${{ github.ref_name }}' -X 'github.com/chainlaunch/chainlaunch/pkg/version.GitCommit=${{ github.sha }}' -X 'github.com/chainlaunch/chainlaunch/pkg/version.BuildTime=$(date -u +'%Y-%m-%dT%H:%M:%SZ')'" -o chainlaunch-darwin-${{ matrix.arch }} main.go
 
-            - name: Upload Darwin binary as artifact
+            - name: Create zip archive
+              run: |
+                zip chainlaunch-darwin-${{ matrix.arch }}.zip chainlaunch-darwin-${{ matrix.arch }}
+
+            - name: Upload Darwin binary and zip as artifacts
               uses: actions/upload-artifact@v4
               with:
                   name: chainlaunch-darwin-${{ matrix.arch }}
-                  path: ./chainlaunch-darwin-${{ matrix.arch }}
+                  path: |
+                    ./chainlaunch-darwin-${{ matrix.arch }}
+                    ./chainlaunch-darwin-${{ matrix.arch }}.zip
 
     create-release:
         name: Create Release
@@ -130,6 +145,36 @@ jobs:
                   asset_name: chainlaunch-linux-amd64
                   asset_content_type: application/octet-stream
 
+            - name: Upload Linux AMD64 zip
+              uses: actions/upload-release-asset@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  upload_url: ${{ steps.create_release.outputs.upload_url }}
+                  asset_path: ./artifacts/chainlaunch-linux-amd64/chainlaunch-linux-amd64.zip
+                  asset_name: chainlaunch-linux-amd64.zip
+                  asset_content_type: application/zip
+
+            - name: Upload Linux ARM64 binary
+              uses: actions/upload-release-asset@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  upload_url: ${{ steps.create_release.outputs.upload_url }}
+                  asset_path: ./artifacts/chainlaunch-linux-arm64/chainlaunch-linux-arm64
+                  asset_name: chainlaunch-linux-arm64
+                  asset_content_type: application/octet-stream
+
+            - name: Upload Linux ARM64 zip
+              uses: actions/upload-release-asset@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  upload_url: ${{ steps.create_release.outputs.upload_url }}
+                  asset_path: ./artifacts/chainlaunch-linux-arm64/chainlaunch-linux-arm64.zip
+                  asset_name: chainlaunch-linux-arm64.zip
+                  asset_content_type: application/zip
+
             - name: Upload Darwin AMD64 binary
               uses: actions/upload-release-asset@v1
               env:
@@ -140,6 +185,16 @@ jobs:
                   asset_name: chainlaunch-darwin-amd64
                   asset_content_type: application/octet-stream
 
+            - name: Upload Darwin AMD64 zip
+              uses: actions/upload-release-asset@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  upload_url: ${{ steps.create_release.outputs.upload_url }}
+                  asset_path: ./artifacts/chainlaunch-darwin-amd64/chainlaunch-darwin-amd64.zip
+                  asset_name: chainlaunch-darwin-amd64.zip
+                  asset_content_type: application/zip
+
             - name: Upload Darwin ARM64 binary
               uses: actions/upload-release-asset@v1
               env:
@@ -149,3 +204,13 @@ jobs:
                   asset_path: ./artifacts/chainlaunch-darwin-arm64/chainlaunch-darwin-arm64
                   asset_name: chainlaunch-darwin-arm64
                   asset_content_type: application/octet-stream
+
+            - name: Upload Darwin ARM64 zip
+              uses: actions/upload-release-asset@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  upload_url: ${{ steps.create_release.outputs.upload_url }}
+                  asset_path: ./artifacts/chainlaunch-darwin-arm64/chainlaunch-darwin-arm64.zip
+                  asset_name: chainlaunch-darwin-arm64.zip
+                  asset_content_type: application/zip
