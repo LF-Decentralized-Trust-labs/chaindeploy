@@ -129,6 +129,7 @@ export type AuthUserResponse = {
 };
 
 export type BlockBlock = {
+    base64Data?: string;
     createdAt?: string;
     dataHash?: string;
     number?: number;
@@ -618,23 +619,22 @@ export type ChainlaunchdeployUpdateChaincodeDefinitionRequest = {
     version?: string;
 };
 
+export type CommonDeploymentMode = 'docker' | 'service';
+
+export type CommonNetworkMode = 'bridge' | 'host';
+
 export type CommonQueryResult = {
-    data?: {
-        result?: Array<{
-            metric?: {
-                [key: string]: string;
-            };
-            /**
-             * For instant queries
-             */
-            value?: Array<unknown>;
-            /**
-             * For range queries (matrix)
-             */
-            values?: Array<Array<unknown>>;
-        }>;
-        resultType?: string;
-    };
+    /**
+     * Data contains the query results
+     */
+    data?: unknown;
+    /**
+     * Error contains any error message
+     */
+    error?: string;
+    /**
+     * Status is the query status
+     */
     status?: string;
 };
 
@@ -693,11 +693,15 @@ export type GithubComChainlaunchChainlaunchPkgMetricsCommonStatus = {
     /**
      * DeploymentMode is the current deployment mode
      */
-    deployment_mode?: string;
+    deployment_mode?: CommonDeploymentMode;
     /**
-     * Error is any error that occurred while getting the status
+     * Error contains any error message
      */
     error?: string;
+    /**
+     * NetworkMode is the Docker network mode (only for Docker deployments)
+     */
+    network_mode?: CommonNetworkMode;
     /**
      * Port is the port Prometheus is listening on
      */
@@ -711,11 +715,11 @@ export type GithubComChainlaunchChainlaunchPkgMetricsCommonStatus = {
      */
     started_at?: string;
     /**
-     * Status is the current status of the Prometheus instance (e.g. "running", "stopped", "not_deployed")
+     * Status is the current status (running, stopped, etc.)
      */
     status?: string;
     /**
-     * Version is the version of Prometheus being used
+     * Version is the Prometheus version
      */
     version?: string;
 };
@@ -1028,6 +1032,10 @@ export type HttpConfigUpdateOperationRequest = {
      * - update_channel_capability: UpdateChannelCapabilityOperation
      * - update_orderer_capability: UpdateOrdererCapabilityOperation
      * - update_application_capability: UpdateApplicationCapabilityOperation
+     * - add_orderer_org: AddOrdererOrgPayload
+     * - remove_orderer_org: RemoveOrdererOrgPayload
+     * - update_orderer_org_msp: UpdateOrdererOrgMSPPayload
+     * - update_application_acl: UpdateApplicationACLPayload
      * @Description The payload for the configuration update operation
      * @Description Can be one of:
      * @Description - AddOrgPayload when type is "add_org"
@@ -1545,7 +1553,7 @@ export type HttpTransactionResponse = {
 
 export type HttpUpdateApplicationAclPayload = {
     acl_name: string;
-    policy: 'Readers' | 'Writers';
+    policy: string;
 };
 
 export type HttpUpdateApplicationCapabilityOperation = {
@@ -1834,6 +1842,70 @@ export type ModelsProviderResponse = {
     isDefault?: number;
     name?: string;
     type?: ModelsKeyProviderType;
+};
+
+/**
+ * Request to sign data using a key
+ */
+export type ModelsSignRequest = {
+    /**
+     * Context for key derivation (base64 encoded)
+     */
+    context?: string;
+    /**
+     * Hash algorithm to use for signing
+     */
+    hash_algorithm?: string;
+    /**
+     * Base64 encoded input data to sign
+     */
+    input: string;
+    /**
+     * Key version to use for signing (0 means latest)
+     */
+    key_version?: number;
+    /**
+     * Marshaling algorithm for ECDSA (asn1 or jws)
+     */
+    marshaling_algorithm?: string;
+    /**
+     * Whether input is already hashed
+     */
+    prehashed?: boolean;
+    /**
+     * Reference string for batch operations
+     */
+    reference?: string;
+    /**
+     * Salt length for RSA PSS (auto, hash, or integer)
+     */
+    salt_length?: string;
+    /**
+     * RSA signature algorithm (pss or pkcs1v15)
+     */
+    signature_algorithm?: string;
+    /**
+     * Signature context for Ed25519ctx and Ed25519ph signatures
+     */
+    signature_context?: string;
+};
+
+/**
+ * Response from a signing operation
+ */
+export type ModelsSignResponse = {
+    /**
+     * Key version used for signing
+     */
+    key_version?: number;
+    /**
+     * Reference from the request (for batch operations)
+     */
+    reference?: string;
+    /**
+     * Base64 encoded signature
+     */
+    signature?: string;
 };
 
 export type NotificationsProviderType = 'SMTP';
@@ -2241,6 +2313,8 @@ export type TypesCustomQueryRequest = {
 };
 
 export type TypesDeployPrometheusRequest = {
+    deployment_mode?: CommonDeploymentMode;
+    docker_config?: TypesDockerDeployConfig;
     prometheus_port: number;
     prometheus_version: string;
     scrape_interval: number;
@@ -2260,6 +2334,10 @@ export type TypesDeploymentStatus = {
 
 export type TypesDockerCompose = {
     contents?: string;
+};
+
+export type TypesDockerDeployConfig = {
+    network_mode?: CommonNetworkMode;
 };
 
 export type TypesDocumentation = {
@@ -2430,6 +2508,23 @@ export type TypesParameterSpec = {
     enum?: Array<string>;
     type?: string;
     'x-source'?: TypesXSourceType;
+};
+
+export type TypesPrometheusDefaultsResponse = {
+    available_ports?: Array<number>;
+    deployment_mode?: CommonDeploymentMode;
+    docker_config?: TypesDockerDeployConfig;
+    prometheus_port?: number;
+    prometheus_version?: string;
+    scrape_interval?: number;
+};
+
+export type TypesRefreshPrometheusRequest = {
+    deployment_mode?: CommonDeploymentMode;
+    docker_config?: TypesDockerDeployConfig;
+    prometheus_port?: number;
+    prometheus_version?: string;
+    scrape_interval?: number;
 };
 
 export type TypesService = {
@@ -4809,6 +4904,80 @@ export type PostKeysByKeyIdSignResponses = {
 
 export type PostKeysByKeyIdSignResponse = PostKeysByKeyIdSignResponses[keyof PostKeysByKeyIdSignResponses];
 
+export type PostKeysByKeyIdSignDataData = {
+    /**
+     * Signing request
+     */
+    body: ModelsSignRequest;
+    path: {
+        /**
+         * Key ID to use for signing
+         */
+        keyID: number;
+    };
+    query?: never;
+    url: '/keys/{keyID}/sign-data';
+};
+
+export type PostKeysByKeyIdSignDataErrors = {
+    /**
+     * Invalid request
+     */
+    400: {
+        [key: string]: string;
+    };
+    /**
+     * Key not found
+     */
+    404: {
+        [key: string]: string;
+    };
+    /**
+     * Internal server error
+     */
+    500: {
+        [key: string]: string;
+    };
+};
+
+export type PostKeysByKeyIdSignDataError = PostKeysByKeyIdSignDataErrors[keyof PostKeysByKeyIdSignDataErrors];
+
+export type PostKeysByKeyIdSignDataResponses = {
+    /**
+     * OK
+     */
+    200: ModelsSignResponse;
+};
+
+export type PostKeysByKeyIdSignDataResponse = PostKeysByKeyIdSignDataResponses[keyof PostKeysByKeyIdSignDataResponses];
+
+export type GetMetricsDefaultsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/metrics/defaults';
+};
+
+export type GetMetricsDefaultsErrors = {
+    /**
+     * Internal Server Error
+     */
+    500: {
+        [key: string]: string;
+    };
+};
+
+export type GetMetricsDefaultsError = GetMetricsDefaultsErrors[keyof GetMetricsDefaultsErrors];
+
+export type GetMetricsDefaultsResponses = {
+    /**
+     * OK
+     */
+    200: TypesPrometheusDefaultsResponse;
+};
+
+export type GetMetricsDefaultsResponse = GetMetricsDefaultsResponses[keyof GetMetricsDefaultsResponses];
+
 export type PostMetricsDeployData = {
     /**
      * Prometheus deployment configuration
@@ -4844,6 +5013,42 @@ export type PostMetricsDeployResponses = {
 };
 
 export type PostMetricsDeployResponse = PostMetricsDeployResponses[keyof PostMetricsDeployResponses];
+
+export type GetMetricsLogsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Follow logs in real-time (default: false)
+         */
+        follow?: boolean;
+        /**
+         * Number of lines to show from the end (default: 100)
+         */
+        tail?: number;
+    };
+    url: '/metrics/logs';
+};
+
+export type GetMetricsLogsErrors = {
+    /**
+     * Internal Server Error
+     */
+    500: {
+        [key: string]: string;
+    };
+};
+
+export type GetMetricsLogsError = GetMetricsLogsErrors[keyof GetMetricsLogsErrors];
+
+export type GetMetricsLogsResponses = {
+    /**
+     * Log stream
+     */
+    200: string;
+};
+
+export type GetMetricsLogsResponse = GetMetricsLogsResponses[keyof GetMetricsLogsResponses];
 
 export type GetMetricsNodeByIdData = {
     body?: never;
@@ -5033,6 +5238,76 @@ export type GetMetricsNodeByIdRangeResponses = {
 
 export type GetMetricsNodeByIdRangeResponse = GetMetricsNodeByIdRangeResponses[keyof GetMetricsNodeByIdRangeResponses];
 
+export type GetMetricsPortByPortCheckData = {
+    body?: never;
+    path: {
+        /**
+         * Port number to check
+         */
+        port: number;
+    };
+    query?: never;
+    url: '/metrics/port/{port}/check';
+};
+
+export type GetMetricsPortByPortCheckErrors = {
+    /**
+     * Bad Request
+     */
+    400: {
+        [key: string]: string;
+    };
+};
+
+export type GetMetricsPortByPortCheckError = GetMetricsPortByPortCheckErrors[keyof GetMetricsPortByPortCheckErrors];
+
+export type GetMetricsPortByPortCheckResponses = {
+    /**
+     * OK
+     */
+    200: {
+        [key: string]: boolean;
+    };
+};
+
+export type GetMetricsPortByPortCheckResponse = GetMetricsPortByPortCheckResponses[keyof GetMetricsPortByPortCheckResponses];
+
+export type PostMetricsRefreshData = {
+    /**
+     * Prometheus refresh configuration
+     */
+    body: TypesRefreshPrometheusRequest;
+    path?: never;
+    query?: never;
+    url: '/metrics/refresh';
+};
+
+export type PostMetricsRefreshErrors = {
+    /**
+     * Bad Request
+     */
+    400: {
+        [key: string]: string;
+    };
+    /**
+     * Internal Server Error
+     */
+    500: {
+        [key: string]: string;
+    };
+};
+
+export type PostMetricsRefreshError = PostMetricsRefreshErrors[keyof PostMetricsRefreshErrors];
+
+export type PostMetricsRefreshResponses = {
+    /**
+     * OK
+     */
+    200: TypesMessageResponse;
+};
+
+export type PostMetricsRefreshResponse = PostMetricsRefreshResponses[keyof PostMetricsRefreshResponses];
+
 export type PostMetricsReloadData = {
     body?: never;
     path?: never;
@@ -5060,6 +5335,39 @@ export type PostMetricsReloadResponses = {
 
 export type PostMetricsReloadResponse = PostMetricsReloadResponses[keyof PostMetricsReloadResponses];
 
+export type PostMetricsStartData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/metrics/start';
+};
+
+export type PostMetricsStartErrors = {
+    /**
+     * Bad Request
+     */
+    400: {
+        [key: string]: string;
+    };
+    /**
+     * Internal Server Error
+     */
+    500: {
+        [key: string]: string;
+    };
+};
+
+export type PostMetricsStartError = PostMetricsStartErrors[keyof PostMetricsStartErrors];
+
+export type PostMetricsStartResponses = {
+    /**
+     * OK
+     */
+    200: TypesMessageResponse;
+};
+
+export type PostMetricsStartResponse = PostMetricsStartResponses[keyof PostMetricsStartResponses];
+
 export type GetMetricsStatusData = {
     body?: never;
     path?: never;
@@ -5086,6 +5394,39 @@ export type GetMetricsStatusResponses = {
 };
 
 export type GetMetricsStatusResponse = GetMetricsStatusResponses[keyof GetMetricsStatusResponses];
+
+export type PostMetricsStopData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/metrics/stop';
+};
+
+export type PostMetricsStopErrors = {
+    /**
+     * Bad Request
+     */
+    400: {
+        [key: string]: string;
+    };
+    /**
+     * Internal Server Error
+     */
+    500: {
+        [key: string]: string;
+    };
+};
+
+export type PostMetricsStopError = PostMetricsStopErrors[keyof PostMetricsStopErrors];
+
+export type PostMetricsStopResponses = {
+    /**
+     * OK
+     */
+    200: TypesMessageResponse;
+};
+
+export type PostMetricsStopResponse = PostMetricsStopResponses[keyof PostMetricsStopResponses];
 
 export type PostMetricsUndeployData = {
     body?: never;
