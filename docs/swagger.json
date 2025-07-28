@@ -3206,6 +3206,36 @@
                 }
             }
         },
+        "/metrics/defaults": {
+            "get": {
+                "description": "Returns default configuration values including available ports for Prometheus deployment",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Metrics"
+                ],
+                "summary": "Get default values for Prometheus deployment",
+                "operationId": "getDefaults",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.PrometheusDefaultsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/metrics/deploy": {
             "post": {
                 "description": "Deploys a new Prometheus instance with the specified configuration",
@@ -3219,6 +3249,7 @@
                     "Metrics"
                 ],
                 "summary": "Deploy a new Prometheus instance",
+                "operationId": "deployPrometheus",
                 "parameters": [
                     {
                         "description": "Prometheus deployment configuration",
@@ -3258,6 +3289,50 @@
                 }
             }
         },
+        "/metrics/logs": {
+            "get": {
+                "description": "Streams Prometheus logs with optional tail and follow functionality",
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "Metrics"
+                ],
+                "summary": "Tail Prometheus logs",
+                "operationId": "tailMetricsLogs",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "Follow logs in real-time (default: false)",
+                        "name": "follow",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Number of lines to show from the end (default: 100)",
+                        "name": "tail",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Log stream",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/metrics/node/{id}": {
             "get": {
                 "description": "Retrieves metrics for a specific node by ID and optional PromQL query",
@@ -3268,6 +3343,7 @@
                     "Metrics"
                 ],
                 "summary": "Get metrics for a specific node",
+                "operationId": "getNodeMetrics",
                 "parameters": [
                     {
                         "type": "string",
@@ -3325,6 +3401,7 @@
                     "Metrics"
                 ],
                 "summary": "Get label values for a specific label",
+                "operationId": "getLabelValues",
                 "parameters": [
                     {
                         "type": "string",
@@ -3384,6 +3461,7 @@
                     "Metrics"
                 ],
                 "summary": "Execute custom Prometheus query",
+                "operationId": "customQuery",
                 "parameters": [
                     {
                         "type": "string",
@@ -3443,6 +3521,7 @@
                     "Metrics"
                 ],
                 "summary": "Get metrics for a specific node with time range",
+                "operationId": "getNodeMetricsRange",
                 "parameters": [
                     {
                         "type": "string",
@@ -3504,6 +3583,101 @@
                 }
             }
         },
+        "/metrics/port/{port}/check": {
+            "get": {
+                "description": "Checks if a specific port is available for Prometheus deployment",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Metrics"
+                ],
+                "summary": "Check port availability",
+                "operationId": "checkPortAvailability",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Port number to check",
+                        "name": "port",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "boolean"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/metrics/refresh": {
+            "post": {
+                "description": "Refreshes the Prometheus deployment with new configuration parameters",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Metrics"
+                ],
+                "summary": "Refresh Prometheus deployment",
+                "operationId": "refreshPrometheus",
+                "parameters": [
+                    {
+                        "description": "Prometheus refresh configuration",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.RefreshPrometheusRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.MessageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/metrics/reload": {
             "post": {
                 "description": "Triggers a reload of the Prometheus configuration to pick up any changes",
@@ -3514,11 +3688,51 @@
                     "Metrics"
                 ],
                 "summary": "Reload Prometheus configuration",
+                "operationId": "reloadConfiguration",
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/types.MessageResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/metrics/start": {
+            "post": {
+                "description": "Starts the Prometheus instance if it's currently stopped",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Metrics"
+                ],
+                "summary": "Start Prometheus instance",
+                "operationId": "startPrometheus",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.MessageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     },
                     "500": {
@@ -3543,11 +3757,51 @@
                     "Metrics"
                 ],
                 "summary": "Get Prometheus status",
+                "operationId": "getStatus",
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_metrics_common.Status"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/metrics/stop": {
+            "post": {
+                "description": "Stops the Prometheus instance if it's currently running",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Metrics"
+                ],
+                "summary": "Stop Prometheus instance",
+                "operationId": "stopPrometheus",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.MessageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     },
                     "500": {
@@ -3572,6 +3826,7 @@
                     "Metrics"
                 ],
                 "summary": "Undeploy Prometheus instance",
+                "operationId": "undeployPrometheus",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -11544,45 +11799,40 @@
                 }
             }
         },
+        "common.DeploymentMode": {
+            "type": "string",
+            "enum": [
+                "docker",
+                "service"
+            ],
+            "x-enum-varnames": [
+                "DeploymentModeDocker",
+                "DeploymentModeService"
+            ]
+        },
+        "common.NetworkMode": {
+            "type": "string",
+            "enum": [
+                "bridge",
+                "host"
+            ],
+            "x-enum-varnames": [
+                "NetworkModeBridge",
+                "NetworkModeHost"
+            ]
+        },
         "common.QueryResult": {
             "type": "object",
             "properties": {
                 "data": {
-                    "type": "object",
-                    "properties": {
-                        "result": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "metric": {
-                                        "type": "object",
-                                        "additionalProperties": {
-                                            "type": "string"
-                                        }
-                                    },
-                                    "value": {
-                                        "description": "For instant queries",
-                                        "type": "array",
-                                        "items": {}
-                                    },
-                                    "values": {
-                                        "description": "For range queries (matrix)",
-                                        "type": "array",
-                                        "items": {
-                                            "type": "array",
-                                            "items": {}
-                                        }
-                                    }
-                                }
-                            }
-                        },
-                        "resultType": {
-                            "type": "string"
-                        }
-                    }
+                    "description": "Data contains the query results"
+                },
+                "error": {
+                    "description": "Error contains any error message",
+                    "type": "string"
                 },
                 "status": {
+                    "description": "Status is the query status",
                     "type": "string"
                 }
             }
@@ -11737,11 +11987,23 @@
             "properties": {
                 "deployment_mode": {
                     "description": "DeploymentMode is the current deployment mode",
-                    "type": "string"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/common.DeploymentMode"
+                        }
+                    ]
                 },
                 "error": {
-                    "description": "Error is any error that occurred while getting the status",
+                    "description": "Error contains any error message",
                     "type": "string"
+                },
+                "network_mode": {
+                    "description": "NetworkMode is the Docker network mode (only for Docker deployments)",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/common.NetworkMode"
+                        }
+                    ]
                 },
                 "port": {
                     "description": "Port is the port Prometheus is listening on",
@@ -11760,11 +12022,11 @@
                     "type": "string"
                 },
                 "status": {
-                    "description": "Status is the current status of the Prometheus instance (e.g. \"running\", \"stopped\", \"not_deployed\")",
+                    "description": "Status is the current status (running, stopped, etc.)",
                     "type": "string"
                 },
                 "version": {
-                    "description": "Version is the version of Prometheus being used",
+                    "description": "Version is the Prometheus version",
                     "type": "string"
                 }
             }
@@ -15744,6 +16006,12 @@
                 "scrape_interval"
             ],
             "properties": {
+                "deployment_mode": {
+                    "$ref": "#/definitions/common.DeploymentMode"
+                },
+                "docker_config": {
+                    "$ref": "#/definitions/types.DockerDeployConfig"
+                },
                 "prometheus_port": {
                     "type": "integer"
                 },
@@ -15790,6 +16058,14 @@
             "properties": {
                 "contents": {
                     "type": "string"
+                }
+            }
+        },
+        "types.DockerDeployConfig": {
+            "type": "object",
+            "properties": {
+                "network_mode": {
+                    "$ref": "#/definitions/common.NetworkMode"
                 }
             }
         },
@@ -16104,6 +16380,52 @@
                 },
                 "x-source": {
                     "$ref": "#/definitions/types.XSourceType"
+                }
+            }
+        },
+        "types.PrometheusDefaultsResponse": {
+            "type": "object",
+            "properties": {
+                "available_ports": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "deployment_mode": {
+                    "$ref": "#/definitions/common.DeploymentMode"
+                },
+                "docker_config": {
+                    "$ref": "#/definitions/types.DockerDeployConfig"
+                },
+                "prometheus_port": {
+                    "type": "integer"
+                },
+                "prometheus_version": {
+                    "type": "string"
+                },
+                "scrape_interval": {
+                    "type": "integer"
+                }
+            }
+        },
+        "types.RefreshPrometheusRequest": {
+            "type": "object",
+            "properties": {
+                "deployment_mode": {
+                    "$ref": "#/definitions/common.DeploymentMode"
+                },
+                "docker_config": {
+                    "$ref": "#/definitions/types.DockerDeployConfig"
+                },
+                "prometheus_port": {
+                    "type": "integer"
+                },
+                "prometheus_version": {
+                    "type": "string"
+                },
+                "scrape_interval": {
+                    "type": "integer"
                 }
             }
         },

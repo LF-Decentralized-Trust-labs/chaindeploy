@@ -1034,42 +1034,7 @@ WHERE session_id = ?;
 SELECT * FROM sessions
 WHERE token = ?;
 
--- name: GetPrometheusConfig :one
-SELECT * FROM prometheus_config WHERE id = 1;
 
--- name: UpdatePrometheusConfig :one
-UPDATE prometheus_config
-SET prometheus_port = ?,
-    data_dir = ?,
-    config_dir = ?,
-    container_name = ?,
-    scrape_interval = ?,
-    evaluation_interval = ?,
-    deployment_mode = ?,
-    docker_image = ?,
-    docker_network = ?,
-    docker_restart_policy = ?,
-    docker_extra_args = ?,
-    updated_at = CURRENT_TIMESTAMP
-WHERE id = 1
-RETURNING *;
-
--- name: ResetPrometheusConfig :one
-UPDATE prometheus_config
-SET prometheus_port = 9090,
-    data_dir = '/var/lib/prometheus',
-    config_dir = '/etc/prometheus',
-    container_name = 'chainlaunch-prometheus',
-    scrape_interval = 15,
-    evaluation_interval = 15,
-    deployment_mode = 'docker',
-    docker_image = 'prom/prometheus:latest',
-    docker_network = 'chainlaunch-network',
-    docker_restart_policy = 'unless-stopped',
-    docker_extra_args = '--web.enable-lifecycle --web.enable-admin-api',
-    updated_at = CURRENT_TIMESTAMP
-WHERE id = 1
-RETURNING *;
 
 -- name: CreateAuditLog :one
 INSERT INTO audit_logs (
@@ -1195,3 +1160,87 @@ WHERE name = ? AND network_id = ?;
 
 -- name: CountFabricOrganizations :one
 SELECT COUNT(*) FROM fabric_organizations;
+
+
+-- name: GetPrometheusConfig :one
+SELECT 
+    id,
+    prometheus_version,
+    prometheus_port,
+    scrape_interval,
+    docker_image,
+    deployment_mode,
+    network_mode,
+    extra_hosts,
+    restart_policy,
+    container_name,
+    service_name,
+    service_user,
+    service_group,
+    data_dir,
+    config_dir,
+    binary_path,
+    created_at,
+    updated_at
+FROM prometheus_config LIMIT 1;
+
+-- name: CreatePrometheusConfig :one
+INSERT INTO prometheus_config (
+    prometheus_port,
+    data_dir,
+    config_dir,
+    container_name,
+    scrape_interval,
+    evaluation_interval,
+    deployment_mode,
+    docker_image,
+    network_mode,
+    extra_hosts,
+    restart_policy,
+    service_name,
+    service_user,
+    service_group,
+    binary_path,
+    prometheus_version
+) VALUES (
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+)
+RETURNING *;
+
+-- name: UpdatePrometheusConfig :one
+UPDATE prometheus_config
+SET prometheus_port = ?,
+    data_dir = ?,
+    config_dir = ?,
+    container_name = ?,
+    scrape_interval = ?,
+    deployment_mode = ?,
+    docker_image = ?,
+    network_mode = ?,
+    extra_hosts = ?,
+    restart_policy = ?,
+    service_name = ?,
+    service_user = ?,
+    service_group = ?,
+    binary_path = ?,
+    updated_at = CURRENT_TIMESTAMP
+RETURNING *;
+
+-- name: ResetPrometheusConfig :one
+UPDATE prometheus_config
+SET prometheus_port = 9090,
+    data_dir = '/var/lib/prometheus',
+    config_dir = '/etc/prometheus',
+    container_name = 'chainlaunch-prometheus',
+    scrape_interval = 15,
+    deployment_mode = 'docker',
+    docker_image = 'prom/prometheus:latest',
+    network_mode = 'bridge',
+    extra_hosts = 'host.docker.internal:host-gateway',
+    restart_policy = 'unless-stopped',
+    service_name = 'chainlaunch-prometheus',
+    service_user = 'prometheus',
+    service_group = 'prometheus',
+    binary_path = '/usr/local/bin/prometheus',
+    updated_at = CURRENT_TIMESTAMP
+RETURNING *;

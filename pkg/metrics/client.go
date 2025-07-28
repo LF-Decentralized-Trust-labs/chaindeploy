@@ -133,9 +133,17 @@ func (c *Client) GetNodeMetrics(ctx context.Context, nodeName string) (map[strin
 	if err != nil {
 		return nil, fmt.Errorf("failed to query CPU usage: %w", err)
 	}
-	if len(cpuResult.Data.Result) > 0 {
-		if value, ok := cpuResult.Data.Result[0].Value[1].(float64); ok {
-			metrics["cpu_usage"] = value
+
+	// Handle interface{} Data field
+	if data, ok := cpuResult.Data.(map[string]interface{}); ok {
+		if result, ok := data["result"].([]interface{}); ok && len(result) > 0 {
+			if resultItem, ok := result[0].(map[string]interface{}); ok {
+				if value, ok := resultItem["value"].([]interface{}); ok && len(value) > 1 {
+					if floatVal, ok := value[1].(float64); ok {
+						metrics["cpu_usage"] = floatVal
+					}
+				}
+			}
 		}
 	}
 
@@ -144,9 +152,17 @@ func (c *Client) GetNodeMetrics(ctx context.Context, nodeName string) (map[strin
 	if err != nil {
 		return nil, fmt.Errorf("failed to query memory usage: %w", err)
 	}
-	if len(memResult.Data.Result) > 0 {
-		if value, ok := memResult.Data.Result[0].Value[1].(float64); ok {
-			metrics["memory_usage"] = value
+
+	// Handle interface{} Data field
+	if data, ok := memResult.Data.(map[string]interface{}); ok {
+		if result, ok := data["result"].([]interface{}); ok && len(result) > 0 {
+			if resultItem, ok := result[0].(map[string]interface{}); ok {
+				if value, ok := resultItem["value"].([]interface{}); ok && len(value) > 1 {
+					if floatVal, ok := value[1].(float64); ok {
+						metrics["memory_usage"] = floatVal
+					}
+				}
+			}
 		}
 	}
 
@@ -155,9 +171,17 @@ func (c *Client) GetNodeMetrics(ctx context.Context, nodeName string) (map[strin
 	if err != nil {
 		return nil, fmt.Errorf("failed to query disk usage: %w", err)
 	}
-	if len(diskResult.Data.Result) > 0 {
-		if value, ok := diskResult.Data.Result[0].Value[1].(float64); ok {
-			metrics["disk_usage"] = value
+
+	// Handle interface{} Data field
+	if data, ok := diskResult.Data.(map[string]interface{}); ok {
+		if result, ok := data["result"].([]interface{}); ok && len(result) > 0 {
+			if resultItem, ok := result[0].(map[string]interface{}); ok {
+				if value, ok := resultItem["value"].([]interface{}); ok && len(value) > 1 {
+					if floatVal, ok := value[1].(float64); ok {
+						metrics["disk_usage"] = floatVal
+					}
+				}
+			}
 		}
 	}
 

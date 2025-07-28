@@ -907,33 +907,31 @@ definitions:
           required: true
         type: string
     type: object
+  common.DeploymentMode:
+    enum:
+    - docker
+    - service
+    type: string
+    x-enum-varnames:
+    - DeploymentModeDocker
+    - DeploymentModeService
+  common.NetworkMode:
+    enum:
+    - bridge
+    - host
+    type: string
+    x-enum-varnames:
+    - NetworkModeBridge
+    - NetworkModeHost
   common.QueryResult:
     properties:
       data:
-        properties:
-          result:
-            items:
-              properties:
-                metric:
-                  additionalProperties:
-                    type: string
-                  type: object
-                value:
-                  description: For instant queries
-                  items: {}
-                  type: array
-                values:
-                  description: For range queries (matrix)
-                  items:
-                    items: {}
-                    type: array
-                  type: array
-              type: object
-            type: array
-          resultType:
-            type: string
-        type: object
+        description: Data contains the query results
+      error:
+        description: Error contains any error message
+        type: string
       status:
+        description: Status is the query status
         type: string
     type: object
   dirs.CreateDirRequest:
@@ -1037,11 +1035,16 @@ definitions:
   github_com_chainlaunch_chainlaunch_pkg_metrics_common.Status:
     properties:
       deployment_mode:
+        allOf:
+        - $ref: '#/definitions/common.DeploymentMode'
         description: DeploymentMode is the current deployment mode
-        type: string
       error:
-        description: Error is any error that occurred while getting the status
+        description: Error contains any error message
         type: string
+      network_mode:
+        allOf:
+        - $ref: '#/definitions/common.NetworkMode'
+        description: NetworkMode is the Docker network mode (only for Docker deployments)
       port:
         description: Port is the port Prometheus is listening on
         type: integer
@@ -1053,11 +1056,10 @@ definitions:
         description: StartedAt is when the instance was started
         type: string
       status:
-        description: Status is the current status of the Prometheus instance (e.g.
-          "running", "stopped", "not_deployed")
+        description: Status is the current status (running, stopped, etc.)
         type: string
       version:
-        description: Version is the version of Prometheus being used
+        description: Version is the Prometheus version
         type: string
     type: object
   github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse:
@@ -3858,6 +3860,10 @@ definitions:
     type: object
   types.DeployPrometheusRequest:
     properties:
+      deployment_mode:
+        $ref: '#/definitions/common.DeploymentMode'
+      docker_config:
+        $ref: '#/definitions/types.DockerDeployConfig'
       prometheus_port:
         type: integer
       prometheus_version:
@@ -3893,6 +3899,11 @@ definitions:
     properties:
       contents:
         type: string
+    type: object
+  types.DockerDeployConfig:
+    properties:
+      network_mode:
+        $ref: '#/definitions/common.NetworkMode'
     type: object
   types.Documentation:
     properties:
@@ -4118,6 +4129,36 @@ definitions:
         type: string
       x-source:
         $ref: '#/definitions/types.XSourceType'
+    type: object
+  types.PrometheusDefaultsResponse:
+    properties:
+      available_ports:
+        items:
+          type: integer
+        type: array
+      deployment_mode:
+        $ref: '#/definitions/common.DeploymentMode'
+      docker_config:
+        $ref: '#/definitions/types.DockerDeployConfig'
+      prometheus_port:
+        type: integer
+      prometheus_version:
+        type: string
+      scrape_interval:
+        type: integer
+    type: object
+  types.RefreshPrometheusRequest:
+    properties:
+      deployment_mode:
+        $ref: '#/definitions/common.DeploymentMode'
+      docker_config:
+        $ref: '#/definitions/types.DockerDeployConfig'
+      prometheus_port:
+        type: integer
+      prometheus_version:
+        type: string
+      scrape_interval:
+        type: integer
     type: object
   types.Service:
     properties:
@@ -6379,11 +6420,33 @@ paths:
       summary: Filter keys by algorithm and curve
       tags:
       - Keys
+  /metrics/defaults:
+    get:
+      description: Returns default configuration values including available ports
+        for Prometheus deployment
+      operationId: getDefaults
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.PrometheusDefaultsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get default values for Prometheus deployment
+      tags:
+      - Metrics
   /metrics/deploy:
     post:
       consumes:
       - application/json
       description: Deploys a new Prometheus instance with the specified configuration
+      operationId: deployPrometheus
       parameters:
       - description: Prometheus deployment configuration
         in: body
@@ -6413,10 +6476,40 @@ paths:
       summary: Deploy a new Prometheus instance
       tags:
       - Metrics
+  /metrics/logs:
+    get:
+      description: Streams Prometheus logs with optional tail and follow functionality
+      operationId: tailMetricsLogs
+      parameters:
+      - description: 'Follow logs in real-time (default: false)'
+        in: query
+        name: follow
+        type: boolean
+      - description: 'Number of lines to show from the end (default: 100)'
+        in: query
+        name: tail
+        type: integer
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: Log stream
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Tail Prometheus logs
+      tags:
+      - Metrics
   /metrics/node/{id}:
     get:
       description: Retrieves metrics for a specific node by ID and optional PromQL
         query
+      operationId: getNodeMetrics
       parameters:
       - description: Node ID
         in: path
@@ -6456,6 +6549,7 @@ paths:
       - application/json
       description: Retrieves all values for a specific label, optionally filtered
         by metric matches and node ID
+      operationId: getLabelValues
       parameters:
       - description: Node ID
         in: path
@@ -6496,6 +6590,7 @@ paths:
       consumes:
       - application/json
       description: Execute a custom Prometheus query with optional time range
+      operationId: customQuery
       parameters:
       - description: Node ID
         in: path
@@ -6535,6 +6630,7 @@ paths:
       consumes:
       - application/json
       description: Retrieves metrics for a specific node within a specified time range
+      operationId: getNodeMetricsRange
       parameters:
       - description: Node ID
         in: path
@@ -6581,10 +6677,74 @@ paths:
       summary: Get metrics for a specific node with time range
       tags:
       - Metrics
+  /metrics/port/{port}/check:
+    get:
+      description: Checks if a specific port is available for Prometheus deployment
+      operationId: checkPortAvailability
+      parameters:
+      - description: Port number to check
+        in: path
+        name: port
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Check port availability
+      tags:
+      - Metrics
+  /metrics/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Refreshes the Prometheus deployment with new configuration parameters
+      operationId: refreshPrometheus
+      parameters:
+      - description: Prometheus refresh configuration
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.RefreshPrometheusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Refresh Prometheus deployment
+      tags:
+      - Metrics
   /metrics/reload:
     post:
       description: Triggers a reload of the Prometheus configuration to pick up any
         changes
+      operationId: reloadConfiguration
       produces:
       - application/json
       responses:
@@ -6601,10 +6761,37 @@ paths:
       summary: Reload Prometheus configuration
       tags:
       - Metrics
+  /metrics/start:
+    post:
+      description: Starts the Prometheus instance if it's currently stopped
+      operationId: startPrometheus
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Start Prometheus instance
+      tags:
+      - Metrics
   /metrics/status:
     get:
       description: Returns the current status of the Prometheus instance including
         version, port, and configuration
+      operationId: getStatus
       produces:
       - application/json
       responses:
@@ -6621,9 +6808,36 @@ paths:
       summary: Get Prometheus status
       tags:
       - Metrics
+  /metrics/stop:
+    post:
+      description: Stops the Prometheus instance if it's currently running
+      operationId: stopPrometheus
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Stop Prometheus instance
+      tags:
+      - Metrics
   /metrics/undeploy:
     post:
       description: Stops and removes the Prometheus instance
+      operationId: undeployPrometheus
       produces:
       - application/json
       responses:
