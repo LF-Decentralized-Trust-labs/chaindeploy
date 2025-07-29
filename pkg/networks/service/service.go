@@ -235,7 +235,13 @@ func (s *NetworkService) CreateNetwork(ctx context.Context, name, description st
 
 // ListNetworks retrieves a list of networks with pagination
 func (s *NetworkService) ListNetworks(ctx context.Context, params ListNetworksParams) (*ListNetworksResult, error) {
-	networks, err := s.db.ListNetworks(ctx)
+	var networks []*db.Network
+	var err error
+	if params.Platform != "" {
+		networks, err = s.db.ListNetworksByPlatform(ctx, string(params.Platform))
+	} else {
+		networks, err = s.db.ListNetworks(ctx)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to list networks: %w", err)
 	}

@@ -65,7 +65,7 @@ export default function CreateBesuNodePage() {
 	const { data: besuDefaultConfig } = useQuery(getNodesDefaultsBesuNodeOptions())
 	useEffect(() => {
 		if (besuDefaultConfig) {
-			const { p2pHost, p2pPort, rpcHost, rpcPort, externalIp, internalIp } = besuDefaultConfig[0].defaults![0]
+			const { p2pHost, p2pPort, rpcHost, rpcPort, externalIp, internalIp } = besuDefaultConfig.defaults![0]
 			form.setValue('p2pHost', p2pHost!)
 			form.setValue('p2pPort', Number(p2pPort))
 			form.setValue('rpcHost', rpcHost!)
