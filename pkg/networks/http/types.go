@@ -17,20 +17,35 @@ type ListNetworksResponse struct {
 
 // Update NetworkResponse to include genesis block
 type NetworkResponse struct {
-	ID                 int64           `json:"id"`
-	Name               string          `json:"name"`
-	Platform           string          `json:"platform"`
-	Status             string          `json:"status"`
-	Description        string          `json:"description,omitempty"`
-	Config             json.RawMessage `json:"config,omitempty"`
-	DeploymentConfig   json.RawMessage `json:"deploymentConfig,omitempty"`
-	ExposedPorts       json.RawMessage `json:"exposedPorts,omitempty"`
-	GenesisBlock       string          `json:"genesisBlock,omitempty"`
-	CurrentConfigBlock string          `json:"currentConfigBlock,omitempty"`
-	Domain             string          `json:"domain,omitempty"`
-	CreatedAt          string          `json:"createdAt"`
-	CreatedBy          *int64          `json:"createdBy,omitempty"`
-	UpdatedAt          *string         `json:"updatedAt,omitempty"`
+	ID                  int64           `json:"id"`
+	Name                string          `json:"name"`
+	Platform            string          `json:"platform"`
+	Status              string          `json:"status"`
+	Description         string          `json:"description,omitempty"`
+	Config              json.RawMessage `json:"config,omitempty"`
+	DeploymentConfig    json.RawMessage `json:"deploymentConfig,omitempty"`
+	ExposedPorts        json.RawMessage `json:"exposedPorts,omitempty"`
+	GenesisBlock        string          `json:"genesisBlock,omitempty"`
+	CurrentConfigBlock  string          `json:"currentConfigBlock,omitempty"`
+	Domain              string          `json:"domain,omitempty"`
+	CreatedAt           string          `json:"createdAt"`
+	CreatedBy           *int64          `json:"createdBy,omitempty"`
+	UpdatedAt           *string         `json:"updatedAt,omitempty"`
+	GenesisChangedAt    *string         `json:"genesisChangedAt,omitempty"`
+	GenesisChangedBy    *int64          `json:"genesisChangedBy,omitempty"`
+	GenesisChangeReason *string         `json:"genesisChangeReason,omitempty"`
+}
+
+// UpdateGenesisBlockRequest represents the request to update a genesis block
+type UpdateGenesisBlockRequest struct {
+	GenesisBlock string `json:"genesisBlock" validate:"required"`
+	Reason       string `json:"reason" validate:"required"`
+}
+
+// UpdateGenesisBlockResponse represents the response from updating a genesis block
+type UpdateGenesisBlockResponse struct {
+	NetworkID int64  `json:"networkId"`
+	Message   string `json:"message"`
 }
 
 // CreateFabricNetworkRequest represents the request to create a new Fabric network

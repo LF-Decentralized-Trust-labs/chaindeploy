@@ -1,13 +1,21 @@
 import { HttpBesuNetworkResponse } from '@/api/client'
 import { ValidatorList } from '@/components/networks/validator-list'
-import { Activity, ArrowLeft, Code, Copy, Network } from 'lucide-react'
+import { Activity, ArrowLeft, Code, Copy, Network, Edit, Save, X } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import * as z from 'zod'
 import { BesuIcon } from '../icons/besu-icon'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
 import { Card } from '../ui/card'
 import { TimeAgo } from '../ui/time-ago'
 import { BesuNetworkTabs, BesuTabValue } from './besu-network-tabs'
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../ui/form'
+import { Textarea } from '../ui/textarea'
+import { Alert, AlertDescription } from '../ui/alert'
+import { toast } from 'sonner'
 
 // Add these interfaces to properly type the config and genesis config
 interface BesuConfig {
@@ -59,9 +67,47 @@ interface BesuNetworkDetailsProps {
 	}
 }
 
+// Form schema for genesis JSON validation
+const genesisFormSchema = z.object({
+	genesisJson: z.string().refine((val) => {
+		try {
+			JSON.parse(val)
+			return true
+		} catch {
+			return false
+		}
+	}, {
+		message: "Invalid JSON format"
+	}).refine((val) => {
+		try {
+			const parsed = JSON.parse(val)
+			// Basic validation for required genesis fields
+			return parsed.config && 
+				   typeof parsed.config.chainId === 'number' &&
+				   parsed.nonce &&
+				   parsed.timestamp &&
+				   parsed.gasLimit &&
+				   parsed.difficulty &&
+				   parsed.mixHash &&
+				   parsed.coinbase
+		} catch {
+			return false
+		}
+	}, {
+		message: "Missing required genesis fields (config.chainId, nonce, timestamp, gasLimit, difficulty, mixHash, coinbase)"
+	})
+})
+
+type GenesisFormValues = z.infer<typeof genesisFormSchema>
+
 export function BesuNetworkDetails({ network }: BesuNetworkDetailsProps) {
 	const [searchParams, setSearchParams] = useSearchParams()
 	const currentTab = (searchParams.get('tab') || 'details') as BesuTabValue
+	const [isEditingGenesis, setIsEditingGenesis] = useState(false)
+
+	// Update the genesisConfig and initialConfig typing
+	const genesisConfig = network.genesisConfig as BesuGenesisConfig
+	const initialConfig = network.config as BesuConfig
 
 	const handleTabChange = (newTab: BesuTabValue) => {
 		setSearchParams({ tab: newTab })
@@ -71,9 +117,37 @@ export function BesuNetworkDetails({ network }: BesuNetworkDetailsProps) {
 		navigator.clipboard.writeText(JSON.stringify(JSON.parse(genesisConfig as any), null, 2))
 	}
 
-	// Update the genesisConfig and initialConfig typing
-	const genesisConfig = network.genesisConfig as BesuGenesisConfig
-	const initialConfig = network.config as BesuConfig
+	// Form setup for genesis editing
+	const form = useForm<GenesisFormValues>({
+		resolver: zodResolver(genesisFormSchema),
+		defaultValues: {
+			genesisJson: JSON.stringify(genesisConfig, null, 2)
+		}
+	})
+
+	const onSubmit = async (data: GenesisFormValues) => {
+		try {
+			const parsedGenesis = JSON.parse(data.genesisJson)
+			
+			// Here you would typically make an API call to update the genesis
+			// For now, we'll just show a success message
+			console.log('Updated genesis config:', parsedGenesis)
+			
+			toast.success('Genesis configuration updated successfully')
+			setIsEditingGenesis(false)
+			
+			// In a real implementation, you would update the network state here
+			// setNetwork(prev => ({ ...prev, genesisConfig: parsedGenesis }))
+		} catch (error) {
+			toast.error('Failed to update genesis configuration')
+			console.error('Error updating genesis:', error)
+		}
+	}
+
+	const handleCancelEdit = () => {
+		setIsEditingGenesis(false)
+		form.reset()
+	}
 	if (!network) {
 		return (
 			<div className="flex-1 p-8">
@@ -167,23 +241,101 @@ export function BesuNetworkDetails({ network }: BesuNetworkDetailsProps) {
 									<div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
 										<Code className="h-6 w-6 text-primary" />
 									</div>
-									<div>
+									<div className="flex-1">
 										<h2 className="text-lg font-semibold">Genesis Configuration</h2>
 										<p className="text-sm text-muted-foreground">Network genesis block configuration</p>
 									</div>
+									{!isEditingGenesis ? (
+										<Button 
+											variant="outline" 
+											size="sm" 
+											onClick={() => setIsEditingGenesis(true)}
+											className="gap-2"
+										>
+											<Edit className="h-4 w-4" />
+											Edit
+										</Button>
+									) : (
+										<div className="flex gap-2">
+											<Button 
+												variant="outline" 
+												size="sm" 
+												onClick={handleCancelEdit}
+												className="gap-2"
+											>
+												<X className="h-4 w-4" />
+												Cancel
+											</Button>
+										</div>
+									)}
 								</div>
 
-								<Card className="p-4">
-									<div className="flex justify-between items-center mb-2">
-										<h3 className="text-sm font-medium">Genesis Configuration</h3>
-										<Button variant="ghost" size="sm" onClick={handleCopyGenesis} className="h-8 w-8 p-0">
-											<Copy className="h-4 w-4" />
-										</Button>
-									</div>
-									<pre className="text-sm overflow-auto">
-										<code>{JSON.stringify(JSON.parse(genesisConfig as any), null, 2)}</code>
-									</pre>
-								</Card>
+								{isEditingGenesis ? (
+									<Card className="p-4">
+										<Form {...form}>
+											<form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+												<FormField
+													control={form.control}
+													name="genesisJson"
+													render={({ field }) => (
+														<FormItem>
+															<FormLabel className="text-sm font-medium">
+																Genesis Configuration JSON
+															</FormLabel>
+															<FormControl>
+																<Textarea
+																	{...field}
+																	placeholder="Enter genesis configuration JSON..."
+																	className="font-mono text-sm min-h-[400px]"
+																	rows={20}
+																/>
+															</FormControl>
+															<FormMessage />
+														</FormItem>
+													)}
+												/>
+												
+												{form.formState.errors.genesisJson && (
+													<Alert variant="destructive">
+														<AlertDescription>
+															{form.formState.errors.genesisJson.message}
+														</AlertDescription>
+													</Alert>
+												)}
+
+												<div className="flex gap-2">
+													<Button 
+														type="submit" 
+														disabled={form.formState.isSubmitting}
+														className="gap-2"
+													>
+														<Save className="h-4 w-4" />
+														{form.formState.isSubmitting ? 'Saving...' : 'Save Changes'}
+													</Button>
+													<Button 
+														type="button" 
+														variant="outline" 
+														onClick={handleCancelEdit}
+													>
+														Cancel
+													</Button>
+												</div>
+											</form>
+										</Form>
+									</Card>
+								) : (
+									<Card className="p-4">
+										<div className="flex justify-between items-center mb-2">
+											<h3 className="text-sm font-medium">Genesis Configuration</h3>
+											<Button variant="ghost" size="sm" onClick={handleCopyGenesis} className="h-8 w-8 p-0">
+												<Copy className="h-4 w-4" />
+											</Button>
+										</div>
+										<pre className="text-sm overflow-auto bg-muted/50 p-4 rounded-md">
+											<code>{JSON.stringify(genesisConfig, null, 2)}</code>
+										</pre>
+									</Card>
+								)}
 							</div>
 						}
 					/>

@@ -5487,6 +5487,66 @@
                 }
             }
         },
+        "/networks/{id}/genesis": {
+            "put": {
+                "description": "Update the genesis block for a network with change tracking",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Fabric Networks",
+                    "Besu Networks"
+                ],
+                "summary": "Update genesis block for a network",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Network ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Genesis block update request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http.UpdateGenesisBlockRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/http.UpdateGenesisBlockResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/nodes": {
             "get": {
                 "description": "Get a paginated list of nodes with optional platform filter",
@@ -13496,6 +13556,15 @@
                 "genesisBlock": {
                     "type": "string"
                 },
+                "genesisChangeReason": {
+                    "type": "string"
+                },
+                "genesisChangedAt": {
+                    "type": "string"
+                },
+                "genesisChangedBy": {
+                    "type": "integer"
+                },
                 "id": {
                     "type": "integer"
                 },
@@ -14288,6 +14357,32 @@
                 },
                 "version": {
                     "type": "string"
+                }
+            }
+        },
+        "http.UpdateGenesisBlockRequest": {
+            "type": "object",
+            "required": [
+                "genesisBlock",
+                "reason"
+            ],
+            "properties": {
+                "genesisBlock": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                }
+            }
+        },
+        "http.UpdateGenesisBlockResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "networkId": {
+                    "type": "integer"
                 }
             }
         },

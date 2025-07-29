@@ -101,14 +101,6 @@ func (d *BesuDeployer) CreateGenesisBlock(networkID int64, config interface{}) (
 	// Create initial allocation
 	alloc := make(map[string]map[string]string)
 
-	// Add validator balances
-	for _, validator := range validators {
-		addressWithoutPrefix := strings.TrimPrefix(validator.Address, "0x")
-		alloc[addressWithoutPrefix] = map[string]string{
-			"balance": "0x200000000000000000000000000000000000000000000000000000000000000",
-		}
-	}
-
 	// Add custom allocations from config if any
 	if besuConfig.Alloc != nil {
 		for address, balance := range besuConfig.Alloc {

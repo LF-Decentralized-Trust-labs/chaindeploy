@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Network } from 'lucide-react'
+import { useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 export default function NetworkDetailPage() {
@@ -14,7 +15,8 @@ export default function NetworkDetailPage() {
 			path: { id: Number(id) },
 		}),
 	})
-
+	console.log("genesisBLock", network?.genesisConfig)
+	const genesisConfig = useMemo(() => (network?.genesisConfig ? JSON.parse(network?.genesisConfig as any) : null), [network])
 	if (isLoading) {
 		return (
 			<div className="flex-1 p-8">
@@ -60,5 +62,14 @@ export default function NetworkDetailPage() {
 		)
 	}
 
-	return <BesuNetworkDetails network={network as any} />
+	return (
+		<BesuNetworkDetails
+			network={{
+				...network,
+				genesisConfig,
+				config: network.config as any,
+				platform: 'besu',
+			}}
+		/>
+	)
 }

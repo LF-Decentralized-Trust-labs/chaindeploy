@@ -2150,6 +2150,12 @@ definitions:
         type: array
       genesisBlock:
         type: string
+      genesisChangeReason:
+        type: string
+      genesisChangedAt:
+        type: string
+      genesisChangedBy:
+        type: integer
       id:
         type: integer
       name:
@@ -2685,6 +2691,23 @@ definitions:
         type: string
       version:
         type: string
+    type: object
+  http.UpdateGenesisBlockRequest:
+    properties:
+      genesisBlock:
+        type: string
+      reason:
+        type: string
+    required:
+    - genesisBlock
+    - reason
+    type: object
+  http.UpdateGenesisBlockResponse:
+    properties:
+      message:
+        type: string
+      networkId:
+        type: integer
     type: object
   http.UpdateNodeRequest:
     properties:
@@ -6854,6 +6877,46 @@ paths:
       summary: Undeploy Prometheus instance
       tags:
       - Metrics
+  /networks/{id}/genesis:
+    put:
+      consumes:
+      - application/json
+      description: Update the genesis block for a network with change tracking
+      parameters:
+      - description: Network ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Genesis block update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/http.UpdateGenesisBlockRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.UpdateGenesisBlockResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+      summary: Update genesis block for a network
+      tags:
+      - Fabric Networks
+      - Besu Networks
   /networks/besu:
     get:
       description: Get a paginated list of Besu networks

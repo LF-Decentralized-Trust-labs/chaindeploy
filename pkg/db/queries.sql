@@ -275,6 +275,16 @@ SET genesis_block_b64 = ?,
 WHERE id = ?
 RETURNING *;
 
+-- name: UpdateNetworkGenesisBlockWithTracking :one
+UPDATE networks
+SET genesis_block_b64 = ?,
+    genesis_changed_at = CURRENT_TIMESTAMP,
+    genesis_changed_by = ?,
+    genesis_change_reason = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING *;
+
 
 -- name: UpdateNodeConfig :one
 UPDATE nodes

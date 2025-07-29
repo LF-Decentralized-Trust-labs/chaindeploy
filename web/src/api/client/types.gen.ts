@@ -1406,6 +1406,9 @@ export type HttpNetworkResponse = {
     domain?: string;
     exposedPorts?: Array<number>;
     genesisBlock?: string;
+    genesisChangeReason?: string;
+    genesisChangedAt?: string;
+    genesisChangedBy?: number;
     id?: number;
     name?: string;
     platform?: string;
@@ -1672,6 +1675,16 @@ export type HttpUpdateFabricPeerRequest = {
     mode?: string;
     operationsListenAddress?: string;
     version?: string;
+};
+
+export type HttpUpdateGenesisBlockRequest = {
+    genesisBlock: string;
+    reason: string;
+};
+
+export type HttpUpdateGenesisBlockResponse = {
+    message?: string;
+    networkId?: number;
 };
 
 export type HttpUpdateNodeRequest = {
@@ -6709,6 +6722,47 @@ export type PostNetworksFabricByIdUpdateConfigResponses = {
 };
 
 export type PostNetworksFabricByIdUpdateConfigResponse = PostNetworksFabricByIdUpdateConfigResponses[keyof PostNetworksFabricByIdUpdateConfigResponses];
+
+export type PutNetworksByIdGenesisData = {
+    /**
+     * Genesis block update request
+     */
+    body: HttpUpdateGenesisBlockRequest;
+    path: {
+        /**
+         * Network ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/networks/{id}/genesis';
+};
+
+export type PutNetworksByIdGenesisErrors = {
+    /**
+     * Bad Request
+     */
+    400: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Not Found
+     */
+    404: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+};
+
+export type PutNetworksByIdGenesisError = PutNetworksByIdGenesisErrors[keyof PutNetworksByIdGenesisErrors];
+
+export type PutNetworksByIdGenesisResponses = {
+    /**
+     * OK
+     */
+    200: HttpUpdateGenesisBlockResponse;
+};
+
+export type PutNetworksByIdGenesisResponse = PutNetworksByIdGenesisResponses[keyof PutNetworksByIdGenesisResponses];
 
 export type GetNodesData = {
     body?: never;

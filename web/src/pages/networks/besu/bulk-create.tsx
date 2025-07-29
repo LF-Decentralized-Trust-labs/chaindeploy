@@ -1,5 +1,5 @@
 import { getNodesDefaultsBesuNode, postKeys } from '@/api/client'
-import { getKeyProvidersOptions, getNodesDefaultsBesuNodeOptions, postNetworksBesuMutation, postNodesMutation } from '@/api/client/@tanstack/react-query.gen'
+import { getKeyProvidersOptions, getNodesDefaultsBesuNodeOptions, postNetworksBesuMutation, postNodesMutation, getKeysOptions } from '@/api/client/@tanstack/react-query.gen'
 import { BesuNodeForm, BesuNodeFormValues } from '@/components/nodes/besu-node-form'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -9,9 +9,27 @@ import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Steps } from '@/components/ui/steps'
 import { hexToNumber, isValidHex, numberToHex } from '@/utils'
+
+// Helper function to convert ETH to WEI
+const ethToWei = (eth: number): string => {
+	return (eth * 10 ** 18).toString()
+}
+
+// Helper function to convert WEI to ETH
+const weiToEth = (wei: string): number => {
+	const eth = Number(wei) / 10 ** 18
+	// Handle floating-point precision issues for very small numbers
+	return Math.abs(eth) < 1e-10 ? 0 : eth
+}
+
+// Helper function to convert ETH to HEX (via WEI)
+const ethToHex = (eth: number): string => {
+	const wei = ethToWei(eth)
+	return numberToHex(Number(wei))
+}
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ArrowLeft, ArrowRight, CheckCircle2, Server } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CheckCircle2, Server, Copy } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router-dom'
@@ -110,6 +128,34 @@ export default function BulkCreateBesuNetworkPage() {
 		...getKeyProvidersOptions({}),
 	})
 
+	const { data: availableKeys } = useQuery({
+		...getKeysOptions(),
+	})
+
+	const [showKeySelector, setShowKeySelector] = useState<number | null>(null)
+	const [creatingKey, setCreatingKey] = useState<number | null>(null)
+
+	// Function to ensure validator keys are in allocations
+	const ensureValidatorAllocations = () => {
+		if (validatorKeys.length > 0) {
+			const currentAlloc = networkForm.getValues('alloc')
+			const validatorAddresses = validatorKeys.map(key => key.ethereumAddress)
+			const existingValidatorAddresses = currentAlloc.map(alloc => alloc.account)
+			
+			// Find validator keys that aren't in allocations yet
+			const newValidatorAllocations = validatorKeys
+				.filter(key => !existingValidatorAddresses.includes(key.ethereumAddress))
+				.map(key => ({
+					account: key.ethereumAddress,
+					balance: ethToHex(1000000), // 1 million ETH
+				}))
+			
+			if (newValidatorAllocations.length > 0) {
+				networkForm.setValue('alloc', [...currentAlloc, ...newValidatorAllocations])
+			}
+		}
+	}
+
 	const nodesForm = useForm<NodesStepValues>({
 		resolver: zodResolver(nodesStepSchema),
 		defaultValues: (() => {
@@ -140,6 +186,8 @@ export default function BulkCreateBesuNetworkPage() {
 	})
 
 	const createNode = useMutation(postNodesMutation())
+
+
 
 	// Save form data to localStorage whenever it changes
 	useEffect(() => {
@@ -182,8 +230,32 @@ export default function BulkCreateBesuNetworkPage() {
 				'selectedValidatorKeys',
 				validatorKeys.map((key) => key.id)
 			)
+			
+			// Add validator keys to initial allocations if they're not already there
+			const currentAlloc = networkForm.getValues('alloc')
+			const validatorAddresses = validatorKeys.map(key => key.ethereumAddress)
+			const existingValidatorAddresses = currentAlloc.map(alloc => alloc.account)
+			
+			// Find validator keys that aren't in allocations yet
+			const newValidatorAllocations = validatorKeys
+				.filter(key => !existingValidatorAddresses.includes(key.ethereumAddress))
+				.map(key => ({
+					account: key.ethereumAddress,
+					balance: ethToHex(1000000), // 1 million ETH
+				}))
+			
+			if (newValidatorAllocations.length > 0) {
+				networkForm.setValue('alloc', [...currentAlloc, ...newValidatorAllocations])
+			}
 		}
 	}, [validatorKeys, networkForm])
+
+	// Ensure validator allocations are added when component loads or step changes
+	useEffect(() => {
+		if (currentStep === 'network' && validatorKeys.length > 0) {
+			ensureValidatorAllocations()
+		}
+	}, [currentStep, validatorKeys])
 
 	// Add this effect after the other useEffect hooks
 	useEffect(() => {
@@ -294,6 +366,16 @@ export default function BulkCreateBesuNetworkPage() {
 				ethereumAddress: key.data!.ethereumAddress!,
 			}))
 			setValidatorKeys(newValidatorKeys)
+			
+			// Add validator keys to initial allocations
+			const validatorAllocations = newValidatorKeys.map((key) => ({
+				account: key.ethereumAddress,
+				balance: ethToHex(1000000), // Start with 1 million ETH balance for validators
+			}))
+			
+			// Update the network form with validator allocations
+			networkForm.setValue('alloc', validatorAllocations)
+			
 			setCreationProgress({ current: 0, total: 0, currentNode: null })
 			return newValidatorKeys
 		} catch (error: any) {
@@ -311,6 +393,14 @@ export default function BulkCreateBesuNetworkPage() {
 				'selectedValidatorKeys',
 				newValidatorKeys.map((key) => key.id)
 			)
+			
+			// Add validator keys to initial allocations
+			const validatorAllocations = newValidatorKeys.map((key) => ({
+				account: key.ethereumAddress,
+				balance: ethToHex(1000000), // 1 million ETH
+			}))
+			networkForm.setValue('alloc', validatorAllocations)
+			
 			setCurrentStep('network')
 		} catch (error) {
 			// Error is already handled in createValidatorKeys
@@ -596,11 +686,44 @@ export default function BulkCreateBesuNetworkPage() {
 																<div className="text-sm space-y-1">
 																	<div className="flex items-center gap-2">
 																		<span className="text-muted-foreground">Address:</span>
-																		<code className="text-xs bg-muted px-2 py-1 rounded">{key.ethereumAddress}</code>
+																		<div className="flex items-center gap-2">
+																			<code className="text-xs bg-muted px-2 py-1 rounded">{key.ethereumAddress}</code>
+																			<Button
+																				type="button"
+																				variant="ghost"
+																				size="sm"
+																				className="h-6 w-6 p-0"
+																				onClick={() => {
+																					navigator.clipboard.writeText(key.ethereumAddress)
+																					toast.success('Address copied to clipboard')
+																				}}
+																			>
+																				<Copy className="h-3 w-3" />
+																			</Button>
+																		</div>
 																	</div>
 																	<div className="flex items-center gap-2">
 																		<span className="text-muted-foreground">Public Key:</span>
-																		<code className="text-xs bg-muted px-2 py-1 rounded">{key.publicKey}</code>
+																		<div className="flex items-center gap-2">
+																			<code className="text-xs bg-muted px-2 py-1 rounded">
+																				{key.publicKey.length > 20 
+																					? `${key.publicKey.slice(0, 10)}...${key.publicKey.slice(-10)}`
+																					: key.publicKey
+																				}
+																			</code>
+																			<Button
+																				type="button"
+																				variant="ghost"
+																				size="sm"
+																				className="h-6 w-6 p-0"
+																				onClick={() => {
+																					navigator.clipboard.writeText(key.publicKey)
+																					toast.success('Public key copied to clipboard')
+																				}}
+																			>
+																				<Copy className="h-3 w-3" />
+																			</Button>
+																		</div>
 																	</div>
 																</div>
 															</div>
@@ -828,59 +951,245 @@ export default function BulkCreateBesuNetworkPage() {
 										render={({ field }) => (
 											<FormItem>
 												<FormLabel>Initial Allocations</FormLabel>
-												<FormDescription>Add initial account balances for the genesis block (in hex format)</FormDescription>
-												<div className="space-y-4">
-													{field.value.map((allocation, index) => (
-														<div key={index} className="flex gap-4 items-start">
-															<div className="flex-1">
-																<Input
-																	placeholder="0x..."
-																	value={allocation.account}
-																	onChange={(e) => {
-																		const value = e.target.value
-																		// Ensure the value starts with 0x
-																		const hexValue = value.startsWith('0x') ? value : `0x${value}`
-																		const newAlloc = [...field.value]
-																		newAlloc[index] = { ...newAlloc[index], account: hexValue }
-																		field.onChange(newAlloc)
-																	}}
-																/>
+												<FormDescription>
+													Set initial account balances for the genesis block. Validator keys have been automatically added.
+												</FormDescription>
+												<div className="space-y-6">
+													{field.value.map((allocation, index) => {
+														// Check if this allocation corresponds to a validator key
+														const validatorKey = validatorKeys.find(key => key.ethereumAddress === allocation.account)
+														const isValidatorKey = !!validatorKey
+														
+														return (
+															<div key={index} className="border rounded-lg p-4 space-y-3">
+																{isValidatorKey ? (
+																	<div className="space-y-3">
+																		<div className="flex items-center gap-2">
+																			<span className="px-2 py-1 text-xs rounded-full bg-primary/10 text-primary font-medium">
+																				Validator {validatorKey?.name}
+																			</span>
+																		</div>
+																		<div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+																			<div>
+																				<label className="text-sm font-medium text-muted-foreground mb-1 block">
+																					Ethereum Address
+																				</label>
+																				<div className="flex items-center gap-2">
+																					<Input
+																						value={allocation.account}
+																						readOnly
+																						className="font-mono text-xs"
+																					/>
+																					<Button
+																						type="button"
+																						variant="ghost"
+																						size="sm"
+																						onClick={() => {
+																							navigator.clipboard.writeText(allocation.account)
+																							toast.success('Address copied to clipboard')
+																						}}
+																					>
+																						<Copy className="h-3 w-3" />
+																					</Button>
+																				</div>
+																			</div>
+																			<div>
+																				<label className="text-sm font-medium text-muted-foreground mb-1 block">
+																					Initial Balance (ETH)
+																				</label>
+																				<Input
+																					type="number"
+																					placeholder="0"
+																					value={(() => {
+																						if (allocation.balance === '0x0') return 0
+																						const weiValue = hexToNumber(allocation.balance)
+																						const ethValue = weiToEth(weiValue.toString())
+																						// Round to 10 decimal places to avoid floating point issues
+																						return Math.round(ethValue * 1e10) / 1e10
+																					})()}
+																					onChange={(e) => {
+																						const value = Number(e.target.value)
+																						const hexValue = ethToHex(value)
+																						const newAlloc = [...field.value]
+																						newAlloc[index] = { ...newAlloc[index], balance: hexValue }
+																						field.onChange(newAlloc)
+																					}}
+																					min={0}
+																					step={0.1}
+																				/>
+																			</div>
+																		</div>
+																	</div>
+																) : (
+																	<div className="space-y-3">
+																		<div className="flex items-center gap-2">
+																			<span className="px-2 py-1 text-xs rounded-full bg-muted text-muted-foreground">
+																				Additional Account
+																			</span>
+																		</div>
+																		<div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+																			<div>
+																				<label className="text-sm font-medium text-muted-foreground mb-1 block">
+																					Ethereum Address
+																				</label>
+																				<div className="space-y-2">
+																					<Input
+																						placeholder="0x..."
+																						value={allocation.account}
+																						onChange={(e) => {
+																							const value = e.target.value
+																							// Ensure the value starts with 0x
+																							const hexValue = value.startsWith('0x') ? value : `0x${value}`
+																							const newAlloc = [...field.value]
+																							newAlloc[index] = { ...newAlloc[index], account: hexValue }
+																							field.onChange(newAlloc)
+																						}}
+																						className="font-mono text-xs"
+																					/>
+																					<div className="flex gap-2">
+																						<Button
+																							type="button"
+																							variant="outline"
+																							size="sm"
+																							onClick={() => setShowKeySelector(showKeySelector === index ? null : index)}
+																						>
+																							{showKeySelector === index ? 'Hide Keys' : 'Select from Keys'}
+																						</Button>
+																						<Button
+																							type="button"
+																							variant="outline"
+																							size="sm"
+																							disabled={creatingKey === index}
+																							onClick={async () => {
+																								setCreatingKey(index)
+																								try {
+																									const newKey = await postKeys({
+																										body: {
+																											name: `Additional Key ${Date.now()}`,
+																											providerId: providersData?.[0]?.id,
+																											algorithm: 'EC',
+																											curve: 'secp256k1',
+																											description: `Additional key for network allocation`,
+																										},
+																									})
+																									
+																									if (newKey.data?.ethereumAddress) {
+																										const newAlloc = [...field.value]
+																										newAlloc[index] = { ...newAlloc[index], account: newKey.data.ethereumAddress }
+																										field.onChange(newAlloc)
+																										toast.success('New key created and address added')
+																									}
+																								} catch (error: any) {
+																									toast.error('Failed to create new key', {
+																										description: error.message,
+																									})
+																								} finally {
+																									setCreatingKey(null)
+																								}
+																							}}
+																						>
+																							{creatingKey === index ? 'Creating...' : 'Create New Key'}
+																						</Button>
+																					</div>
+																					{showKeySelector === index && availableKeys && (
+																						<div className="border rounded-lg p-3 space-y-2 max-h-40 overflow-y-auto">
+																							<div className="text-xs font-medium text-muted-foreground mb-2">
+																								Available Keys (EC secp256k1):
+																							</div>
+																							{availableKeys?.items
+																								?.filter(key => key.algorithm === 'EC' && key.curve === 'secp256k1')
+																								.map((key) => (
+																									<div
+																										key={key.id}
+																										className="flex items-center justify-between p-2 border rounded hover:bg-accent/50 cursor-pointer"
+																										onClick={() => {
+																											const newAlloc = [...field.value]
+																											newAlloc[index] = { ...newAlloc[index], account: key.ethereumAddress! }
+																											field.onChange(newAlloc)
+																											setShowKeySelector(null)
+																										}}
+																									>
+																										<div className="flex-1">
+																											<div className="text-sm font-medium">{key.name}</div>
+																											<div className="text-xs text-muted-foreground font-mono">
+																												{key.ethereumAddress}
+																											</div>
+																										</div>
+																										<Button
+																											type="button"
+																											variant="ghost"
+																											size="sm"
+																											onClick={(e) => {
+																												e.stopPropagation()
+																												navigator.clipboard.writeText(key.ethereumAddress!)
+																												toast.success('Address copied to clipboard')
+																											}}
+																										>
+																											<Copy className="h-3 w-3" />
+																										</Button>
+																									</div>
+																								))}
+																							{availableKeys?.items?.filter(key => key.algorithm === 'EC' && key.curve === 'secp256k1').length === 0 && (
+																								<div className="text-xs text-muted-foreground text-center py-2">
+																									No EC secp256k1 keys available
+																								</div>
+																							)}
+																						</div>
+																					)}
+																				</div>
+																			</div>
+																			<div>
+																				<label className="text-sm font-medium text-muted-foreground mb-1 block">
+																					Initial Balance (ETH)
+																				</label>
+																				<Input
+																					type="number"
+																					placeholder="0"
+																					value={(() => {
+																						if (allocation.balance === '0x0') return 0
+																						const weiValue = hexToNumber(allocation.balance)
+																						const ethValue = weiToEth(weiValue.toString())
+																						// Round to 10 decimal places to avoid floating point issues
+																						return Math.round(ethValue * 1e10) / 1e10
+																					})()}
+																					onChange={(e) => {
+																						const value = Number(e.target.value)
+																						const hexValue = ethToHex(value)
+																						const newAlloc = [...field.value]
+																						newAlloc[index] = { ...newAlloc[index], balance: hexValue }
+																						field.onChange(newAlloc)
+																					}}
+																					min={0}
+																					step={0.1}
+																				/>
+																			</div>
+																		</div>
+																		<div className="flex justify-end">
+																			<Button
+																				type="button"
+																				variant="outline"
+																				size="sm"
+																				onClick={() => {
+																					const newAlloc = field.value.filter((_, i) => i !== index)
+																					field.onChange(newAlloc)
+																				}}
+																			>
+																				Remove
+																			</Button>
+																		</div>
+																	</div>
+																)}
 															</div>
-															<div className="flex-1">
-																<Input
-																	placeholder="0x..."
-																	value={allocation.balance}
-																	onChange={(e) => {
-																		const value = e.target.value
-																		// Ensure the value starts with 0x
-																		const hexValue = value.startsWith('0x') ? value : `0x${value}`
-																		const newAlloc = [...field.value]
-																		newAlloc[index] = { ...newAlloc[index], balance: hexValue }
-																		field.onChange(newAlloc)
-																	}}
-																/>
-															</div>
-															<Button
-																type="button"
-																variant="outline"
-																size="icon"
-																onClick={() => {
-																	const newAlloc = field.value.filter((_, i) => i !== index)
-																	field.onChange(newAlloc)
-																}}
-															>
-																×
-															</Button>
-														</div>
-													))}
+														)
+													})}
 													<Button
 														type="button"
 														variant="outline"
 														onClick={() => {
-															field.onChange([...field.value, { account: '0x', balance: '0x0' }])
+															field.onChange([...field.value, { account: '0x', balance: ethToHex(1000000) }])
 														}}
 													>
-														Add Allocation
+														Add Additional Account
 													</Button>
 												</div>
 												<FormMessage />
@@ -946,11 +1255,51 @@ export default function BulkCreateBesuNetworkPage() {
 										requestTimeout: 30,
 									} as BesuNodeFormValues
 
+									// Get the validator key and its allocation for this node
+									const validatorKey = validatorKeys[index]
+									const allocation = networkForm.getValues('alloc').find(alloc => alloc.account === validatorKey?.ethereumAddress)
+									const initialBalance = allocation ? weiToEth(hexToNumber(allocation.balance).toString()) : 0
+									
 									return (
 										<div key={index} className="space-y-4">
-											<h4 className="font-medium">
-												Node {index + 1} {index < 2 ? '(Bootnode + Validator)' : '(Validator)'}
-											</h4>
+											<div className="flex items-center justify-between">
+												<h4 className="font-medium">
+													Node {index + 1} {index < 2 ? '(Bootnode + Validator)' : '(Validator)'}
+												</h4>
+												<div className="flex items-center gap-2">
+													<span className="text-sm text-muted-foreground">Initial Balance:</span>
+													<span className="font-mono text-sm bg-muted px-2 py-1 rounded">
+														{(() => {
+															if (allocation?.balance === '0x0') return '0 ETH'
+															const weiValue = hexToNumber(allocation?.balance || '0x0')
+															const ethValue = weiToEth(weiValue.toString())
+															return Math.round(ethValue * 1e10) / 1e10 + ' ETH'
+														})()}
+													</span>
+												</div>
+											</div>
+											{validatorKey && (
+												<div className="text-sm text-muted-foreground mb-4">
+													<div className="flex items-center gap-2">
+														<span>Validator Address:</span>
+														<code className="text-xs bg-muted px-2 py-1 rounded">
+															{validatorKey.ethereumAddress}
+														</code>
+														<Button
+															type="button"
+															variant="ghost"
+															size="sm"
+															className="h-6 w-6 p-0"
+															onClick={() => {
+																navigator.clipboard.writeText(validatorKey.ethereumAddress)
+																toast.success('Address copied to clipboard')
+															}}
+														>
+															<Copy className="h-3 w-3" />
+														</Button>
+													</div>
+												</div>
+											)}
 											<BesuNodeForm
 												defaultValues={nodeConfigs[index] || defaultNodeConfig}
 												onChange={(values) => {

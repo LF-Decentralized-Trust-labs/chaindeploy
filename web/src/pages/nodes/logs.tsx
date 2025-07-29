@@ -4,7 +4,6 @@ import { FabricIcon } from '@/components/icons/fabric-icon'
 import { LogViewer } from '@/components/nodes/LogViewer'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -154,37 +153,44 @@ export default function NodesLogsPage() {
 			</div>
 
 			{/* Desktop View */}
-			<div className="hidden md:block">
-				<Tabs value={selectedNode} onValueChange={handleNodeChange}>
-					<TabsList className="w-full justify-start">
+			<div className="hidden md:block mb-4">
+				<Select value={selectedNode} onValueChange={handleNodeChange}>
+					<SelectTrigger className="w-full max-w-md">
+						<SelectValue placeholder="Select a node" />
+					</SelectTrigger>
+					<SelectContent>
 						{nodes.items.map((node) => (
-							<TabsTrigger key={node.id} value={node.id!.toString()} className="flex items-center gap-2">
-								{node.fabricPeer || node.fabricOrderer ? <FabricIcon className="h-4 w-4" /> : <BesuIcon className="h-4 w-4" />}
-								{node.name}
-							</TabsTrigger>
+							<SelectItem key={node.id} value={node.id!.toString()}>
+								<div className="flex items-center gap-2">
+									{node.fabricPeer || node.fabricOrderer ? <FabricIcon className="h-4 w-4" /> : <BesuIcon className="h-4 w-4" />}
+									{node.name}
+								</div>
+							</SelectItem>
 						))}
-					</TabsList>
-					{nodes.items.map((node) => (
-						<TabsContent key={node.id} value={node.id!.toString()}>
-							<Card>
-								<CardHeader>
-									<CardTitle>Logs for {node.name}</CardTitle>
-									<CardDescription>Real-time node logs</CardDescription>
-								</CardHeader>
-								<CardContent>
-									<LogViewer
-										logs={nodeLogs.find((nl) => nl.nodeId === node.id)?.logs || ''}
-										onScroll={(isScrolledToBottom) => {
-											if (isScrolledToBottom) {
-												scrollToBottom(node.id!)
-											}
-										}}
-									/>
-								</CardContent>
-							</Card>
-						</TabsContent>
-					))}
-				</Tabs>
+					</SelectContent>
+				</Select>
+			</div>
+
+			{/* Desktop Content */}
+			<div className="hidden md:block">
+				{selectedNode && (
+					<Card>
+						<CardHeader>
+							<CardTitle>Logs for {nodes.items.find((n) => n.id!.toString() === selectedNode)?.name}</CardTitle>
+							<CardDescription>Real-time node logs</CardDescription>
+						</CardHeader>
+						<CardContent>
+							<LogViewer
+								logs={nodeLogs.find((nl) => nl.nodeId.toString() === selectedNode)?.logs || ''}
+								onScroll={(isScrolledToBottom) => {
+									if (isScrolledToBottom) {
+										scrollToBottom(selectedNode!)
+									}
+								}}
+							/>
+						</CardContent>
+					</Card>
+				)}
 			</div>
 
 			{/* Mobile Content */}

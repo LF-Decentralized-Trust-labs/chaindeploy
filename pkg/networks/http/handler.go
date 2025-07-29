@@ -71,6 +71,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Get("/{id}/transactions/{txId}", h.FabricGetTransaction)
 		r.Post("/{id}/organization-crl", h.UpdateOrganizationCRL)
 		r.Get("/{id}/map", h.NetworkMap)
+		r.Put("/{id}/genesis", h.UpdateGenesisBlock)
 	})
 
 	// Besu network routes with resource middleware
@@ -84,6 +85,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Get("/{id}", h.BesuNetworkGet)
 		r.Delete("/{id}", h.BesuNetworkDelete)
 		r.Get("/{id}/map", h.NetworkMap)
+		r.Put("/{id}/genesis", h.UpdateGenesisBlock)
 	})
 }
 
@@ -898,21 +900,30 @@ func mapNetworkToResponse(n service.Network) NetworkResponse {
 		updatedAt = &timeStr
 	}
 
+	var genesisChangedAt *string
+	if n.GenesisChangedAt != nil {
+		timeStr := n.GenesisChangedAt.Format(time.RFC3339)
+		genesisChangedAt = &timeStr
+	}
+
 	return NetworkResponse{
-		ID:                 n.ID,
-		Name:               n.Name,
-		Platform:           n.Platform,
-		Status:             string(n.Status),
-		Description:        n.Description,
-		Config:             n.Config,
-		DeploymentConfig:   n.DeploymentConfig,
-		ExposedPorts:       n.ExposedPorts,
-		GenesisBlock:       n.GenesisBlock,
-		CurrentConfigBlock: n.CurrentConfigBlock,
-		Domain:             n.Domain,
-		CreatedAt:          n.CreatedAt.Format(time.RFC3339),
-		CreatedBy:          n.CreatedBy,
-		UpdatedAt:          updatedAt,
+		ID:                  n.ID,
+		Name:                n.Name,
+		Platform:            n.Platform,
+		Status:              string(n.Status),
+		Description:         n.Description,
+		Config:              n.Config,
+		DeploymentConfig:    n.DeploymentConfig,
+		ExposedPorts:        n.ExposedPorts,
+		GenesisBlock:        n.GenesisBlock,
+		CurrentConfigBlock:  n.CurrentConfigBlock,
+		Domain:              n.Domain,
+		CreatedAt:           n.CreatedAt.Format(time.RFC3339),
+		CreatedBy:           n.CreatedBy,
+		UpdatedAt:           updatedAt,
+		GenesisChangedAt:    genesisChangedAt,
+		GenesisChangedBy:    n.GenesisChangedBy,
+		GenesisChangeReason: n.GenesisChangeReason,
 	}
 }
 
@@ -2220,4 +2231,63 @@ func (h *Handler) NetworkMap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+// @Summary Update genesis block for a network
+// @Description Update the genesis block for a network with change tracking
+// @Tags Fabric Networks, Besu Networks
+// @Accept json
+// @Produce json
+// @Param id path int true "Network ID"
+// @Param request body UpdateGenesisBlockRequest true "Genesis block update request"
+// @Success 200 {object} UpdateGenesisBlockResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /networks/{id}/genesis [put]
+func (h *Handler) UpdateGenesisBlock(w http.ResponseWriter, r *http.Request) {
+	// Parse network ID from URL
+	networkID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_network_id", "Invalid network ID")
+		return
+	}
+
+	// Parse request body
+	var req UpdateGenesisBlockRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+
+	// Validate request
+	if err := h.validate.Struct(req); err != nil {
+		writeError(w, http.StatusBadRequest, "validation_failed", err.Error())
+		return
+	}
+
+	// Decode base64 genesis block
+	genesisBlock, err := base64.StdEncoding.DecodeString(req.GenesisBlock)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_genesis_block", "Invalid base64-encoded genesis block")
+		return
+	}
+
+	// Get user ID from context (you may need to implement this based on your auth system)
+	// For now, we'll use a placeholder value
+	changedBy := int64(1) // TODO: Get actual user ID from context
+
+	// Update genesis block with tracking
+	err = h.networkService.UpdateGenesisBlock(r.Context(), networkID, genesisBlock, changedBy, req.Reason)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "update_genesis_failed", err.Error())
+		return
+	}
+
+	// Return success response
+	resp := UpdateGenesisBlockResponse{
+		NetworkID: networkID,
+		Message:   "Genesis block updated successfully",
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
