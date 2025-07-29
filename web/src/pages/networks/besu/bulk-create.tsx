@@ -232,10 +232,11 @@ export default function BulkCreateBesuNetworkPage() {
 							p2pPort: Number(p2pPort),
 							rpcHost: rpcHost,
 							rpcPort: Number(rpcPort),
-							metricsHost: '127.0.0.1',
-							metricsPort,
-							bootNodes: bootNodes,
-							requestTimeout: 30,
+												metricsEnabled: true,
+					metricsHost: '127.0.0.1',
+					metricsPort,
+					bootNodes: bootNodes,
+					requestTimeout: 30,
 						} as BesuNodeFormValues
 					})
 					setNodeConfigs(newNodeConfigs)

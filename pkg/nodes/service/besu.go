@@ -100,6 +100,7 @@ func (s *NodeService) GetBesuNodeDefaults(besuNodes int) ([]BesuNodeDefaults, er
 			P2PPort:    p2pPort,
 			RPCHost:    defaultIP, // Use default IP for rpc host
 			RPCPort:    rpcPort,
+			InternalIP: defaultIP,
 			ExternalIP: defaultIP,
 			Mode:       ModeService,
 			Env: map[string]string{
@@ -454,6 +455,10 @@ func (s *NodeService) UpdateBesuNode(ctx context.Context, nodeID int64, req Upda
 		if err := s.startBesuNode(ctx, node); err != nil {
 			s.logger.Warn("Failed to start Besu node after mode change", "error", err)
 		}
+	}
+	err = s.metricsService.Reload(ctx)
+	if err != nil {
+		s.logger.Warn("Failed to reload metrics", "error", err)
 	}
 
 	// Return updated node

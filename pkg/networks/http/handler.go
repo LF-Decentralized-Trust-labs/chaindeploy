@@ -122,8 +122,9 @@ func (h *Handler) FabricNetworkList(w http.ResponseWriter, r *http.Request) {
 
 	// Get networks from service
 	result, err := h.networkService.ListNetworks(r.Context(), service.ListNetworksParams{
-		Limit:  limit,
-		Offset: offset,
+		Limit:    limit,
+		Offset:   offset,
+		Platform: service.BlockchainTypeFabric,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "list_networks_failed", err.Error())

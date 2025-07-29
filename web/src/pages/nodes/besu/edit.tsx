@@ -58,6 +58,8 @@ export default function EditBesuNodePage() {
 						?.split(',')
 						.map((node) => node.trim())
 						.filter(Boolean),
+					metricsEnabled: values.metricsEnabled,
+					metricsPort: values.metricsPort,
 				},
 			},
 		})
@@ -86,6 +88,9 @@ export default function EditBesuNodePage() {
 		p2pPort: node.besuNode?.p2pPort!,
 		rpcHost: node.besuNode?.rpcHost!,
 		rpcPort: node.besuNode?.rpcPort!,
+		metricsEnabled: node.besuNode?.metricsEnabled ?? false,
+		metricsPort: node.besuNode.metricsPort,
+		metricsHost: node.besuNode.metricsHost,
 		bootNodes: node.besuNode?.bootNodes?.join(',') || '',
 	}
 

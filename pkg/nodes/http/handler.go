@@ -812,16 +812,18 @@ func (h *NodeHandler) UpdateNode(w http.ResponseWriter, r *http.Request) error {
 func (h *NodeHandler) updateBesuNode(w http.ResponseWriter, r *http.Request, nodeID int64, req *UpdateBesuNodeRequest) error {
 	// Convert HTTP layer request to service layer request
 	serviceReq := service.UpdateBesuNodeRequest{
-		NetworkID:  req.NetworkID,
-		P2PHost:    req.P2PHost,
-		P2PPort:    req.P2PPort,
-		RPCHost:    req.RPCHost,
-		RPCPort:    req.RPCPort,
-		Bootnodes:  req.Bootnodes,
-		ExternalIP: req.ExternalIP,
-		InternalIP: req.InternalIP,
-		Env:        req.Env,
-		Mode:       req.Mode,
+		NetworkID:      req.NetworkID,
+		P2PHost:        req.P2PHost,
+		P2PPort:        req.P2PPort,
+		RPCHost:        req.RPCHost,
+		RPCPort:        req.RPCPort,
+		Bootnodes:      req.Bootnodes,
+		ExternalIP:     req.ExternalIP,
+		InternalIP:     req.InternalIP,
+		Env:            req.Env,
+		Mode:           req.Mode,
+		MetricsEnabled: req.MetricsEnabled,
+		MetricsPort:    req.MetricsPort,
 	}
 
 	// Call service layer to update the Besu node

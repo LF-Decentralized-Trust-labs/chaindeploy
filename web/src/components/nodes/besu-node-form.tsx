@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
@@ -22,6 +23,7 @@ const besuNodeFormSchema = z.object({
 	p2pPort: z.number().min(1024).max(65535),
 	rpcHost: z.string(),
 	rpcPort: z.number().min(1024).max(65535),
+	metricsEnabled: z.boolean().default(true),
 	metricsHost: z.string().default('127.0.0.1'),
 	metricsPort: z.number().min(1024).max(65535).optional(),
 	type: z.literal('besu'),
@@ -60,6 +62,7 @@ export function BesuNodeForm({ onSubmit, isSubmitting, hideSubmit, defaultValues
 			rpcHost: '127.0.0.1',
 			rpcPort: 8545,
 			p2pPort: 30303,
+			metricsEnabled: true,
 			metricsHost: '127.0.0.1',
 			metricsPort: 9545,
 			requestTimeout: 30,
@@ -284,37 +287,60 @@ export function BesuNodeForm({ onSubmit, isSubmitting, hideSubmit, defaultValues
 					/>
 				</div>
 
-				<div className="grid grid-cols-2 gap-4">
-					<FormField
-						control={form.control}
-						name="metricsHost"
-						render={({ field }) => (
-							<FormItem>
-								<FormLabel>Metrics Host</FormLabel>
-								<FormControl>
-									<Input {...field} placeholder="127.0.0.1" />
-								</FormControl>
-								<FormDescription>Host for Prometheus metrics endpoint</FormDescription>
-								<FormMessage />
-							</FormItem>
-						)}
-					/>
+				<FormField
+					control={form.control}
+					name="metricsEnabled"
+					render={({ field }) => (
+						<FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+							<div className="space-y-0.5">
+								<FormLabel className="text-base">Enable Metrics</FormLabel>
+								<FormDescription>
+									Enable Prometheus metrics collection for this node
+								</FormDescription>
+							</div>
+							<FormControl>
+								<Switch
+									checked={field.value}
+									onCheckedChange={field.onChange}
+								/>
+							</FormControl>
+						</FormItem>
+					)}
+				/>
 
-					<FormField
-						control={form.control}
-						name="metricsPort"
-						render={({ field }) => (
-							<FormItem>
-								<FormLabel>Metrics Port</FormLabel>
-								<FormControl>
-									<Input type="number" {...field} onChange={(e) => field.onChange(Number(e.target.value))} />
-								</FormControl>
-								<FormDescription>Port for Prometheus metrics endpoint</FormDescription>
-								<FormMessage />
-							</FormItem>
-						)}
-					/>
-				</div>
+				{form.watch('metricsEnabled') && (
+					<div className="grid grid-cols-2 gap-4">
+						<FormField
+							control={form.control}
+							name="metricsHost"
+							render={({ field }) => (
+								<FormItem>
+									<FormLabel>Metrics Host</FormLabel>
+									<FormControl>
+										<Input {...field} placeholder="127.0.0.1" />
+									</FormControl>
+									<FormDescription>Host for Prometheus metrics endpoint</FormDescription>
+									<FormMessage />
+								</FormItem>
+							)}
+						/>
+
+						<FormField
+							control={form.control}
+							name="metricsPort"
+							render={({ field }) => (
+								<FormItem>
+									<FormLabel>Metrics Port</FormLabel>
+									<FormControl>
+										<Input type="number" {...field} onChange={(e) => field.onChange(Number(e.target.value))} />
+									</FormControl>
+									<FormDescription>Port for Prometheus metrics endpoint</FormDescription>
+									<FormMessage />
+								</FormItem>
+							)}
+						/>
+					</div>
+				)}
 
 				<FormField
 					control={form.control}

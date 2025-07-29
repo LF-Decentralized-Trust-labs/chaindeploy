@@ -152,7 +152,7 @@ function ConfigurationStep({ form, onNext, onBack }: StepProps) {
 
 	// Fabric queries
 	const { data: organizations } = useQuery({
-		...getOrganizationsOptions({query: {limit:1000}}),
+		...getOrganizationsOptions({ query: { limit: 1000 } }),
 		enabled: protocol === 'fabric',
 	})
 
@@ -271,7 +271,7 @@ function ConfigurationStep({ form, onNext, onBack }: StepProps) {
 									fabricProperties: {
 										...form.getValues().configuration,
 									},
-								}
+							  }
 							: {
 									name: form.getValues().name,
 									fabricProperties: {
@@ -285,7 +285,7 @@ function ConfigurationStep({ form, onNext, onBack }: StepProps) {
 										domains: [],
 										addressOverrides: [],
 									},
-								}
+							  }
 					}
 					submitText="Next"
 				/>
@@ -300,7 +300,7 @@ function ConfigurationStep({ form, onNext, onBack }: StepProps) {
 							? {
 									...form.getValues().configuration,
 									name: form.getValues().name,
-								}
+							  }
 							: {
 									name: form.getValues().name,
 									blockchainPlatform: 'BESU',
@@ -314,9 +314,10 @@ function ConfigurationStep({ form, onNext, onBack }: StepProps) {
 									internalIp: besuDefaults?.defaults?.[0]?.internalIp || '0.0.0.0',
 									keyId: 0,
 									networkId: 1,
+									metricsEnabled: true,
 									requestTimeout: 30,
 									environmentVariables: [],
-								}
+							  }
 					}
 					submitButtonText="Next"
 				/>
@@ -406,10 +407,14 @@ function ReviewStep({ form, onBack }: StepProps) {
 					externalIp: config.externalIp || '0.0.0.0',
 					internalIp: config.internalIp || '0.0.0.0',
 
-					bootNodes: config.bootNodes
-						?.split('\n')
-						.map((node: string) => node.trim())
-						.filter(Boolean),
+					bootNodes: Array.isArray(config.bootNodes)
+						? config.bootNodes.filter(Boolean).map((node) => (typeof node === 'string' ? node.trim() : node))
+						: typeof config.bootNodes === 'string'
+						? config.bootNodes
+								.split(/[,\n]/)
+								.map((node) => node.trim())
+								.filter(Boolean)
+						: [],
 					env: config.environmentVariables?.reduce(
 						(acc: any, { key, value }: any) => ({
 							...acc,
