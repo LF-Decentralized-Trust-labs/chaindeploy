@@ -1,3 +1,4 @@
+basePath: /api/v1
 definitions:
   ai.ChatMessage:
     properties:
@@ -3756,6 +3757,15 @@ definitions:
           $ref: '#/definitions/service.NodeDefaults'
         type: array
     type: object
+  service.QbftSignerMetric:
+    properties:
+      address:
+        type: string
+      lastProposedBlockNumber:
+        type: string
+      proposedBlockCount:
+        type: string
+    type: object
   service.Setting:
     properties:
       config:
@@ -4322,8 +4332,20 @@ definitions:
     - KeyUsageCRLSign
     - KeyUsageEncipherOnly
     - KeyUsageDecipherOnly
+host: localhost:8100
 info:
-  contact: {}
+  contact:
+    email: support@chainlaunch.dev
+    name: API Support
+    url: http://chainlaunch.dev/support
+  description: ChainLaunch API provides services for managing blockchain networks
+    and cryptographic keys
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: ChainLaunch API
+  version: "1.0"
 paths:
   /ai/{projectId}/chat:
     post:
@@ -8424,6 +8446,880 @@ paths:
       summary: Restart a node
       tags:
       - Nodes
+  /nodes/{id}/rpc/accounts:
+    get:
+      consumes:
+      - application/json
+      description: Lists accounts managed by the node
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Array of account addresses
+          schema:
+            items:
+              type: string
+            type: array
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get accounts managed by the Besu node
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/balance:
+    get:
+      consumes:
+      - application/json
+      description: Gets balance of an address in Wei
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Account address
+        in: query
+        name: address
+        required: true
+        type: string
+      - description: 'Block tag (default: latest)'
+        in: query
+        name: blockTag
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Balance in hex
+          schema:
+            type: string
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get balance of an address
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/block-by-hash:
+    get:
+      consumes:
+      - application/json
+      description: Gets block details by hash
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Block hash
+        in: query
+        name: hash
+        required: true
+        type: string
+      - default: false
+        description: Include full transaction objects
+        in: query
+        name: fullTx
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Block object
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get block by hash
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/block-by-number:
+    get:
+      consumes:
+      - application/json
+      description: Gets block by number or tag
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Block number
+        in: query
+        name: number
+        type: string
+      - description: Block tag (latest, earliest, pending)
+        in: query
+        name: tag
+        type: string
+      - default: false
+        description: Include full transaction objects
+        in: query
+        name: fullTx
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Block object
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get block by number
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/block-number:
+    get:
+      consumes:
+      - application/json
+      description: Gets the latest block number
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Block number in hex
+          schema:
+            type: string
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get latest block number
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/block-transaction-count-by-hash:
+    get:
+      consumes:
+      - application/json
+      description: Gets transaction count in a block by hash
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Block hash
+        in: query
+        name: hash
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Transaction count in hex
+          schema:
+            type: string
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get transaction count in block by hash
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/block-transaction-count-by-number:
+    get:
+      consumes:
+      - application/json
+      description: Gets transaction count by block number
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Block number
+        in: query
+        name: number
+        type: string
+      - description: Block tag (latest, earliest, pending)
+        in: query
+        name: tag
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Transaction count in hex
+          schema:
+            type: string
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get transaction count in block by number
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/chain-id:
+    get:
+      consumes:
+      - application/json
+      description: Gets the chain ID
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Chain ID in hex
+          schema:
+            type: string
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get chain ID
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/code:
+    get:
+      consumes:
+      - application/json
+      description: Gets bytecode at an address (e.g., contract code)
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Contract address
+        in: query
+        name: address
+        required: true
+        type: string
+      - description: 'Block tag (default: latest)'
+        in: query
+        name: blockTag
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Bytecode in hex
+          schema:
+            type: string
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get bytecode at an address
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/fee-history:
+    get:
+      consumes:
+      - application/json
+      description: Gets historical gas fees
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Number of blocks
+        in: query
+        name: blockCount
+        required: true
+        type: string
+      - description: Newest block
+        in: query
+        name: newestBlock
+        required: true
+        type: string
+      - description: Reward percentiles
+        in: query
+        name: rewardPercentiles
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Fee history object
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get fee history
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/logs:
+    post:
+      consumes:
+      - application/json
+      description: Gets event logs based on filter criteria
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Log filter object
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Array of log objects
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get event logs
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/pending-transactions:
+    get:
+      consumes:
+      - application/json
+      description: Gets pending transactions in the mempool
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Array of transaction objects
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get pending transactions
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/protocol-version:
+    get:
+      consumes:
+      - application/json
+      description: Gets Ethereum protocol version
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Protocol version in hex
+          schema:
+            type: string
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get protocol version
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/qbft-request-timeout:
+    get:
+      consumes:
+      - application/json
+      description: Gets QBFT request timeout in seconds
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Request timeout in seconds
+          schema:
+            type: int64
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get QBFT request timeout
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/qbft-signer-metrics:
+    get:
+      consumes:
+      - application/json
+      description: Gets QBFT signer metrics
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: QBFT signer metrics
+          schema:
+            items:
+              $ref: '#/definitions/service.QbftSignerMetric'
+            type: array
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get QBFT signer metrics
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/storage:
+    get:
+      consumes:
+      - application/json
+      description: Gets storage value at a position for an address
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Contract address
+        in: query
+        name: address
+        required: true
+        type: string
+      - description: Storage position
+        in: query
+        name: position
+        required: true
+        type: string
+      - description: 'Block tag (default: latest)'
+        in: query
+        name: blockTag
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Storage value in hex
+          schema:
+            type: string
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get storage value at a position
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/syncing:
+    get:
+      consumes:
+      - application/json
+      description: Gets sync status
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Sync object or false
+          schema: {}
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get sync status
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/transaction-by-block-hash-and-index:
+    get:
+      consumes:
+      - application/json
+      description: Gets transaction by block hash and index
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Block hash
+        in: query
+        name: hash
+        required: true
+        type: string
+      - description: Transaction index
+        in: query
+        name: index
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Transaction object
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get transaction by block hash and index
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/transaction-by-block-number-and-index:
+    get:
+      consumes:
+      - application/json
+      description: Gets transaction by block number and index
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Block number
+        in: query
+        name: number
+        type: string
+      - description: Block tag (latest, earliest, pending)
+        in: query
+        name: tag
+        type: string
+      - description: Transaction index
+        in: query
+        name: index
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Transaction object
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get transaction by block number and index
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/transaction-by-hash:
+    get:
+      consumes:
+      - application/json
+      description: Gets transaction details by hash
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Transaction hash
+        in: query
+        name: hash
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Transaction object
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get transaction by hash
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/transaction-count:
+    get:
+      consumes:
+      - application/json
+      description: Gets nonce (tx count) for an address
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Account address
+        in: query
+        name: address
+        required: true
+        type: string
+      - description: 'Block tag (default: latest)'
+        in: query
+        name: blockTag
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Transaction count in hex
+          schema:
+            type: string
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get transaction count for an address
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/transaction-receipt:
+    get:
+      consumes:
+      - application/json
+      description: Gets receipt for a transaction
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Transaction hash
+        in: query
+        name: hash
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Transaction receipt
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get transaction receipt
+      tags:
+      - Nodes
   /nodes/{id}/start:
     post:
       consumes:
@@ -11342,4 +12238,51 @@ paths:
       summary: Update user role
       tags:
       - Users
+schemes:
+- http
+- https
+securityDefinitions:
+  BasicAuth:
+    type: basic
+  CookieAuth:
+    in: cookie
+    name: session_id
+    type: apiKey
 swagger: "2.0"
+tags:
+- description: Audit management operations
+  name: Audit
+- description: Chaincode project management operations
+  name: Chaincode Projects
+- description: User authentication and authorization operations
+  name: Authentication
+- description: Backup schedule configuration and management
+  name: Backup Schedules
+- description: Backup target location configuration and management
+  name: Backup Targets
+- description: Backup management operations
+  name: Backups
+- description: Hyperledger Besu network management operations
+  name: Besu Networks
+- description: Hyperledger Fabric network management operations
+  name: Fabric Networks
+- description: Cryptographic key management operations
+  name: Keys
+- description: Metrics management operations
+  name: Metrics
+- description: Network node management operations
+  name: Nodes
+- description: System notification configuration and management
+  name: Notifications
+- description: Organization management operations
+  name: Organizations
+- description: Plugin management operations
+  name: Plugins
+- description: Key provider management operations
+  name: Providers
+- description: Settings management operations
+  name: Settings
+- description: Smart contract management operations
+  name: SmartContracts
+- description: User account management operations
+  name: Users

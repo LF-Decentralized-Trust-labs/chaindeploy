@@ -45,6 +45,7 @@ import (
 	kmodels "github.com/chainlaunch/chainlaunch/pkg/keymanagement/models"
 	keymanagement "github.com/chainlaunch/chainlaunch/pkg/keymanagement/service"
 	"github.com/chainlaunch/chainlaunch/pkg/logger"
+	"github.com/chainlaunch/chainlaunch/pkg/networks/service/fabric/org"
 	nodetypes "github.com/chainlaunch/chainlaunch/pkg/nodes/types"
 	settingsservice "github.com/chainlaunch/chainlaunch/pkg/settings/service"
 	"github.com/docker/docker/api/types/container"
@@ -2600,33 +2601,65 @@ func (p *LocalPeer) SaveChannelConfigWithSignatures(
 	envelopeBytes []byte,
 	signatures [][]byte,
 ) (*SaveChannelConfigWithSignaturesResponse, error) {
-	var cbEnvelope *cb.Envelope
-	if err := proto.Unmarshal(envelopeBytes, cbEnvelope); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal envelope: %w", err)
+	// Unmarshal the original config update envelope
+	originalEnv := &cb.Envelope{}
+	if err := proto.Unmarshal(envelopeBytes, originalEnv); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config update envelope: %w", err)
 	}
 
-	signedEnvelope, err := protoutil.FormSignedEnvelope(cb.HeaderType_CONFIG_UPDATE, channelID, cbEnvelope, signatures, 1, 0)
+	// Extract the payload and config update envelope
+	payload := &cb.Payload{}
+	if err := proto.Unmarshal(originalEnv.Payload, payload); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal payload: %w", err)
+	}
+	configUpdateEnv := &cb.ConfigUpdateEnvelope{}
+	if err := proto.Unmarshal(payload.Data, configUpdateEnv); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config update envelope: %w", err)
+	}
+
+	// Aggregate signatures from all signature envelopes
+	for _, sigEnvBytes := range signatures {
+		configSignature := &cb.ConfigSignature{}
+		if err := proto.Unmarshal(sigEnvBytes, configSignature); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal config signature: %w", err)
+		}
+		configUpdateEnv.Signatures = append(configUpdateEnv.Signatures, configSignature)
+	}
+	firstOrgID := p.org.ID
+	orgService := org.NewOrganizationService(p.orgService, p.keyService, p.logger, p.mspID, p.db)
+	signer, err := orgService.GetAdminIdentity(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to form signed envelope: %w", err)
+		return nil, fmt.Errorf("failed to get signer for org %s: %w", firstOrgID, err)
 	}
 
+	envelope, err := protoutil.CreateSignedEnvelope(cb.HeaderType_CONFIG_UPDATE, channelID, signer, configUpdateEnv, 0, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create signed envelope: %w", err)
+	}
+
+	// Connect to orderer and send
 	ordererConn, err := p.CreateOrdererConnection(ctx, ordererUrl, ordererTlsCACert)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create orderer connection: %w", err)
 	}
 	defer ordererConn.Close()
+
 	ordererClient, err := orderer.NewAtomicBroadcastClient(ordererConn).Broadcast(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create orderer client: %w", err)
 	}
 
-	err = ordererClient.Send(signedEnvelope)
+	err = ordererClient.Send(envelope)
 	if err != nil {
 		return nil, fmt.Errorf("failed to save channel config with signatures: %w", err)
 	}
+
 	response, err := ordererClient.Recv()
 	if err != nil {
 		return nil, fmt.Errorf("failed to receive response: %w", err)
+	}
+	if response.Status != cb.Status_SUCCESS {
+		return nil, fmt.Errorf("failed to save channel config with signatures: %s", response.String())
 	}
 	return &SaveChannelConfigWithSignaturesResponse{
 		TransactionID: response.String(),

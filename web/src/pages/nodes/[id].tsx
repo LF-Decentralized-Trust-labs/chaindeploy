@@ -9,6 +9,7 @@ import {
 	postNodesByIdStopMutation,
 } from '@/api/client/@tanstack/react-query.gen'
 import { BesuNodeConfig } from '@/components/nodes/BesuNodeConfig'
+import { BesuNodeNetwork } from '@/components/nodes/BesuNodeNetwork'
 import { FabricNodeChannels } from '@/components/nodes/FabricNodeChannels'
 import { FabricOrdererConfig } from '@/components/nodes/FabricOrdererConfig'
 import { FabricPeerConfig } from '@/components/nodes/FabricPeerConfig'
@@ -429,6 +430,7 @@ export default function NodeDetailPage() {
 					<TabsTrigger value="crypto">Crypto Material</TabsTrigger>
 					<TabsTrigger value="events">Events</TabsTrigger>
 					{isFabricNode(node) && <TabsTrigger value="channels">Channels</TabsTrigger>}
+					{isBesuNode(node) && <TabsTrigger value="network">Besu Node Network</TabsTrigger>}
 				</TabsList>
 
 				<TabsContent value="logs" className="space-y-4">
@@ -530,6 +532,7 @@ export default function NodeDetailPage() {
 				</TabsContent>
 
 				<TabsContent value="channels">{isFabricNode(node) && <FabricNodeChannels nodeId={node.id!} />}</TabsContent>
+				<TabsContent value="network">{isBesuNode(node) && <BesuNodeNetwork nodeId={node.id!} />}</TabsContent>
 			</Tabs>
 
 			<AlertDialog open={showRenewCertDialog} onOpenChange={setShowRenewCertDialog}>

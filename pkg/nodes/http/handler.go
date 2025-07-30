@@ -68,6 +68,32 @@ func (h *NodeHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/{id}/channels/{channelID}/chaincodes", response.Middleware(h.GetNodeChaincodes))
 		r.Post("/{id}/certificates/renew", response.Middleware(h.RenewCertificates))
 		r.Put("/{id}", response.Middleware(h.UpdateNode))
+
+		// Besu RPC endpoints
+		r.Route("/{id}/rpc", func(r chi.Router) {
+			r.Get("/accounts", response.Middleware(h.GetBesuAccounts))
+			r.Get("/balance", response.Middleware(h.GetBesuBalance))
+			r.Get("/code", response.Middleware(h.GetBesuCode))
+			r.Get("/storage", response.Middleware(h.GetBesuStorageAt))
+			r.Get("/transaction-count", response.Middleware(h.GetBesuTransactionCount))
+			r.Get("/block-number", response.Middleware(h.GetBesuBlockNumber))
+			r.Get("/block-by-hash", response.Middleware(h.GetBesuBlockByHash))
+			r.Get("/block-by-number", response.Middleware(h.GetBesuBlockByNumber))
+			r.Get("/block-transaction-count-by-hash", response.Middleware(h.GetBesuBlockTransactionCountByHash))
+			r.Get("/block-transaction-count-by-number", response.Middleware(h.GetBesuBlockTransactionCountByNumber))
+			r.Get("/transaction-by-hash", response.Middleware(h.GetBesuTransactionByHash))
+			r.Get("/transaction-by-block-hash-and-index", response.Middleware(h.GetBesuTransactionByBlockHashAndIndex))
+			r.Get("/transaction-by-block-number-and-index", response.Middleware(h.GetBesuTransactionByBlockNumberAndIndex))
+			r.Get("/transaction-receipt", response.Middleware(h.GetBesuTransactionReceipt))
+			r.Get("/fee-history", response.Middleware(h.GetBesuFeeHistory))
+			r.Post("/logs", response.Middleware(h.GetBesuLogs))
+			r.Get("/pending-transactions", response.Middleware(h.GetBesuPendingTransactions))
+			r.Get("/chain-id", response.Middleware(h.GetBesuChainId))
+			r.Get("/protocol-version", response.Middleware(h.GetBesuProtocolVersion))
+			r.Get("/syncing", response.Middleware(h.GetBesuSyncing))
+			r.Get("/qbft-signer-metrics", response.Middleware(h.GetBesuQbftSignerMetrics))
+			r.Get("/qbft-request-timeout", response.Middleware(h.GetBesuQbftRequestTimeoutSeconds))
+		})
 	})
 }
 
@@ -1000,6 +1026,884 @@ func (h *NodeHandler) GetNodeChaincodes(w http.ResponseWriter, r *http.Request) 
 
 	response.JSON(w, http.StatusOK, chaincodeResponses)
 	return nil
+}
+
+// GetBesuAccounts godoc
+// @Summary Get accounts managed by the Besu node
+// @Description Lists accounts managed by the node
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Success 200 {array} string "Array of account addresses"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/accounts [get]
+func (h *NodeHandler) GetBesuAccounts(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	accounts, err := rpcClient.GetAccounts(r.Context())
+	if err != nil {
+		return errors.NewInternalError("failed to get accounts", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, accounts)
+}
+
+// GetBesuBalance godoc
+// @Summary Get balance of an address
+// @Description Gets balance of an address in Wei
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Param address query string true "Account address"
+// @Param blockTag query string false "Block tag (default: latest)"
+// @Success 200 {string} string "Balance in hex"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/balance [get]
+func (h *NodeHandler) GetBesuBalance(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	address := r.URL.Query().Get("address")
+	if address == "" {
+		return errors.NewValidationError("address parameter is required", nil)
+	}
+
+	blockTag := r.URL.Query().Get("blockTag")
+	if blockTag == "" {
+		blockTag = "latest"
+	}
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	balance, err := rpcClient.GetBalance(r.Context(), address, blockTag)
+	if err != nil {
+		return errors.NewInternalError("failed to get balance", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, balance)
+}
+
+// GetBesuCode godoc
+// @Summary Get bytecode at an address
+// @Description Gets bytecode at an address (e.g., contract code)
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Param address query string true "Contract address"
+// @Param blockTag query string false "Block tag (default: latest)"
+// @Success 200 {string} string "Bytecode in hex"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/code [get]
+func (h *NodeHandler) GetBesuCode(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	address := r.URL.Query().Get("address")
+	if address == "" {
+		return errors.NewValidationError("address parameter is required", nil)
+	}
+
+	blockTag := r.URL.Query().Get("blockTag")
+	if blockTag == "" {
+		blockTag = "latest"
+	}
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	code, err := rpcClient.GetCode(r.Context(), address, blockTag)
+	if err != nil {
+		return errors.NewInternalError("failed to get code", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, code)
+}
+
+// GetBesuStorageAt godoc
+// @Summary Get storage value at a position
+// @Description Gets storage value at a position for an address
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Param address query string true "Contract address"
+// @Param position query string true "Storage position"
+// @Param blockTag query string false "Block tag (default: latest)"
+// @Success 200 {string} string "Storage value in hex"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/storage [get]
+func (h *NodeHandler) GetBesuStorageAt(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	address := r.URL.Query().Get("address")
+	if address == "" {
+		return errors.NewValidationError("address parameter is required", nil)
+	}
+
+	position := r.URL.Query().Get("position")
+	if position == "" {
+		return errors.NewValidationError("position parameter is required", nil)
+	}
+
+	blockTag := r.URL.Query().Get("blockTag")
+	if blockTag == "" {
+		blockTag = "latest"
+	}
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	value, err := rpcClient.GetStorageAt(r.Context(), address, position, blockTag)
+	if err != nil {
+		return errors.NewInternalError("failed to get storage value", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, value)
+}
+
+// GetBesuTransactionCount godoc
+// @Summary Get transaction count for an address
+// @Description Gets nonce (tx count) for an address
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Param address query string true "Account address"
+// @Param blockTag query string false "Block tag (default: latest)"
+// @Success 200 {string} string "Transaction count in hex"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/transaction-count [get]
+func (h *NodeHandler) GetBesuTransactionCount(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	address := r.URL.Query().Get("address")
+	if address == "" {
+		return errors.NewValidationError("address parameter is required", nil)
+	}
+
+	blockTag := r.URL.Query().Get("blockTag")
+	if blockTag == "" {
+		blockTag = "latest"
+	}
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	count, err := rpcClient.GetTransactionCount(r.Context(), address, blockTag)
+	if err != nil {
+		return errors.NewInternalError("failed to get transaction count", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, count)
+}
+
+// GetBesuBlockNumber godoc
+// @Summary Get latest block number
+// @Description Gets the latest block number
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Success 200 {string} string "Block number in hex"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/block-number [get]
+func (h *NodeHandler) GetBesuBlockNumber(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	blockNumber, err := rpcClient.GetBlockNumber(r.Context())
+	if err != nil {
+		return errors.NewInternalError("failed to get block number", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, blockNumber)
+}
+
+// GetBesuBlockByHash godoc
+// @Summary Get block by hash
+// @Description Gets block details by hash
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Param hash query string true "Block hash"
+// @Param fullTx query bool false "Include full transaction objects" default(false)
+// @Success 200 {object} map[string]interface{} "Block object"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/block-by-hash [get]
+func (h *NodeHandler) GetBesuBlockByHash(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	hash := r.URL.Query().Get("hash")
+	if hash == "" {
+		return errors.NewValidationError("hash parameter is required", nil)
+	}
+
+	fullTx := r.URL.Query().Get("fullTx") == "true"
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	block, err := rpcClient.GetBlockByHash(r.Context(), hash, fullTx)
+	if err != nil {
+		return errors.NewInternalError("failed to get block", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, block)
+}
+
+// GetBesuBlockByNumber godoc
+// @Summary Get block by number
+// @Description Gets block by number or tag
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Param number query string false "Block number"
+// @Param tag query string false "Block tag (latest, earliest, pending)"
+// @Param fullTx query bool false "Include full transaction objects" default(false)
+// @Success 200 {object} map[string]interface{} "Block object"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/block-by-number [get]
+func (h *NodeHandler) GetBesuBlockByNumber(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	number := r.URL.Query().Get("number")
+	tag := r.URL.Query().Get("tag")
+	if number == "" && tag == "" {
+		tag = "latest"
+	}
+
+	fullTx := r.URL.Query().Get("fullTx") == "true"
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	block, err := rpcClient.GetBlockByNumber(r.Context(), number, tag, fullTx)
+	if err != nil {
+		return errors.NewInternalError("failed to get block", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, block)
+}
+
+// GetBesuTransactionByHash godoc
+// @Summary Get transaction by hash
+// @Description Gets transaction details by hash
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Param hash query string true "Transaction hash"
+// @Success 200 {object} map[string]interface{} "Transaction object"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/transaction-by-hash [get]
+func (h *NodeHandler) GetBesuTransactionByHash(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	hash := r.URL.Query().Get("hash")
+	if hash == "" {
+		return errors.NewValidationError("hash parameter is required", nil)
+	}
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	tx, err := rpcClient.GetTransactionByHash(r.Context(), hash)
+	if err != nil {
+		return errors.NewInternalError("failed to get transaction", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, tx)
+}
+
+// GetBesuTransactionReceipt godoc
+// @Summary Get transaction receipt
+// @Description Gets receipt for a transaction
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Param hash query string true "Transaction hash"
+// @Success 200 {object} map[string]interface{} "Transaction receipt"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/transaction-receipt [get]
+func (h *NodeHandler) GetBesuTransactionReceipt(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	hash := r.URL.Query().Get("hash")
+	if hash == "" {
+		return errors.NewValidationError("hash parameter is required", nil)
+	}
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	receipt, err := rpcClient.GetTransactionReceipt(r.Context(), hash)
+	if err != nil {
+		return errors.NewInternalError("failed to get transaction receipt", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, receipt)
+}
+
+// GetBesuLogs godoc
+// @Summary Get event logs
+// @Description Gets event logs based on filter criteria
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Param request body map[string]interface{} true "Log filter object"
+// @Success 200 {array} map[string]interface{} "Array of log objects"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/logs [post]
+func (h *NodeHandler) GetBesuLogs(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	var filter map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&filter); err != nil {
+		return errors.NewValidationError("invalid request body", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	logs, err := rpcClient.GetLogs(r.Context(), filter)
+	if err != nil {
+		return errors.NewInternalError("failed to get logs", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, logs)
+}
+
+// GetBesuPendingTransactions godoc
+// @Summary Get pending transactions
+// @Description Gets pending transactions in the mempool
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Success 200 {array} map[string]interface{} "Array of transaction objects"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/pending-transactions [get]
+func (h *NodeHandler) GetBesuPendingTransactions(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	txs, err := rpcClient.GetPendingTransactions(r.Context())
+	if err != nil {
+		return errors.NewInternalError("failed to get pending transactions", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, txs)
+}
+
+// GetBesuChainId godoc
+// @Summary Get chain ID
+// @Description Gets the chain ID
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Success 200 {string} string "Chain ID in hex"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/chain-id [get]
+func (h *NodeHandler) GetBesuChainId(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	chainId, err := rpcClient.GetChainId(r.Context())
+	if err != nil {
+		return errors.NewInternalError("failed to get chain ID", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, chainId)
+}
+
+// GetBesuProtocolVersion godoc
+// @Summary Get protocol version
+// @Description Gets Ethereum protocol version
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Success 200 {string} string "Protocol version in hex"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/protocol-version [get]
+func (h *NodeHandler) GetBesuProtocolVersion(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	version, err := rpcClient.GetProtocolVersion(r.Context())
+	if err != nil {
+		return errors.NewInternalError("failed to get protocol version", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, version)
+}
+
+// GetBesuSyncing godoc
+// @Summary Get sync status
+// @Description Gets sync status
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Success 200 {object} interface{} "Sync object or false"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/syncing [get]
+func (h *NodeHandler) GetBesuSyncing(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	syncing, err := rpcClient.GetSyncing(r.Context())
+	if err != nil {
+		return errors.NewInternalError("failed to get syncing status", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, syncing)
+}
+
+// GetBesuBlockTransactionCountByHash godoc
+// @Summary Get transaction count in block by hash
+// @Description Gets transaction count in a block by hash
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Param hash query string true "Block hash"
+// @Success 200 {string} string "Transaction count in hex"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/block-transaction-count-by-hash [get]
+func (h *NodeHandler) GetBesuBlockTransactionCountByHash(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	hash := r.URL.Query().Get("hash")
+	if hash == "" {
+		return errors.NewValidationError("hash parameter is required", nil)
+	}
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	count, err := rpcClient.GetBlockTransactionCountByHash(r.Context(), hash)
+	if err != nil {
+		return errors.NewInternalError("failed to get block transaction count", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, count)
+}
+
+// GetBesuBlockTransactionCountByNumber godoc
+// @Summary Get transaction count in block by number
+// @Description Gets transaction count by block number
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Param number query string false "Block number"
+// @Param tag query string false "Block tag (latest, earliest, pending)"
+// @Success 200 {string} string "Transaction count in hex"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/block-transaction-count-by-number [get]
+func (h *NodeHandler) GetBesuBlockTransactionCountByNumber(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	number := r.URL.Query().Get("number")
+	tag := r.URL.Query().Get("tag")
+	if number == "" && tag == "" {
+		tag = "latest"
+	}
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	count, err := rpcClient.GetBlockTransactionCountByNumber(r.Context(), number, tag)
+	if err != nil {
+		return errors.NewInternalError("failed to get block transaction count", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, count)
+}
+
+// GetBesuTransactionByBlockHashAndIndex godoc
+// @Summary Get transaction by block hash and index
+// @Description Gets transaction by block hash and index
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Param hash query string true "Block hash"
+// @Param index query string true "Transaction index"
+// @Success 200 {object} map[string]interface{} "Transaction object"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/transaction-by-block-hash-and-index [get]
+func (h *NodeHandler) GetBesuTransactionByBlockHashAndIndex(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	hash := r.URL.Query().Get("hash")
+	if hash == "" {
+		return errors.NewValidationError("hash parameter is required", nil)
+	}
+
+	index := r.URL.Query().Get("index")
+	if index == "" {
+		return errors.NewValidationError("index parameter is required", nil)
+	}
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	tx, err := rpcClient.GetTransactionByBlockHashAndIndex(r.Context(), hash, index)
+	if err != nil {
+		return errors.NewInternalError("failed to get transaction", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, tx)
+}
+
+// GetBesuTransactionByBlockNumberAndIndex godoc
+// @Summary Get transaction by block number and index
+// @Description Gets transaction by block number and index
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Param number query string false "Block number"
+// @Param tag query string false "Block tag (latest, earliest, pending)"
+// @Param index query string true "Transaction index"
+// @Success 200 {object} map[string]interface{} "Transaction object"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/transaction-by-block-number-and-index [get]
+func (h *NodeHandler) GetBesuTransactionByBlockNumberAndIndex(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	number := r.URL.Query().Get("number")
+	tag := r.URL.Query().Get("tag")
+	if number == "" && tag == "" {
+		tag = "latest"
+	}
+
+	index := r.URL.Query().Get("index")
+	if index == "" {
+		return errors.NewValidationError("index parameter is required", nil)
+	}
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	tx, err := rpcClient.GetTransactionByBlockNumberAndIndex(r.Context(), number, tag, index)
+	if err != nil {
+		return errors.NewInternalError("failed to get transaction", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, tx)
+}
+
+// GetBesuFeeHistory godoc
+// @Summary Get fee history
+// @Description Gets historical gas fees
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Param blockCount query string true "Number of blocks"
+// @Param newestBlock query string true "Newest block"
+// @Param rewardPercentiles query string true "Reward percentiles"
+// @Success 200 {object} map[string]interface{} "Fee history object"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/fee-history [get]
+func (h *NodeHandler) GetBesuFeeHistory(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	blockCount := r.URL.Query().Get("blockCount")
+	if blockCount == "" {
+		return errors.NewValidationError("blockCount parameter is required", nil)
+	}
+
+	newestBlock := r.URL.Query().Get("newestBlock")
+	if newestBlock == "" {
+		return errors.NewValidationError("newestBlock parameter is required", nil)
+	}
+
+	rewardPercentiles := r.URL.Query().Get("rewardPercentiles")
+	if rewardPercentiles == "" {
+		return errors.NewValidationError("rewardPercentiles parameter is required", nil)
+	}
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	feeHistory, err := rpcClient.GetFeeHistory(r.Context(), blockCount, newestBlock, rewardPercentiles)
+	if err != nil {
+		return errors.NewInternalError("failed to get fee history", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, feeHistory)
+}
+
+// GetBesuQbftSignerMetrics godoc
+// @Summary Get QBFT signer metrics
+// @Description Gets QBFT signer metrics
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Success 200 {array} service.QbftSignerMetric "QBFT signer metrics"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/qbft-signer-metrics [get]
+func (h *NodeHandler) GetBesuQbftSignerMetrics(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	metrics, err := rpcClient.GetQbftSignerMetrics(r.Context())
+	if err != nil {
+		return errors.NewInternalError("failed to get QBFT signer metrics", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, metrics)
+}
+
+// GetBesuQbftRequestTimeoutSeconds godoc
+// @Summary Get QBFT request timeout
+// @Description Gets QBFT request timeout in seconds
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Success 200 {int64} int64 "Request timeout in seconds"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/qbft-request-timeout [get]
+func (h *NodeHandler) GetBesuQbftRequestTimeoutSeconds(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	timeout, err := rpcClient.GetQbftRequestTimeoutSeconds(r.Context())
+	if err != nil {
+		return errors.NewInternalError("failed to get QBFT request timeout", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, timeout)
 }
 
 // SignaturePolicyToString converts a SignaturePolicyEnvelope to a human-readable string format
