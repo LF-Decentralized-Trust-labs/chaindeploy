@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
 	getNodesByIdRpcAccountsOptions,
 	getNodesByIdRpcBalanceOptions,
@@ -14,6 +14,9 @@ import {
 	getNodesByIdRpcStorageOptions,
 	getNodesByIdRpcQbftRequestTimeoutOptions,
 	getNodesByIdRpcQbftSignerMetricsOptions,
+	getNodesByIdRpcQbftPendingVotesOptions,
+	getNodesByIdRpcQbftValidatorsByBlockHashOptions,
+	getNodesByIdRpcQbftValidatorsByBlockNumberOptions,
 } from '@/api/client/@tanstack/react-query.gen'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -38,6 +41,12 @@ export function BesuNodeNetwork({ nodeId }: BesuNodeNetworkProps) {
 	const [storageAddress, setStorageAddress] = useState('')
 	const [storagePosition, setStoragePosition] = useState('')
 	const [copiedAddresses, setCopiedAddresses] = useState<Set<string>>(new Set())
+
+	const [selectedTab, setSelectedTab] = useState('overview')
+	const [voteLoading, setVoteLoading] = useState(false)
+	const [discardLoading, setDiscardLoading] = useState(false)
+
+	const queryClient = useQueryClient()
 
 	// Core network queries
 	const { data: chainId, isLoading: chainIdLoading } = useQuery({
@@ -134,6 +143,60 @@ export function BesuNodeNetwork({ nodeId }: BesuNodeNetworkProps) {
 		}),
 	})
 
+	// Additional QBFT queries
+	const { data: qbftPendingVotes, isLoading: qbftPendingVotesLoading } = useQuery({
+		...getNodesByIdRpcQbftPendingVotesOptions({
+			path: { id: nodeId },
+		}),
+	})
+
+	const { data: qbftValidatorsByBlockHash, isLoading: qbftValidatorsByBlockHashLoading } = useQuery({
+		...getNodesByIdRpcQbftValidatorsByBlockHashOptions({
+			path: { id: nodeId },
+			query: { blockHash: 'latest' },
+		}),
+	})
+
+	const { data: qbftValidatorsByBlockNumber, isLoading: qbftValidatorsByBlockNumberLoading } = useQuery({
+		...getNodesByIdRpcQbftValidatorsByBlockNumberOptions({
+			path: { id: nodeId },
+			query: { blockNumber: 'latest' },
+		}),
+	})
+
+	// QBFT voting mutations
+	const handleVote = async (validator: string, vote: boolean) => {
+		setVoteLoading(true)
+		try {
+			// TODO: Implement direct API call for voting
+			console.log('Voting for validator:', validator, 'vote:', vote)
+			// Refetch pending votes after successful vote
+			queryClient.invalidateQueries({
+				queryKey: getNodesByIdRpcQbftPendingVotesOptions({ path: { id: nodeId } }).queryKey,
+			})
+		} catch (error) {
+			console.error('Error voting:', error)
+		} finally {
+			setVoteLoading(false)
+		}
+	}
+
+	const handleDiscardVote = async (validator: string) => {
+		setDiscardLoading(true)
+		try {
+			// TODO: Implement direct API call for discarding vote
+			console.log('Discarding vote for validator:', validator)
+			// Refetch pending votes after successful discard
+			queryClient.invalidateQueries({
+				queryKey: getNodesByIdRpcQbftPendingVotesOptions({ path: { id: nodeId } }).queryKey,
+			})
+		} catch (error) {
+			console.error('Error discarding vote:', error)
+		} finally {
+			setDiscardLoading(false)
+		}
+	}
+
 	const copyToClipboard = (text: string) => {
 		navigator.clipboard.writeText(text)
 		setCopiedAddresses(prev => new Set([...prev, text]))
@@ -175,6 +238,7 @@ export function BesuNodeNetwork({ nodeId }: BesuNodeNetworkProps) {
 					<TabsTrigger value="accounts">Accounts</TabsTrigger>
 					<TabsTrigger value="blocks">Blocks</TabsTrigger>
 					<TabsTrigger value="contracts">Contracts</TabsTrigger>
+					<TabsTrigger value="validators">Validators</TabsTrigger>
 				</TabsList>
 
 				<TabsContent value="overview" className="space-y-4">
@@ -183,7 +247,7 @@ export function BesuNodeNetwork({ nodeId }: BesuNodeNetworkProps) {
 							<CardHeader>
 								<CardTitle className="flex items-center gap-2">
 									Network Information
-									<RefreshCw className={cn('h-4 w-4', { 'animate-spin': chainIdLoading || protocolVersionLoading || latestBlockLoading || syncStatusLoading || qbftRequestTimeoutLoading || qbftSignerMetricsLoading })} />
+									<RefreshCw className={cn('h-4 w-4', { 'animate-spin': chainIdLoading || protocolVersionLoading || latestBlockLoading || syncStatusLoading || qbftRequestTimeoutLoading || qbftSignerMetricsLoading || qbftPendingVotesLoading || qbftValidatorsByBlockHashLoading || qbftValidatorsByBlockNumberLoading })} />
 								</CardTitle>
 							</CardHeader>
 							<CardContent className="space-y-4">
@@ -588,6 +652,96 @@ export function BesuNodeNetwork({ nodeId }: BesuNodeNetworkProps) {
 											</Button>
 										</div>
 									</div>
+								)}
+							</CardContent>
+						</Card>
+					</div>
+				</TabsContent>
+
+				<TabsContent value="validators" className="space-y-4">
+					<div className="grid gap-4 md:grid-cols-2">
+						<Card>
+							<CardHeader>
+								<CardTitle>Current Validators</CardTitle>
+								<CardDescription>Validators for the latest block</CardDescription>
+							</CardHeader>
+							<CardContent>
+								{qbftValidatorsByBlockNumberLoading ? (
+									<p>Loading validators...</p>
+								) : qbftValidatorsByBlockNumber && qbftValidatorsByBlockNumber.length > 0 ? (
+									<div className="space-y-2">
+										{qbftValidatorsByBlockNumber.map((validator, index) => (
+											<div key={index} className="flex items-center justify-between p-2 rounded border">
+												<span className="font-mono text-sm">{validator}</span>
+												<Button
+													variant="ghost"
+													size="sm"
+													onClick={() => copyToClipboard(validator)}
+												>
+													<Copy className="h-4 w-4" />
+												</Button>
+											</div>
+										))}
+									</div>
+								) : (
+									<p>No validators found</p>
+								)}
+							</CardContent>
+						</Card>
+
+						<Card>
+							<CardHeader>
+								<CardTitle>Pending Votes</CardTitle>
+								<CardDescription>Votes waiting for consensus</CardDescription>
+							</CardHeader>
+							<CardContent>
+								{qbftPendingVotesLoading ? (
+									<p>Loading pending votes...</p>
+								) : qbftPendingVotes && Object.keys(qbftPendingVotes).length > 0 ? (
+									<div className="space-y-4">
+										{Object.entries(qbftPendingVotes).map(([validator, votes]) => (
+											<div key={validator} className="p-4 border rounded-lg">
+												<div className="flex items-center justify-between mb-2">
+													<span className="font-medium">Validator: {validator}</span>
+													<div className="flex gap-2">
+														<Button
+															size="sm"
+															variant="outline"
+															onClick={() => handleVote(validator, true)}
+															disabled={voteLoading}
+														>
+															Approve
+														</Button>
+														<Button
+															size="sm"
+															variant="outline"
+															onClick={() => handleVote(validator, false)}
+															disabled={voteLoading}
+														>
+															Reject
+														</Button>
+														<Button
+															size="sm"
+															variant="destructive"
+															onClick={() => handleDiscardVote(validator)}
+															disabled={discardLoading}
+														>
+															Discard
+														</Button>
+													</div>
+												</div>
+												<div className="space-y-1">
+													{votes.map((vote, index) => (
+														<div key={index} className="text-sm text-muted-foreground">
+															Proposer: {vote.proposer} - Vote: {vote.vote ? 'Approve' : 'Reject'}
+														</div>
+													))}
+												</div>
+											</div>
+										))}
+									</div>
+								) : (
+									<p>No pending votes</p>
 								)}
 							</CardContent>
 						</Card>

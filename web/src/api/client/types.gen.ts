@@ -1480,6 +1480,15 @@ export type HttpProviderResponse = {
     updatedAt?: string;
 };
 
+export type HttpQbftDiscardValidatorVoteRequest = {
+    validatorAddress: string;
+};
+
+export type HttpQbftProposeValidatorVoteRequest = {
+    validatorAddress: string;
+    vote?: boolean;
+};
+
 export type HttpRemoveConsenterPayload = {
     host: string;
     port: number;
@@ -2265,6 +2274,10 @@ export type ServiceNodesDefaultsResult = {
     availableAddresses?: Array<string>;
     orderers?: Array<ServiceNodeDefaults>;
     peers?: Array<ServiceNodeDefaults>;
+};
+
+export type ServiceQbftPendingVotes = {
+    [key: string]: boolean;
 };
 
 export type ServiceQbftSignerMetric = {
@@ -7950,6 +7963,126 @@ export type GetNodesByIdRpcProtocolVersionResponses = {
 
 export type GetNodesByIdRpcProtocolVersionResponse = GetNodesByIdRpcProtocolVersionResponses[keyof GetNodesByIdRpcProtocolVersionResponses];
 
+export type PostNodesByIdRpcQbftDiscardValidatorVoteData = {
+    /**
+     * Discard vote request
+     */
+    body: HttpQbftDiscardValidatorVoteRequest;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/nodes/{id}/rpc/qbft-discard-validator-vote';
+};
+
+export type PostNodesByIdRpcQbftDiscardValidatorVoteErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type PostNodesByIdRpcQbftDiscardValidatorVoteError = PostNodesByIdRpcQbftDiscardValidatorVoteErrors[keyof PostNodesByIdRpcQbftDiscardValidatorVoteErrors];
+
+export type PostNodesByIdRpcQbftDiscardValidatorVoteResponses = {
+    /**
+     * Success status
+     */
+    200: boolean;
+};
+
+export type PostNodesByIdRpcQbftDiscardValidatorVoteResponse = PostNodesByIdRpcQbftDiscardValidatorVoteResponses[keyof PostNodesByIdRpcQbftDiscardValidatorVoteResponses];
+
+export type GetNodesByIdRpcQbftPendingVotesData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/nodes/{id}/rpc/qbft-pending-votes';
+};
+
+export type GetNodesByIdRpcQbftPendingVotesErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcQbftPendingVotesError = GetNodesByIdRpcQbftPendingVotesErrors[keyof GetNodesByIdRpcQbftPendingVotesErrors];
+
+export type GetNodesByIdRpcQbftPendingVotesResponses = {
+    /**
+     * Map of validator addresses to boolean values indicating pending votes
+     */
+    200: ServiceQbftPendingVotes;
+};
+
+export type GetNodesByIdRpcQbftPendingVotesResponse = GetNodesByIdRpcQbftPendingVotesResponses[keyof GetNodesByIdRpcQbftPendingVotesResponses];
+
+export type PostNodesByIdRpcQbftProposeValidatorVoteData = {
+    /**
+     * Propose vote request
+     */
+    body: HttpQbftProposeValidatorVoteRequest;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/nodes/{id}/rpc/qbft-propose-validator-vote';
+};
+
+export type PostNodesByIdRpcQbftProposeValidatorVoteErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type PostNodesByIdRpcQbftProposeValidatorVoteError = PostNodesByIdRpcQbftProposeValidatorVoteErrors[keyof PostNodesByIdRpcQbftProposeValidatorVoteErrors];
+
+export type PostNodesByIdRpcQbftProposeValidatorVoteResponses = {
+    /**
+     * Success status
+     */
+    200: boolean;
+};
+
+export type PostNodesByIdRpcQbftProposeValidatorVoteResponse = PostNodesByIdRpcQbftProposeValidatorVoteResponses[keyof PostNodesByIdRpcQbftProposeValidatorVoteResponses];
+
 export type GetNodesByIdRpcQbftRequestTimeoutData = {
     body?: never;
     path: {
@@ -8023,6 +8156,92 @@ export type GetNodesByIdRpcQbftSignerMetricsResponses = {
 };
 
 export type GetNodesByIdRpcQbftSignerMetricsResponse = GetNodesByIdRpcQbftSignerMetricsResponses[keyof GetNodesByIdRpcQbftSignerMetricsResponses];
+
+export type GetNodesByIdRpcQbftValidatorsByBlockHashData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query: {
+        /**
+         * Block hash
+         */
+        blockHash: string;
+    };
+    url: '/nodes/{id}/rpc/qbft-validators-by-block-hash';
+};
+
+export type GetNodesByIdRpcQbftValidatorsByBlockHashErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcQbftValidatorsByBlockHashError = GetNodesByIdRpcQbftValidatorsByBlockHashErrors[keyof GetNodesByIdRpcQbftValidatorsByBlockHashErrors];
+
+export type GetNodesByIdRpcQbftValidatorsByBlockHashResponses = {
+    /**
+     * List of validator addresses
+     */
+    200: Array<string>;
+};
+
+export type GetNodesByIdRpcQbftValidatorsByBlockHashResponse = GetNodesByIdRpcQbftValidatorsByBlockHashResponses[keyof GetNodesByIdRpcQbftValidatorsByBlockHashResponses];
+
+export type GetNodesByIdRpcQbftValidatorsByBlockNumberData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query: {
+        /**
+         * Block number (hex string, 'latest', 'earliest', or 'pending')
+         */
+        blockNumber: string;
+    };
+    url: '/nodes/{id}/rpc/qbft-validators-by-block-number';
+};
+
+export type GetNodesByIdRpcQbftValidatorsByBlockNumberErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcQbftValidatorsByBlockNumberError = GetNodesByIdRpcQbftValidatorsByBlockNumberErrors[keyof GetNodesByIdRpcQbftValidatorsByBlockNumberErrors];
+
+export type GetNodesByIdRpcQbftValidatorsByBlockNumberResponses = {
+    /**
+     * List of validator addresses
+     */
+    200: Array<string>;
+};
+
+export type GetNodesByIdRpcQbftValidatorsByBlockNumberResponse = GetNodesByIdRpcQbftValidatorsByBlockNumberResponses[keyof GetNodesByIdRpcQbftValidatorsByBlockNumberResponses];
 
 export type GetNodesByIdRpcStorageData = {
     body?: never;
@@ -11411,5 +11630,5 @@ export type PutUsersByIdRoleResponses = {
 export type PutUsersByIdRoleResponse = PutUsersByIdRoleResponses[keyof PutUsersByIdRoleResponses];
 
 export type ClientOptions = {
-    baseUrl: 'http://localhost:8100/api/v1' | 'https://localhost:8100/api/v1' | (string & {});
+    baseUrl: 'http://localhost:8100' | (string & {});
 };

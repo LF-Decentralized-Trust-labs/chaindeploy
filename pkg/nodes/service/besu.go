@@ -1055,6 +1055,110 @@ func (c *RPCClient) GetQbftRequestTimeoutSeconds(ctx context.Context) (int64, er
 	return timeout, nil
 }
 
+// QbftPendingVote represents a pending vote for a validator proposal
+type QbftPendingVote struct {
+	Proposer string `json:"proposer"`
+	Vote     bool   `json:"vote"`
+}
+
+// QbftPendingVotes represents a map of pending validator proposals and their votes
+// The actual format is: {"validatorAddress": true}
+type QbftPendingVotes map[string]bool
+
+// QbftDiscardValidatorVote discards a pending vote for a validator proposal
+func (c *RPCClient) QbftDiscardValidatorVote(ctx context.Context, validatorAddress string) (bool, error) {
+	result, err := c.callRPC(ctx, "qbft_discardValidatorVote", []interface{}{validatorAddress})
+	if err != nil {
+		return false, err
+	}
+
+	var success bool
+	if err := json.Unmarshal(result, &success); err != nil {
+		return false, fmt.Errorf("failed to unmarshal QBFT discard validator vote response: %w, raw response: %s", err, string(result))
+	}
+
+	return success, nil
+}
+
+// QbftGetPendingVotes retrieves a map of pending validator proposals and their votes
+func (c *RPCClient) QbftGetPendingVotes(ctx context.Context) (QbftPendingVotes, error) {
+	result, err := c.callRPC(ctx, "qbft_getPendingVotes", []interface{}{})
+	if err != nil {
+		return nil, err
+	}
+
+	// Try to unmarshal as the expected map structure (validator address -> bool)
+	var pendingVotes QbftPendingVotes
+	if err := json.Unmarshal(result, &pendingVotes); err == nil {
+		return pendingVotes, nil
+	}
+
+	// If that fails, check if it's a boolean (indicating no pending votes)
+	var boolResult bool
+	if err := json.Unmarshal(result, &boolResult); err == nil {
+		// If it's a boolean and false, return empty map (no pending votes)
+		if !boolResult {
+			return make(QbftPendingVotes), nil
+		}
+		// If it's true, this might indicate an error or different response format
+		return nil, fmt.Errorf("unexpected QBFT pending votes response: got boolean true, expected map structure")
+	}
+
+	// If neither map nor boolean works, try to unmarshal as null
+	var nullResult interface{}
+	if err := json.Unmarshal(result, &nullResult); err == nil && nullResult == nil {
+		return make(QbftPendingVotes), nil
+	}
+
+	// If all else fails, return the raw response for debugging
+	return nil, fmt.Errorf("failed to unmarshal QBFT pending votes: unexpected response format: %s", string(result))
+}
+
+// QbftProposeValidatorVote proposes a vote to add (true) or remove (false) a validator
+func (c *RPCClient) QbftProposeValidatorVote(ctx context.Context, validatorAddress string, vote bool) (bool, error) {
+	result, err := c.callRPC(ctx, "qbft_proposeValidatorVote", []interface{}{validatorAddress, vote})
+	if err != nil {
+		return false, err
+	}
+
+	var success bool
+	if err := json.Unmarshal(result, &success); err != nil {
+		return false, fmt.Errorf("failed to unmarshal QBFT propose validator vote response: %w, raw response: %s", err, string(result))
+	}
+
+	return success, nil
+}
+
+// QbftGetValidatorsByBlockHash retrieves the list of validators for a specific block by its hash
+func (c *RPCClient) QbftGetValidatorsByBlockHash(ctx context.Context, blockHash string) ([]string, error) {
+	result, err := c.callRPC(ctx, "qbft_getValidatorsByBlockHash", []interface{}{blockHash})
+	if err != nil {
+		return nil, err
+	}
+
+	var validators []string
+	if err := json.Unmarshal(result, &validators); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal QBFT validators by block hash: %w, raw response: %s", err, string(result))
+	}
+
+	return validators, nil
+}
+
+// QbftGetValidatorsByBlockNumber retrieves the list of validators for a specific block by its number
+func (c *RPCClient) QbftGetValidatorsByBlockNumber(ctx context.Context, blockNumber string) ([]string, error) {
+	result, err := c.callRPC(ctx, "qbft_getValidatorsByBlockNumber", []interface{}{blockNumber})
+	if err != nil {
+		return nil, err
+	}
+
+	var validators []string
+	if err := json.Unmarshal(result, &validators); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal QBFT validators by block number: %w, raw response: %s", err, string(result))
+	}
+
+	return validators, nil
+}
+
 // GetBlockTransactionCountByHash gets tx count in a block by hash
 func (c *RPCClient) GetBlockTransactionCountByHash(ctx context.Context, blockHash string) (string, error) {
 	result, err := c.callRPC(ctx, "eth_getBlockTransactionCountByHash", []interface{}{blockHash})

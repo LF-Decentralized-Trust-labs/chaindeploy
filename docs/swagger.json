@@ -1,26 +1,8 @@
 {
-    "schemes": [
-        "http",
-        "https"
-    ],
     "swagger": "2.0",
     "info": {
-        "description": "ChainLaunch API provides services for managing blockchain networks and cryptographic keys",
-        "title": "ChainLaunch API",
-        "termsOfService": "http://swagger.io/terms/",
-        "contact": {
-            "name": "API Support",
-            "url": "http://chainlaunch.dev/support",
-            "email": "support@chainlaunch.dev"
-        },
-        "license": {
-            "name": "Apache 2.0",
-            "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
-        },
-        "version": "1.0"
+        "contact": {}
     },
-    "host": "localhost:8100",
-    "basePath": "/api/v1",
     "paths": {
         "/ai/boilerplates": {
             "get": {
@@ -7140,6 +7122,174 @@
                 }
             }
         },
+        "/nodes/{id}/rpc/qbft-discard-validator-vote": {
+            "post": {
+                "description": "Discards a pending vote for a validator proposal",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Nodes"
+                ],
+                "summary": "Discard QBFT validator vote",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Node ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Discard vote request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http.QbftDiscardValidatorVoteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success status",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Node not found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/nodes/{id}/rpc/qbft-pending-votes": {
+            "get": {
+                "description": "Retrieves a map of pending validator proposals where keys are validator addresses and values are boolean (true indicates pending vote)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Nodes"
+                ],
+                "summary": "Get QBFT pending votes",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Node ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Map of validator addresses to boolean values indicating pending votes",
+                        "schema": {
+                            "$ref": "#/definitions/service.QbftPendingVotes"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Node not found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/nodes/{id}/rpc/qbft-propose-validator-vote": {
+            "post": {
+                "description": "Proposes a vote to add (true) or remove (false) a validator",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Nodes"
+                ],
+                "summary": "Propose QBFT validator vote",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Node ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Propose vote request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http.QbftProposeValidatorVoteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success status",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Node not found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/nodes/{id}/rpc/qbft-request-timeout": {
             "get": {
                 "description": "Gets QBFT request timeout in seconds",
@@ -7219,6 +7369,126 @@
                             "type": "array",
                             "items": {
                                 "$ref": "#/definitions/service.QbftSignerMetric"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Validation error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Node not found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/nodes/{id}/rpc/qbft-validators-by-block-hash": {
+            "get": {
+                "description": "Retrieves the list of validators for a specific block by its hash",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Nodes"
+                ],
+                "summary": "Get QBFT validators by block hash",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Node ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Block hash",
+                        "name": "blockHash",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of validator addresses",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Validation error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Node not found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/nodes/{id}/rpc/qbft-validators-by-block-number": {
+            "get": {
+                "description": "Retrieves the list of validators for a specific block by its number",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Nodes"
+                ],
+                "summary": "Get QBFT validators by block number",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Node ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Block number (hex string, 'latest', 'earliest', or 'pending')",
+                        "name": "blockNumber",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of validator addresses",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
                             }
                         }
                     },
@@ -15085,6 +15355,31 @@
                 }
             }
         },
+        "http.QbftDiscardValidatorVoteRequest": {
+            "type": "object",
+            "required": [
+                "validatorAddress"
+            ],
+            "properties": {
+                "validatorAddress": {
+                    "type": "string"
+                }
+            }
+        },
+        "http.QbftProposeValidatorVoteRequest": {
+            "type": "object",
+            "required": [
+                "validatorAddress"
+            ],
+            "properties": {
+                "validatorAddress": {
+                    "type": "string"
+                },
+                "vote": {
+                    "type": "boolean"
+                }
+            }
+        },
         "http.RemoveConsenterPayload": {
             "type": "object",
             "required": [
@@ -17244,6 +17539,12 @@
                 }
             }
         },
+        "service.QbftPendingVotes": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "boolean"
+            }
+        },
         "service.QbftSignerMetric": {
             "type": "object",
             "properties": {
@@ -18047,89 +18348,5 @@
                 "KeyUsageDecipherOnly"
             ]
         }
-    },
-    "securityDefinitions": {
-        "BasicAuth": {
-            "type": "basic"
-        },
-        "CookieAuth": {
-            "type": "apiKey",
-            "name": "session_id",
-            "in": "cookie"
-        }
-    },
-    "tags": [
-        {
-            "description": "Audit management operations",
-            "name": "Audit"
-        },
-        {
-            "description": "Chaincode project management operations",
-            "name": "Chaincode Projects"
-        },
-        {
-            "description": "User authentication and authorization operations",
-            "name": "Authentication"
-        },
-        {
-            "description": "Backup schedule configuration and management",
-            "name": "Backup Schedules"
-        },
-        {
-            "description": "Backup target location configuration and management",
-            "name": "Backup Targets"
-        },
-        {
-            "description": "Backup management operations",
-            "name": "Backups"
-        },
-        {
-            "description": "Hyperledger Besu network management operations",
-            "name": "Besu Networks"
-        },
-        {
-            "description": "Hyperledger Fabric network management operations",
-            "name": "Fabric Networks"
-        },
-        {
-            "description": "Cryptographic key management operations",
-            "name": "Keys"
-        },
-        {
-            "description": "Metrics management operations",
-            "name": "Metrics"
-        },
-        {
-            "description": "Network node management operations",
-            "name": "Nodes"
-        },
-        {
-            "description": "System notification configuration and management",
-            "name": "Notifications"
-        },
-        {
-            "description": "Organization management operations",
-            "name": "Organizations"
-        },
-        {
-            "description": "Plugin management operations",
-            "name": "Plugins"
-        },
-        {
-            "description": "Key provider management operations",
-            "name": "Providers"
-        },
-        {
-            "description": "Settings management operations",
-            "name": "Settings"
-        },
-        {
-            "description": "Smart contract management operations",
-            "name": "SmartContracts"
-        },
-        {
-            "description": "User account management operations",
-            "name": "Users"
-        }
-    ]
+    }
 }

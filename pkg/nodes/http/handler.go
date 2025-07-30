@@ -93,6 +93,11 @@ func (h *NodeHandler) RegisterRoutes(r chi.Router) {
 			r.Get("/syncing", response.Middleware(h.GetBesuSyncing))
 			r.Get("/qbft-signer-metrics", response.Middleware(h.GetBesuQbftSignerMetrics))
 			r.Get("/qbft-request-timeout", response.Middleware(h.GetBesuQbftRequestTimeoutSeconds))
+			r.Post("/qbft-discard-validator-vote", response.Middleware(h.QbftDiscardValidatorVote))
+			r.Get("/qbft-pending-votes", response.Middleware(h.QbftGetPendingVotes))
+			r.Post("/qbft-propose-validator-vote", response.Middleware(h.QbftProposeValidatorVote))
+			r.Get("/qbft-validators-by-block-hash", response.Middleware(h.QbftGetValidatorsByBlockHash))
+			r.Get("/qbft-validators-by-block-number", response.Middleware(h.QbftGetValidatorsByBlockNumber))
 		})
 	})
 }
@@ -1987,4 +1992,212 @@ func UnmarshalApplicationPolicy(policyBytes []byte) (*cb.SignaturePolicyEnvelope
 			"policyType": fmt.Sprintf("%T", policy),
 		})
 	}
+}
+
+// QbftDiscardValidatorVoteRequest represents the request to discard a validator vote
+type QbftDiscardValidatorVoteRequest struct {
+	ValidatorAddress string `json:"validatorAddress" validate:"required"`
+}
+
+// QbftDiscardValidatorVote godoc
+// @Summary Discard QBFT validator vote
+// @Description Discards a pending vote for a validator proposal
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Param request body QbftDiscardValidatorVoteRequest true "Discard vote request"
+// @Success 200 {boolean} bool "Success status"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/qbft-discard-validator-vote [post]
+func (h *NodeHandler) QbftDiscardValidatorVote(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	var req QbftDiscardValidatorVoteRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return errors.NewValidationError("invalid request body", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	success, err := rpcClient.QbftDiscardValidatorVote(r.Context(), req.ValidatorAddress)
+	if err != nil {
+		return errors.NewInternalError("failed to discard QBFT validator vote", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, success)
+}
+
+// QbftGetPendingVotes godoc
+// @Summary Get QBFT pending votes
+// @Description Retrieves a map of pending validator proposals where keys are validator addresses and values are boolean (true indicates pending vote)
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Success 200 {object} service.QbftPendingVotes "Map of validator addresses to boolean values indicating pending votes"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/qbft-pending-votes [get]
+func (h *NodeHandler) QbftGetPendingVotes(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	pendingVotes, err := rpcClient.QbftGetPendingVotes(r.Context())
+	if err != nil {
+		return errors.NewInternalError("failed to get QBFT pending votes", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, pendingVotes)
+}
+
+// QbftProposeValidatorVoteRequest represents the request to propose a validator vote
+type QbftProposeValidatorVoteRequest struct {
+	ValidatorAddress string `json:"validatorAddress" validate:"required"`
+	Vote             bool   `json:"vote"`
+}
+
+// QbftProposeValidatorVote godoc
+// @Summary Propose QBFT validator vote
+// @Description Proposes a vote to add (true) or remove (false) a validator
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Param request body QbftProposeValidatorVoteRequest true "Propose vote request"
+// @Success 200 {boolean} bool "Success status"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/qbft-propose-validator-vote [post]
+func (h *NodeHandler) QbftProposeValidatorVote(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	var req QbftProposeValidatorVoteRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return errors.NewValidationError("invalid request body", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	success, err := rpcClient.QbftProposeValidatorVote(r.Context(), req.ValidatorAddress, req.Vote)
+	if err != nil {
+		return errors.NewInternalError("failed to propose QBFT validator vote", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, success)
+}
+
+// QbftGetValidatorsByBlockHash godoc
+// @Summary Get QBFT validators by block hash
+// @Description Retrieves the list of validators for a specific block by its hash
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Param blockHash query string true "Block hash"
+// @Success 200 {array} string "List of validator addresses"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/qbft-validators-by-block-hash [get]
+func (h *NodeHandler) QbftGetValidatorsByBlockHash(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	blockHash := r.URL.Query().Get("blockHash")
+	if blockHash == "" {
+		return errors.NewValidationError("block hash is required", map[string]interface{}{
+			"error": "blockHash query parameter is required",
+		})
+	}
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	validators, err := rpcClient.QbftGetValidatorsByBlockHash(r.Context(), blockHash)
+	if err != nil {
+		return errors.NewInternalError("failed to get QBFT validators by block hash", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, validators)
+}
+
+// QbftGetValidatorsByBlockNumber godoc
+// @Summary Get QBFT validators by block number
+// @Description Retrieves the list of validators for a specific block by its number
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param id path int true "Node ID"
+// @Param blockNumber query string true "Block number (hex string, 'latest', 'earliest', or 'pending')"
+// @Success 200 {array} string "List of validator addresses"
+// @Failure 400 {object} response.ErrorResponse "Validation error"
+// @Failure 404 {object} response.ErrorResponse "Node not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /nodes/{id}/rpc/qbft-validators-by-block-number [get]
+func (h *NodeHandler) QbftGetValidatorsByBlockNumber(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return errors.NewValidationError("invalid node ID", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	blockNumber := r.URL.Query().Get("blockNumber")
+	if blockNumber == "" {
+		return errors.NewValidationError("block number is required", map[string]interface{}{
+			"error": "blockNumber query parameter is required",
+		})
+	}
+
+	rpcClient, err := h.service.GetBesuRPCClient(r.Context(), id)
+	if err != nil {
+		return errors.NewInternalError("failed to get RPC client", err, nil)
+	}
+
+	validators, err := rpcClient.QbftGetValidatorsByBlockNumber(r.Context(), blockNumber)
+	if err != nil {
+		return errors.NewInternalError("failed to get QBFT validators by block number", err, nil)
+	}
+
+	return response.WriteJSON(w, http.StatusOK, validators)
 }
