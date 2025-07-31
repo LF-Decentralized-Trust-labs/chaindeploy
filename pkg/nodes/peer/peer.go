@@ -2629,7 +2629,7 @@ func (p *LocalPeer) SaveChannelConfigWithSignatures(
 	orgService := org.NewOrganizationService(p.orgService, p.keyService, p.logger, p.mspID, p.db)
 	signer, err := orgService.GetAdminIdentity(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get signer for org %s: %w", firstOrgID, err)
+		return nil, fmt.Errorf("failed to get signer for org %d: %w", firstOrgID, err)
 	}
 
 	envelope, err := protoutil.CreateSignedEnvelope(cb.HeaderType_CONFIG_UPDATE, channelID, signer, configUpdateEnv, 0, 0)
