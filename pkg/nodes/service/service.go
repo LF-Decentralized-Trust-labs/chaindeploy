@@ -1833,28 +1833,8 @@ func (s *NodeService) validateFabricPeerConnectivity(ctx context.Context, node *
 		"operations_address", peerConfig.OperationsListenAddress)
 
 	// Validate listen address
-	if err := s.validateAddressAvailability(peerConfig.ListenAddress, "peer listen"); err != nil {
+	if err := s.validateAddressAvailability(peerConfig.ExternalEndpoint, "peer listen"); err != nil {
 		return fmt.Errorf("peer listen address validation failed: %w", err)
-	}
-
-	// Validate operations address
-	if err := s.validateAddressAvailability(peerConfig.OperationsListenAddress, "peer operations"); err != nil {
-		return fmt.Errorf("peer operations address validation failed: %w", err)
-	}
-
-	// Validate chaincode address
-	if err := s.validateAddressAvailability(peerConfig.ChaincodeAddress, "peer chaincode"); err != nil {
-		return fmt.Errorf("peer chaincode address validation failed: %w", err)
-	}
-
-	// Validate events address
-	if err := s.validateAddressAvailability(peerConfig.EventsAddress, "peer events"); err != nil {
-		return fmt.Errorf("peer events address validation failed: %w", err)
-	}
-
-	// Try to connect to the peer's gRPC endpoint
-	if err := s.validateGRPCConnection(ctx, peerConfig.ListenAddress, "peer"); err != nil {
-		return fmt.Errorf("peer gRPC connection validation failed: %w", err)
 	}
 
 	s.logger.Info("Fabric peer connectivity validation successful", "node_id", node.ID)
@@ -1875,23 +1855,8 @@ func (s *NodeService) validateFabricOrdererConnectivity(ctx context.Context, nod
 		"operations_address", ordererConfig.OperationsListenAddress)
 
 	// Validate listen address
-	if err := s.validateAddressAvailability(ordererConfig.ListenAddress, "orderer listen"); err != nil {
+	if err := s.validateAddressAvailability(ordererConfig.ExternalEndpoint, "orderer listen"); err != nil {
 		return fmt.Errorf("orderer listen address validation failed: %w", err)
-	}
-
-	// Validate admin address
-	if err := s.validateAddressAvailability(ordererConfig.AdminAddress, "orderer admin"); err != nil {
-		return fmt.Errorf("orderer admin address validation failed: %w", err)
-	}
-
-	// Validate operations address
-	if err := s.validateAddressAvailability(ordererConfig.OperationsListenAddress, "orderer operations"); err != nil {
-		return fmt.Errorf("orderer operations address validation failed: %w", err)
-	}
-
-	// Try to connect to the orderer's gRPC endpoint
-	if err := s.validateGRPCConnection(ctx, ordererConfig.ListenAddress, "orderer"); err != nil {
-		return fmt.Errorf("orderer gRPC connection validation failed: %w", err)
 	}
 
 	s.logger.Info("Fabric orderer connectivity validation successful", "node_id", node.ID)

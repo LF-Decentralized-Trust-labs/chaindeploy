@@ -64,17 +64,13 @@ func (c *Client) JoinPeerToFabricNetwork(networkID, peerID int64) (*httptypes.Ne
 }
 
 // JoinAllPeersToFabricNetwork joins all peer nodes to a Fabric network
-func (c *Client) JoinAllPeersToFabricNetwork(networkID int64) ([]*httptypes.NetworkResponse, []error) {
-	peersResp, err := c.ListPeerNodes(1, 1000)
-	if err != nil {
-		return nil, []error{fmt.Errorf("failed to list peer nodes: %w", err)}
-	}
+func (c *Client) JoinAllPeersToFabricNetwork(networkID int64, peerNodeIDs []int64) ([]*httptypes.NetworkResponse, []error) {
 	var results []*httptypes.NetworkResponse
 	var errs []error
-	for _, peer := range peersResp.Items {
-		resp, err := c.JoinPeerToFabricNetwork(networkID, peer.ID)
+	for _, peerID := range peerNodeIDs {
+		resp, err := c.JoinPeerToFabricNetwork(networkID, peerID)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("peer %d: %w", peer.ID, err))
+			errs = append(errs, fmt.Errorf("peer %d: %w", peerID, err))
 		} else {
 			results = append(results, resp)
 		}
@@ -101,17 +97,13 @@ func (c *Client) JoinOrdererToFabricNetwork(networkID, ordererID int64) (*httpty
 }
 
 // JoinAllOrderersToFabricNetwork joins all orderer nodes to a Fabric network
-func (c *Client) JoinAllOrderersToFabricNetwork(networkID int64) ([]*httptypes.NetworkResponse, []error) {
-	orderersResp, err := c.ListOrdererNodes(1, 1000)
-	if err != nil {
-		return nil, []error{fmt.Errorf("failed to list orderer nodes: %w", err)}
-	}
+func (c *Client) JoinAllOrderersToFabricNetwork(networkID int64, ordererNodeIDs []int64) ([]*httptypes.NetworkResponse, []error) {
 	var results []*httptypes.NetworkResponse
 	var errs []error
-	for _, orderer := range orderersResp.Items {
-		resp, err := c.JoinOrdererToFabricNetwork(networkID, orderer.ID)
+	for _, ordererID := range ordererNodeIDs {
+		resp, err := c.JoinOrdererToFabricNetwork(networkID, ordererID)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("orderer %d: %w", orderer.ID, err))
+			errs = append(errs, fmt.Errorf("orderer %d: %w", ordererID, err))
 		} else {
 			results = append(results, resp)
 		}

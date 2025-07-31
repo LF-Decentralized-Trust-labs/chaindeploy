@@ -70,7 +70,16 @@ func newJoinAllCmd(logger *logger.Logger) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create client: %w", err)
 			}
-			results, errs := client.JoinAllPeersToFabricNetwork(networkID)
+
+			peerResp, err := client.ListPeerNodes(1, 1000)
+			if err != nil {
+				return fmt.Errorf("failed to list peer nodes: %w", err)
+			}
+			peerNodeIDs := []int64{}
+			for _, peer := range peerResp.Items {
+				peerNodeIDs = append(peerNodeIDs, peer.ID)
+			}
+			results, errs := client.JoinAllPeersToFabricNetwork(networkID, peerNodeIDs)
 			for _, resp := range results {
 				fmt.Printf("Peer joined network %d successfully. Network ID: %d, Status: %s\n", networkID, resp.ID, resp.Status)
 			}
@@ -129,7 +138,17 @@ func newJoinAllOrderersCmd(logger *logger.Logger) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create client: %w", err)
 			}
-			results, errs := client.JoinAllOrderersToFabricNetwork(networkID)
+
+			ordererResp, err := client.ListOrdererNodes(1, 1000)
+			if err != nil {
+				return fmt.Errorf("failed to list orderer nodes: %w", err)
+			}
+			ordererNodeIDs := []int64{}
+			for _, orderer := range ordererResp.Items {
+				ordererNodeIDs = append(ordererNodeIDs, orderer.ID)
+			}
+			results, errs := client.JoinAllOrderersToFabricNetwork(networkID, ordererNodeIDs)
+
 			for _, resp := range results {
 				fmt.Printf("Orderer joined network %d successfully. Network ID: %d, Status: %s\n", networkID, resp.ID, resp.Status)
 			}
