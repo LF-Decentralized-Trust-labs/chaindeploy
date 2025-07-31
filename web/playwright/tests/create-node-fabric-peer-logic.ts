@@ -54,7 +54,7 @@ export async function createFabricNode(page: Page, baseURL: string, mspId: strin
 	await page.getByRole('button', { name: /create node/i }).click()
 	await page.waitForLoadState('networkidle')
 	// Wait for navigation to the node detail page or nodes list
-	await page.getByText(/General Information/i).waitFor({ state: 'visible', timeout: 60000 })
+	await page.getByText(/Hyperledger Fabric Node/i).waitFor({ state: 'visible', timeout: 60000 })
 
 	return nodeName
 }

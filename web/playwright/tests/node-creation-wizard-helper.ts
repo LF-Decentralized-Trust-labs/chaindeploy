@@ -93,5 +93,5 @@ export async function createNodeWithWizard(page: Page, baseURL: string, params: 
 	await page.getByRole('button', { name: /create node/i }).click()
 
 	// Wait for navigation to the node detail page or nodes list
-	await expect(page.getByText(/General Information/i)).toBeVisible({ timeout: 60000 })
+	await expect(page.getByText(/Hyperledger Fabric Node/i)).toBeVisible({ timeout: 60000 })
 }

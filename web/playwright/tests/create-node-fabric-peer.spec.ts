@@ -27,7 +27,7 @@ test('can login, create an organization, and create a Fabric node', async ({ pag
 	const nodeName = await createFabricNode(page, baseURL ?? '', mspId)
 
 	// Optionally, assert the node name is visible or other post-creation checks
-	await expect(page.getByText(/General Information/i)).toBeVisible({ timeout: 60000 })
+	await expect(page.getByText(/Hyperledger Fabric Node/i)).toBeVisible({ timeout: 60000 })
 })
 
 test('can create a Fabric peer node using the NodeCreationWizard', async ({ page, baseURL }) => {
@@ -81,5 +81,5 @@ test('can create a Fabric peer node using the NodeCreationWizard', async ({ page
 	await page.getByRole('button', { name: /create node/i }).click()
 
 	// Wait for navigation to the node detail page or nodes list
-	await expect(page.getByText(/General Information/i)).toBeVisible({ timeout: 60000 })
+	await expect(page.getByText(/Hyperledger Fabric Node/i)).toBeVisible({ timeout: 60000 })
 })
