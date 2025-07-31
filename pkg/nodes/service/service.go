@@ -1855,7 +1855,7 @@ func (s *NodeService) validateFabricOrdererConnectivity(ctx context.Context, nod
 		"operations_address", ordererConfig.OperationsListenAddress)
 
 	// Validate listen address
-	if err := s.validateHTTPConnection(ordererConfig.ExternalEndpoint, "orderer listen"); err != nil {
+	if err := s.validateHTTPConnection(ctx, ordererConfig.ExternalEndpoint, "orderer listen"); err != nil {
 		return fmt.Errorf("orderer listen address validation failed: %w", err)
 	}
 
