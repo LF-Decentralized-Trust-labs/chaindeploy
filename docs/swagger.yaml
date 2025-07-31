@@ -1,3 +1,4 @@
+basePath: /api/v1
 definitions:
   ai.ChatMessage:
     properties:
@@ -3522,6 +3523,9 @@ definitions:
         type: string
       internalIp:
         type: string
+      keyAddress:
+        description: Key information
+        type: string
       keyId:
         type: integer
       metricsEnabled:
@@ -3542,6 +3546,8 @@ definitions:
         type: string
       p2pPort:
         type: integer
+      publicKey:
+        type: string
       rpcHost:
         type: string
       rpcPort:
@@ -4351,8 +4357,20 @@ definitions:
     - KeyUsageCRLSign
     - KeyUsageEncipherOnly
     - KeyUsageDecipherOnly
+host: localhost:8100
 info:
-  contact: {}
+  contact:
+    email: support@chainlaunch.dev
+    name: API Support
+    url: http://chainlaunch.dev/support
+  description: ChainLaunch API provides services for managing blockchain networks
+    and cryptographic keys
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: ChainLaunch API
+  version: "1.0"
 paths:
   /ai/{projectId}/chat:
     post:
@@ -7100,6 +7118,39 @@ paths:
       summary: Get network map
       tags:
       - Fabric Networks
+      - Besu Networks
+  /networks/besu/{id}/nodes:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves all nodes associated with a Besu network
+      parameters:
+      - description: Network ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.GetNetworkNodesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+      summary: Get nodes for a Besu network
+      tags:
       - Besu Networks
   /networks/besu/import:
     post:
@@ -12438,4 +12489,51 @@ paths:
       summary: Update user role
       tags:
       - Users
+schemes:
+- http
+- https
+securityDefinitions:
+  BasicAuth:
+    type: basic
+  CookieAuth:
+    in: cookie
+    name: session_id
+    type: apiKey
 swagger: "2.0"
+tags:
+- description: Audit management operations
+  name: Audit
+- description: Chaincode project management operations
+  name: Chaincode Projects
+- description: User authentication and authorization operations
+  name: Authentication
+- description: Backup schedule configuration and management
+  name: Backup Schedules
+- description: Backup target location configuration and management
+  name: Backup Targets
+- description: Backup management operations
+  name: Backups
+- description: Hyperledger Besu network management operations
+  name: Besu Networks
+- description: Hyperledger Fabric network management operations
+  name: Fabric Networks
+- description: Cryptographic key management operations
+  name: Keys
+- description: Metrics management operations
+  name: Metrics
+- description: Network node management operations
+  name: Nodes
+- description: System notification configuration and management
+  name: Notifications
+- description: Organization management operations
+  name: Organizations
+- description: Plugin management operations
+  name: Plugins
+- description: Key provider management operations
+  name: Providers
+- description: Settings management operations
+  name: Settings
+- description: Smart contract management operations
+  name: SmartContracts
+- description: User account management operations
+  name: Users

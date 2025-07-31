@@ -8,19 +8,13 @@ import {
 	postNodesByIdStartMutation,
 	postNodesByIdStopMutation,
 } from '@/api/client/@tanstack/react-query.gen'
-import { BesuNodeConfig } from '@/components/nodes/BesuNodeConfig'
-import { BesuNodeNetwork } from '@/components/nodes/BesuNodeNetwork'
-import { FabricNodeChannels } from '@/components/nodes/FabricNodeChannels'
-import { FabricOrdererConfig } from '@/components/nodes/FabricOrdererConfig'
-import { FabricPeerConfig } from '@/components/nodes/FabricPeerConfig'
-import { LogViewer } from '@/components/nodes/LogViewer'
+import { FabricNodeDetails } from '@/components/nodes/FabricNodeDetails'
+import { BesuNodeDetails } from '@/components/nodes/BesuNodeDetails'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { CertificateViewer } from '@/components/ui/certificate-viewer'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/utils'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -29,9 +23,6 @@ import { AlertCircle, CheckCircle2, ChevronDown, Clock, KeyRound, Pencil, Play, 
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import BesuMetricsPage from '../metrics/besu/[nodeId]'
-import OrdererMetricsPage from '../metrics/orderer/[nodeId]'
-import PeerMetricsPage from '../metrics/peer/[nodeId]'
 
 interface DeploymentConfig {
 	type?: string
@@ -306,12 +297,66 @@ export default function NodeDetailPage() {
 	if (!node) {
 		return <div>Node not found</div>
 	}
+	// Events rendering component
+	const renderEvents = () => {
+		if (!events?.items?.length) {
+			return (
+				<div className="flex flex-col items-center justify-center py-8 text-center">
+					<Clock className="h-12 w-12 text-muted-foreground mb-4" />
+					<h3 className="text-lg font-medium mb-2">No Events Found</h3>
+					<p className="text-sm text-muted-foreground max-w-md">
+						There are no events recorded for this node yet. Events will appear here when you perform operations like start, stop, or restart.
+					</p>
+				</div>
+			)
+		}
+
+		return (
+			<div className="space-y-8">
+				{events.items.map((event) => {
+					const EventIcon = getEventIcon(event.type!)
+					const StatusIcon = getEventStatusIcon(event.type!)
+					return (
+						<div key={event.id} className="flex gap-4">
+							<div className="mt-1">
+								<EventIcon className="h-5 w-5 text-muted-foreground" />
+							</div>
+							<div className="flex-1 space-y-1">
+								<div className="flex items-center justify-between">
+									<div className="flex items-center gap-2">
+										<span className="font-medium">{event.type}</span>
+										<StatusIcon className={cn('h-4 w-4', getEventStatusColor(event.type!))} />
+										<span className="text-sm text-muted-foreground">{event.type}</span>
+									</div>
+									<time className="text-sm text-muted-foreground">{format(new Date(event.created_at!), 'PPp')}</time>
+								</div>
+								{event.data && typeof event.data === 'object' ? (
+									<div className="rounded-md bg-muted p-2 text-sm">
+										<pre className="whitespace-pre-wrap font-mono text-xs">{JSON.stringify(event.data, null, 2)}</pre>
+									</div>
+								) : null}
+							</div>
+						</div>
+					)
+				})}
+			</div>
+		)
+	}
+
 	return (
 		<div className="flex-1 space-y-6 p-8">
 			<div className="flex items-center justify-between">
 				<div>
 					<h1 className="text-2xl font-semibold">{node.name}</h1>
-					<p className="text-muted-foreground">Node Details</p>
+					<div className="flex items-center gap-4 mt-1">
+						<p className="text-muted-foreground">
+							{isFabricNode(node) ? 'Hyperledger Fabric' : 'Hyperledger Besu'} Node
+						</p>
+						<Badge variant="default">{node.status}</Badge>
+						<span className="text-sm text-muted-foreground">
+							Created <TimeAgo date={node.createdAt!} />
+						</span>
+					</div>
 				</div>
 				<div className="flex gap-2">
 					<DropdownMenu>
@@ -362,178 +407,38 @@ export default function NodeDetailPage() {
 				</div>
 			</div>
 
-			<div className="grid gap-6 md:grid-cols-2">
-				<Card>
-					<CardHeader>
-						<CardTitle>General Information</CardTitle>
-						<CardDescription>Basic node details and configuration</CardDescription>
+			{/* Error Message Card - only show if there's an error */}
+			{node.errorMessage && (
+				<Card className="border-destructive">
+					<CardHeader className="pb-3">
+						<CardTitle className="text-base text-destructive">Error Message</CardTitle>
 					</CardHeader>
-					<CardContent className="space-y-4">
-						<div className="grid grid-cols-2 gap-4">
-							<div>
-								<p className="text-sm font-medium text-muted-foreground">Status</p>
-								<Badge variant="default">{node.status}</Badge>
-							</div>
-							{node.errorMessage && (
-								<div>
-									<p className="text-sm font-medium text-muted-foreground">Error Message</p>
-									<p>{node.errorMessage}</p>
-								</div>
-							)}
-							<div>
-								<p className="text-sm font-medium text-muted-foreground">Platform</p>
-								<p>{isFabricNode(node) ? 'Fabric' : 'Besu'}</p>
-							</div>
-							<div>
-								<p className="text-sm font-medium text-muted-foreground">Created At</p>
-								<TimeAgo date={node.createdAt!} />
-							</div>
-							{node.updatedAt && (
-								<div>
-									<p className="text-sm font-medium text-muted-foreground">Updated At</p>
-									<TimeAgo date={node.updatedAt} />
-								</div>
-							)}
-							{node.fabricPeer ? (
-								<div>
-									<p className="text-sm font-medium text-muted-foreground">Mode</p>
-									<p>{node.fabricPeer.mode || 'N/A'}</p>
-								</div>
-							) : null}
-							{node.fabricOrderer ? (
-								<div>
-									<p className="text-sm font-medium text-muted-foreground">Mode</p>
-									<p>{node.fabricOrderer.mode || 'N/A'}</p>
-								</div>
-							) : null}
-							{node.besuNode ? (
-								<div>
-									<p className="text-sm font-medium text-muted-foreground">Mode</p>
-									<p>{node.besuNode.mode || 'N/A'}</p>
-								</div>
-							) : null}
-						</div>
+					<CardContent>
+						<p className="text-sm">{node.errorMessage}</p>
 					</CardContent>
 				</Card>
+			)}
 
-				<>
-					{node.fabricPeer && <FabricPeerConfig config={node.fabricPeer} />}
-					{node.fabricOrderer && <FabricOrdererConfig config={node.fabricOrderer} />}
-					{node.besuNode && <BesuNodeConfig config={node.besuNode} />}
-				</>
-			</div>
+			{/* Platform-specific content */}
+			{isFabricNode(node) && (
+				<FabricNodeDetails
+					node={node}
+					logs={logs}
+					events={renderEvents()}
+					activeTab={activeTab}
+					onTabChange={handleTabChange}
+				/>
+			)}
 
-			<Tabs defaultValue={activeTab} className="space-y-4" onValueChange={handleTabChange}>
-				<TabsList>
-					<TabsTrigger value="logs">Logs</TabsTrigger>
-					<TabsTrigger value="metrics">Metrics</TabsTrigger>
-					<TabsTrigger value="crypto">Crypto Material</TabsTrigger>
-					<TabsTrigger value="events">Events</TabsTrigger>
-					{isFabricNode(node) && <TabsTrigger value="channels">Channels</TabsTrigger>}
-					{isBesuNode(node) && <TabsTrigger value="network">Besu Node Network</TabsTrigger>}
-				</TabsList>
-
-				<TabsContent value="logs" className="space-y-4">
-					<Card>
-						<CardHeader>
-							<CardTitle>Logs</CardTitle>
-							<CardDescription>Real-time node logs</CardDescription>
-						</CardHeader>
-						<CardContent>
-							<LogViewer logs={logs} onScroll={() => {}} />
-						</CardContent>
-					</Card>
-				</TabsContent>
-
-				<TabsContent value="metrics" className="space-y-4">
-					{node.besuNode && <BesuMetricsPage node={node} />}
-					{node.fabricOrderer && <OrdererMetricsPage node={node} />}
-					{node.fabricPeer && <PeerMetricsPage node={node} />}
-				</TabsContent>
-
-				<TabsContent value="crypto" className="space-y-4">
-					<Card>
-						<CardHeader>
-							<CardTitle>Certificates</CardTitle>
-							<CardDescription>Node certificates and keys</CardDescription>
-						</CardHeader>
-						<CardContent className="space-y-6">
-							{node.fabricPeer && (
-								<>
-									<div className="space-y-4">
-										<CertificateViewer label="Signing Certificate" certificate={node.fabricPeer?.signCert || ''} />
-										<CertificateViewer label="TLS Certificate" certificate={node.fabricPeer?.tlsCert || ''} />
-										<CertificateViewer label="CA Certificate" certificate={node.fabricPeer?.signCaCert || ''} />
-										<CertificateViewer label="TLS CA Certificate" certificate={node.fabricPeer?.tlsCaCert || ''} />
-									</div>
-								</>
-							)}
-							{node.fabricOrderer && (
-								<>
-									<div className="space-y-4">
-										<CertificateViewer label="Signing Certificate" certificate={node.fabricOrderer?.signCert || ''} />
-										<CertificateViewer label="TLS Certificate" certificate={node.fabricOrderer?.tlsCert || ''} />
-										<CertificateViewer label="CA Certificate" certificate={node.fabricOrderer?.signCaCert || ''} />
-										<CertificateViewer label="TLS CA Certificate" certificate={node.fabricOrderer?.tlsCaCert || ''} />
-									</div>
-								</>
-							)}
-						</CardContent>
-					</Card>
-				</TabsContent>
-
-				<TabsContent value="events">
-					<Card>
-						<CardHeader>
-							<CardTitle>Event History</CardTitle>
-							<CardDescription>Recent node operations and their status</CardDescription>
-						</CardHeader>
-						<CardContent>
-							{!events?.items?.length ? (
-								<div className="flex flex-col items-center justify-center py-8 text-center">
-									<Clock className="h-12 w-12 text-muted-foreground mb-4" />
-									<h3 className="text-lg font-medium mb-2">No Events Found</h3>
-									<p className="text-sm text-muted-foreground max-w-md">
-										There are no events recorded for this node yet. Events will appear here when you perform operations like start, stop, or restart.
-									</p>
-								</div>
-							) : (
-								<div className="space-y-8">
-									{events.items.map((event) => {
-										const EventIcon = getEventIcon(event.type!)
-										const StatusIcon = getEventStatusIcon(event.type!)
-										return (
-											<div key={event.id} className="flex gap-4">
-												<div className="mt-1">
-													<EventIcon className="h-5 w-5 text-muted-foreground" />
-												</div>
-												<div className="flex-1 space-y-1">
-													<div className="flex items-center justify-between">
-														<div className="flex items-center gap-2">
-															<span className="font-medium">{event.type}</span>
-															<StatusIcon className={cn('h-4 w-4', getEventStatusColor(event.type!))} />
-															<span className="text-sm text-muted-foreground">{event.type}</span>
-														</div>
-														<time className="text-sm text-muted-foreground">{format(new Date(event.created_at!), 'PPp')}</time>
-													</div>
-													{event.data && typeof event.data === 'object' ? (
-														<div className="rounded-md bg-muted p-2 text-sm">
-															<pre className="whitespace-pre-wrap font-mono text-xs">{JSON.stringify(event.data, null, 2)}</pre>
-														</div>
-													) : null}
-												</div>
-											</div>
-										)
-									})}
-								</div>
-							)}
-						</CardContent>
-					</Card>
-				</TabsContent>
-
-				<TabsContent value="channels">{isFabricNode(node) && <FabricNodeChannels nodeId={node.id!} />}</TabsContent>
-				<TabsContent value="network">{isBesuNode(node) && <BesuNodeNetwork nodeId={node.id!} />}</TabsContent>
-			</Tabs>
+			{isBesuNode(node) && (
+				<BesuNodeDetails
+					node={node}
+					logs={logs}
+					events={renderEvents()}
+					activeTab={activeTab}
+					onTabChange={handleTabChange}
+				/>
+			)}
 
 			<AlertDialog open={showRenewCertDialog} onOpenChange={setShowRenewCertDialog}>
 				<AlertDialogContent>

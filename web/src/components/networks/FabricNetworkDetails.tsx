@@ -852,7 +852,7 @@ export default function FabricNetworkDetails({ network }: FabricNetworkDetailsPr
 								{(() => {
 									const consensusType = channelConfig?.config?.data?.data?.[0]?.payload?.data?.config?.channel_group?.groups?.Orderer?.values?.ConsensusType?.value?.type
 									const isBFT = consensusType === 'BFT'
-									
+
 									let consenters
 									if (isBFT) {
 										// For BFT consensus, use Orderers.value.consenter_mapping
@@ -862,18 +862,13 @@ export default function FabricNetworkDetails({ network }: FabricNetworkDetailsPr
 										consenters = channelConfig?.config?.data?.data?.[0]?.payload?.data?.config?.channel_group?.groups?.Orderer?.values?.ConsensusType?.value?.metadata?.consenters
 									}
 
-									
 									if (consenters && consenters.length > 0) {
 										return <ConsenterConfig consenters={consenters} />
 									} else {
 										return (
 											<Card className="p-4">
 												<p className="text-sm text-muted-foreground text-center">No consenters configured</p>
-												{consenters && (
-													<p className="text-xs text-muted-foreground text-center mt-2">
-														Data structure: {JSON.stringify(consenters, null, 2)}
-													</p>
-												)}
+												{consenters && <p className="text-xs text-muted-foreground text-center mt-2">Data structure: {JSON.stringify(consenters, null, 2)}</p>}
 											</Card>
 										)
 									}

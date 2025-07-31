@@ -14,11 +14,7 @@ export function BesuNodeConfig({ config }: BesuNodeConfigProps) {
         <CardDescription>Besu-specific node settings</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-sm font-medium text-muted-foreground">Node Key</p>
-            <p>Key ID: {config.keyId}</p>
-          </div>
+        <div className="grid grid-cols-1 gap-4">
           <div>
             <p className="text-sm font-medium text-muted-foreground">Network ID</p>
             <p>{config.networkId}</p>

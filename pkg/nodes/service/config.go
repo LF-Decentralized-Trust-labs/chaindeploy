@@ -115,4 +115,7 @@ type BesuNodeProperties struct {
 	MetricsHost     string `json:"metricsHost"`
 	MetricsPort     uint   `json:"metricsPort"`
 	MetricsProtocol string `json:"metricsProtocol"`
+	// Key information
+	KeyAddress string `json:"keyAddress,omitempty"`
+	PublicKey  string `json:"publicKey,omitempty"`
 }

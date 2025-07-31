@@ -2113,6 +2113,10 @@ export type ServiceBesuNodeProperties = {
     enodeUrl?: string;
     externalIp?: string;
     internalIp?: string;
+    /**
+     * Key information
+     */
+    keyAddress?: string;
     keyId?: number;
     /**
      * Metrics configuration
@@ -2128,6 +2132,7 @@ export type ServiceBesuNodeProperties = {
      */
     p2pHost?: string;
     p2pPort?: number;
+    publicKey?: string;
     rpcHost?: string;
     rpcPort?: number;
     version?: string;
@@ -5705,6 +5710,44 @@ export type GetNetworksBesuByIdMapResponses = {
 };
 
 export type GetNetworksBesuByIdMapResponse = GetNetworksBesuByIdMapResponses[keyof GetNetworksBesuByIdMapResponses];
+
+export type GetNetworksBesuByIdNodesData = {
+    body?: never;
+    path: {
+        /**
+         * Network ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/networks/besu/{id}/nodes';
+};
+
+export type GetNetworksBesuByIdNodesErrors = {
+    /**
+     * Bad Request
+     */
+    400: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Not Found
+     */
+    404: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+};
+
+export type GetNetworksBesuByIdNodesError = GetNetworksBesuByIdNodesErrors[keyof GetNetworksBesuByIdNodesErrors];
+
+export type GetNetworksBesuByIdNodesResponses = {
+    /**
+     * OK
+     */
+    200: HttpGetNetworkNodesResponse;
+};
+
+export type GetNetworksBesuByIdNodesResponse = GetNetworksBesuByIdNodesResponses[keyof GetNetworksBesuByIdNodesResponses];
 
 export type GetNetworksFabricData = {
     body?: never;
@@ -11630,5 +11673,5 @@ export type PutUsersByIdRoleResponses = {
 export type PutUsersByIdRoleResponse = PutUsersByIdRoleResponses[keyof PutUsersByIdRoleResponses];
 
 export type ClientOptions = {
-    baseUrl: 'http://localhost:8100' | (string & {});
+    baseUrl: 'http://localhost:8100/api/v1' | 'https://localhost:8100/api/v1' | (string & {});
 };

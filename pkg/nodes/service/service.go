@@ -1028,6 +1028,18 @@ func (s *NodeService) mapDBNodeToServiceNode(dbNode *db.Node) (*Node, *NodeRespo
 				MetricsPort:     uint(config.MetricsPort),
 				MetricsProtocol: config.MetricsProtocol,
 			}
+
+			// Fetch key information from key management service
+			if config.KeyID > 0 {
+				key, err := s.keymanagementService.GetKey(ctx, int(config.KeyID))
+				if err == nil {
+					nodeResponse.BesuNode.KeyAddress = key.EthereumAddress
+					nodeResponse.BesuNode.PublicKey = key.PublicKey
+				} else {
+					s.logger.Warn("failed to get key information for Besu node", "nodeID", dbNode.ID, "keyID", config.KeyID, "error", err)
+				}
+			}
+
 			deployConfig, ok := deploymentConfig.(*types.BesuNodeDeploymentConfig)
 			if ok {
 				nodeResponse.BesuNode.KeyID = deployConfig.KeyID

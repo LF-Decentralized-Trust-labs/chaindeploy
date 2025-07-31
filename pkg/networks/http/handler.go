@@ -84,6 +84,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Post("/import", h.ImportBesuNetwork)
 		r.Get("/{id}", h.BesuNetworkGet)
 		r.Delete("/{id}", h.BesuNetworkDelete)
+		r.Get("/{id}/nodes", h.BesuNetworkGetNodes)
 		r.Get("/{id}/map", h.NetworkMap)
 		r.Put("/{id}/genesis", h.UpdateGenesisBlock)
 	})
@@ -1121,6 +1122,40 @@ func (h *Handler) BesuNetworkDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// @Summary Get nodes for a Besu network
+// @Description Retrieves all nodes associated with a Besu network
+// @Tags Besu Networks
+// @Accept json
+// @Produce json
+// @Param id path int true "Network ID"
+// @Success 200 {object} GetNetworkNodesResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /networks/besu/{id}/nodes [get]
+func (h *Handler) BesuNetworkGetNodes(w http.ResponseWriter, r *http.Request) {
+	networkID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_network_id", "Invalid network ID")
+		return
+	}
+
+	nodes, err := h.networkService.GetNetworkNodes(r.Context(), networkID)
+	if err != nil {
+		if err.Error() == "sql: no rows in result set" {
+			writeError(w, http.StatusNotFound, "network_not_found", "Network not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "get_network_nodes_failed", err.Error())
+		return
+	}
+
+	resp := GetNetworkNodesResponse{
+		Nodes: nodes,
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // Helper function to map network to Besu response

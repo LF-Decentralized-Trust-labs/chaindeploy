@@ -1,39 +1,41 @@
-import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { HttpNodeResponse } from '@/api/client'
 import {
 	getNodesByIdRpcAccountsOptions,
 	getNodesByIdRpcBalanceOptions,
+	getNodesByIdRpcBlockByHashOptions,
+	getNodesByIdRpcBlockByNumberOptions,
 	getNodesByIdRpcBlockNumberOptions,
 	getNodesByIdRpcChainIdOptions,
-	getNodesByIdRpcProtocolVersionOptions,
-	getNodesByIdRpcSyncingOptions,
-	getNodesByIdRpcTransactionCountOptions,
-	getNodesByIdRpcBlockByNumberOptions,
-	getNodesByIdRpcBlockByHashOptions,
 	getNodesByIdRpcCodeOptions,
-	getNodesByIdRpcStorageOptions,
+	getNodesByIdRpcProtocolVersionOptions,
+	getNodesByIdRpcQbftPendingVotesOptions,
 	getNodesByIdRpcQbftRequestTimeoutOptions,
 	getNodesByIdRpcQbftSignerMetricsOptions,
-	getNodesByIdRpcQbftPendingVotesOptions,
 	getNodesByIdRpcQbftValidatorsByBlockHashOptions,
 	getNodesByIdRpcQbftValidatorsByBlockNumberOptions,
+	getNodesByIdRpcStorageOptions,
+	getNodesByIdRpcSyncingOptions,
+	getNodesByIdRpcTransactionCountOptions
 } from '@/api/client/@tanstack/react-query.gen'
+import { BesuValidatorsTab } from '@/components/networks/BesuValidatorsTab'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { Copy, RefreshCw, Search, ExternalLink, Check } from 'lucide-react'
-import { toast } from 'sonner'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Check, Copy, RefreshCw } from 'lucide-react'
+import { useState } from 'react'
 
 interface BesuNodeNetworkProps {
 	nodeId: number
+	node: HttpNodeResponse
 }
 
-export function BesuNodeNetwork({ nodeId }: BesuNodeNetworkProps) {
+export function BesuNodeNetwork({ nodeId, node }: BesuNodeNetworkProps) {
 	const [address, setAddress] = useState('')
 	const [blockNumber, setBlockNumber] = useState('')
 	const [blockHash, setBlockHash] = useState('')
@@ -41,12 +43,6 @@ export function BesuNodeNetwork({ nodeId }: BesuNodeNetworkProps) {
 	const [storageAddress, setStorageAddress] = useState('')
 	const [storagePosition, setStoragePosition] = useState('')
 	const [copiedAddresses, setCopiedAddresses] = useState<Set<string>>(new Set())
-
-	const [selectedTab, setSelectedTab] = useState('overview')
-	const [voteLoading, setVoteLoading] = useState(false)
-	const [discardLoading, setDiscardLoading] = useState(false)
-
-	const queryClient = useQueryClient()
 
 	// Core network queries
 	const { data: chainId, isLoading: chainIdLoading } = useQuery({
@@ -112,8 +108,6 @@ export function BesuNodeNetwork({ nodeId }: BesuNodeNetworkProps) {
 		enabled: !!blockHash,
 	})
 
-
-
 	const { data: contractCode, isLoading: contractCodeLoading } = useQuery({
 		...getNodesByIdRpcCodeOptions({
 			path: { id: nodeId },
@@ -164,45 +158,12 @@ export function BesuNodeNetwork({ nodeId }: BesuNodeNetworkProps) {
 		}),
 	})
 
-	// QBFT voting mutations
-	const handleVote = async (validator: string, vote: boolean) => {
-		setVoteLoading(true)
-		try {
-			// TODO: Implement direct API call for voting
-			console.log('Voting for validator:', validator, 'vote:', vote)
-			// Refetch pending votes after successful vote
-			queryClient.invalidateQueries({
-				queryKey: getNodesByIdRpcQbftPendingVotesOptions({ path: { id: nodeId } }).queryKey,
-			})
-		} catch (error) {
-			console.error('Error voting:', error)
-		} finally {
-			setVoteLoading(false)
-		}
-	}
-
-	const handleDiscardVote = async (validator: string) => {
-		setDiscardLoading(true)
-		try {
-			// TODO: Implement direct API call for discarding vote
-			console.log('Discarding vote for validator:', validator)
-			// Refetch pending votes after successful discard
-			queryClient.invalidateQueries({
-				queryKey: getNodesByIdRpcQbftPendingVotesOptions({ path: { id: nodeId } }).queryKey,
-			})
-		} catch (error) {
-			console.error('Error discarding vote:', error)
-		} finally {
-			setDiscardLoading(false)
-		}
-	}
-
 	const copyToClipboard = (text: string) => {
 		navigator.clipboard.writeText(text)
-		setCopiedAddresses(prev => new Set([...prev, text]))
+		setCopiedAddresses((prev) => new Set([...prev, text]))
 		// Reset the checkmark after 2 seconds
 		setTimeout(() => {
-			setCopiedAddresses(prev => {
+			setCopiedAddresses((prev) => {
 				const newSet = new Set(prev)
 				newSet.delete(text)
 				return newSet
@@ -247,7 +208,20 @@ export function BesuNodeNetwork({ nodeId }: BesuNodeNetworkProps) {
 							<CardHeader>
 								<CardTitle className="flex items-center gap-2">
 									Network Information
-									<RefreshCw className={cn('h-4 w-4', { 'animate-spin': chainIdLoading || protocolVersionLoading || latestBlockLoading || syncStatusLoading || qbftRequestTimeoutLoading || qbftSignerMetricsLoading || qbftPendingVotesLoading || qbftValidatorsByBlockHashLoading || qbftValidatorsByBlockNumberLoading })} />
+									<RefreshCw
+										className={cn('h-4 w-4', {
+											'animate-spin':
+												chainIdLoading ||
+												protocolVersionLoading ||
+												latestBlockLoading ||
+												syncStatusLoading ||
+												qbftRequestTimeoutLoading ||
+												qbftSignerMetricsLoading ||
+												qbftPendingVotesLoading ||
+												qbftValidatorsByBlockHashLoading ||
+												qbftValidatorsByBlockNumberLoading,
+										})}
+									/>
 								</CardTitle>
 							</CardHeader>
 							<CardContent className="space-y-4">
@@ -286,18 +260,11 @@ export function BesuNodeNetwork({ nodeId }: BesuNodeNetworkProps) {
 															<div className="flex justify-between mb-1">
 																<span className="text-muted-foreground">Address:</span>
 																<div className="flex items-center gap-1">
-																	<span className="font-mono">{signer.address.length > 12 ? `${signer.address.slice(0, 8)}...${signer.address.slice(-4)}` : signer.address}</span>
-																	<Button
-																		variant="ghost"
-																		size="sm"
-																		onClick={() => copyToClipboard(signer.address)}
-																		className="h-4 w-4 p-0"
-																	>
-																		{copiedAddresses.has(signer.address) ? (
-																			<Check className="h-3 w-3 text-green-500" />
-																		) : (
-																			<Copy className="h-3 w-3" />
-																		)}
+																	<span className="font-mono">
+																		{signer.address.length > 12 ? `${signer.address.slice(0, 8)}...${signer.address.slice(-4)}` : signer.address}
+																	</span>
+																	<Button variant="ghost" size="sm" onClick={() => copyToClipboard(signer.address)} className="h-4 w-4 p-0">
+																		{copiedAddresses.has(signer.address) ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
 																	</Button>
 																</div>
 															</div>
@@ -320,7 +287,7 @@ export function BesuNodeNetwork({ nodeId }: BesuNodeNetworkProps) {
 										)}
 									</div>
 								</div>
-								
+
 								{syncStatus && typeof syncStatus === 'object' && (
 									<div className="mt-4 p-3 bg-muted rounded-lg">
 										<h4 className="text-sm font-medium mb-2">Sync Details</h4>
@@ -360,11 +327,7 @@ export function BesuNodeNetwork({ nodeId }: BesuNodeNetworkProps) {
 										{accounts.map((account, index) => (
 											<div key={index} className="flex items-center justify-between p-2 rounded border">
 												<span className="font-mono text-sm">{account}</span>
-												<Button
-													variant="ghost"
-													size="sm"
-													onClick={() => copyToClipboard(account)}
-												>
+												<Button variant="ghost" size="sm" onClick={() => copyToClipboard(account)}>
 													<Copy className="h-4 w-4" />
 												</Button>
 											</div>
@@ -388,12 +351,7 @@ export function BesuNodeNetwork({ nodeId }: BesuNodeNetworkProps) {
 							<div className="space-y-2">
 								<Label htmlFor="address">Address</Label>
 								<div className="flex gap-2">
-									<Input
-										id="address"
-										placeholder="0x..."
-										value={address}
-										onChange={(e) => setAddress(e.target.value)}
-									/>
+									<Input id="address" placeholder="0x..." value={address} onChange={(e) => setAddress(e.target.value)} />
 									<Button variant="outline" onClick={() => setAddress('')}>
 										Clear
 									</Button>
@@ -413,11 +371,7 @@ export function BesuNodeNetwork({ nodeId }: BesuNodeNetworkProps) {
 												<div className="space-y-2">
 													<p className="text-lg font-mono">{formatWeiToEth(balance)} ETH</p>
 													<p className="text-sm text-muted-foreground">{balance} Wei</p>
-													<Button
-														variant="ghost"
-														size="sm"
-														onClick={() => copyToClipboard(balance)}
-													>
+													<Button variant="ghost" size="sm" onClick={() => copyToClipboard(balance)}>
 														<Copy className="h-4 w-4" />
 													</Button>
 												</div>
@@ -437,11 +391,7 @@ export function BesuNodeNetwork({ nodeId }: BesuNodeNetworkProps) {
 											) : transactionCount ? (
 												<div className="space-y-2">
 													<p className="text-lg font-mono">{transactionCount}</p>
-													<Button
-														variant="ghost"
-														size="sm"
-														onClick={() => copyToClipboard(transactionCount)}
-													>
+													<Button variant="ghost" size="sm" onClick={() => copyToClipboard(transactionCount)}>
 														<Copy className="h-4 w-4" />
 													</Button>
 												</div>
@@ -467,12 +417,7 @@ export function BesuNodeNetwork({ nodeId }: BesuNodeNetworkProps) {
 								<div className="space-y-2">
 									<Label htmlFor="blockNumber">Block Number</Label>
 									<div className="flex gap-2">
-										<Input
-											id="blockNumber"
-											placeholder="12345"
-											value={blockNumber}
-											onChange={(e) => setBlockNumber(e.target.value)}
-										/>
+										<Input id="blockNumber" placeholder="12345" value={blockNumber} onChange={(e) => setBlockNumber(e.target.value)} />
 										<Button variant="outline" onClick={() => setBlockNumber('')}>
 											Clear
 										</Button>
@@ -510,12 +455,7 @@ export function BesuNodeNetwork({ nodeId }: BesuNodeNetworkProps) {
 								<div className="space-y-2">
 									<Label htmlFor="blockHash">Block Hash</Label>
 									<div className="flex gap-2">
-										<Input
-											id="blockHash"
-											placeholder="0x..."
-											value={blockHash}
-											onChange={(e) => setBlockHash(e.target.value)}
-										/>
+										<Input id="blockHash" placeholder="0x..." value={blockHash} onChange={(e) => setBlockHash(e.target.value)} />
 										<Button variant="outline" onClick={() => setBlockHash('')}>
 											Clear
 										</Button>
@@ -546,8 +486,6 @@ export function BesuNodeNetwork({ nodeId }: BesuNodeNetworkProps) {
 					</div>
 				</TabsContent>
 
-
-
 				<TabsContent value="contracts" className="space-y-4">
 					<div className="grid gap-4 md:grid-cols-2">
 						<Card>
@@ -559,12 +497,7 @@ export function BesuNodeNetwork({ nodeId }: BesuNodeNetworkProps) {
 								<div className="space-y-2">
 									<Label htmlFor="contractAddress">Contract Address</Label>
 									<div className="flex gap-2">
-										<Input
-											id="contractAddress"
-											placeholder="0x..."
-											value={address}
-											onChange={(e) => setAddress(e.target.value)}
-										/>
+										<Input id="contractAddress" placeholder="0x..." value={address} onChange={(e) => setAddress(e.target.value)} />
 										<Button variant="outline" onClick={() => setAddress('')}>
 											Clear
 										</Button>
@@ -577,21 +510,13 @@ export function BesuNodeNetwork({ nodeId }: BesuNodeNetworkProps) {
 										<div className="space-y-2">
 											<div className="flex justify-between">
 												<span className="text-sm font-medium">Has Code:</span>
-												<Badge variant={contractCode && contractCode !== '0x' ? 'default' : 'secondary'}>
-													{contractCode && contractCode !== '0x' ? 'Yes' : 'No'}
-												</Badge>
+												<Badge variant={contractCode && contractCode !== '0x' ? 'default' : 'secondary'}>{contractCode && contractCode !== '0x' ? 'Yes' : 'No'}</Badge>
 											</div>
 											{contractCode && contractCode !== '0x' && (
 												<div className="space-y-2">
 													<span className="text-sm font-medium">Bytecode:</span>
-													<div className="bg-muted p-2 rounded text-xs font-mono max-h-32 overflow-y-auto">
-														{contractCode}
-													</div>
-													<Button
-														variant="ghost"
-														size="sm"
-														onClick={() => copyToClipboard(contractCode)}
-													>
+													<div className="bg-muted p-2 rounded text-xs font-mono max-h-32 overflow-y-auto">{contractCode}</div>
+													<Button variant="ghost" size="sm" onClick={() => copyToClipboard(contractCode)}>
 														<Copy className="h-4 w-4" />
 													</Button>
 												</div>
@@ -610,26 +535,19 @@ export function BesuNodeNetwork({ nodeId }: BesuNodeNetworkProps) {
 							<CardContent className="space-y-4">
 								<div className="space-y-2">
 									<Label htmlFor="storageAddress">Contract Address</Label>
-									<Input
-										id="storageAddress"
-										placeholder="0x..."
-										value={storageAddress}
-										onChange={(e) => setStorageAddress(e.target.value)}
-									/>
+									<Input id="storageAddress" placeholder="0x..." value={storageAddress} onChange={(e) => setStorageAddress(e.target.value)} />
 								</div>
 								<div className="space-y-2">
 									<Label htmlFor="storagePosition">Storage Position</Label>
 									<div className="flex gap-2">
-										<Input
-											id="storagePosition"
-											placeholder="0x..."
-											value={storagePosition}
-											onChange={(e) => setStoragePosition(e.target.value)}
-										/>
-										<Button variant="outline" onClick={() => {
-											setStorageAddress('')
-											setStoragePosition('')
-										}}>
+										<Input id="storagePosition" placeholder="0x..." value={storagePosition} onChange={(e) => setStoragePosition(e.target.value)} />
+										<Button
+											variant="outline"
+											onClick={() => {
+												setStorageAddress('')
+												setStoragePosition('')
+											}}
+										>
 											Clear
 										</Button>
 									</div>
@@ -643,11 +561,7 @@ export function BesuNodeNetwork({ nodeId }: BesuNodeNetworkProps) {
 												<span className="text-sm font-medium">Storage Value:</span>
 												<span className="font-mono text-sm">{formatHex(storageValue)}</span>
 											</div>
-											<Button
-												variant="ghost"
-												size="sm"
-												onClick={() => copyToClipboard(storageValue)}
-											>
+											<Button variant="ghost" size="sm" onClick={() => copyToClipboard(storageValue)}>
 												<Copy className="h-4 w-4" />
 											</Button>
 										</div>
@@ -659,95 +573,9 @@ export function BesuNodeNetwork({ nodeId }: BesuNodeNetworkProps) {
 				</TabsContent>
 
 				<TabsContent value="validators" className="space-y-4">
-					<div className="grid gap-4 md:grid-cols-2">
-						<Card>
-							<CardHeader>
-								<CardTitle>Current Validators</CardTitle>
-								<CardDescription>Validators for the latest block</CardDescription>
-							</CardHeader>
-							<CardContent>
-								{qbftValidatorsByBlockNumberLoading ? (
-									<p>Loading validators...</p>
-								) : qbftValidatorsByBlockNumber && qbftValidatorsByBlockNumber.length > 0 ? (
-									<div className="space-y-2">
-										{qbftValidatorsByBlockNumber.map((validator, index) => (
-											<div key={index} className="flex items-center justify-between p-2 rounded border">
-												<span className="font-mono text-sm">{validator}</span>
-												<Button
-													variant="ghost"
-													size="sm"
-													onClick={() => copyToClipboard(validator)}
-												>
-													<Copy className="h-4 w-4" />
-												</Button>
-											</div>
-										))}
-									</div>
-								) : (
-									<p>No validators found</p>
-								)}
-							</CardContent>
-						</Card>
-
-						<Card>
-							<CardHeader>
-								<CardTitle>Pending Votes</CardTitle>
-								<CardDescription>Votes waiting for consensus</CardDescription>
-							</CardHeader>
-							<CardContent>
-								{qbftPendingVotesLoading ? (
-									<p>Loading pending votes...</p>
-								) : qbftPendingVotes && Object.keys(qbftPendingVotes).length > 0 ? (
-									<div className="space-y-4">
-										{Object.entries(qbftPendingVotes).map(([validator, votes]) => (
-											<div key={validator} className="p-4 border rounded-lg">
-												<div className="flex items-center justify-between mb-2">
-													<span className="font-medium">Validator: {validator}</span>
-													<div className="flex gap-2">
-														<Button
-															size="sm"
-															variant="outline"
-															onClick={() => handleVote(validator, true)}
-															disabled={voteLoading}
-														>
-															Approve
-														</Button>
-														<Button
-															size="sm"
-															variant="outline"
-															onClick={() => handleVote(validator, false)}
-															disabled={voteLoading}
-														>
-															Reject
-														</Button>
-														<Button
-															size="sm"
-															variant="destructive"
-															onClick={() => handleDiscardVote(validator)}
-															disabled={discardLoading}
-														>
-															Discard
-														</Button>
-													</div>
-												</div>
-												<div className="space-y-1">
-													{votes.map((vote, index) => (
-														<div key={index} className="text-sm text-muted-foreground">
-															Proposer: {vote.proposer} - Vote: {vote.vote ? 'Approve' : 'Reject'}
-														</div>
-													))}
-												</div>
-											</div>
-										))}
-									</div>
-								) : (
-									<p>No pending votes</p>
-								)}
-							</CardContent>
-						</Card>
-					</div>
+					<BesuValidatorsTab nodeId={node.id} nodesLoading={false} />
 				</TabsContent>
 			</Tabs>
 		</div>
 	)
-} 
+}
