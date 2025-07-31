@@ -48,7 +48,7 @@ export async function createFabricNode(page: Page, baseURL: string, mspId: strin
 
 	// External Endpoint - use crypto.getRandomValues for secure random port
 	const extPort = 7000 + (new DataView(crypto.getRandomValues(new Uint8Array(4)).buffer).getUint32(0) % 1000)
-	await page.getByPlaceholder('e.g., peer0.org1.example.com:7051').fill(`peer0.example.com:${extPort}`)
+	await page.getByPlaceholder('e.g., peer0.org1.example.com:7051').fill(`127.0.0.1:${extPort}`)
 
 	// Submit
 	await page.getByRole('button', { name: /create node/i }).click()

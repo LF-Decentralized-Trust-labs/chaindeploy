@@ -1833,7 +1833,7 @@ func (s *NodeService) validateFabricPeerConnectivity(ctx context.Context, node *
 		"operations_address", peerConfig.OperationsListenAddress)
 
 	// Validate listen address
-	if err := s.validateAddressAvailability(peerConfig.ExternalEndpoint, "peer listen"); err != nil {
+	if err := s.validateHTTPConnection(ctx, peerConfig.ExternalEndpoint, "peer listen"); err != nil {
 		return fmt.Errorf("peer listen address validation failed: %w", err)
 	}
 
@@ -1855,7 +1855,7 @@ func (s *NodeService) validateFabricOrdererConnectivity(ctx context.Context, nod
 		"operations_address", ordererConfig.OperationsListenAddress)
 
 	// Validate listen address
-	if err := s.validateAddressAvailability(ordererConfig.ExternalEndpoint, "orderer listen"); err != nil {
+	if err := s.validateHTTPConnection(ordererConfig.ExternalEndpoint, "orderer listen"); err != nil {
 		return fmt.Errorf("orderer listen address validation failed: %w", err)
 	}
 
