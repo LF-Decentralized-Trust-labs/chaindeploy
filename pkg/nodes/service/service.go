@@ -1883,9 +1883,10 @@ func (s *NodeService) validateBesuNodeConnectivity(ctx context.Context, node *db
 		return fmt.Errorf("besu P2P address validation failed: %w", err)
 	}
 
-	// Try to connect to the Besu RPC endpoint
+	// Validate RPC address
+	rpcAddress := fmt.Sprintf("%s:%d", besuConfig.RPCHost, besuConfig.RPCPort)
 	if err := s.validateHTTPConnection(ctx, rpcAddress, "besu RPC"); err != nil {
-		return fmt.Errorf("besu RPC connection validation failed: %w", err)
+		return fmt.Errorf("besu RPC address validation failed: %w", err)
 	}
 
 	s.logger.Info("Besu node connectivity validation successful", "node_id", node.ID)
