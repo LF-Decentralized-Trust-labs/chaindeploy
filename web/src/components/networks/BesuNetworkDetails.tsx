@@ -112,7 +112,6 @@ export function BesuNetworkDetails({ network }: BesuNetworkDetailsProps) {
 	const [isEditingGenesis, setIsEditingGenesis] = useState(false)
 	const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null)
 
-	const queryClient = useQueryClient()
 
 	// Fetch BESU nodes for the network
 	const { data: besuNodes, isLoading: nodesLoading } = useQuery({
@@ -377,7 +376,9 @@ export function BesuNetworkDetails({ network }: BesuNetworkDetailsProps) {
 										<CardContent>
 											<div className="flex items-center gap-3">
 												<div className="flex items-center gap-2">
-													<span className="font-medium text-lg">{selectedNodeId}</span>
+													<span className="font-medium text-lg">
+														{networkNodes.find(node => node.id === selectedNodeId)?.name || `Node ${selectedNodeId}`}
+													</span>
 												</div>
 											</div>
 										</CardContent>
