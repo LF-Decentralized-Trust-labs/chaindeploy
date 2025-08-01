@@ -45,20 +45,23 @@ const (
 
 // Network represents a blockchain network
 type Network struct {
-	ID                 int64           `json:"id"`
-	Name               string          `json:"name"`
-	Platform           string          `json:"platform"`
-	Status             NetworkStatus   `json:"status"`
-	Description        string          `json:"description"`
-	Config             json.RawMessage `json:"config,omitempty"`
-	DeploymentConfig   json.RawMessage `json:"deploymentConfig,omitempty"`
-	ExposedPorts       json.RawMessage `json:"exposedPorts,omitempty"`
-	GenesisBlock       string          `json:"genesisBlock,omitempty"`
-	CurrentConfigBlock string          `json:"currentConfigBlock,omitempty"`
-	Domain             string          `json:"domain,omitempty"`
-	CreatedAt          time.Time       `json:"createdAt"`
-	CreatedBy          *int64          `json:"createdBy,omitempty"`
-	UpdatedAt          *time.Time      `json:"updatedAt,omitempty"`
+	ID                  int64           `json:"id"`
+	Name                string          `json:"name"`
+	Platform            string          `json:"platform"`
+	Status              NetworkStatus   `json:"status"`
+	Description         string          `json:"description"`
+	Config              json.RawMessage `json:"config,omitempty"`
+	DeploymentConfig    json.RawMessage `json:"deploymentConfig,omitempty"`
+	ExposedPorts        json.RawMessage `json:"exposedPorts,omitempty"`
+	GenesisBlock        string          `json:"genesisBlock,omitempty"`
+	CurrentConfigBlock  string          `json:"currentConfigBlock,omitempty"`
+	Domain              string          `json:"domain,omitempty"`
+	CreatedAt           time.Time       `json:"createdAt"`
+	CreatedBy           *int64          `json:"createdBy,omitempty"`
+	UpdatedAt           *time.Time      `json:"updatedAt,omitempty"`
+	GenesisChangedAt    *time.Time      `json:"genesisChangedAt,omitempty"`
+	GenesisChangedBy    *int64          `json:"genesisChangedBy,omitempty"`
+	GenesisChangeReason *string         `json:"genesisChangeReason,omitempty"`
 }
 
 // ListNetworksParams represents the parameters for listing networks
@@ -235,7 +238,13 @@ func (s *NetworkService) CreateNetwork(ctx context.Context, name, description st
 
 // ListNetworks retrieves a list of networks with pagination
 func (s *NetworkService) ListNetworks(ctx context.Context, params ListNetworksParams) (*ListNetworksResult, error) {
-	networks, err := s.db.ListNetworks(ctx)
+	var networks []*db.Network
+	var err error
+	if params.Platform != "" {
+		networks, err = s.db.ListNetworksByPlatform(ctx, string(params.Platform))
+	} else {
+		networks, err = s.db.ListNetworks(ctx)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to list networks: %w", err)
 	}
@@ -321,6 +330,16 @@ func (s *NetworkService) mapDBNetworkToServiceNetwork(n *db.Network) *Network {
 	}
 	if n.CurrentConfigBlockB64.Valid {
 		network.CurrentConfigBlock = n.CurrentConfigBlockB64.String
+	}
+	if n.GenesisChangedAt.Valid {
+		genesisChangedAt := n.GenesisChangedAt.Time
+		network.GenesisChangedAt = &genesisChangedAt
+	}
+	if n.GenesisChangedBy.Valid {
+		network.GenesisChangedBy = &n.GenesisChangedBy.Int64
+	}
+	if n.GenesisChangeReason.Valid {
+		network.GenesisChangeReason = &n.GenesisChangeReason.String
 	}
 
 	return network
@@ -455,6 +474,23 @@ func (s *NetworkService) GetGenesisBlock(ctx context.Context, networkID int64) (
 	}
 
 	return genesisBlock, nil
+}
+
+// UpdateGenesisBlock updates the genesis block for a network with change tracking
+func (s *NetworkService) UpdateGenesisBlock(ctx context.Context, networkID int64, genesisBlock []byte, changedBy int64, reason string) error {
+	genesisBlockB64 := base64.StdEncoding.EncodeToString(genesisBlock)
+
+	_, err := s.db.UpdateNetworkGenesisBlockWithTracking(ctx, &db.UpdateNetworkGenesisBlockWithTrackingParams{
+		GenesisBlockB64:     sql.NullString{String: genesisBlockB64, Valid: true},
+		GenesisChangedBy:    sql.NullInt64{Int64: changedBy, Valid: true},
+		GenesisChangeReason: sql.NullString{String: reason, Valid: true},
+		ID:                  networkID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update genesis block: %w", err)
+	}
+
+	return nil
 }
 
 func (s *NetworkService) ImportNetwork(ctx context.Context, params ImportNetworkParams) (*ImportNetworkResult, error) {

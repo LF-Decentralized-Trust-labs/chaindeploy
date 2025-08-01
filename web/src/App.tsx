@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider } from 'next-themes'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { Suspense, lazy } from 'react'
-import { client } from './api/client'
+import { client } from './api/client/client.gen'
 import { Header } from './components/dashboard/Header'
 import AppSidebar from './components/dashboard/Sidebar'
 import { ProtectedLayout } from './components/layout/ProtectedLayout'
@@ -65,6 +65,9 @@ const FabricChaincodeDefinitionDetail = lazy(() => import('./pages/smart-contrac
 const ChaincodeProjectDetailPage = lazy(() => import('./pages/smart-contracts/fabric/[id]'))
 const ChaincodeProjectEditorPage = lazy(() => import('./pages/smart-contracts/fabric/[id]/editor'))
 const ChaincodePlaygroundPage = lazy(() => import('./pages/smart-contracts/fabric/[id]/playground'))
+const BesuBlocksPage = lazy(() => import('./pages/networks/besu/[nodeId]/blocks'))
+const BesuBlockDetailsPage = lazy(() => import('./pages/networks/besu/[nodeId]/blocks/[blockNumber]'))
+const BesuTransactionDetailsPage = lazy(() => import('./pages/networks/besu/[nodeId]/blocks/[blockNumber]/transactions/[index]'))
 
 import { Toaster } from './components/ui/sonner'
 import { AlertCircle, CheckCircle, Loader2, X } from 'lucide-react'
@@ -153,6 +156,9 @@ const App2 = () => {
 													<Route path="sc/fabric/projects/chaincodes/:id" element={<ChaincodeProjectDetailPage />} />
 													<Route path="sc/fabric/projects/chaincodes/:id/editor" element={<ChaincodeProjectEditorPage />} />
 													<Route path="smart-contracts/fabric/:id/playground" element={<ChaincodePlaygroundPage />} />
+													<Route path="networks/besu/:nodeId/blocks" element={<BesuBlocksPage />} />
+													<Route path="networks/besu/:nodeId/blocks/:blockNumber" element={<BesuBlockDetailsPage />} />
+													<Route path="networks/besu/:nodeId/blocks/:blockNumber/transactions/:index" element={<BesuTransactionDetailsPage />} />
 												</Route>
 												<Route path="*" element={<NotFoundPage />} />
 											</Routes>
@@ -243,10 +249,13 @@ const App = () => {
 														<Route path="settings/audit-logs/:id" element={<AuditLogDetailPage />} />
 														<Route path="platform/analytics" element={<AnalyticsPage />} />
 														<Route path="sc/fabric/chaincodes/:id" element={<FabricChaincodeDefinitionDetail />} />
-														<Route path="sc/fabric/projects/chaincodes/:id" element={<ChaincodeProjectDetailPage />} />
-														<Route path="sc/fabric/projects/chaincodes/:id/editor" element={<ChaincodeProjectEditorPage />} />
-														<Route path="smart-contracts/fabric/:id/playground" element={<ChaincodePlaygroundPage />} />
-													</Route>
+																											<Route path="sc/fabric/projects/chaincodes/:id" element={<ChaincodeProjectDetailPage />} />
+													<Route path="sc/fabric/projects/chaincodes/:id/editor" element={<ChaincodeProjectEditorPage />} />
+													<Route path="smart-contracts/fabric/:id/playground" element={<ChaincodePlaygroundPage />} />
+													<Route path="networks/besu/:nodeId/blocks" element={<BesuBlocksPage />} />
+													<Route path="networks/besu/:nodeId/blocks/:blockNumber" element={<BesuBlockDetailsPage />} />
+													<Route path="networks/besu/:nodeId/blocks/:blockNumber/transactions/:index" element={<BesuTransactionDetailsPage />} />
+												</Route>
 													<Route path="*" element={<NotFoundPage />} />
 												</Routes>
 											</Suspense>

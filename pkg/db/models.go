@@ -228,6 +228,9 @@ type Network struct {
 	UpdatedAt             sql.NullTime   `json:"updatedAt"`
 	GenesisBlockB64       sql.NullString `json:"genesisBlockB64"`
 	CurrentConfigBlockB64 sql.NullString `json:"currentConfigBlockB64"`
+	GenesisChangedAt      sql.NullTime   `json:"genesisChangedAt"`
+	GenesisChangedBy      sql.NullInt64  `json:"genesisChangedBy"`
+	GenesisChangeReason   sql.NullString `json:"genesisChangeReason"`
 }
 
 type NetworkNode struct {
@@ -339,6 +342,14 @@ type PrometheusConfig struct {
 	DockerExtraArgs     sql.NullString `json:"dockerExtraArgs"`
 	CreatedAt           time.Time      `json:"createdAt"`
 	UpdatedAt           time.Time      `json:"updatedAt"`
+	NetworkMode         sql.NullString `json:"networkMode"`
+	ExtraHosts          sql.NullString `json:"extraHosts"`
+	RestartPolicy       sql.NullString `json:"restartPolicy"`
+	ServiceName         sql.NullString `json:"serviceName"`
+	ServiceUser         sql.NullString `json:"serviceUser"`
+	ServiceGroup        sql.NullString `json:"serviceGroup"`
+	BinaryPath          sql.NullString `json:"binaryPath"`
+	PrometheusVersion   sql.NullString `json:"prometheusVersion"`
 }
 
 type Session struct {

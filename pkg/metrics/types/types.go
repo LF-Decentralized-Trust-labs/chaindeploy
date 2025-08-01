@@ -1,14 +1,44 @@
 package types
 
-import "time"
+import (
+	"time"
+
+	"github.com/chainlaunch/chainlaunch/pkg/metrics/common"
+)
 
 // DeployPrometheusRequest represents the request to deploy Prometheus
 // Used for HTTP API data transfer
 // See handler.go for usage
 type DeployPrometheusRequest struct {
-	PrometheusVersion string `json:"prometheus_version" binding:"required"`
-	PrometheusPort    int    `json:"prometheus_port" binding:"required"`
-	ScrapeInterval    int    `json:"scrape_interval" binding:"required"`
+	PrometheusVersion string                `json:"prometheus_version" binding:"required"`
+	PrometheusPort    int                   `json:"prometheus_port" binding:"required"`
+	ScrapeInterval    int                   `json:"scrape_interval" binding:"required"`
+	DeploymentMode    common.DeploymentMode `json:"deployment_mode"`
+	DockerConfig      *DockerDeployConfig   `json:"docker_config,omitempty"`
+}
+
+// DockerDeployConfig represents Docker-specific deployment configuration
+type DockerDeployConfig struct {
+	NetworkMode common.NetworkMode `json:"network_mode"`
+}
+
+// RefreshPrometheusRequest represents the request to refresh Prometheus deployment
+type RefreshPrometheusRequest struct {
+	PrometheusVersion string                `json:"prometheus_version,omitempty"`
+	PrometheusPort    int                   `json:"prometheus_port,omitempty"`
+	ScrapeInterval    int                   `json:"scrape_interval,omitempty"`
+	DeploymentMode    common.DeploymentMode `json:"deployment_mode,omitempty"`
+	DockerConfig      *DockerDeployConfig   `json:"docker_config,omitempty"`
+}
+
+// PrometheusDefaultsResponse represents the default values for Prometheus deployment
+type PrometheusDefaultsResponse struct {
+	DeploymentMode    common.DeploymentMode `json:"deployment_mode"`
+	PrometheusVersion string                `json:"prometheus_version"`
+	PrometheusPort    int                   `json:"prometheus_port"`
+	ScrapeInterval    int                   `json:"scrape_interval"`
+	AvailablePorts    []int                 `json:"available_ports"`
+	DockerConfig      *DockerDeployConfig   `json:"docker_config"`
 }
 
 // RefreshNodesRequest represents the request to refresh nodes
@@ -30,8 +60,7 @@ type CustomQueryRequest struct {
 	Step  *string    `json:"step,omitempty"`
 }
 
-// MessageResponse is a generic response for endpoints that return a message
-// Example: {"message": "Prometheus deployed successfully"}
+// MessageResponse represents a simple message response
 type MessageResponse struct {
 	Message string `json:"message"`
 }

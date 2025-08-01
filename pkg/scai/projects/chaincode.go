@@ -105,6 +105,9 @@ func (s *ChaincodeService) InvokeTransaction(ctx context.Context, req Transactio
 			break
 		}
 	}
+	if peerNode == nil {
+		return nil, fmt.Errorf("no peer node found for organization %d", req.OrgID)
+	}
 	// Get peer node for the specified organization
 	peer, err := s.nodesService.GetFabricPeer(ctx, peerNode.ID)
 	if err != nil {

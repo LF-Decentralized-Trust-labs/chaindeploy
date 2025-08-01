@@ -47,14 +47,13 @@ export async function createFabricNode(page: Page, baseURL: string, mspId: strin
 	await page.getByPlaceholder('e.g., 0.0.0.0:9443').fill(`0.0.0.0:${opsPort}`)
 
 	// External Endpoint - use crypto.getRandomValues for secure random port
-	const extPort = 7000 + (new DataView(crypto.getRandomValues(new Uint8Array(4)).buffer).getUint32(0) % 1000)
-	await page.getByPlaceholder('e.g., peer0.org1.example.com:7051').fill(`peer0.example.com:${extPort}`)
+	await page.getByPlaceholder('e.g., peer0.org1.example.com:7051').fill(`127.0.0.1:${listenPort}`)
 
 	// Submit
 	await page.getByRole('button', { name: /create node/i }).click()
 	await page.waitForLoadState('networkidle')
 	// Wait for navigation to the node detail page or nodes list
-	await page.getByText(/General Information/i).waitFor({ state: 'visible', timeout: 60000 })
+	await page.getByText(/Hyperledger Fabric Node/i).waitFor({ state: 'visible', timeout: 60000 })
 
 	return nodeName
 }

@@ -145,7 +145,7 @@ export default function KeyDetailPage() {
 											<p className="text-sm text-muted-foreground">{key.curve}</p>
 										</div>
 									)}
-									{key.keySize && (
+									{!!key.keySize && (
 										<div>
 											<h3 className="text-sm font-medium mb-1">Key Size</h3>
 											<p className="text-sm text-muted-foreground">{key.keySize} bits</p>

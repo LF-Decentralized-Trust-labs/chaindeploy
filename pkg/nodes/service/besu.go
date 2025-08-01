@@ -5,10 +5,15 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
+
+	"bytes"
 
 	"github.com/chainlaunch/chainlaunch/pkg/db"
 	"github.com/chainlaunch/chainlaunch/pkg/errors"
@@ -100,6 +105,7 @@ func (s *NodeService) GetBesuNodeDefaults(besuNodes int) ([]BesuNodeDefaults, er
 			P2PPort:    p2pPort,
 			RPCHost:    defaultIP, // Use default IP for rpc host
 			RPCPort:    rpcPort,
+			InternalIP: defaultIP,
 			ExternalIP: defaultIP,
 			Mode:       ModeService,
 			Env: map[string]string{
@@ -455,6 +461,10 @@ func (s *NodeService) UpdateBesuNode(ctx context.Context, nodeID int64, req Upda
 			s.logger.Warn("Failed to start Besu node after mode change", "error", err)
 		}
 	}
+	err = s.metricsService.Reload(ctx)
+	if err != nil {
+		s.logger.Warn("Failed to reload metrics", "error", err)
+	}
 
 	// Return updated node
 	_, nodeResponse := s.mapDBNodeToServiceNode(node)
@@ -666,4 +676,618 @@ func (s *NodeService) initializeBesuNode(ctx context.Context, dbNode *db.Node, c
 	}
 
 	return deploymentConfig, nil
+}
+
+// RPCClient represents a JSON-RPC client for Besu nodes
+type RPCClient struct {
+	client  *http.Client
+	baseURL string
+}
+
+// NewRPCClient creates a new RPC client for a Besu node
+func NewRPCClient(rpcHost string, rpcPort uint) *RPCClient {
+	return &RPCClient{
+		client: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+		baseURL: fmt.Sprintf("http://%s:%d", rpcHost, rpcPort),
+	}
+}
+
+// callRPC makes a JSON-RPC call to the Besu node
+func (c *RPCClient) callRPC(ctx context.Context, method string, params []interface{}) ([]byte, error) {
+	requestBody := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"method":  method,
+		"params":  params,
+		"id":      1,
+	}
+
+	jsonBody, err := json.Marshal(requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal JSON-RPC request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	// Check for RPC error
+	var rpcResp struct {
+		Jsonrpc string          `json:"jsonrpc"`
+		ID      int             `json:"id"`
+		Result  json.RawMessage `json:"result"`
+		Error   *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+
+	if err := json.Unmarshal(body, &rpcResp); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if rpcResp.Error != nil {
+		return nil, fmt.Errorf("RPC error: %s (code: %d)", rpcResp.Error.Message, rpcResp.Error.Code)
+	}
+
+	return rpcResp.Result, nil
+}
+
+// GetAccounts returns accounts managed by the node
+func (c *RPCClient) GetAccounts(ctx context.Context) ([]string, error) {
+	result, err := c.callRPC(ctx, "eth_accounts", []interface{}{})
+	if err != nil {
+		return nil, err
+	}
+
+	var accounts []string
+	if err := json.Unmarshal(result, &accounts); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal accounts: %w", err)
+	}
+
+	return accounts, nil
+}
+
+// GetBalance gets balance of an address in Wei
+func (c *RPCClient) GetBalance(ctx context.Context, address, blockTag string) (string, error) {
+	result, err := c.callRPC(ctx, "eth_getBalance", []interface{}{address, blockTag})
+	if err != nil {
+		return "", err
+	}
+
+	var balance string
+	if err := json.Unmarshal(result, &balance); err != nil {
+		return "", fmt.Errorf("failed to unmarshal balance: %w", err)
+	}
+
+	return balance, nil
+}
+
+// GetCode gets bytecode at an address
+func (c *RPCClient) GetCode(ctx context.Context, address, blockTag string) (string, error) {
+	result, err := c.callRPC(ctx, "eth_getCode", []interface{}{address, blockTag})
+	if err != nil {
+		return "", err
+	}
+
+	var code string
+	if err := json.Unmarshal(result, &code); err != nil {
+		return "", fmt.Errorf("failed to unmarshal code: %w", err)
+	}
+
+	return code, nil
+}
+
+// GetStorageAt gets storage value at a position for an address
+func (c *RPCClient) GetStorageAt(ctx context.Context, address, position, blockTag string) (string, error) {
+	result, err := c.callRPC(ctx, "eth_getStorageAt", []interface{}{address, position, blockTag})
+	if err != nil {
+		return "", err
+	}
+
+	var value string
+	if err := json.Unmarshal(result, &value); err != nil {
+		return "", fmt.Errorf("failed to unmarshal storage value: %w", err)
+	}
+
+	return value, nil
+}
+
+// GetTransactionCount gets nonce for an address
+func (c *RPCClient) GetTransactionCount(ctx context.Context, address, blockTag string) (string, error) {
+	result, err := c.callRPC(ctx, "eth_getTransactionCount", []interface{}{address, blockTag})
+	if err != nil {
+		return "", err
+	}
+
+	var count string
+	if err := json.Unmarshal(result, &count); err != nil {
+		return "", fmt.Errorf("failed to unmarshal transaction count: %w", err)
+	}
+
+	return count, nil
+}
+
+// GetBlockNumber gets the latest block number
+func (c *RPCClient) GetBlockNumber(ctx context.Context) (string, error) {
+	result, err := c.callRPC(ctx, "eth_blockNumber", []interface{}{})
+	if err != nil {
+		return "", err
+	}
+
+	var blockNumber string
+	if err := json.Unmarshal(result, &blockNumber); err != nil {
+		return "", fmt.Errorf("failed to unmarshal block number: %w", err)
+	}
+
+	return blockNumber, nil
+}
+
+// GetBlockByHash gets block details by hash
+func (c *RPCClient) GetBlockByHash(ctx context.Context, blockHash string, fullTx bool) (map[string]interface{}, error) {
+	result, err := c.callRPC(ctx, "eth_getBlockByHash", []interface{}{blockHash, fullTx})
+	if err != nil {
+		return nil, err
+	}
+
+	var block map[string]interface{}
+	if err := json.Unmarshal(result, &block); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal block: %w", err)
+	}
+
+	return block, nil
+}
+
+// GetBlockByNumber gets block by number or tag
+func (c *RPCClient) GetBlockByNumber(ctx context.Context, blockNumber, blockTag string, fullTx bool) (map[string]interface{}, error) {
+	param := blockNumber
+	if blockTag != "" {
+		param = blockTag
+	}
+	result, err := c.callRPC(ctx, "eth_getBlockByNumber", []interface{}{param, fullTx})
+	if err != nil {
+		return nil, err
+	}
+
+	var block map[string]interface{}
+	if err := json.Unmarshal(result, &block); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal block: %w", err)
+	}
+
+	return block, nil
+}
+
+// GetUncleByBlockHashAndIndex gets uncle block by parent hash and index
+func (c *RPCClient) GetUncleByBlockHashAndIndex(ctx context.Context, blockHash, uncleIndex string) (map[string]interface{}, error) {
+	result, err := c.callRPC(ctx, "eth_getUncleByBlockHashAndIndex", []interface{}{blockHash, uncleIndex})
+	if err != nil {
+		return nil, err
+	}
+
+	var uncle map[string]interface{}
+	if err := json.Unmarshal(result, &uncle); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal uncle: %w", err)
+	}
+
+	return uncle, nil
+}
+
+// GetUncleByBlockNumberAndIndex gets uncle by block number and index
+func (c *RPCClient) GetUncleByBlockNumberAndIndex(ctx context.Context, blockNumber, blockTag, uncleIndex string) (map[string]interface{}, error) {
+	param := blockNumber
+	if blockTag != "" {
+		param = blockTag
+	}
+	result, err := c.callRPC(ctx, "eth_getUncleByBlockNumberAndIndex", []interface{}{param, uncleIndex})
+	if err != nil {
+		return nil, err
+	}
+
+	var uncle map[string]interface{}
+	if err := json.Unmarshal(result, &uncle); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal uncle: %w", err)
+	}
+
+	return uncle, nil
+}
+
+// GetUncleCountByBlockHash gets uncle count for a block by hash
+func (c *RPCClient) GetUncleCountByBlockHash(ctx context.Context, blockHash string) (string, error) {
+	result, err := c.callRPC(ctx, "eth_getUncleCountByBlockHash", []interface{}{blockHash})
+	if err != nil {
+		return "", err
+	}
+
+	var count string
+	if err := json.Unmarshal(result, &count); err != nil {
+		return "", fmt.Errorf("failed to unmarshal uncle count: %w", err)
+	}
+
+	return count, nil
+}
+
+// GetUncleCountByBlockNumber gets uncle count by block number
+func (c *RPCClient) GetUncleCountByBlockNumber(ctx context.Context, blockNumber, blockTag string) (string, error) {
+	param := blockNumber
+	if blockTag != "" {
+		param = blockTag
+	}
+	result, err := c.callRPC(ctx, "eth_getUncleCountByBlockNumber", []interface{}{param})
+	if err != nil {
+		return "", err
+	}
+
+	var count string
+	if err := json.Unmarshal(result, &count); err != nil {
+		return "", fmt.Errorf("failed to unmarshal uncle count: %w", err)
+	}
+
+	return count, nil
+}
+
+// GetTransactionByHash gets tx details by hash
+func (c *RPCClient) GetTransactionByHash(ctx context.Context, txHash string) (map[string]interface{}, error) {
+	result, err := c.callRPC(ctx, "eth_getTransactionByHash", []interface{}{txHash})
+	if err != nil {
+		return nil, err
+	}
+
+	var tx map[string]interface{}
+	if err := json.Unmarshal(result, &tx); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal transaction: %w", err)
+	}
+
+	return tx, nil
+}
+
+// GetTransactionByBlockHashAndIndex gets tx by block hash and index
+func (c *RPCClient) GetTransactionByBlockHashAndIndex(ctx context.Context, blockHash, txIndex string) (map[string]interface{}, error) {
+	result, err := c.callRPC(ctx, "eth_getTransactionByBlockHashAndIndex", []interface{}{blockHash, txIndex})
+	if err != nil {
+		return nil, err
+	}
+
+	var tx map[string]interface{}
+	if err := json.Unmarshal(result, &tx); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal transaction: %w", err)
+	}
+
+	return tx, nil
+}
+
+// GetTransactionByBlockNumberAndIndex gets tx by block number and index
+func (c *RPCClient) GetTransactionByBlockNumberAndIndex(ctx context.Context, blockNumber, blockTag, txIndex string) (map[string]interface{}, error) {
+	param := blockNumber
+	if blockTag != "" {
+		param = blockTag
+	}
+	result, err := c.callRPC(ctx, "eth_getTransactionByBlockNumberAndIndex", []interface{}{param, txIndex})
+	if err != nil {
+		return nil, err
+	}
+
+	var tx map[string]interface{}
+	if err := json.Unmarshal(result, &tx); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal transaction: %w", err)
+	}
+
+	return tx, nil
+}
+
+// GetTransactionReceipt gets receipt for a transaction
+func (c *RPCClient) GetTransactionReceipt(ctx context.Context, txHash string) (map[string]interface{}, error) {
+	result, err := c.callRPC(ctx, "eth_getTransactionReceipt", []interface{}{txHash})
+	if err != nil {
+		return nil, err
+	}
+
+	var receipt map[string]interface{}
+	if err := json.Unmarshal(result, &receipt); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal transaction receipt: %w", err)
+	}
+
+	return receipt, nil
+}
+
+// GetFeeHistory gets historical gas fees
+func (c *RPCClient) GetFeeHistory(ctx context.Context, blockCount, newestBlock, rewardPercentiles string) (map[string]interface{}, error) {
+	result, err := c.callRPC(ctx, "eth_feeHistory", []interface{}{blockCount, newestBlock, rewardPercentiles})
+	if err != nil {
+		return nil, err
+	}
+
+	var feeHistory map[string]interface{}
+	if err := json.Unmarshal(result, &feeHistory); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal fee history: %w", err)
+	}
+
+	return feeHistory, nil
+}
+
+// QbftSignerMetric represents a QBFT signer metric
+type QbftSignerMetric struct {
+	Address                 string `json:"address"`
+	ProposedBlockCount      string `json:"proposedBlockCount"`
+	LastProposedBlockNumber string `json:"lastProposedBlockNumber"`
+}
+
+// GetQbftSignerMetrics gets QBFT signer metrics
+func (c *RPCClient) GetQbftSignerMetrics(ctx context.Context) ([]QbftSignerMetric, error) {
+	result, err := c.callRPC(ctx, "qbft_getSignerMetrics", []interface{}{})
+	if err != nil {
+		return nil, err
+	}
+
+	var metrics []QbftSignerMetric
+	if err := json.Unmarshal(result, &metrics); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal QBFT signer metrics: %w", err)
+	}
+
+	return metrics, nil
+}
+
+// GetQbftRequestTimeoutSeconds gets QBFT request timeout in seconds
+func (c *RPCClient) GetQbftRequestTimeoutSeconds(ctx context.Context) (int64, error) {
+	result, err := c.callRPC(ctx, "qbft_getRequestTimeoutSeconds", []interface{}{})
+	if err != nil {
+		return 0, err
+	}
+
+	var timeout int64
+	if err := json.Unmarshal(result, &timeout); err != nil {
+		return 0, fmt.Errorf("failed to unmarshal QBFT request timeout: %w", err)
+	}
+
+	return timeout, nil
+}
+
+// QbftPendingVote represents a pending vote for a validator proposal
+type QbftPendingVote struct {
+	Proposer string `json:"proposer"`
+	Vote     bool   `json:"vote"`
+}
+
+// QbftPendingVotes represents a map of pending validator proposals and their votes
+// The actual format is: {"validatorAddress": true}
+type QbftPendingVotes map[string]bool
+
+// QbftDiscardValidatorVote discards a pending vote for a validator proposal
+func (c *RPCClient) QbftDiscardValidatorVote(ctx context.Context, validatorAddress string) (bool, error) {
+	result, err := c.callRPC(ctx, "qbft_discardValidatorVote", []interface{}{validatorAddress})
+	if err != nil {
+		return false, err
+	}
+
+	var success bool
+	if err := json.Unmarshal(result, &success); err != nil {
+		return false, fmt.Errorf("failed to unmarshal QBFT discard validator vote response: %w, raw response: %s", err, string(result))
+	}
+
+	return success, nil
+}
+
+// QbftGetPendingVotes retrieves a map of pending validator proposals and their votes
+func (c *RPCClient) QbftGetPendingVotes(ctx context.Context) (QbftPendingVotes, error) {
+	result, err := c.callRPC(ctx, "qbft_getPendingVotes", []interface{}{})
+	if err != nil {
+		return nil, err
+	}
+
+	// Try to unmarshal as the expected map structure (validator address -> bool)
+	var pendingVotes QbftPendingVotes
+	if err := json.Unmarshal(result, &pendingVotes); err == nil {
+		return pendingVotes, nil
+	}
+
+	// If that fails, check if it's a boolean (indicating no pending votes)
+	var boolResult bool
+	if err := json.Unmarshal(result, &boolResult); err == nil {
+		// If it's a boolean and false, return empty map (no pending votes)
+		if !boolResult {
+			return make(QbftPendingVotes), nil
+		}
+		// If it's true, this might indicate an error or different response format
+		return nil, fmt.Errorf("unexpected QBFT pending votes response: got boolean true, expected map structure")
+	}
+
+	// If neither map nor boolean works, try to unmarshal as null
+	var nullResult interface{}
+	if err := json.Unmarshal(result, &nullResult); err == nil && nullResult == nil {
+		return make(QbftPendingVotes), nil
+	}
+
+	// If all else fails, return the raw response for debugging
+	return nil, fmt.Errorf("failed to unmarshal QBFT pending votes: unexpected response format: %s", string(result))
+}
+
+// QbftProposeValidatorVote proposes a vote to add (true) or remove (false) a validator
+func (c *RPCClient) QbftProposeValidatorVote(ctx context.Context, validatorAddress string, vote bool) (bool, error) {
+	result, err := c.callRPC(ctx, "qbft_proposeValidatorVote", []interface{}{validatorAddress, vote})
+	if err != nil {
+		return false, err
+	}
+
+	var success bool
+	if err := json.Unmarshal(result, &success); err != nil {
+		return false, fmt.Errorf("failed to unmarshal QBFT propose validator vote response: %w, raw response: %s", err, string(result))
+	}
+
+	return success, nil
+}
+
+// QbftGetValidatorsByBlockHash retrieves the list of validators for a specific block by its hash
+func (c *RPCClient) QbftGetValidatorsByBlockHash(ctx context.Context, blockHash string) ([]string, error) {
+	result, err := c.callRPC(ctx, "qbft_getValidatorsByBlockHash", []interface{}{blockHash})
+	if err != nil {
+		return nil, err
+	}
+
+	var validators []string
+	if err := json.Unmarshal(result, &validators); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal QBFT validators by block hash: %w, raw response: %s", err, string(result))
+	}
+
+	return validators, nil
+}
+
+// QbftGetValidatorsByBlockNumber retrieves the list of validators for a specific block by its number
+func (c *RPCClient) QbftGetValidatorsByBlockNumber(ctx context.Context, blockNumber string) ([]string, error) {
+	result, err := c.callRPC(ctx, "qbft_getValidatorsByBlockNumber", []interface{}{blockNumber})
+	if err != nil {
+		return nil, err
+	}
+
+	var validators []string
+	if err := json.Unmarshal(result, &validators); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal QBFT validators by block number: %w, raw response: %s", err, string(result))
+	}
+
+	return validators, nil
+}
+
+// GetBlockTransactionCountByHash gets tx count in a block by hash
+func (c *RPCClient) GetBlockTransactionCountByHash(ctx context.Context, blockHash string) (string, error) {
+	result, err := c.callRPC(ctx, "eth_getBlockTransactionCountByHash", []interface{}{blockHash})
+	if err != nil {
+		return "", err
+	}
+
+	var count string
+	if err := json.Unmarshal(result, &count); err != nil {
+		return "", fmt.Errorf("failed to unmarshal transaction count: %w", err)
+	}
+
+	return count, nil
+}
+
+// GetBlockTransactionCountByNumber gets tx count by block number
+func (c *RPCClient) GetBlockTransactionCountByNumber(ctx context.Context, blockNumber, blockTag string) (string, error) {
+	param := blockNumber
+	if blockTag != "" {
+		param = blockTag
+	}
+	result, err := c.callRPC(ctx, "eth_getBlockTransactionCountByNumber", []interface{}{param})
+	if err != nil {
+		return "", err
+	}
+
+	var count string
+	if err := json.Unmarshal(result, &count); err != nil {
+		return "", fmt.Errorf("failed to unmarshal transaction count: %w", err)
+	}
+
+	return count, nil
+}
+
+// GetLogs gets event logs
+func (c *RPCClient) GetLogs(ctx context.Context, filter map[string]interface{}) ([]map[string]interface{}, error) {
+	result, err := c.callRPC(ctx, "eth_getLogs", []interface{}{filter})
+	if err != nil {
+		return nil, err
+	}
+
+	var logs []map[string]interface{}
+	if err := json.Unmarshal(result, &logs); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal logs: %w", err)
+	}
+
+	return logs, nil
+}
+
+// GetPendingTransactions gets pending tx in the mempool
+func (c *RPCClient) GetPendingTransactions(ctx context.Context) ([]map[string]interface{}, error) {
+	result, err := c.callRPC(ctx, "eth_pendingTransactions", []interface{}{})
+	if err != nil {
+		return nil, err
+	}
+
+	var txs []map[string]interface{}
+	if err := json.Unmarshal(result, &txs); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal pending transactions: %w", err)
+	}
+
+	return txs, nil
+}
+
+// GetChainId gets the chain ID
+func (c *RPCClient) GetChainId(ctx context.Context) (string, error) {
+	result, err := c.callRPC(ctx, "eth_chainId", []interface{}{})
+	if err != nil {
+		return "", err
+	}
+
+	var chainId string
+	if err := json.Unmarshal(result, &chainId); err != nil {
+		return "", fmt.Errorf("failed to unmarshal chain ID: %w", err)
+	}
+
+	return chainId, nil
+}
+
+// GetProtocolVersion gets Ethereum protocol version
+func (c *RPCClient) GetProtocolVersion(ctx context.Context) (string, error) {
+	result, err := c.callRPC(ctx, "eth_protocolVersion", []interface{}{})
+	if err != nil {
+		return "", err
+	}
+
+	var version string
+	if err := json.Unmarshal(result, &version); err != nil {
+		return "", fmt.Errorf("failed to unmarshal protocol version: %w", err)
+	}
+
+	return version, nil
+}
+
+// GetSyncing gets sync status
+func (c *RPCClient) GetSyncing(ctx context.Context) (interface{}, error) {
+	result, err := c.callRPC(ctx, "eth_syncing", []interface{}{})
+	if err != nil {
+		return nil, err
+	}
+
+	var syncing interface{}
+	if err := json.Unmarshal(result, &syncing); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal syncing status: %w", err)
+	}
+
+	return syncing, nil
+}
+
+// GetBesuRPCClient creates an RPC client for a Besu node
+func (s *NodeService) GetBesuRPCClient(ctx context.Context, nodeID int64) (*RPCClient, error) {
+	node, err := s.db.GetNode(ctx, nodeID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get node: %w", err)
+	}
+
+	if types.NodeType(node.NodeType.String) != types.NodeTypeBesuFullnode {
+		return nil, errors.NewValidationError("node is not a Besu node", nil)
+	}
+
+	nodeConfig, err := utils.LoadNodeConfig([]byte(node.NodeConfig.String))
+	if err != nil {
+		return nil, fmt.Errorf("failed to load node config: %w", err)
+	}
+
+	besuConfig, ok := nodeConfig.(*types.BesuNodeConfig)
+	if !ok {
+		return nil, fmt.Errorf("invalid besu config type")
+	}
+
+	return NewRPCClient(besuConfig.RPCHost, besuConfig.RPCPort), nil
 }

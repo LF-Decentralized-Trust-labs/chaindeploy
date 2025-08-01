@@ -1,4 +1,4 @@
-import { deleteNetworksFabricByIdMutation, getNetworksFabricOptions } from '@/api/client/@tanstack/react-query.gen'
+import { deleteNetworksFabricByIdMutation, deleteNetworksBesuByIdMutation, getNetworksFabricOptions, getNetworksBesuOptions } from '@/api/client/@tanstack/react-query.gen'
 import { HttpNetworkResponse } from '@/api/client'
 import { BesuIcon } from '@/components/icons/besu-icon'
 import { FabricIcon } from '@/components/icons/fabric-icon'
@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { MoreVertical, Network, Trash, ChevronDown, Upload } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -18,14 +18,37 @@ export default function NetworksPage() {
 	const [networkToDelete, setNetworkToDelete] = useState<HttpNetworkResponse | null>(null)
 
 	const {
-		data: networks,
-		isLoading,
-		refetch,
+		data: fabricNetworks,
+		isLoading: isLoadingFabric,
+		refetch: refetchFabric,
 	} = useQuery({
 		...getNetworksFabricOptions(),
 	})
 
-	const deleteNetwork = useMutation({
+	const {
+		data: besuNetworks,
+		isLoading: isLoadingBesu,
+		refetch: refetchBesu,
+	} = useQuery({
+		...getNetworksBesuOptions(),
+	})
+
+	// Combine networks from both sources
+	const networks = useMemo(
+		() => ({
+			networks: [...(fabricNetworks?.networks || []), ...(besuNetworks?.networks || [])].sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime()),
+		}),
+		[fabricNetworks?.networks, besuNetworks?.networks]
+	)
+
+	const isLoading = useMemo(() => isLoadingFabric || isLoadingBesu, [isLoadingFabric, isLoadingBesu])
+
+	const refetch = useCallback(() => {
+		refetchFabric()
+		refetchBesu()
+	}, [refetchFabric, refetchBesu])
+
+	const deleteFabricNetwork = useMutation({
 		...deleteNetworksFabricByIdMutation(),
 		onSuccess: () => {
 			toast.success('Network deleted successfully')
@@ -39,9 +62,34 @@ export default function NetworksPage() {
 		},
 	})
 
-	const handleDelete = (network: HttpNetworkResponse) => {
+	const deleteBesuNetwork = useMutation({
+		...deleteNetworksBesuByIdMutation(),
+		onSuccess: () => {
+			toast.success('Network deleted successfully')
+			refetch()
+			setNetworkToDelete(null)
+		},
+		onError: (error: any) => {
+			toast.error('Failed to delete network', {
+				description: error.message,
+			})
+		},
+	})
+
+	const deleteNetwork = useCallback(
+		(network: HttpNetworkResponse) => {
+			if (network.platform === 'fabric') {
+				deleteFabricNetwork.mutate({ path: { id: network.id! } })
+			} else {
+				deleteBesuNetwork.mutate({ path: { id: network.id! } })
+			}
+		},
+		[deleteFabricNetwork, deleteBesuNetwork]
+	)
+
+	const handleDelete = useCallback((network: HttpNetworkResponse) => {
 		setNetworkToDelete(network)
-	}
+	}, [])
 
 	if (isLoading) {
 		return (
@@ -252,11 +300,11 @@ export default function NetworksPage() {
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							onClick={() => networkToDelete && deleteNetwork.mutate({ path: { id: networkToDelete.id! } })}
-							disabled={deleteNetwork.isPending}
+							onClick={() => networkToDelete && deleteNetwork(networkToDelete)}
+							disabled={deleteFabricNetwork.isPending || deleteBesuNetwork.isPending}
 							className="bg-destructive hover:bg-destructive/90"
 						>
-							{deleteNetwork.isPending ? 'Deleting...' : 'Delete'}
+							{deleteFabricNetwork.isPending || deleteBesuNetwork.isPending ? 'Deleting...' : 'Delete'}
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>

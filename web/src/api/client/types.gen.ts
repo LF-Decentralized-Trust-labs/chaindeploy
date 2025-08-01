@@ -129,6 +129,7 @@ export type AuthUserResponse = {
 };
 
 export type BlockBlock = {
+    base64Data?: string;
     createdAt?: string;
     dataHash?: string;
     number?: number;
@@ -618,23 +619,22 @@ export type ChainlaunchdeployUpdateChaincodeDefinitionRequest = {
     version?: string;
 };
 
+export type CommonDeploymentMode = 'docker' | 'service';
+
+export type CommonNetworkMode = 'bridge' | 'host';
+
 export type CommonQueryResult = {
-    data?: {
-        result?: Array<{
-            metric?: {
-                [key: string]: string;
-            };
-            /**
-             * For instant queries
-             */
-            value?: Array<unknown>;
-            /**
-             * For range queries (matrix)
-             */
-            values?: Array<Array<unknown>>;
-        }>;
-        resultType?: string;
-    };
+    /**
+     * Data contains the query results
+     */
+    data?: unknown;
+    /**
+     * Error contains any error message
+     */
+    error?: string;
+    /**
+     * Status is the query status
+     */
     status?: string;
 };
 
@@ -693,11 +693,15 @@ export type GithubComChainlaunchChainlaunchPkgMetricsCommonStatus = {
     /**
      * DeploymentMode is the current deployment mode
      */
-    deployment_mode?: string;
+    deployment_mode?: CommonDeploymentMode;
     /**
-     * Error is any error that occurred while getting the status
+     * Error contains any error message
      */
     error?: string;
+    /**
+     * NetworkMode is the Docker network mode (only for Docker deployments)
+     */
+    network_mode?: CommonNetworkMode;
     /**
      * Port is the port Prometheus is listening on
      */
@@ -711,11 +715,11 @@ export type GithubComChainlaunchChainlaunchPkgMetricsCommonStatus = {
      */
     started_at?: string;
     /**
-     * Status is the current status of the Prometheus instance (e.g. "running", "stopped", "not_deployed")
+     * Status is the current status (running, stopped, etc.)
      */
     status?: string;
     /**
-     * Version is the version of Prometheus being used
+     * Version is the Prometheus version
      */
     version?: string;
 };
@@ -943,6 +947,12 @@ export type HttpBackupTargetResponse = {
     updatedAt?: string;
 };
 
+export type HttpBatchSize = {
+    absoluteMaxBytes?: number;
+    maxMessageCount?: number;
+    preferredMaxBytes?: number;
+};
+
 export type HttpBesuNetworkResponse = {
     chainId?: number;
     config?: Array<number>;
@@ -1022,6 +1032,10 @@ export type HttpConfigUpdateOperationRequest = {
      * - update_channel_capability: UpdateChannelCapabilityOperation
      * - update_orderer_capability: UpdateOrdererCapabilityOperation
      * - update_application_capability: UpdateApplicationCapabilityOperation
+     * - add_orderer_org: AddOrdererOrgPayload
+     * - remove_orderer_org: RemoveOrdererOrgPayload
+     * - update_orderer_org_msp: UpdateOrdererOrgMSPPayload
+     * - update_application_acl: UpdateApplicationACLPayload
      * @Description The payload for the configuration update operation
      * @Description Can be one of:
      * @Description - AddOrgPayload when type is "add_org"
@@ -1043,13 +1057,14 @@ export type HttpConfigUpdateOperationRequest = {
      * @Description - AddOrdererOrgPayload when type is "add_orderer_org"
      * @Description - RemoveOrdererOrgPayload when type is "remove_orderer_org"
      * @Description - UpdateOrdererOrgMSPPayload when type is "update_orderer_org_msp"
+     * @Description - UpdateApplicationACLPayload when type is "update_application_acl"
      */
     payload: Array<number>;
     /**
      * Type is the type of configuration update operation
-     * enum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout,update_application_policy,update_orderer_policy,update_channel_policy,add_orderer_org,remove_orderer_org,update_orderer_org_msp
+     * enum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout,update_application_policy,update_orderer_policy,update_channel_policy,add_orderer_org,remove_orderer_org,update_orderer_org_msp,update_application_acl
      */
-    type: 'add_org' | 'remove_org' | 'update_org_msp' | 'set_anchor_peers' | 'add_consenter' | 'remove_consenter' | 'update_consenter' | 'update_etcd_raft_options' | 'update_batch_size' | 'update_batch_timeout' | 'update_application_policy' | 'update_orderer_policy' | 'update_channel_policy' | 'update_channel_capability' | 'update_orderer_capability' | 'update_application_capability' | 'add_orderer_org' | 'remove_orderer_org' | 'update_orderer_org_msp';
+    type: 'add_org' | 'remove_org' | 'update_org_msp' | 'set_anchor_peers' | 'add_consenter' | 'remove_consenter' | 'update_consenter' | 'update_etcd_raft_options' | 'update_batch_size' | 'update_batch_timeout' | 'update_application_policy' | 'update_orderer_policy' | 'update_channel_policy' | 'update_channel_capability' | 'update_orderer_capability' | 'update_application_capability' | 'add_orderer_org' | 'remove_orderer_org' | 'update_orderer_org_msp' | 'update_application_acl';
 };
 
 export type HttpConfigUpdateResponse = {
@@ -1286,21 +1301,50 @@ export type HttpCreateProviderRequest = {
     type: 'SMTP';
 };
 
+export type HttpEtcdRaftOptions = {
+    electionTick?: number;
+    heartbeatTick?: number;
+    maxInflightBlocks?: number;
+    snapshotIntervalSize?: number;
+    tickInterval?: string;
+};
+
 export type HttpFabricNetworkConfig = {
+    applicationCapabilities?: Array<string>;
     /**
      * Optional policies
      */
     applicationPolicies?: {
         [key: string]: HttpFabricPolicy;
     };
+    /**
+     * Batch configuration
+     */
+    batchSize?: HttpBatchSize;
+    /**
+     * e.g., "2s"
+     */
+    batchTimeout?: string;
+    /**
+     * Capabilities configuration
+     */
+    channelCapabilities?: Array<string>;
     channelPolicies?: {
         [key: string]: HttpFabricPolicy;
     };
+    /**
+     * Consensus configuration
+     */
+    consensusType?: string;
+    etcdRaftOptions?: HttpEtcdRaftOptions;
+    ordererCapabilities?: Array<string>;
     ordererOrganizations?: Array<HttpOrganizationConfig>;
     ordererPolicies?: {
         [key: string]: HttpFabricPolicy;
     };
     peerOrganizations?: Array<HttpOrganizationConfig>;
+    smartBFTConsenters?: Array<HttpSmartBftConsenter>;
+    smartBFTOptions?: HttpSmartBftOptions;
 };
 
 export type HttpFabricPolicy = {
@@ -1310,6 +1354,11 @@ export type HttpFabricPolicy = {
 
 export type HttpGetNetworkNodesResponse = {
     nodes?: Array<ServiceNetworkNode>;
+};
+
+export type HttpHostPort = {
+    host?: string;
+    port?: number;
 };
 
 export type HttpImportBesuNetworkRequest = {
@@ -1357,6 +1406,9 @@ export type HttpNetworkResponse = {
     domain?: string;
     exposedPorts?: Array<number>;
     genesisBlock?: string;
+    genesisChangeReason?: string;
+    genesisChangedAt?: string;
+    genesisChangedBy?: number;
     id?: number;
     name?: string;
     platform?: string;
@@ -1428,6 +1480,15 @@ export type HttpProviderResponse = {
     updatedAt?: string;
 };
 
+export type HttpQbftDiscardValidatorVoteRequest = {
+    validatorAddress: string;
+};
+
+export type HttpQbftProposeValidatorVoteRequest = {
+    validatorAddress: string;
+    vote?: boolean;
+};
+
 export type HttpRemoveConsenterPayload = {
     host: string;
     port: number;
@@ -1458,6 +1519,36 @@ export type HttpSetAnchorPeersResponse = {
     transactionId?: string;
 };
 
+export type HttpSmartBftConsenter = {
+    address?: HttpHostPort;
+    clientTLSCert?: string;
+    id?: number;
+    identity?: string;
+    mspId?: string;
+    serverTLSCert?: string;
+};
+
+export type HttpSmartBftOptions = {
+    collectTimeout?: string;
+    decisionsPerLeader?: number;
+    incomingMessageBufferSize?: number;
+    leaderHeartbeatCount?: number;
+    leaderHeartbeatTimeout?: string;
+    leaderRotation?: string;
+    requestAutoRemoveTimeout?: string;
+    requestBatchMaxBytes?: number;
+    requestBatchMaxCount?: number;
+    requestBatchMaxInterval?: string;
+    requestComplainTimeout?: string;
+    requestForwardTimeout?: string;
+    requestMaxBytes?: number;
+    requestPoolSize?: number;
+    speedUpViewChange?: boolean;
+    syncOnStart?: boolean;
+    viewChangeResendInterval?: string;
+    viewChangeTimeout?: string;
+};
+
 export type HttpTestProviderRequest = {
     testEmail: string;
 };
@@ -1470,6 +1561,11 @@ export type HttpTestProviderResponse = {
 
 export type HttpTransactionResponse = {
     block?: BlockBlock;
+};
+
+export type HttpUpdateApplicationAclPayload = {
+    acl_name: string;
+    policy: string;
 };
 
 export type HttpUpdateApplicationCapabilityOperation = {
@@ -1588,6 +1684,16 @@ export type HttpUpdateFabricPeerRequest = {
     mode?: string;
     operationsListenAddress?: string;
     version?: string;
+};
+
+export type HttpUpdateGenesisBlockRequest = {
+    genesisBlock: string;
+    reason: string;
+};
+
+export type HttpUpdateGenesisBlockResponse = {
+    message?: string;
+    networkId?: number;
 };
 
 export type HttpUpdateNodeRequest = {
@@ -1758,6 +1864,70 @@ export type ModelsProviderResponse = {
     isDefault?: number;
     name?: string;
     type?: ModelsKeyProviderType;
+};
+
+/**
+ * Request to sign data using a key
+ */
+export type ModelsSignRequest = {
+    /**
+     * Context for key derivation (base64 encoded)
+     */
+    context?: string;
+    /**
+     * Hash algorithm to use for signing
+     */
+    hash_algorithm?: string;
+    /**
+     * Base64 encoded input data to sign
+     */
+    input: string;
+    /**
+     * Key version to use for signing (0 means latest)
+     */
+    key_version?: number;
+    /**
+     * Marshaling algorithm for ECDSA (asn1 or jws)
+     */
+    marshaling_algorithm?: string;
+    /**
+     * Whether input is already hashed
+     */
+    prehashed?: boolean;
+    /**
+     * Reference string for batch operations
+     */
+    reference?: string;
+    /**
+     * Salt length for RSA PSS (auto, hash, or integer)
+     */
+    salt_length?: string;
+    /**
+     * RSA signature algorithm (pss or pkcs1v15)
+     */
+    signature_algorithm?: string;
+    /**
+     * Signature context for Ed25519ctx and Ed25519ph signatures
+     */
+    signature_context?: string;
+};
+
+/**
+ * Response from a signing operation
+ */
+export type ModelsSignResponse = {
+    /**
+     * Key version used for signing
+     */
+    key_version?: number;
+    /**
+     * Reference from the request (for batch operations)
+     */
+    reference?: string;
+    /**
+     * Base64 encoded signature
+     */
+    signature?: string;
 };
 
 export type NotificationsProviderType = 'SMTP';
@@ -1943,6 +2113,10 @@ export type ServiceBesuNodeProperties = {
     enodeUrl?: string;
     externalIp?: string;
     internalIp?: string;
+    /**
+     * Key information
+     */
+    keyAddress?: string;
     keyId?: number;
     /**
      * Metrics configuration
@@ -1958,6 +2132,7 @@ export type ServiceBesuNodeProperties = {
      */
     p2pHost?: string;
     p2pPort?: number;
+    publicKey?: string;
     rpcHost?: string;
     rpcPort?: number;
     version?: string;
@@ -2106,6 +2281,16 @@ export type ServiceNodesDefaultsResult = {
     peers?: Array<ServiceNodeDefaults>;
 };
 
+export type ServiceQbftPendingVotes = {
+    [key: string]: boolean;
+};
+
+export type ServiceQbftSignerMetric = {
+    address?: string;
+    lastProposedBlockNumber?: string;
+    proposedBlockCount?: string;
+};
+
 export type ServiceSetting = {
     config?: ServiceSettingConfig;
     created_at?: string;
@@ -2165,6 +2350,8 @@ export type TypesCustomQueryRequest = {
 };
 
 export type TypesDeployPrometheusRequest = {
+    deployment_mode?: CommonDeploymentMode;
+    docker_config?: TypesDockerDeployConfig;
     prometheus_port: number;
     prometheus_version: string;
     scrape_interval: number;
@@ -2184,6 +2371,10 @@ export type TypesDeploymentStatus = {
 
 export type TypesDockerCompose = {
     contents?: string;
+};
+
+export type TypesDockerDeployConfig = {
+    network_mode?: CommonNetworkMode;
 };
 
 export type TypesDocumentation = {
@@ -2354,6 +2545,23 @@ export type TypesParameterSpec = {
     enum?: Array<string>;
     type?: string;
     'x-source'?: TypesXSourceType;
+};
+
+export type TypesPrometheusDefaultsResponse = {
+    available_ports?: Array<number>;
+    deployment_mode?: CommonDeploymentMode;
+    docker_config?: TypesDockerDeployConfig;
+    prometheus_port?: number;
+    prometheus_version?: string;
+    scrape_interval?: number;
+};
+
+export type TypesRefreshPrometheusRequest = {
+    deployment_mode?: CommonDeploymentMode;
+    docker_config?: TypesDockerDeployConfig;
+    prometheus_port?: number;
+    prometheus_version?: string;
+    scrape_interval?: number;
 };
 
 export type TypesService = {
@@ -4289,6 +4497,7 @@ export type PostDummyResponses = {
     215: HttpAddOrdererOrgPayload;
     216: HttpRemoveOrdererOrgPayload;
     217: HttpUpdateOrdererOrgMspPayload;
+    218: HttpUpdateApplicationAclPayload;
 };
 
 export type PostDummyResponse = PostDummyResponses[keyof PostDummyResponses];
@@ -4732,6 +4941,80 @@ export type PostKeysByKeyIdSignResponses = {
 
 export type PostKeysByKeyIdSignResponse = PostKeysByKeyIdSignResponses[keyof PostKeysByKeyIdSignResponses];
 
+export type PostKeysByKeyIdSignDataData = {
+    /**
+     * Signing request
+     */
+    body: ModelsSignRequest;
+    path: {
+        /**
+         * Key ID to use for signing
+         */
+        keyID: number;
+    };
+    query?: never;
+    url: '/keys/{keyID}/sign-data';
+};
+
+export type PostKeysByKeyIdSignDataErrors = {
+    /**
+     * Invalid request
+     */
+    400: {
+        [key: string]: string;
+    };
+    /**
+     * Key not found
+     */
+    404: {
+        [key: string]: string;
+    };
+    /**
+     * Internal server error
+     */
+    500: {
+        [key: string]: string;
+    };
+};
+
+export type PostKeysByKeyIdSignDataError = PostKeysByKeyIdSignDataErrors[keyof PostKeysByKeyIdSignDataErrors];
+
+export type PostKeysByKeyIdSignDataResponses = {
+    /**
+     * OK
+     */
+    200: ModelsSignResponse;
+};
+
+export type PostKeysByKeyIdSignDataResponse = PostKeysByKeyIdSignDataResponses[keyof PostKeysByKeyIdSignDataResponses];
+
+export type GetMetricsDefaultsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/metrics/defaults';
+};
+
+export type GetMetricsDefaultsErrors = {
+    /**
+     * Internal Server Error
+     */
+    500: {
+        [key: string]: string;
+    };
+};
+
+export type GetMetricsDefaultsError = GetMetricsDefaultsErrors[keyof GetMetricsDefaultsErrors];
+
+export type GetMetricsDefaultsResponses = {
+    /**
+     * OK
+     */
+    200: TypesPrometheusDefaultsResponse;
+};
+
+export type GetMetricsDefaultsResponse = GetMetricsDefaultsResponses[keyof GetMetricsDefaultsResponses];
+
 export type PostMetricsDeployData = {
     /**
      * Prometheus deployment configuration
@@ -4767,6 +5050,42 @@ export type PostMetricsDeployResponses = {
 };
 
 export type PostMetricsDeployResponse = PostMetricsDeployResponses[keyof PostMetricsDeployResponses];
+
+export type GetMetricsLogsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Follow logs in real-time (default: false)
+         */
+        follow?: boolean;
+        /**
+         * Number of lines to show from the end (default: 100)
+         */
+        tail?: number;
+    };
+    url: '/metrics/logs';
+};
+
+export type GetMetricsLogsErrors = {
+    /**
+     * Internal Server Error
+     */
+    500: {
+        [key: string]: string;
+    };
+};
+
+export type GetMetricsLogsError = GetMetricsLogsErrors[keyof GetMetricsLogsErrors];
+
+export type GetMetricsLogsResponses = {
+    /**
+     * Log stream
+     */
+    200: string;
+};
+
+export type GetMetricsLogsResponse = GetMetricsLogsResponses[keyof GetMetricsLogsResponses];
 
 export type GetMetricsNodeByIdData = {
     body?: never;
@@ -4956,6 +5275,76 @@ export type GetMetricsNodeByIdRangeResponses = {
 
 export type GetMetricsNodeByIdRangeResponse = GetMetricsNodeByIdRangeResponses[keyof GetMetricsNodeByIdRangeResponses];
 
+export type GetMetricsPortByPortCheckData = {
+    body?: never;
+    path: {
+        /**
+         * Port number to check
+         */
+        port: number;
+    };
+    query?: never;
+    url: '/metrics/port/{port}/check';
+};
+
+export type GetMetricsPortByPortCheckErrors = {
+    /**
+     * Bad Request
+     */
+    400: {
+        [key: string]: string;
+    };
+};
+
+export type GetMetricsPortByPortCheckError = GetMetricsPortByPortCheckErrors[keyof GetMetricsPortByPortCheckErrors];
+
+export type GetMetricsPortByPortCheckResponses = {
+    /**
+     * OK
+     */
+    200: {
+        [key: string]: boolean;
+    };
+};
+
+export type GetMetricsPortByPortCheckResponse = GetMetricsPortByPortCheckResponses[keyof GetMetricsPortByPortCheckResponses];
+
+export type PostMetricsRefreshData = {
+    /**
+     * Prometheus refresh configuration
+     */
+    body: TypesRefreshPrometheusRequest;
+    path?: never;
+    query?: never;
+    url: '/metrics/refresh';
+};
+
+export type PostMetricsRefreshErrors = {
+    /**
+     * Bad Request
+     */
+    400: {
+        [key: string]: string;
+    };
+    /**
+     * Internal Server Error
+     */
+    500: {
+        [key: string]: string;
+    };
+};
+
+export type PostMetricsRefreshError = PostMetricsRefreshErrors[keyof PostMetricsRefreshErrors];
+
+export type PostMetricsRefreshResponses = {
+    /**
+     * OK
+     */
+    200: TypesMessageResponse;
+};
+
+export type PostMetricsRefreshResponse = PostMetricsRefreshResponses[keyof PostMetricsRefreshResponses];
+
 export type PostMetricsReloadData = {
     body?: never;
     path?: never;
@@ -4983,6 +5372,39 @@ export type PostMetricsReloadResponses = {
 
 export type PostMetricsReloadResponse = PostMetricsReloadResponses[keyof PostMetricsReloadResponses];
 
+export type PostMetricsStartData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/metrics/start';
+};
+
+export type PostMetricsStartErrors = {
+    /**
+     * Bad Request
+     */
+    400: {
+        [key: string]: string;
+    };
+    /**
+     * Internal Server Error
+     */
+    500: {
+        [key: string]: string;
+    };
+};
+
+export type PostMetricsStartError = PostMetricsStartErrors[keyof PostMetricsStartErrors];
+
+export type PostMetricsStartResponses = {
+    /**
+     * OK
+     */
+    200: TypesMessageResponse;
+};
+
+export type PostMetricsStartResponse = PostMetricsStartResponses[keyof PostMetricsStartResponses];
+
 export type GetMetricsStatusData = {
     body?: never;
     path?: never;
@@ -5009,6 +5431,39 @@ export type GetMetricsStatusResponses = {
 };
 
 export type GetMetricsStatusResponse = GetMetricsStatusResponses[keyof GetMetricsStatusResponses];
+
+export type PostMetricsStopData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/metrics/stop';
+};
+
+export type PostMetricsStopErrors = {
+    /**
+     * Bad Request
+     */
+    400: {
+        [key: string]: string;
+    };
+    /**
+     * Internal Server Error
+     */
+    500: {
+        [key: string]: string;
+    };
+};
+
+export type PostMetricsStopError = PostMetricsStopErrors[keyof PostMetricsStopErrors];
+
+export type PostMetricsStopResponses = {
+    /**
+     * OK
+     */
+    200: TypesMessageResponse;
+};
+
+export type PostMetricsStopResponse = PostMetricsStopResponses[keyof PostMetricsStopResponses];
 
 export type PostMetricsUndeployData = {
     body?: never;
@@ -5255,6 +5710,44 @@ export type GetNetworksBesuByIdMapResponses = {
 };
 
 export type GetNetworksBesuByIdMapResponse = GetNetworksBesuByIdMapResponses[keyof GetNetworksBesuByIdMapResponses];
+
+export type GetNetworksBesuByIdNodesData = {
+    body?: never;
+    path: {
+        /**
+         * Network ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/networks/besu/{id}/nodes';
+};
+
+export type GetNetworksBesuByIdNodesErrors = {
+    /**
+     * Bad Request
+     */
+    400: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Not Found
+     */
+    404: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+};
+
+export type GetNetworksBesuByIdNodesError = GetNetworksBesuByIdNodesErrors[keyof GetNetworksBesuByIdNodesErrors];
+
+export type GetNetworksBesuByIdNodesResponses = {
+    /**
+     * OK
+     */
+    200: HttpGetNetworkNodesResponse;
+};
+
+export type GetNetworksBesuByIdNodesResponse = GetNetworksBesuByIdNodesResponses[keyof GetNetworksBesuByIdNodesResponses];
 
 export type GetNetworksFabricData = {
     body?: never;
@@ -6292,6 +6785,47 @@ export type PostNetworksFabricByIdUpdateConfigResponses = {
 
 export type PostNetworksFabricByIdUpdateConfigResponse = PostNetworksFabricByIdUpdateConfigResponses[keyof PostNetworksFabricByIdUpdateConfigResponses];
 
+export type PutNetworksByIdGenesisData = {
+    /**
+     * Genesis block update request
+     */
+    body: HttpUpdateGenesisBlockRequest;
+    path: {
+        /**
+         * Network ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/networks/{id}/genesis';
+};
+
+export type PutNetworksByIdGenesisErrors = {
+    /**
+     * Bad Request
+     */
+    400: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Not Found
+     */
+    404: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+};
+
+export type PutNetworksByIdGenesisError = PutNetworksByIdGenesisErrors[keyof PutNetworksByIdGenesisErrors];
+
+export type PutNetworksByIdGenesisResponses = {
+    /**
+     * OK
+     */
+    200: HttpUpdateGenesisBlockResponse;
+};
+
+export type PutNetworksByIdGenesisResponse = PutNetworksByIdGenesisResponses[keyof PutNetworksByIdGenesisResponses];
+
 export type GetNodesData = {
     body?: never;
     path?: never;
@@ -6895,6 +7429,1188 @@ export type PostNodesByIdRestartResponses = {
 };
 
 export type PostNodesByIdRestartResponse = PostNodesByIdRestartResponses[keyof PostNodesByIdRestartResponses];
+
+export type GetNodesByIdRpcAccountsData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/nodes/{id}/rpc/accounts';
+};
+
+export type GetNodesByIdRpcAccountsErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcAccountsError = GetNodesByIdRpcAccountsErrors[keyof GetNodesByIdRpcAccountsErrors];
+
+export type GetNodesByIdRpcAccountsResponses = {
+    /**
+     * Array of account addresses
+     */
+    200: Array<string>;
+};
+
+export type GetNodesByIdRpcAccountsResponse = GetNodesByIdRpcAccountsResponses[keyof GetNodesByIdRpcAccountsResponses];
+
+export type GetNodesByIdRpcBalanceData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query: {
+        /**
+         * Account address
+         */
+        address: string;
+        /**
+         * Block tag (default: latest)
+         */
+        blockTag?: string;
+    };
+    url: '/nodes/{id}/rpc/balance';
+};
+
+export type GetNodesByIdRpcBalanceErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcBalanceError = GetNodesByIdRpcBalanceErrors[keyof GetNodesByIdRpcBalanceErrors];
+
+export type GetNodesByIdRpcBalanceResponses = {
+    /**
+     * Balance in hex
+     */
+    200: string;
+};
+
+export type GetNodesByIdRpcBalanceResponse = GetNodesByIdRpcBalanceResponses[keyof GetNodesByIdRpcBalanceResponses];
+
+export type GetNodesByIdRpcBlockByHashData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query: {
+        /**
+         * Block hash
+         */
+        hash: string;
+        /**
+         * Include full transaction objects
+         */
+        fullTx?: boolean;
+    };
+    url: '/nodes/{id}/rpc/block-by-hash';
+};
+
+export type GetNodesByIdRpcBlockByHashErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcBlockByHashError = GetNodesByIdRpcBlockByHashErrors[keyof GetNodesByIdRpcBlockByHashErrors];
+
+export type GetNodesByIdRpcBlockByHashResponses = {
+    /**
+     * Block object
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type GetNodesByIdRpcBlockByHashResponse = GetNodesByIdRpcBlockByHashResponses[keyof GetNodesByIdRpcBlockByHashResponses];
+
+export type GetNodesByIdRpcBlockByNumberData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query?: {
+        /**
+         * Block number
+         */
+        number?: string;
+        /**
+         * Block tag (latest, earliest, pending)
+         */
+        tag?: string;
+        /**
+         * Include full transaction objects
+         */
+        fullTx?: boolean;
+    };
+    url: '/nodes/{id}/rpc/block-by-number';
+};
+
+export type GetNodesByIdRpcBlockByNumberErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcBlockByNumberError = GetNodesByIdRpcBlockByNumberErrors[keyof GetNodesByIdRpcBlockByNumberErrors];
+
+export type GetNodesByIdRpcBlockByNumberResponses = {
+    /**
+     * Block object
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type GetNodesByIdRpcBlockByNumberResponse = GetNodesByIdRpcBlockByNumberResponses[keyof GetNodesByIdRpcBlockByNumberResponses];
+
+export type GetNodesByIdRpcBlockNumberData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/nodes/{id}/rpc/block-number';
+};
+
+export type GetNodesByIdRpcBlockNumberErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcBlockNumberError = GetNodesByIdRpcBlockNumberErrors[keyof GetNodesByIdRpcBlockNumberErrors];
+
+export type GetNodesByIdRpcBlockNumberResponses = {
+    /**
+     * Block number in hex
+     */
+    200: string;
+};
+
+export type GetNodesByIdRpcBlockNumberResponse = GetNodesByIdRpcBlockNumberResponses[keyof GetNodesByIdRpcBlockNumberResponses];
+
+export type GetNodesByIdRpcBlockTransactionCountByHashData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query: {
+        /**
+         * Block hash
+         */
+        hash: string;
+    };
+    url: '/nodes/{id}/rpc/block-transaction-count-by-hash';
+};
+
+export type GetNodesByIdRpcBlockTransactionCountByHashErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcBlockTransactionCountByHashError = GetNodesByIdRpcBlockTransactionCountByHashErrors[keyof GetNodesByIdRpcBlockTransactionCountByHashErrors];
+
+export type GetNodesByIdRpcBlockTransactionCountByHashResponses = {
+    /**
+     * Transaction count in hex
+     */
+    200: string;
+};
+
+export type GetNodesByIdRpcBlockTransactionCountByHashResponse = GetNodesByIdRpcBlockTransactionCountByHashResponses[keyof GetNodesByIdRpcBlockTransactionCountByHashResponses];
+
+export type GetNodesByIdRpcBlockTransactionCountByNumberData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query?: {
+        /**
+         * Block number
+         */
+        number?: string;
+        /**
+         * Block tag (latest, earliest, pending)
+         */
+        tag?: string;
+    };
+    url: '/nodes/{id}/rpc/block-transaction-count-by-number';
+};
+
+export type GetNodesByIdRpcBlockTransactionCountByNumberErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcBlockTransactionCountByNumberError = GetNodesByIdRpcBlockTransactionCountByNumberErrors[keyof GetNodesByIdRpcBlockTransactionCountByNumberErrors];
+
+export type GetNodesByIdRpcBlockTransactionCountByNumberResponses = {
+    /**
+     * Transaction count in hex
+     */
+    200: string;
+};
+
+export type GetNodesByIdRpcBlockTransactionCountByNumberResponse = GetNodesByIdRpcBlockTransactionCountByNumberResponses[keyof GetNodesByIdRpcBlockTransactionCountByNumberResponses];
+
+export type GetNodesByIdRpcChainIdData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/nodes/{id}/rpc/chain-id';
+};
+
+export type GetNodesByIdRpcChainIdErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcChainIdError = GetNodesByIdRpcChainIdErrors[keyof GetNodesByIdRpcChainIdErrors];
+
+export type GetNodesByIdRpcChainIdResponses = {
+    /**
+     * Chain ID in hex
+     */
+    200: string;
+};
+
+export type GetNodesByIdRpcChainIdResponse = GetNodesByIdRpcChainIdResponses[keyof GetNodesByIdRpcChainIdResponses];
+
+export type GetNodesByIdRpcCodeData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query: {
+        /**
+         * Contract address
+         */
+        address: string;
+        /**
+         * Block tag (default: latest)
+         */
+        blockTag?: string;
+    };
+    url: '/nodes/{id}/rpc/code';
+};
+
+export type GetNodesByIdRpcCodeErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcCodeError = GetNodesByIdRpcCodeErrors[keyof GetNodesByIdRpcCodeErrors];
+
+export type GetNodesByIdRpcCodeResponses = {
+    /**
+     * Bytecode in hex
+     */
+    200: string;
+};
+
+export type GetNodesByIdRpcCodeResponse = GetNodesByIdRpcCodeResponses[keyof GetNodesByIdRpcCodeResponses];
+
+export type GetNodesByIdRpcFeeHistoryData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query: {
+        /**
+         * Number of blocks
+         */
+        blockCount: string;
+        /**
+         * Newest block
+         */
+        newestBlock: string;
+        /**
+         * Reward percentiles
+         */
+        rewardPercentiles: string;
+    };
+    url: '/nodes/{id}/rpc/fee-history';
+};
+
+export type GetNodesByIdRpcFeeHistoryErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcFeeHistoryError = GetNodesByIdRpcFeeHistoryErrors[keyof GetNodesByIdRpcFeeHistoryErrors];
+
+export type GetNodesByIdRpcFeeHistoryResponses = {
+    /**
+     * Fee history object
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type GetNodesByIdRpcFeeHistoryResponse = GetNodesByIdRpcFeeHistoryResponses[keyof GetNodesByIdRpcFeeHistoryResponses];
+
+export type PostNodesByIdRpcLogsData = {
+    /**
+     * Log filter object
+     */
+    body: {
+        [key: string]: unknown;
+    };
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/nodes/{id}/rpc/logs';
+};
+
+export type PostNodesByIdRpcLogsErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type PostNodesByIdRpcLogsError = PostNodesByIdRpcLogsErrors[keyof PostNodesByIdRpcLogsErrors];
+
+export type PostNodesByIdRpcLogsResponses = {
+    /**
+     * Array of log objects
+     */
+    200: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+export type PostNodesByIdRpcLogsResponse = PostNodesByIdRpcLogsResponses[keyof PostNodesByIdRpcLogsResponses];
+
+export type GetNodesByIdRpcPendingTransactionsData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/nodes/{id}/rpc/pending-transactions';
+};
+
+export type GetNodesByIdRpcPendingTransactionsErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcPendingTransactionsError = GetNodesByIdRpcPendingTransactionsErrors[keyof GetNodesByIdRpcPendingTransactionsErrors];
+
+export type GetNodesByIdRpcPendingTransactionsResponses = {
+    /**
+     * Array of transaction objects
+     */
+    200: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+export type GetNodesByIdRpcPendingTransactionsResponse = GetNodesByIdRpcPendingTransactionsResponses[keyof GetNodesByIdRpcPendingTransactionsResponses];
+
+export type GetNodesByIdRpcProtocolVersionData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/nodes/{id}/rpc/protocol-version';
+};
+
+export type GetNodesByIdRpcProtocolVersionErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcProtocolVersionError = GetNodesByIdRpcProtocolVersionErrors[keyof GetNodesByIdRpcProtocolVersionErrors];
+
+export type GetNodesByIdRpcProtocolVersionResponses = {
+    /**
+     * Protocol version in hex
+     */
+    200: string;
+};
+
+export type GetNodesByIdRpcProtocolVersionResponse = GetNodesByIdRpcProtocolVersionResponses[keyof GetNodesByIdRpcProtocolVersionResponses];
+
+export type PostNodesByIdRpcQbftDiscardValidatorVoteData = {
+    /**
+     * Discard vote request
+     */
+    body: HttpQbftDiscardValidatorVoteRequest;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/nodes/{id}/rpc/qbft-discard-validator-vote';
+};
+
+export type PostNodesByIdRpcQbftDiscardValidatorVoteErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type PostNodesByIdRpcQbftDiscardValidatorVoteError = PostNodesByIdRpcQbftDiscardValidatorVoteErrors[keyof PostNodesByIdRpcQbftDiscardValidatorVoteErrors];
+
+export type PostNodesByIdRpcQbftDiscardValidatorVoteResponses = {
+    /**
+     * Success status
+     */
+    200: boolean;
+};
+
+export type PostNodesByIdRpcQbftDiscardValidatorVoteResponse = PostNodesByIdRpcQbftDiscardValidatorVoteResponses[keyof PostNodesByIdRpcQbftDiscardValidatorVoteResponses];
+
+export type GetNodesByIdRpcQbftPendingVotesData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/nodes/{id}/rpc/qbft-pending-votes';
+};
+
+export type GetNodesByIdRpcQbftPendingVotesErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcQbftPendingVotesError = GetNodesByIdRpcQbftPendingVotesErrors[keyof GetNodesByIdRpcQbftPendingVotesErrors];
+
+export type GetNodesByIdRpcQbftPendingVotesResponses = {
+    /**
+     * Map of validator addresses to boolean values indicating pending votes
+     */
+    200: ServiceQbftPendingVotes;
+};
+
+export type GetNodesByIdRpcQbftPendingVotesResponse = GetNodesByIdRpcQbftPendingVotesResponses[keyof GetNodesByIdRpcQbftPendingVotesResponses];
+
+export type PostNodesByIdRpcQbftProposeValidatorVoteData = {
+    /**
+     * Propose vote request
+     */
+    body: HttpQbftProposeValidatorVoteRequest;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/nodes/{id}/rpc/qbft-propose-validator-vote';
+};
+
+export type PostNodesByIdRpcQbftProposeValidatorVoteErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type PostNodesByIdRpcQbftProposeValidatorVoteError = PostNodesByIdRpcQbftProposeValidatorVoteErrors[keyof PostNodesByIdRpcQbftProposeValidatorVoteErrors];
+
+export type PostNodesByIdRpcQbftProposeValidatorVoteResponses = {
+    /**
+     * Success status
+     */
+    200: boolean;
+};
+
+export type PostNodesByIdRpcQbftProposeValidatorVoteResponse = PostNodesByIdRpcQbftProposeValidatorVoteResponses[keyof PostNodesByIdRpcQbftProposeValidatorVoteResponses];
+
+export type GetNodesByIdRpcQbftRequestTimeoutData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/nodes/{id}/rpc/qbft-request-timeout';
+};
+
+export type GetNodesByIdRpcQbftRequestTimeoutErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcQbftRequestTimeoutError = GetNodesByIdRpcQbftRequestTimeoutErrors[keyof GetNodesByIdRpcQbftRequestTimeoutErrors];
+
+export type GetNodesByIdRpcQbftRequestTimeoutResponses = {
+    /**
+     * Request timeout in seconds
+     */
+    200: unknown;
+};
+
+export type GetNodesByIdRpcQbftSignerMetricsData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/nodes/{id}/rpc/qbft-signer-metrics';
+};
+
+export type GetNodesByIdRpcQbftSignerMetricsErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcQbftSignerMetricsError = GetNodesByIdRpcQbftSignerMetricsErrors[keyof GetNodesByIdRpcQbftSignerMetricsErrors];
+
+export type GetNodesByIdRpcQbftSignerMetricsResponses = {
+    /**
+     * QBFT signer metrics
+     */
+    200: Array<ServiceQbftSignerMetric>;
+};
+
+export type GetNodesByIdRpcQbftSignerMetricsResponse = GetNodesByIdRpcQbftSignerMetricsResponses[keyof GetNodesByIdRpcQbftSignerMetricsResponses];
+
+export type GetNodesByIdRpcQbftValidatorsByBlockHashData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query: {
+        /**
+         * Block hash
+         */
+        blockHash: string;
+    };
+    url: '/nodes/{id}/rpc/qbft-validators-by-block-hash';
+};
+
+export type GetNodesByIdRpcQbftValidatorsByBlockHashErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcQbftValidatorsByBlockHashError = GetNodesByIdRpcQbftValidatorsByBlockHashErrors[keyof GetNodesByIdRpcQbftValidatorsByBlockHashErrors];
+
+export type GetNodesByIdRpcQbftValidatorsByBlockHashResponses = {
+    /**
+     * List of validator addresses
+     */
+    200: Array<string>;
+};
+
+export type GetNodesByIdRpcQbftValidatorsByBlockHashResponse = GetNodesByIdRpcQbftValidatorsByBlockHashResponses[keyof GetNodesByIdRpcQbftValidatorsByBlockHashResponses];
+
+export type GetNodesByIdRpcQbftValidatorsByBlockNumberData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query: {
+        /**
+         * Block number (hex string, 'latest', 'earliest', or 'pending')
+         */
+        blockNumber: string;
+    };
+    url: '/nodes/{id}/rpc/qbft-validators-by-block-number';
+};
+
+export type GetNodesByIdRpcQbftValidatorsByBlockNumberErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcQbftValidatorsByBlockNumberError = GetNodesByIdRpcQbftValidatorsByBlockNumberErrors[keyof GetNodesByIdRpcQbftValidatorsByBlockNumberErrors];
+
+export type GetNodesByIdRpcQbftValidatorsByBlockNumberResponses = {
+    /**
+     * List of validator addresses
+     */
+    200: Array<string>;
+};
+
+export type GetNodesByIdRpcQbftValidatorsByBlockNumberResponse = GetNodesByIdRpcQbftValidatorsByBlockNumberResponses[keyof GetNodesByIdRpcQbftValidatorsByBlockNumberResponses];
+
+export type GetNodesByIdRpcStorageData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query: {
+        /**
+         * Contract address
+         */
+        address: string;
+        /**
+         * Storage position
+         */
+        position: string;
+        /**
+         * Block tag (default: latest)
+         */
+        blockTag?: string;
+    };
+    url: '/nodes/{id}/rpc/storage';
+};
+
+export type GetNodesByIdRpcStorageErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcStorageError = GetNodesByIdRpcStorageErrors[keyof GetNodesByIdRpcStorageErrors];
+
+export type GetNodesByIdRpcStorageResponses = {
+    /**
+     * Storage value in hex
+     */
+    200: string;
+};
+
+export type GetNodesByIdRpcStorageResponse = GetNodesByIdRpcStorageResponses[keyof GetNodesByIdRpcStorageResponses];
+
+export type GetNodesByIdRpcSyncingData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/nodes/{id}/rpc/syncing';
+};
+
+export type GetNodesByIdRpcSyncingErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcSyncingError = GetNodesByIdRpcSyncingErrors[keyof GetNodesByIdRpcSyncingErrors];
+
+export type GetNodesByIdRpcSyncingResponses = {
+    /**
+     * Sync object or false
+     */
+    200: unknown;
+};
+
+export type GetNodesByIdRpcTransactionByBlockHashAndIndexData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query: {
+        /**
+         * Block hash
+         */
+        hash: string;
+        /**
+         * Transaction index
+         */
+        index: string;
+    };
+    url: '/nodes/{id}/rpc/transaction-by-block-hash-and-index';
+};
+
+export type GetNodesByIdRpcTransactionByBlockHashAndIndexErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcTransactionByBlockHashAndIndexError = GetNodesByIdRpcTransactionByBlockHashAndIndexErrors[keyof GetNodesByIdRpcTransactionByBlockHashAndIndexErrors];
+
+export type GetNodesByIdRpcTransactionByBlockHashAndIndexResponses = {
+    /**
+     * Transaction object
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type GetNodesByIdRpcTransactionByBlockHashAndIndexResponse = GetNodesByIdRpcTransactionByBlockHashAndIndexResponses[keyof GetNodesByIdRpcTransactionByBlockHashAndIndexResponses];
+
+export type GetNodesByIdRpcTransactionByBlockNumberAndIndexData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query: {
+        /**
+         * Block number
+         */
+        number?: string;
+        /**
+         * Block tag (latest, earliest, pending)
+         */
+        tag?: string;
+        /**
+         * Transaction index
+         */
+        index: string;
+    };
+    url: '/nodes/{id}/rpc/transaction-by-block-number-and-index';
+};
+
+export type GetNodesByIdRpcTransactionByBlockNumberAndIndexErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcTransactionByBlockNumberAndIndexError = GetNodesByIdRpcTransactionByBlockNumberAndIndexErrors[keyof GetNodesByIdRpcTransactionByBlockNumberAndIndexErrors];
+
+export type GetNodesByIdRpcTransactionByBlockNumberAndIndexResponses = {
+    /**
+     * Transaction object
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type GetNodesByIdRpcTransactionByBlockNumberAndIndexResponse = GetNodesByIdRpcTransactionByBlockNumberAndIndexResponses[keyof GetNodesByIdRpcTransactionByBlockNumberAndIndexResponses];
+
+export type GetNodesByIdRpcTransactionByHashData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query: {
+        /**
+         * Transaction hash
+         */
+        hash: string;
+    };
+    url: '/nodes/{id}/rpc/transaction-by-hash';
+};
+
+export type GetNodesByIdRpcTransactionByHashErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcTransactionByHashError = GetNodesByIdRpcTransactionByHashErrors[keyof GetNodesByIdRpcTransactionByHashErrors];
+
+export type GetNodesByIdRpcTransactionByHashResponses = {
+    /**
+     * Transaction object
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type GetNodesByIdRpcTransactionByHashResponse = GetNodesByIdRpcTransactionByHashResponses[keyof GetNodesByIdRpcTransactionByHashResponses];
+
+export type GetNodesByIdRpcTransactionCountData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query: {
+        /**
+         * Account address
+         */
+        address: string;
+        /**
+         * Block tag (default: latest)
+         */
+        blockTag?: string;
+    };
+    url: '/nodes/{id}/rpc/transaction-count';
+};
+
+export type GetNodesByIdRpcTransactionCountErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcTransactionCountError = GetNodesByIdRpcTransactionCountErrors[keyof GetNodesByIdRpcTransactionCountErrors];
+
+export type GetNodesByIdRpcTransactionCountResponses = {
+    /**
+     * Transaction count in hex
+     */
+    200: string;
+};
+
+export type GetNodesByIdRpcTransactionCountResponse = GetNodesByIdRpcTransactionCountResponses[keyof GetNodesByIdRpcTransactionCountResponses];
+
+export type GetNodesByIdRpcTransactionReceiptData = {
+    body?: never;
+    path: {
+        /**
+         * Node ID
+         */
+        id: number;
+    };
+    query: {
+        /**
+         * Transaction hash
+         */
+        hash: string;
+    };
+    url: '/nodes/{id}/rpc/transaction-receipt';
+};
+
+export type GetNodesByIdRpcTransactionReceiptErrors = {
+    /**
+     * Validation error
+     */
+    400: ResponseErrorResponse;
+    /**
+     * Node not found
+     */
+    404: ResponseErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ResponseErrorResponse;
+};
+
+export type GetNodesByIdRpcTransactionReceiptError = GetNodesByIdRpcTransactionReceiptErrors[keyof GetNodesByIdRpcTransactionReceiptErrors];
+
+export type GetNodesByIdRpcTransactionReceiptResponses = {
+    /**
+     * Transaction receipt
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type GetNodesByIdRpcTransactionReceiptResponse = GetNodesByIdRpcTransactionReceiptResponses[keyof GetNodesByIdRpcTransactionReceiptResponses];
 
 export type PostNodesByIdStartData = {
     body?: never;
@@ -9052,6 +10768,42 @@ export type PostScFabricChaincodesByChaincodeIdQueryResponses = {
 
 export type PostScFabricChaincodesByChaincodeIdQueryResponse = PostScFabricChaincodesByChaincodeIdQueryResponses[keyof PostScFabricChaincodesByChaincodeIdQueryResponses];
 
+export type DeleteScFabricChaincodesByIdData = {
+    body?: never;
+    path: {
+        /**
+         * Chaincode ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/sc/fabric/chaincodes/{id}';
+};
+
+export type DeleteScFabricChaincodesByIdErrors = {
+    /**
+     * Bad Request
+     */
+    400: ResponseResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ResponseResponse;
+};
+
+export type DeleteScFabricChaincodesByIdError = DeleteScFabricChaincodesByIdErrors[keyof DeleteScFabricChaincodesByIdErrors];
+
+export type DeleteScFabricChaincodesByIdResponses = {
+    /**
+     * OK
+     */
+    200: {
+        [key: string]: string;
+    };
+};
+
+export type DeleteScFabricChaincodesByIdResponse = DeleteScFabricChaincodesByIdResponses[keyof DeleteScFabricChaincodesByIdResponses];
+
 export type GetScFabricChaincodesByIdData = {
     body?: never;
     path: {
@@ -9919,3 +11671,7 @@ export type PutUsersByIdRoleResponses = {
 };
 
 export type PutUsersByIdRoleResponse = PutUsersByIdRoleResponses[keyof PutUsersByIdRoleResponses];
+
+export type ClientOptions = {
+    baseUrl: 'http://localhost:8100/api/v1' | 'https://localhost:8100/api/v1' | (string & {});
+};

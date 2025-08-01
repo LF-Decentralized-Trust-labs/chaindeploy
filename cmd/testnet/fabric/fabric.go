@@ -65,6 +65,7 @@ type FabricTestnetConfig struct {
 	PeerCounts    map[string]int
 	OrdererCounts map[string]int
 	Mode          string
+	ExternalIP    string
 }
 
 // FabricTestnetRunner encapsulates the config and logic for running and validating the Fabric testnet command
@@ -129,6 +130,8 @@ func (r *FabricTestnetRunner) Run() error {
 
 	// 2. Create nodes for each org using common helpers
 	nodeIDs := []int64{}
+	peerNodeIDs := []int64{}
+	ordererNodeIDs := []int64{}
 	peerNodeIDsByOrg := map[string][]int64{}
 	ordererNodeIDsByOrg := map[string][]int64{}
 	for org, count := range r.Config.PeerCounts {
@@ -154,9 +157,13 @@ func (r *FabricTestnetRunner) Run() error {
 				return fmt.Errorf("failed to allocate operations port for peer %s: %w", nodeName, err)
 			}
 
-			// Determine external endpoint based on mode
+			// Determine external endpoint based on mode and user preference
 			externalIP := "127.0.0.1"
-			if r.Config.Mode == "docker" {
+			if r.Config.ExternalIP != "" {
+				// Use user-specified external IP
+				externalIP = r.Config.ExternalIP
+			} else if r.Config.Mode == "docker" {
+				// Auto-detect external IP for docker mode
 				hostIP, err := getExternalIP()
 				if err == nil {
 					externalIP = hostIP
@@ -188,6 +195,7 @@ func (r *FabricTestnetRunner) Run() error {
 				return fmt.Errorf("failed to create peer node for org %s: %w", org, err)
 			}
 			nodeIDs = append(nodeIDs, nodeResp.ID)
+			peerNodeIDs = append(peerNodeIDs, nodeResp.ID)
 			peerNodeIDsByOrg[org] = append(peerNodeIDsByOrg[org], nodeResp.ID)
 		}
 	}
@@ -210,9 +218,13 @@ func (r *FabricTestnetRunner) Run() error {
 				return fmt.Errorf("failed to allocate operations port for orderer %s: %w", nodeName, err)
 			}
 
-			// Determine external endpoint based on mode
+			// Determine external endpoint based on mode and user preference
 			externalIP := "127.0.0.1"
-			if r.Config.Mode == "docker" {
+			if r.Config.ExternalIP != "" {
+				// Use user-specified external IP
+				externalIP = r.Config.ExternalIP
+			} else if r.Config.Mode == "docker" {
+				// Auto-detect external IP for docker mode
 				hostIP, err := getExternalIP()
 				if err == nil {
 					externalIP = hostIP
@@ -242,6 +254,7 @@ func (r *FabricTestnetRunner) Run() error {
 				return fmt.Errorf("failed to create orderer node for org %s: %w", org, err)
 			}
 			nodeIDs = append(nodeIDs, nodeResp.ID)
+			ordererNodeIDs = append(ordererNodeIDs, nodeResp.ID)
 			ordererNodeIDsByOrg[org] = append(ordererNodeIDsByOrg[org], nodeResp.ID)
 		}
 	}
@@ -262,7 +275,6 @@ func (r *FabricTestnetRunner) Run() error {
 			NodeIDs: ordererNodeIDsByOrg[org],
 		})
 	}
-	// Optionally, you can group nodeIDs by org if needed
 
 	netReq := &networkshttp.CreateFabricNetworkRequest{
 		Name:        r.Config.Name,
@@ -281,7 +293,7 @@ func (r *FabricTestnetRunner) Run() error {
 	fmt.Printf("Fabric testnet created successfully! Network ID: %d\n", networkResp.ID)
 
 	// Join all peers to the network
-	peerResults, peerErrs := client.JoinAllPeersToFabricNetwork(networkResp.ID)
+	peerResults, peerErrs := client.JoinAllPeersToFabricNetwork(networkResp.ID, peerNodeIDs)
 	for _, resp := range peerResults {
 		fmt.Printf("Peer joined network %d successfully. Network ID: %d, Status: %s\n", networkResp.ID, resp.ID, resp.Status)
 	}
@@ -294,7 +306,7 @@ func (r *FabricTestnetRunner) Run() error {
 	}
 
 	// Join all orderers to the network
-	ordererResults, ordererErrs := client.JoinAllOrderersToFabricNetwork(networkResp.ID)
+	ordererResults, ordererErrs := client.JoinAllOrderersToFabricNetwork(networkResp.ID, ordererNodeIDs)
 	for _, resp := range ordererResults {
 		fmt.Printf("Orderer joined network %d successfully. Network ID: %d, Status: %s\n", networkResp.ID, resp.ID, resp.Status)
 	}
@@ -335,6 +347,7 @@ func NewFabricTestnetCmd() *cobra.Command {
 	cmd.Flags().StringToIntVar(&runner.Config.PeerCounts, "peerCounts", nil, "Number of peers per org (e.g., Org1=2,Org2=3)")
 	cmd.Flags().StringToIntVar(&runner.Config.OrdererCounts, "ordererCounts", nil, "Number of orderers per org (e.g., Orderer1=1,Orderer2=2)")
 	cmd.Flags().StringVar(&runner.Config.Mode, "mode", "service", "Node mode (default 'service')")
+	cmd.Flags().StringVar(&runner.Config.ExternalIP, "external-ip", "", "External IP address to use for node endpoints (defaults to auto-detection in docker mode)")
 
 	return cmd
 }

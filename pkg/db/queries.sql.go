@@ -130,6 +130,17 @@ func (q *Queries) CountBackupsByTarget(ctx context.Context, targetID int64) (int
 	return count, err
 }
 
+const CountFabricOrganizations = `-- name: CountFabricOrganizations :one
+SELECT COUNT(*) FROM fabric_organizations
+`
+
+func (q *Queries) CountFabricOrganizations(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, CountFabricOrganizations)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const CountNetworks = `-- name: CountNetworks :one
 SELECT COUNT(*) FROM networks
 `
@@ -698,7 +709,7 @@ INSERT INTO networks (
 ) VALUES (
     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 )
-RETURNING id, name, network_id, platform, status, description, config, deployment_config, exposed_ports, domain, created_at, created_by, updated_at, genesis_block_b64, current_config_block_b64
+RETURNING id, name, network_id, platform, status, description, config, deployment_config, exposed_ports, domain, created_at, created_by, updated_at, genesis_block_b64, current_config_block_b64, genesis_changed_at, genesis_changed_by, genesis_change_reason
 `
 
 type CreateNetworkParams struct {
@@ -744,6 +755,9 @@ func (q *Queries) CreateNetwork(ctx context.Context, arg *CreateNetworkParams) (
 		&i.UpdatedAt,
 		&i.GenesisBlockB64,
 		&i.CurrentConfigBlockB64,
+		&i.GenesisChangedAt,
+		&i.GenesisChangedBy,
+		&i.GenesisChangeReason,
 	)
 	return &i, err
 }
@@ -755,7 +769,7 @@ INSERT INTO networks (
 ) VALUES (
     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 )
-RETURNING id, name, network_id, platform, status, description, config, deployment_config, exposed_ports, domain, created_at, created_by, updated_at, genesis_block_b64, current_config_block_b64
+RETURNING id, name, network_id, platform, status, description, config, deployment_config, exposed_ports, domain, created_at, created_by, updated_at, genesis_block_b64, current_config_block_b64, genesis_changed_at, genesis_changed_by, genesis_change_reason
 `
 
 type CreateNetworkFullParams struct {
@@ -803,6 +817,9 @@ func (q *Queries) CreateNetworkFull(ctx context.Context, arg *CreateNetworkFullP
 		&i.UpdatedAt,
 		&i.GenesisBlockB64,
 		&i.CurrentConfigBlockB64,
+		&i.GenesisChangedAt,
+		&i.GenesisChangedBy,
+		&i.GenesisChangeReason,
 	)
 	return &i, err
 }
@@ -1101,6 +1118,96 @@ func (q *Queries) CreatePlugin(ctx context.Context, arg *CreatePluginParams) (*P
 		&i.UpdatedAt,
 		&i.DeploymentMetadata,
 		&i.DeploymentStatus,
+	)
+	return &i, err
+}
+
+const CreatePrometheusConfig = `-- name: CreatePrometheusConfig :one
+INSERT INTO prometheus_config (
+    prometheus_port,
+    data_dir,
+    config_dir,
+    container_name,
+    scrape_interval,
+    evaluation_interval,
+    deployment_mode,
+    docker_image,
+    network_mode,
+    extra_hosts,
+    restart_policy,
+    service_name,
+    service_user,
+    service_group,
+    binary_path,
+    prometheus_version
+) VALUES (
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+)
+RETURNING id, prometheus_port, data_dir, config_dir, container_name, scrape_interval, evaluation_interval, deployment_mode, docker_image, docker_network, docker_restart_policy, docker_extra_args, created_at, updated_at, network_mode, extra_hosts, restart_policy, service_name, service_user, service_group, binary_path, prometheus_version
+`
+
+type CreatePrometheusConfigParams struct {
+	PrometheusPort     int64          `json:"prometheusPort"`
+	DataDir            string         `json:"dataDir"`
+	ConfigDir          string         `json:"configDir"`
+	ContainerName      string         `json:"containerName"`
+	ScrapeInterval     int64          `json:"scrapeInterval"`
+	EvaluationInterval int64          `json:"evaluationInterval"`
+	DeploymentMode     string         `json:"deploymentMode"`
+	DockerImage        string         `json:"dockerImage"`
+	NetworkMode        sql.NullString `json:"networkMode"`
+	ExtraHosts         sql.NullString `json:"extraHosts"`
+	RestartPolicy      sql.NullString `json:"restartPolicy"`
+	ServiceName        sql.NullString `json:"serviceName"`
+	ServiceUser        sql.NullString `json:"serviceUser"`
+	ServiceGroup       sql.NullString `json:"serviceGroup"`
+	BinaryPath         sql.NullString `json:"binaryPath"`
+	PrometheusVersion  sql.NullString `json:"prometheusVersion"`
+}
+
+func (q *Queries) CreatePrometheusConfig(ctx context.Context, arg *CreatePrometheusConfigParams) (*PrometheusConfig, error) {
+	row := q.db.QueryRowContext(ctx, CreatePrometheusConfig,
+		arg.PrometheusPort,
+		arg.DataDir,
+		arg.ConfigDir,
+		arg.ContainerName,
+		arg.ScrapeInterval,
+		arg.EvaluationInterval,
+		arg.DeploymentMode,
+		arg.DockerImage,
+		arg.NetworkMode,
+		arg.ExtraHosts,
+		arg.RestartPolicy,
+		arg.ServiceName,
+		arg.ServiceUser,
+		arg.ServiceGroup,
+		arg.BinaryPath,
+		arg.PrometheusVersion,
+	)
+	var i PrometheusConfig
+	err := row.Scan(
+		&i.ID,
+		&i.PrometheusPort,
+		&i.DataDir,
+		&i.ConfigDir,
+		&i.ContainerName,
+		&i.ScrapeInterval,
+		&i.EvaluationInterval,
+		&i.DeploymentMode,
+		&i.DockerImage,
+		&i.DockerNetwork,
+		&i.DockerRestartPolicy,
+		&i.DockerExtraArgs,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.NetworkMode,
+		&i.ExtraHosts,
+		&i.RestartPolicy,
+		&i.ServiceName,
+		&i.ServiceUser,
+		&i.ServiceGroup,
+		&i.BinaryPath,
+		&i.PrometheusVersion,
 	)
 	return &i, err
 }
@@ -1906,17 +2013,6 @@ func (q *Queries) GetChaincodeDefinition(ctx context.Context, id int64) (*Fabric
 	return &i, err
 }
 
-const GetConversation = `-- name: GetConversation :one
-SELECT id, project_id, started_at FROM conversations WHERE id = ? LIMIT 1
-`
-
-func (q *Queries) GetConversation(ctx context.Context, id int64) (*Conversation, error) {
-	row := q.db.QueryRowContext(ctx, GetConversation, id)
-	var i Conversation
-	err := row.Scan(&i.ID, &i.ProjectID, &i.StartedAt)
-	return &i, err
-}
-
 const GetDefaultNotificationProvider = `-- name: GetDefaultNotificationProvider :one
 SELECT id, name, type, config, is_default, is_enabled, created_at, updated_at, notify_node_downtime, notify_backup_success, notify_backup_failure, notify_s3_connection_issue, last_test_at, last_test_status, last_test_message FROM notification_providers
 WHERE is_default = 1 AND type = ?
@@ -2669,7 +2765,7 @@ func (q *Queries) GetLatestNodeEvent(ctx context.Context, nodeID int64) (*NodeEv
 }
 
 const GetNetwork = `-- name: GetNetwork :one
-SELECT id, name, network_id, platform, status, description, config, deployment_config, exposed_ports, domain, created_at, created_by, updated_at, genesis_block_b64, current_config_block_b64 FROM networks
+SELECT id, name, network_id, platform, status, description, config, deployment_config, exposed_ports, domain, created_at, created_by, updated_at, genesis_block_b64, current_config_block_b64, genesis_changed_at, genesis_changed_by, genesis_change_reason FROM networks
 WHERE id = ? LIMIT 1
 `
 
@@ -2692,12 +2788,15 @@ func (q *Queries) GetNetwork(ctx context.Context, id int64) (*Network, error) {
 		&i.UpdatedAt,
 		&i.GenesisBlockB64,
 		&i.CurrentConfigBlockB64,
+		&i.GenesisChangedAt,
+		&i.GenesisChangedBy,
+		&i.GenesisChangeReason,
 	)
 	return &i, err
 }
 
 const GetNetworkByName = `-- name: GetNetworkByName :one
-SELECT id, name, network_id, platform, status, description, config, deployment_config, exposed_ports, domain, created_at, created_by, updated_at, genesis_block_b64, current_config_block_b64 FROM networks
+SELECT id, name, network_id, platform, status, description, config, deployment_config, exposed_ports, domain, created_at, created_by, updated_at, genesis_block_b64, current_config_block_b64, genesis_changed_at, genesis_changed_by, genesis_change_reason FROM networks
 WHERE name = ? LIMIT 1
 `
 
@@ -2720,12 +2819,15 @@ func (q *Queries) GetNetworkByName(ctx context.Context, name string) (*Network, 
 		&i.UpdatedAt,
 		&i.GenesisBlockB64,
 		&i.CurrentConfigBlockB64,
+		&i.GenesisChangedAt,
+		&i.GenesisChangedBy,
+		&i.GenesisChangeReason,
 	)
 	return &i, err
 }
 
 const GetNetworkByNetworkId = `-- name: GetNetworkByNetworkId :one
-SELECT id, name, network_id, platform, status, description, config, deployment_config, exposed_ports, domain, created_at, created_by, updated_at, genesis_block_b64, current_config_block_b64 FROM networks
+SELECT id, name, network_id, platform, status, description, config, deployment_config, exposed_ports, domain, created_at, created_by, updated_at, genesis_block_b64, current_config_block_b64, genesis_changed_at, genesis_changed_by, genesis_change_reason FROM networks
 WHERE network_id = ? LIMIT 1
 `
 
@@ -2748,6 +2850,9 @@ func (q *Queries) GetNetworkByNetworkId(ctx context.Context, networkID sql.NullS
 		&i.UpdatedAt,
 		&i.GenesisBlockB64,
 		&i.CurrentConfigBlockB64,
+		&i.GenesisChangedAt,
+		&i.GenesisChangedBy,
+		&i.GenesisChangeReason,
 	)
 	return &i, err
 }
@@ -3129,25 +3234,69 @@ func (q *Queries) GetPlugin(ctx context.Context, name string) (*Plugin, error) {
 }
 
 const GetPrometheusConfig = `-- name: GetPrometheusConfig :one
-SELECT id, prometheus_port, data_dir, config_dir, container_name, scrape_interval, evaluation_interval, deployment_mode, docker_image, docker_network, docker_restart_policy, docker_extra_args, created_at, updated_at FROM prometheus_config WHERE id = 1
+SELECT 
+    id,
+    prometheus_version,
+    prometheus_port,
+    scrape_interval,
+    docker_image,
+    deployment_mode,
+    network_mode,
+    extra_hosts,
+    restart_policy,
+    container_name,
+    service_name,
+    service_user,
+    service_group,
+    data_dir,
+    config_dir,
+    binary_path,
+    created_at,
+    updated_at
+FROM prometheus_config LIMIT 1
 `
 
-func (q *Queries) GetPrometheusConfig(ctx context.Context) (*PrometheusConfig, error) {
+type GetPrometheusConfigRow struct {
+	ID                int64          `json:"id"`
+	PrometheusVersion sql.NullString `json:"prometheusVersion"`
+	PrometheusPort    int64          `json:"prometheusPort"`
+	ScrapeInterval    int64          `json:"scrapeInterval"`
+	DockerImage       string         `json:"dockerImage"`
+	DeploymentMode    string         `json:"deploymentMode"`
+	NetworkMode       sql.NullString `json:"networkMode"`
+	ExtraHosts        sql.NullString `json:"extraHosts"`
+	RestartPolicy     sql.NullString `json:"restartPolicy"`
+	ContainerName     string         `json:"containerName"`
+	ServiceName       sql.NullString `json:"serviceName"`
+	ServiceUser       sql.NullString `json:"serviceUser"`
+	ServiceGroup      sql.NullString `json:"serviceGroup"`
+	DataDir           string         `json:"dataDir"`
+	ConfigDir         string         `json:"configDir"`
+	BinaryPath        sql.NullString `json:"binaryPath"`
+	CreatedAt         time.Time      `json:"createdAt"`
+	UpdatedAt         time.Time      `json:"updatedAt"`
+}
+
+func (q *Queries) GetPrometheusConfig(ctx context.Context) (*GetPrometheusConfigRow, error) {
 	row := q.db.QueryRowContext(ctx, GetPrometheusConfig)
-	var i PrometheusConfig
+	var i GetPrometheusConfigRow
 	err := row.Scan(
 		&i.ID,
+		&i.PrometheusVersion,
 		&i.PrometheusPort,
+		&i.ScrapeInterval,
+		&i.DockerImage,
+		&i.DeploymentMode,
+		&i.NetworkMode,
+		&i.ExtraHosts,
+		&i.RestartPolicy,
+		&i.ContainerName,
+		&i.ServiceName,
+		&i.ServiceUser,
+		&i.ServiceGroup,
 		&i.DataDir,
 		&i.ConfigDir,
-		&i.ContainerName,
-		&i.ScrapeInterval,
-		&i.EvaluationInterval,
-		&i.DeploymentMode,
-		&i.DockerImage,
-		&i.DockerNetwork,
-		&i.DockerRestartPolicy,
-		&i.DockerExtraArgs,
+		&i.BinaryPath,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -4216,7 +4365,7 @@ func (q *Queries) ListNetworkNodesByNode(ctx context.Context, nodeID int64) ([]*
 }
 
 const ListNetworks = `-- name: ListNetworks :many
-SELECT id, name, network_id, platform, status, description, config, deployment_config, exposed_ports, domain, created_at, created_by, updated_at, genesis_block_b64, current_config_block_b64 FROM networks
+SELECT id, name, network_id, platform, status, description, config, deployment_config, exposed_ports, domain, created_at, created_by, updated_at, genesis_block_b64, current_config_block_b64, genesis_changed_at, genesis_changed_by, genesis_change_reason FROM networks
 ORDER BY created_at DESC
 `
 
@@ -4245,6 +4394,9 @@ func (q *Queries) ListNetworks(ctx context.Context) ([]*Network, error) {
 			&i.UpdatedAt,
 			&i.GenesisBlockB64,
 			&i.CurrentConfigBlockB64,
+			&i.GenesisChangedAt,
+			&i.GenesisChangedBy,
+			&i.GenesisChangeReason,
 		); err != nil {
 			return nil, err
 		}
@@ -4260,7 +4412,7 @@ func (q *Queries) ListNetworks(ctx context.Context) ([]*Network, error) {
 }
 
 const ListNetworksByPlatform = `-- name: ListNetworksByPlatform :many
-SELECT id, name, network_id, platform, status, description, config, deployment_config, exposed_ports, domain, created_at, created_by, updated_at, genesis_block_b64, current_config_block_b64 FROM networks
+SELECT id, name, network_id, platform, status, description, config, deployment_config, exposed_ports, domain, created_at, created_by, updated_at, genesis_block_b64, current_config_block_b64, genesis_changed_at, genesis_changed_by, genesis_change_reason FROM networks
 WHERE
   (CASE WHEN COALESCE(CAST(?1 AS TEXT), '') = '' THEN 1 ELSE platform = ?1 END)
 ORDER BY created_at DESC
@@ -4291,6 +4443,9 @@ func (q *Queries) ListNetworksByPlatform(ctx context.Context, platform string) (
 			&i.UpdatedAt,
 			&i.GenesisBlockB64,
 			&i.CurrentConfigBlockB64,
+			&i.GenesisChangedAt,
+			&i.GenesisChangedBy,
+			&i.GenesisChangeReason,
 		); err != nil {
 			return nil, err
 		}
@@ -4774,15 +4929,17 @@ SET prometheus_port = 9090,
     config_dir = '/etc/prometheus',
     container_name = 'chainlaunch-prometheus',
     scrape_interval = 15,
-    evaluation_interval = 15,
     deployment_mode = 'docker',
     docker_image = 'prom/prometheus:latest',
-    docker_network = 'chainlaunch-network',
-    docker_restart_policy = 'unless-stopped',
-    docker_extra_args = '--web.enable-lifecycle --web.enable-admin-api',
+    network_mode = 'bridge',
+    extra_hosts = 'host.docker.internal:host-gateway',
+    restart_policy = 'unless-stopped',
+    service_name = 'chainlaunch-prometheus',
+    service_user = 'prometheus',
+    service_group = 'prometheus',
+    binary_path = '/usr/local/bin/prometheus',
     updated_at = CURRENT_TIMESTAMP
-WHERE id = 1
-RETURNING id, prometheus_port, data_dir, config_dir, container_name, scrape_interval, evaluation_interval, deployment_mode, docker_image, docker_network, docker_restart_policy, docker_extra_args, created_at, updated_at
+RETURNING id, prometheus_port, data_dir, config_dir, container_name, scrape_interval, evaluation_interval, deployment_mode, docker_image, docker_network, docker_restart_policy, docker_extra_args, created_at, updated_at, network_mode, extra_hosts, restart_policy, service_name, service_user, service_group, binary_path, prometheus_version
 `
 
 func (q *Queries) ResetPrometheusConfig(ctx context.Context) (*PrometheusConfig, error) {
@@ -4803,6 +4960,14 @@ func (q *Queries) ResetPrometheusConfig(ctx context.Context) (*PrometheusConfig,
 		&i.DockerExtraArgs,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.NetworkMode,
+		&i.ExtraHosts,
+		&i.RestartPolicy,
+		&i.ServiceName,
+		&i.ServiceUser,
+		&i.ServiceGroup,
+		&i.BinaryPath,
+		&i.PrometheusVersion,
 	)
 	return &i, err
 }
@@ -5475,7 +5640,7 @@ UPDATE networks
 SET genesis_block_b64 = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
-RETURNING id, name, network_id, platform, status, description, config, deployment_config, exposed_ports, domain, created_at, created_by, updated_at, genesis_block_b64, current_config_block_b64
+RETURNING id, name, network_id, platform, status, description, config, deployment_config, exposed_ports, domain, created_at, created_by, updated_at, genesis_block_b64, current_config_block_b64, genesis_changed_at, genesis_changed_by, genesis_change_reason
 `
 
 type UpdateNetworkGenesisBlockParams struct {
@@ -5502,6 +5667,58 @@ func (q *Queries) UpdateNetworkGenesisBlock(ctx context.Context, arg *UpdateNetw
 		&i.UpdatedAt,
 		&i.GenesisBlockB64,
 		&i.CurrentConfigBlockB64,
+		&i.GenesisChangedAt,
+		&i.GenesisChangedBy,
+		&i.GenesisChangeReason,
+	)
+	return &i, err
+}
+
+const UpdateNetworkGenesisBlockWithTracking = `-- name: UpdateNetworkGenesisBlockWithTracking :one
+UPDATE networks
+SET genesis_block_b64 = ?,
+    genesis_changed_at = CURRENT_TIMESTAMP,
+    genesis_changed_by = ?,
+    genesis_change_reason = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING id, name, network_id, platform, status, description, config, deployment_config, exposed_ports, domain, created_at, created_by, updated_at, genesis_block_b64, current_config_block_b64, genesis_changed_at, genesis_changed_by, genesis_change_reason
+`
+
+type UpdateNetworkGenesisBlockWithTrackingParams struct {
+	GenesisBlockB64     sql.NullString `json:"genesisBlockB64"`
+	GenesisChangedBy    sql.NullInt64  `json:"genesisChangedBy"`
+	GenesisChangeReason sql.NullString `json:"genesisChangeReason"`
+	ID                  int64          `json:"id"`
+}
+
+func (q *Queries) UpdateNetworkGenesisBlockWithTracking(ctx context.Context, arg *UpdateNetworkGenesisBlockWithTrackingParams) (*Network, error) {
+	row := q.db.QueryRowContext(ctx, UpdateNetworkGenesisBlockWithTracking,
+		arg.GenesisBlockB64,
+		arg.GenesisChangedBy,
+		arg.GenesisChangeReason,
+		arg.ID,
+	)
+	var i Network
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.NetworkID,
+		&i.Platform,
+		&i.Status,
+		&i.Description,
+		&i.Config,
+		&i.DeploymentConfig,
+		&i.ExposedPorts,
+		&i.Domain,
+		&i.CreatedAt,
+		&i.CreatedBy,
+		&i.UpdatedAt,
+		&i.GenesisBlockB64,
+		&i.CurrentConfigBlockB64,
+		&i.GenesisChangedAt,
+		&i.GenesisChangedBy,
+		&i.GenesisChangeReason,
 	)
 	return &i, err
 }
@@ -5960,29 +6177,34 @@ SET prometheus_port = ?,
     config_dir = ?,
     container_name = ?,
     scrape_interval = ?,
-    evaluation_interval = ?,
     deployment_mode = ?,
     docker_image = ?,
-    docker_network = ?,
-    docker_restart_policy = ?,
-    docker_extra_args = ?,
+    network_mode = ?,
+    extra_hosts = ?,
+    restart_policy = ?,
+    service_name = ?,
+    service_user = ?,
+    service_group = ?,
+    binary_path = ?,
     updated_at = CURRENT_TIMESTAMP
-WHERE id = 1
-RETURNING id, prometheus_port, data_dir, config_dir, container_name, scrape_interval, evaluation_interval, deployment_mode, docker_image, docker_network, docker_restart_policy, docker_extra_args, created_at, updated_at
+RETURNING id, prometheus_port, data_dir, config_dir, container_name, scrape_interval, evaluation_interval, deployment_mode, docker_image, docker_network, docker_restart_policy, docker_extra_args, created_at, updated_at, network_mode, extra_hosts, restart_policy, service_name, service_user, service_group, binary_path, prometheus_version
 `
 
 type UpdatePrometheusConfigParams struct {
-	PrometheusPort      int64          `json:"prometheusPort"`
-	DataDir             string         `json:"dataDir"`
-	ConfigDir           string         `json:"configDir"`
-	ContainerName       string         `json:"containerName"`
-	ScrapeInterval      int64          `json:"scrapeInterval"`
-	EvaluationInterval  int64          `json:"evaluationInterval"`
-	DeploymentMode      string         `json:"deploymentMode"`
-	DockerImage         string         `json:"dockerImage"`
-	DockerNetwork       sql.NullString `json:"dockerNetwork"`
-	DockerRestartPolicy string         `json:"dockerRestartPolicy"`
-	DockerExtraArgs     sql.NullString `json:"dockerExtraArgs"`
+	PrometheusPort int64          `json:"prometheusPort"`
+	DataDir        string         `json:"dataDir"`
+	ConfigDir      string         `json:"configDir"`
+	ContainerName  string         `json:"containerName"`
+	ScrapeInterval int64          `json:"scrapeInterval"`
+	DeploymentMode string         `json:"deploymentMode"`
+	DockerImage    string         `json:"dockerImage"`
+	NetworkMode    sql.NullString `json:"networkMode"`
+	ExtraHosts     sql.NullString `json:"extraHosts"`
+	RestartPolicy  sql.NullString `json:"restartPolicy"`
+	ServiceName    sql.NullString `json:"serviceName"`
+	ServiceUser    sql.NullString `json:"serviceUser"`
+	ServiceGroup   sql.NullString `json:"serviceGroup"`
+	BinaryPath     sql.NullString `json:"binaryPath"`
 }
 
 func (q *Queries) UpdatePrometheusConfig(ctx context.Context, arg *UpdatePrometheusConfigParams) (*PrometheusConfig, error) {
@@ -5992,12 +6214,15 @@ func (q *Queries) UpdatePrometheusConfig(ctx context.Context, arg *UpdatePrometh
 		arg.ConfigDir,
 		arg.ContainerName,
 		arg.ScrapeInterval,
-		arg.EvaluationInterval,
 		arg.DeploymentMode,
 		arg.DockerImage,
-		arg.DockerNetwork,
-		arg.DockerRestartPolicy,
-		arg.DockerExtraArgs,
+		arg.NetworkMode,
+		arg.ExtraHosts,
+		arg.RestartPolicy,
+		arg.ServiceName,
+		arg.ServiceUser,
+		arg.ServiceGroup,
+		arg.BinaryPath,
 	)
 	var i PrometheusConfig
 	err := row.Scan(
@@ -6015,6 +6240,14 @@ func (q *Queries) UpdatePrometheusConfig(ctx context.Context, arg *UpdatePrometh
 		&i.DockerExtraArgs,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.NetworkMode,
+		&i.ExtraHosts,
+		&i.RestartPolicy,
+		&i.ServiceName,
+		&i.ServiceUser,
+		&i.ServiceGroup,
+		&i.BinaryPath,
+		&i.PrometheusVersion,
 	)
 	return &i, err
 }

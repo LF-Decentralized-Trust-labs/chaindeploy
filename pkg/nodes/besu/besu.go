@@ -559,3 +559,63 @@ func (b *LocalBesu) TailLogs(ctx context.Context, tail int, follow bool) (<-chan
 
 	return logChan, nil
 }
+
+// QBFT_DISCARD_VALIDATOR_VOTE discards a pending vote for a validator proposal
+func (b *LocalBesu) QbftDiscardValidatorVote(validatorAddress string) (bool, error) {
+	// TODO: Implement QBFT discard validator vote
+	// This would typically make an RPC call to the Besu node
+	// For now, return a placeholder implementation
+	b.logger.Info("QBFT discard validator vote called", "validator", validatorAddress)
+	return true, nil
+}
+
+// QBFT_GET_PENDING_VOTES retrieves a map of pending validator proposals and their votes
+func (b *LocalBesu) QbftGetPendingVotes() (map[string][]map[string]interface{}, error) {
+	// TODO: Implement QBFT get pending votes
+	// This would typically make an RPC call to the Besu node
+	// For now, return a placeholder implementation
+	b.logger.Info("QBFT get pending votes called")
+	return map[string][]map[string]interface{}{
+		"0x1234567890abcdef1234567890abcdef12345678": {
+			{
+				"proposer": "0xabcdef1234567890abcdef1234567890abcdef12",
+				"vote":     true,
+			},
+		},
+	}, nil
+}
+
+// QBFT_PROPOSE_VALIDATOR_VOTE proposes a vote to add or remove a validator
+func (b *LocalBesu) QbftProposeValidatorVote(validatorAddress string, vote bool) (bool, error) {
+	// TODO: Implement QBFT propose validator vote
+	// This would typically make an RPC call to the Besu node
+	// For now, return a placeholder implementation
+	b.logger.Info("QBFT propose validator vote called", "validator", validatorAddress, "vote", vote)
+	return true, nil
+}
+
+// QBFT_GET_VALIDATORS_BY_BLOCK_HASH retrieves the list of validators for a specific block hash
+func (b *LocalBesu) QbftGetValidatorsByBlockHash(blockHash string) ([]string, error) {
+	// TODO: Implement QBFT get validators by block hash
+	// This would typically make an RPC call to the Besu node
+	// For now, return a placeholder implementation
+	b.logger.Info("QBFT get validators by block hash called", "blockHash", blockHash)
+	return []string{
+		"0x1234567890abcdef1234567890abcdef12345678",
+		"0xabcdef1234567890abcdef1234567890abcdef12",
+		"0xfedcba9876543210fedcba9876543210fedcba98",
+	}, nil
+}
+
+// QBFT_GET_VALIDATORS_BY_BLOCK_NUMBER retrieves the list of validators for a specific block number
+func (b *LocalBesu) QbftGetValidatorsByBlockNumber(blockNumber string) ([]string, error) {
+	// TODO: Implement QBFT get validators by block number
+	// This would typically make an RPC call to the Besu node
+	// For now, return a placeholder implementation
+	b.logger.Info("QBFT get validators by block number called", "blockNumber", blockNumber)
+	return []string{
+		"0x1234567890abcdef1234567890abcdef12345678",
+		"0xabcdef1234567890abcdef1234567890abcdef12",
+		"0xfedcba9876543210fedcba9876543210fedcba98",
+	}, nil
+}

@@ -566,3 +566,48 @@ func (s *FabricOrg) InitializeCRL(ctx context.Context) error {
 
 	return nil
 }
+
+// GetAdminIdentity retrieves the admin identity for the organization
+func (s *FabricOrg) GetAdminIdentity(ctx context.Context) (identity.SigningIdentity, error) {
+	// Get organization details
+	org, err := s.orgService.GetOrganizationByMspID(ctx, s.mspID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get organization: %w", err)
+	}
+
+	if !org.AdminSignKeyID.Valid {
+		return nil, fmt.Errorf("organization has no signing key")
+	}
+
+	// Get admin signing key
+	adminSignKey, err := s.keyMgmtService.GetKey(ctx, int(org.AdminSignKeyID.Int64))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get admin sign key: %w", err)
+	}
+	if adminSignKey.Certificate == nil {
+		return nil, fmt.Errorf("admin sign key has no certificate")
+	}
+
+	// Get private key from key management service
+	privateKeyPEM, err := s.keyMgmtService.GetDecryptedPrivateKey(int(org.AdminSignKeyID.Int64))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get private key: %w", err)
+	}
+
+	cert, err := gwidentity.CertificateFromPEM([]byte(*adminSignKey.Certificate))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read certificate: %w", err)
+	}
+
+	priv, err := gwidentity.PrivateKeyFromPEM([]byte(privateKeyPEM))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read private key: %w", err)
+	}
+
+	signingIdentity, err := identity.NewPrivateKeySigningIdentity(s.mspID, cert, priv)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create signing identity: %w", err)
+	}
+
+	return signingIdentity, nil
+}

@@ -1,34 +1,34 @@
 import { HandlerOrganizationResponse } from '@/api/client'
 import { deleteOrganizationsByIdMutation, getKeyProvidersOptions, getOrganizationsOptions, postOrganizationsMutation } from '@/api/client/@tanstack/react-query.gen'
-// createFabricOrganizationMutation, deleteOrganizationMutation, getOrganizationsOptions, listProvidersOptions
 import { OrganizationFormValues } from '@/components/forms/organization-form'
 import { CreateOrganizationDialog } from '@/components/organizations/create-organization-dialog'
 import { OrganizationItem } from '@/components/organizations/organization-item'
 import { OrganizationSkeleton } from '@/components/organizations/organization-skeleton'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Pagination } from '@/components/ui/pagination'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Building2 } from 'lucide-react'
+import { Building2, ChevronDown } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Pagination } from '@/components/ui/pagination'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Button } from '@/components/ui/button'
-import { ChevronDown } from 'lucide-react'
 
 export default function OrganizationsPage() {
 	const [open, setOpen] = useState(false)
 	const [orgToDelete, setOrgToDelete] = useState<HandlerOrganizationResponse | null>(null)
+	// State for pagination
 	const [currentPage, setCurrentPage] = useState(1)
+	const pageSize = 10
 	const [selectedOrganizations, setSelectedOrganizations] = useState<HandlerOrganizationResponse[]>([])
 	const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
-	const pageSize = 10
 
 	const { data: providers } = useQuery({
 		...getKeyProvidersOptions(),
 	})
 
+	// API query with pagination parameters
 	const {
 		data: organizations,
 		isLoading,
@@ -212,7 +212,12 @@ export default function OrganizationsPage() {
 
 				{organizations && typeof organizations.count === 'number' && organizations.count > pageSize && (
 					<div className="mt-8 flex justify-center">
-						<Pagination currentPage={currentPage} pageSize={pageSize} totalItems={organizations.count} onPageChange={setCurrentPage} />
+						<Pagination
+							currentPage={currentPage}
+							pageSize={pageSize}
+							totalItems={organizations.count}
+							onPageChange={setCurrentPage}
+						/>
 					</div>
 				)}
 			</div>

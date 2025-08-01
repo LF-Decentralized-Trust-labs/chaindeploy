@@ -16,6 +16,7 @@ type Querier interface {
 	CountAuditLogs(ctx context.Context, arg *CountAuditLogsParams) (int64, error)
 	CountBackupsBySchedule(ctx context.Context, scheduleID sql.NullInt64) (int64, error)
 	CountBackupsByTarget(ctx context.Context, targetID int64) (int64, error)
+	CountFabricOrganizations(ctx context.Context) (int64, error)
 	CountNetworks(ctx context.Context) (int64, error)
 	CountNodeEvents(ctx context.Context, nodeID int64) (int64, error)
 	CountNodes(ctx context.Context) (int64, error)
@@ -41,6 +42,7 @@ type Querier interface {
 	CreateNotificationProvider(ctx context.Context, arg *CreateNotificationProviderParams) (*NotificationProvider, error)
 	CreatePlugin(ctx context.Context, arg *CreatePluginParams) (*Plugin, error)
 	CreateProject(ctx context.Context, arg *CreateProjectParams) (*ChaincodeProject, error)
+	CreatePrometheusConfig(ctx context.Context, arg *CreatePrometheusConfigParams) (*PrometheusConfig, error)
 	CreateSession(ctx context.Context, arg *CreateSessionParams) (*Session, error)
 	CreateSetting(ctx context.Context, config string) (*Setting, error)
 	CreateUser(ctx context.Context, arg *CreateUserParams) (*User, error)
@@ -121,7 +123,7 @@ type Querier interface {
 	GetPlugin(ctx context.Context, name string) (*Plugin, error)
 	GetProject(ctx context.Context, id int64) (*GetProjectRow, error)
 	GetProjectBySlug(ctx context.Context, slug string) (*GetProjectBySlugRow, error)
-	GetPrometheusConfig(ctx context.Context) (*PrometheusConfig, error)
+	GetPrometheusConfig(ctx context.Context) (*GetPrometheusConfigRow, error)
 	GetProvidersByNotificationType(ctx context.Context, arg *GetProvidersByNotificationTypeParams) ([]*NotificationProvider, error)
 	GetRecentCompletedBackups(ctx context.Context) ([]*Backup, error)
 	GetRevokedCertificate(ctx context.Context, arg *GetRevokedCertificateParams) (*FabricRevokedCertificate, error)
@@ -192,6 +194,7 @@ type Querier interface {
 	UpdateMessageEnhancedContent(ctx context.Context, arg *UpdateMessageEnhancedContentParams) (*Message, error)
 	UpdateNetworkCurrentConfigBlock(ctx context.Context, arg *UpdateNetworkCurrentConfigBlockParams) error
 	UpdateNetworkGenesisBlock(ctx context.Context, arg *UpdateNetworkGenesisBlockParams) (*Network, error)
+	UpdateNetworkGenesisBlockWithTracking(ctx context.Context, arg *UpdateNetworkGenesisBlockWithTrackingParams) (*Network, error)
 	UpdateNetworkNodeRole(ctx context.Context, arg *UpdateNetworkNodeRoleParams) (*NetworkNode, error)
 	UpdateNetworkNodeStatus(ctx context.Context, arg *UpdateNetworkNodeStatusParams) (*NetworkNode, error)
 	UpdateNetworkStatus(ctx context.Context, arg *UpdateNetworkStatusParams) error

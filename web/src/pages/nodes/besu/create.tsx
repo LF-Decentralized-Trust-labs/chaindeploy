@@ -65,7 +65,7 @@ export default function CreateBesuNodePage() {
 	const { data: besuDefaultConfig } = useQuery(getNodesDefaultsBesuNodeOptions())
 	useEffect(() => {
 		if (besuDefaultConfig) {
-			const { p2pHost, p2pPort, rpcHost, rpcPort, externalIp, internalIp } = besuDefaultConfig[0].defaults![0]
+			const { p2pHost, p2pPort, rpcHost, rpcPort, externalIp, internalIp } = besuDefaultConfig.defaults![0]
 			form.setValue('p2pHost', p2pHost!)
 			form.setValue('p2pPort', Number(p2pPort))
 			form.setValue('rpcHost', rpcHost!)
@@ -106,10 +106,14 @@ export default function CreateBesuNodePage() {
 						type: 'BESU',
 						metricsEnabled: true,
 						metricsProtocol: 'PROMETHEUS',
-						bootNodes: data.bootNodes
-							?.split('\n')
-							.map((node) => node.trim())
-							.filter(Boolean),
+						bootNodes: Array.isArray(data.bootNodes)
+							? data.bootNodes.filter(Boolean).map((node) => typeof node === 'string' ? node.trim() : node)
+							: typeof data.bootNodes === 'string'
+								? data.bootNodes
+										.split(/[,\n]/)
+										.map((node) => node.trim())
+										.filter(Boolean)
+								: [],
 						env: data.environmentVariables?.reduce(
 							(acc, { key, value }) => ({
 								...acc,
@@ -356,10 +360,16 @@ export default function CreateBesuNodePage() {
 														</SelectContent>
 													</Select>
 													<FormControl>
-														<Textarea {...field} placeholder="Enter boot node URLs (one per line)" className="min-h-[100px]" />
+														<Textarea 
+															{...field} 
+															value={field.value || ''}
+															onChange={(e) => field.onChange(e.target.value)}
+															placeholder="Enter boot node URLs (one per line)" 
+															className="min-h-[100px]" 
+														/>
 													</FormControl>
 												</div>
-												<FormDescription>Select from existing nodes or enter custom enode URLs (one per line)</FormDescription>
+												<FormDescription>Comma-separated list of boot node URLs</FormDescription>
 												<FormMessage />
 											</FormItem>
 										)}

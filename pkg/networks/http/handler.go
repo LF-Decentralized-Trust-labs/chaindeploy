@@ -71,6 +71,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Get("/{id}/transactions/{txId}", h.FabricGetTransaction)
 		r.Post("/{id}/organization-crl", h.UpdateOrganizationCRL)
 		r.Get("/{id}/map", h.NetworkMap)
+		r.Put("/{id}/genesis", h.UpdateGenesisBlock)
 	})
 
 	// Besu network routes with resource middleware
@@ -83,7 +84,9 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Post("/import", h.ImportBesuNetwork)
 		r.Get("/{id}", h.BesuNetworkGet)
 		r.Delete("/{id}", h.BesuNetworkDelete)
+		r.Get("/{id}/nodes", h.BesuNetworkGetNodes)
 		r.Get("/{id}/map", h.NetworkMap)
+		r.Put("/{id}/genesis", h.UpdateGenesisBlock)
 	})
 }
 
@@ -122,8 +125,9 @@ func (h *Handler) FabricNetworkList(w http.ResponseWriter, r *http.Request) {
 
 	// Get networks from service
 	result, err := h.networkService.ListNetworks(r.Context(), service.ListNetworksParams{
-		Limit:  limit,
-		Offset: offset,
+		Limit:    limit,
+		Offset:   offset,
+		Platform: service.BlockchainTypeFabric,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "list_networks_failed", err.Error())
@@ -164,7 +168,11 @@ func (h *Handler) FabricNetworkCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "validation_failed", err.Error())
 		return
 	}
-
+	// Validate orderer requirements based on consensus type
+	consensusType := req.Config.ConsensusType
+	if consensusType == "" {
+		consensusType = "etcdraft" // default to etcdraft
+	}
 	// Validate that at least 3 orderer nodes are specified
 	ordererCount := 0
 
@@ -183,8 +191,19 @@ func (h *Handler) FabricNetworkCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if ordererCount < 3 {
-		writeError(w, http.StatusBadRequest, "insufficient_orderers", "At least 3 orderer nodes are required for a Fabric network")
+	// Count SmartBFT consenters if using SmartBFT
+	if consensusType == "smartbft" && req.Config.SmartBFTConsenters != nil {
+		ordererCount += len(req.Config.SmartBFTConsenters)
+	}
+
+	// Validate minimum orderer requirements
+	minOrderers := 3
+	if consensusType == "smartbft" {
+		minOrderers = 4 // SmartBFT requires at least 4 consenters
+	}
+
+	if ordererCount < minOrderers {
+		writeError(w, http.StatusBadRequest, "insufficient_orderers", fmt.Sprintf("At least %d orderer nodes are required for %s consensus", minOrderers, consensusType))
 		return
 	}
 
@@ -227,12 +246,15 @@ func (h *Handler) FabricNetworkCreate(w http.ResponseWriter, r *http.Request) {
 		BaseNetworkConfig: types.BaseNetworkConfig{
 			Type: types.NetworkTypeFabric,
 		},
-		ChannelName:          req.Name,
-		PeerOrganizations:    make([]types.Organization, len(req.Config.PeerOrganizations)),
-		OrdererOrganizations: make([]types.Organization, len(req.Config.OrdererOrganizations)),
-		ApplicationPolicies:  appPolicies,
-		OrdererPolicies:      ordererPolicies,
-		ChannelPolicies:      channelPolicies,
+		ChannelName:             req.Name,
+		PeerOrganizations:       make([]types.Organization, len(req.Config.PeerOrganizations)),
+		OrdererOrganizations:    make([]types.Organization, len(req.Config.OrdererOrganizations)),
+		ApplicationPolicies:     appPolicies,
+		OrdererPolicies:         ordererPolicies,
+		ChannelPolicies:         channelPolicies,
+		ChannelCapabilities:     req.Config.ChannelCapabilities,
+		ApplicationCapabilities: req.Config.ApplicationCapabilities,
+		OrdererCapabilities:     req.Config.OrdererCapabilities,
 	}
 
 	// Convert peer organizations
@@ -250,6 +272,65 @@ func (h *Handler) FabricNetworkCreate(w http.ResponseWriter, r *http.Request) {
 			NodeIDs: org.NodeIDs,
 		}
 	}
+
+	// Add consensus configuration
+	fabricConfig.ConsensusType = req.Config.ConsensusType
+	if req.Config.SmartBFTConsenters != nil {
+		smartBFTConsenters := make([]types.SmartBFTConsenter, len(req.Config.SmartBFTConsenters))
+		for i, cons := range req.Config.SmartBFTConsenters {
+			smartBFTConsenters[i] = types.SmartBFTConsenter{
+				Address: types.HostPort{
+					Host: cons.Address.Host,
+					Port: cons.Address.Port,
+				},
+				ClientTLSCert: cons.ClientTLSCert,
+				ServerTLSCert: cons.ServerTLSCert,
+				Identity:      cons.Identity,
+				ID:            cons.ID,
+				MSPID:         cons.MSPID,
+			}
+		}
+		fabricConfig.SmartBFTConsenters = smartBFTConsenters
+	}
+	if req.Config.SmartBFTOptions != nil {
+		fabricConfig.SmartBFTOptions = &types.SmartBFTOptions{
+			RequestBatchMaxCount:      req.Config.SmartBFTOptions.RequestBatchMaxCount,
+			RequestBatchMaxBytes:      req.Config.SmartBFTOptions.RequestBatchMaxBytes,
+			RequestBatchMaxInterval:   req.Config.SmartBFTOptions.RequestBatchMaxInterval,
+			IncomingMessageBufferSize: req.Config.SmartBFTOptions.IncomingMessageBufferSize,
+			RequestPoolSize:           req.Config.SmartBFTOptions.RequestPoolSize,
+			RequestForwardTimeout:     req.Config.SmartBFTOptions.RequestForwardTimeout,
+			RequestComplainTimeout:    req.Config.SmartBFTOptions.RequestComplainTimeout,
+			RequestAutoRemoveTimeout:  req.Config.SmartBFTOptions.RequestAutoRemoveTimeout,
+			RequestMaxBytes:           req.Config.SmartBFTOptions.RequestMaxBytes,
+			ViewChangeResendInterval:  req.Config.SmartBFTOptions.ViewChangeResendInterval,
+			ViewChangeTimeout:         req.Config.SmartBFTOptions.ViewChangeTimeout,
+			LeaderHeartbeatTimeout:    req.Config.SmartBFTOptions.LeaderHeartbeatTimeout,
+			LeaderHeartbeatCount:      req.Config.SmartBFTOptions.LeaderHeartbeatCount,
+			CollectTimeout:            req.Config.SmartBFTOptions.CollectTimeout,
+			SyncOnStart:               req.Config.SmartBFTOptions.SyncOnStart,
+			SpeedUpViewChange:         req.Config.SmartBFTOptions.SpeedUpViewChange,
+			LeaderRotation:            req.Config.SmartBFTOptions.LeaderRotation,
+			DecisionsPerLeader:        req.Config.SmartBFTOptions.DecisionsPerLeader,
+		}
+	}
+	if req.Config.EtcdRaftOptions != nil {
+		fabricConfig.EtcdRaftOptions = &types.EtcdRaftOptions{
+			TickInterval:         req.Config.EtcdRaftOptions.TickInterval,
+			ElectionTick:         req.Config.EtcdRaftOptions.ElectionTick,
+			HeartbeatTick:        req.Config.EtcdRaftOptions.HeartbeatTick,
+			MaxInflightBlocks:    req.Config.EtcdRaftOptions.MaxInflightBlocks,
+			SnapshotIntervalSize: req.Config.EtcdRaftOptions.SnapshotIntervalSize,
+		}
+	}
+	if req.Config.BatchSize != nil {
+		fabricConfig.BatchSize = &types.BatchSize{
+			MaxMessageCount:   req.Config.BatchSize.MaxMessageCount,
+			AbsoluteMaxBytes:  req.Config.BatchSize.AbsoluteMaxBytes,
+			PreferredMaxBytes: req.Config.BatchSize.PreferredMaxBytes,
+		}
+	}
+	fabricConfig.BatchTimeout = req.Config.BatchTimeout
 
 	// Marshal the config to bytes
 	configBytes, err := json.Marshal(fabricConfig)
@@ -820,21 +901,30 @@ func mapNetworkToResponse(n service.Network) NetworkResponse {
 		updatedAt = &timeStr
 	}
 
+	var genesisChangedAt *string
+	if n.GenesisChangedAt != nil {
+		timeStr := n.GenesisChangedAt.Format(time.RFC3339)
+		genesisChangedAt = &timeStr
+	}
+
 	return NetworkResponse{
-		ID:                 n.ID,
-		Name:               n.Name,
-		Platform:           n.Platform,
-		Status:             string(n.Status),
-		Description:        n.Description,
-		Config:             n.Config,
-		DeploymentConfig:   n.DeploymentConfig,
-		ExposedPorts:       n.ExposedPorts,
-		GenesisBlock:       n.GenesisBlock,
-		CurrentConfigBlock: n.CurrentConfigBlock,
-		Domain:             n.Domain,
-		CreatedAt:          n.CreatedAt.Format(time.RFC3339),
-		CreatedBy:          n.CreatedBy,
-		UpdatedAt:          updatedAt,
+		ID:                  n.ID,
+		Name:                n.Name,
+		Platform:            n.Platform,
+		Status:              string(n.Status),
+		Description:         n.Description,
+		Config:              n.Config,
+		DeploymentConfig:    n.DeploymentConfig,
+		ExposedPorts:        n.ExposedPorts,
+		GenesisBlock:        n.GenesisBlock,
+		CurrentConfigBlock:  n.CurrentConfigBlock,
+		Domain:              n.Domain,
+		CreatedAt:           n.CreatedAt.Format(time.RFC3339),
+		CreatedBy:           n.CreatedBy,
+		UpdatedAt:           updatedAt,
+		GenesisChangedAt:    genesisChangedAt,
+		GenesisChangedBy:    n.GenesisChangedBy,
+		GenesisChangeReason: n.GenesisChangeReason,
 	}
 }
 
@@ -1032,6 +1122,40 @@ func (h *Handler) BesuNetworkDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// @Summary Get nodes for a Besu network
+// @Description Retrieves all nodes associated with a Besu network
+// @Tags Besu Networks
+// @Accept json
+// @Produce json
+// @Param id path int true "Network ID"
+// @Success 200 {object} GetNetworkNodesResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /networks/besu/{id}/nodes [get]
+func (h *Handler) BesuNetworkGetNodes(w http.ResponseWriter, r *http.Request) {
+	networkID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_network_id", "Invalid network ID")
+		return
+	}
+
+	nodes, err := h.networkService.GetNetworkNodes(r.Context(), networkID)
+	if err != nil {
+		if err.Error() == "sql: no rows in result set" {
+			writeError(w, http.StatusNotFound, "network_not_found", "Network not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "get_network_nodes_failed", err.Error())
+		return
+	}
+
+	resp := GetNetworkNodesResponse{
+		Nodes: nodes,
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // Helper function to map network to Besu response
@@ -1258,8 +1382,8 @@ func (h *Handler) ImportBesuNetwork(w http.ResponseWriter, r *http.Request) {
 // @Description A single configuration update operation
 type ConfigUpdateOperationRequest struct {
 	// Type is the type of configuration update operation
-	// enum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout,update_application_policy,update_orderer_policy,update_channel_policy,add_orderer_org,remove_orderer_org,update_orderer_org_msp
-	Type string `json:"type" validate:"required,oneof=add_org remove_org update_org_msp set_anchor_peers add_consenter remove_consenter update_consenter update_etcd_raft_options update_batch_size update_batch_timeout update_application_policy update_orderer_policy update_channel_policy update_channel_capability update_orderer_capability update_application_capability add_orderer_org remove_orderer_org update_orderer_org_msp"`
+	// enum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout,update_application_policy,update_orderer_policy,update_channel_policy,add_orderer_org,remove_orderer_org,update_orderer_org_msp,update_application_acl
+	Type string `json:"type" validate:"required,oneof=add_org remove_org update_org_msp set_anchor_peers add_consenter remove_consenter update_consenter update_etcd_raft_options update_batch_size update_batch_timeout update_application_policy update_orderer_policy update_channel_policy update_channel_capability update_orderer_capability update_application_capability add_orderer_org remove_orderer_org update_orderer_org_msp update_application_acl"`
 
 	// Payload contains the operation-specific data
 	// The structure depends on the operation type:
@@ -1279,6 +1403,10 @@ type ConfigUpdateOperationRequest struct {
 	// - update_channel_capability: UpdateChannelCapabilityOperation
 	// - update_orderer_capability: UpdateOrdererCapabilityOperation
 	// - update_application_capability: UpdateApplicationCapabilityOperation
+	// - add_orderer_org: AddOrdererOrgPayload
+	// - remove_orderer_org: RemoveOrdererOrgPayload
+	// - update_orderer_org_msp: UpdateOrdererOrgMSPPayload
+	// - update_application_acl: UpdateApplicationACLPayload
 	// @Description The payload for the configuration update operation
 	// @Description Can be one of:
 	// @Description - AddOrgPayload when type is "add_org"
@@ -1300,6 +1428,7 @@ type ConfigUpdateOperationRequest struct {
 	// @Description - AddOrdererOrgPayload when type is "add_orderer_org"
 	// @Description - RemoveOrdererOrgPayload when type is "remove_orderer_org"
 	// @Description - UpdateOrdererOrgMSPPayload when type is "update_orderer_org_msp"
+	// @Description - UpdateApplicationACLPayload when type is "update_application_acl"
 	Payload json.RawMessage `json:"payload" validate:"required"`
 }
 
@@ -1316,6 +1445,11 @@ type AddOrgPayload struct {
 	MSPID        string   `json:"msp_id" validate:"required"`
 	TLSRootCerts []string `json:"tls_root_certs" validate:"required,min=1"`
 	RootCerts    []string `json:"root_certs" validate:"required,min=1"`
+}
+
+type UpdateApplicationACLPayload struct {
+	ACLName string `json:"acl_name" validate:"required"`
+	Policy  string `json:"policy" validate:"required"`
 }
 
 // Example:
@@ -1536,6 +1670,7 @@ type UpdateFabricNetworkRequest struct {
 // @Success 215 {object} AddOrdererOrgPayload
 // @Success 216 {object} RemoveOrdererOrgPayload
 // @Success 217 {object} UpdateOrdererOrgMSPPayload
+// @Success 218 {object} UpdateApplicationACLPayload
 // @Router /dummy [post]
 func (h *Handler) DummyHandler(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusBadRequest, "dummy_error", "Dummy error")
@@ -1554,6 +1689,16 @@ func (h *Handler) DummyHandler(w http.ResponseWriter, r *http.Request) {
 // @Description - update_etcd_raft_options: Update etcd raft options for the orderer
 // @Description - update_batch_size: Update batch size for the orderer
 // @Description - update_batch_timeout: Update batch timeout for the orderer
+// @Description - update_application_policy: Update application policy for the channel
+// @Description - update_orderer_policy: Update orderer policy for the channel
+// @Description - update_channel_policy: Update channel policy for the channel
+// @Description - update_channel_capability: Update channel capability for the channel
+// @Description - update_orderer_capability: Update orderer capability for the channel
+// @Description - update_application_capability: Update application capability for the channel
+// @Description - add_orderer_org: Add a new orderer organization to the channel
+// @Description - remove_orderer_org: Remove an orderer organization from the channel
+// @Description - update_orderer_org_msp: Update an orderer organization's MSP configuration
+// @Description - update_application_acl: Update application ACL for the channel
 // @Tags Fabric Networks
 // @Accept json
 // @Produce json
@@ -1774,6 +1919,16 @@ func (h *Handler) FabricUpdateChannelConfig(w http.ResponseWriter, r *http.Reque
 			}
 		case "update_orderer_org_msp":
 			var payload UpdateOrdererOrgMSPPayload
+			if err := json.Unmarshal(op.Payload, &payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_payload", fmt.Sprintf("Invalid payload for operation %d: %s", i, err.Error()))
+				return
+			}
+			if err := h.validate.Struct(payload); err != nil {
+				writeError(w, http.StatusBadRequest, "validation_error", fmt.Sprintf("Invalid payload for operation %d: %s", i, err.Error()))
+				return
+			}
+		case "update_application_acl":
+			var payload UpdateApplicationACLPayload
 			if err := json.Unmarshal(op.Payload, &payload); err != nil {
 				writeError(w, http.StatusBadRequest, "invalid_payload", fmt.Sprintf("Invalid payload for operation %d: %s", i, err.Error()))
 				return
@@ -2111,4 +2266,63 @@ func (h *Handler) NetworkMap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+// @Summary Update genesis block for a network
+// @Description Update the genesis block for a network with change tracking
+// @Tags Fabric Networks, Besu Networks
+// @Accept json
+// @Produce json
+// @Param id path int true "Network ID"
+// @Param request body UpdateGenesisBlockRequest true "Genesis block update request"
+// @Success 200 {object} UpdateGenesisBlockResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /networks/{id}/genesis [put]
+func (h *Handler) UpdateGenesisBlock(w http.ResponseWriter, r *http.Request) {
+	// Parse network ID from URL
+	networkID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_network_id", "Invalid network ID")
+		return
+	}
+
+	// Parse request body
+	var req UpdateGenesisBlockRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+
+	// Validate request
+	if err := h.validate.Struct(req); err != nil {
+		writeError(w, http.StatusBadRequest, "validation_failed", err.Error())
+		return
+	}
+
+	// Decode base64 genesis block
+	genesisBlock, err := base64.StdEncoding.DecodeString(req.GenesisBlock)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_genesis_block", "Invalid base64-encoded genesis block")
+		return
+	}
+
+	// Get user ID from context (you may need to implement this based on your auth system)
+	// For now, we'll use a placeholder value
+	changedBy := int64(1) // TODO: Get actual user ID from context
+
+	// Update genesis block with tracking
+	err = h.networkService.UpdateGenesisBlock(r.Context(), networkID, genesisBlock, changedBy, req.Reason)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "update_genesis_failed", err.Error())
+		return
+	}
+
+	// Return success response
+	resp := UpdateGenesisBlockResponse{
+		NetworkID: networkID,
+		Message:   "Genesis block updated successfully",
+	}
+	writeJSON(w, http.StatusOK, resp)
 }

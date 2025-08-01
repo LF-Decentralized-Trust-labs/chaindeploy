@@ -35,7 +35,7 @@ export default function EditFabricNodePage() {
 	})
 
 	const { data: organizations } = useQuery({
-		...getOrganizationsOptions(),
+		...getOrganizationsOptions({query: {limit:1000}}),
 	})
 
 	const updateNode = useMutation({

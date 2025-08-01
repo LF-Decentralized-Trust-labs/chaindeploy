@@ -250,6 +250,8 @@ definitions:
     type: object
   block.Block:
     properties:
+      base64Data:
+        type: string
       createdAt:
         type: string
       dataHash:
@@ -906,33 +908,31 @@ definitions:
           required: true
         type: string
     type: object
+  common.DeploymentMode:
+    enum:
+    - docker
+    - service
+    type: string
+    x-enum-varnames:
+    - DeploymentModeDocker
+    - DeploymentModeService
+  common.NetworkMode:
+    enum:
+    - bridge
+    - host
+    type: string
+    x-enum-varnames:
+    - NetworkModeBridge
+    - NetworkModeHost
   common.QueryResult:
     properties:
       data:
-        properties:
-          result:
-            items:
-              properties:
-                metric:
-                  additionalProperties:
-                    type: string
-                  type: object
-                value:
-                  description: For instant queries
-                  items: {}
-                  type: array
-                values:
-                  description: For range queries (matrix)
-                  items:
-                    items: {}
-                    type: array
-                  type: array
-              type: object
-            type: array
-          resultType:
-            type: string
-        type: object
+        description: Data contains the query results
+      error:
+        description: Error contains any error message
+        type: string
       status:
+        description: Status is the query status
         type: string
     type: object
   dirs.CreateDirRequest:
@@ -1036,11 +1036,16 @@ definitions:
   github_com_chainlaunch_chainlaunch_pkg_metrics_common.Status:
     properties:
       deployment_mode:
+        allOf:
+        - $ref: '#/definitions/common.DeploymentMode'
         description: DeploymentMode is the current deployment mode
-        type: string
       error:
-        description: Error is any error that occurred while getting the status
+        description: Error contains any error message
         type: string
+      network_mode:
+        allOf:
+        - $ref: '#/definitions/common.NetworkMode'
+        description: NetworkMode is the Docker network mode (only for Docker deployments)
       port:
         description: Port is the port Prometheus is listening on
         type: integer
@@ -1052,11 +1057,10 @@ definitions:
         description: StartedAt is when the instance was started
         type: string
       status:
-        description: Status is the current status of the Prometheus instance (e.g.
-          "running", "stopped", "not_deployed")
+        description: Status is the current status (running, stopped, etc.)
         type: string
       version:
-        description: Version is the version of Prometheus being used
+        description: Version is the Prometheus version
         type: string
     type: object
   github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse:
@@ -1495,6 +1499,15 @@ definitions:
       updatedAt:
         type: string
     type: object
+  http.BatchSize:
+    properties:
+      absoluteMaxBytes:
+        type: integer
+      maxMessageCount:
+        type: integer
+      preferredMaxBytes:
+        type: integer
+    type: object
   http.BesuNetworkResponse:
     properties:
       chainId:
@@ -1609,6 +1622,10 @@ definitions:
           - update_channel_capability: UpdateChannelCapabilityOperation
           - update_orderer_capability: UpdateOrdererCapabilityOperation
           - update_application_capability: UpdateApplicationCapabilityOperation
+          - add_orderer_org: AddOrdererOrgPayload
+          - remove_orderer_org: RemoveOrdererOrgPayload
+          - update_orderer_org_msp: UpdateOrdererOrgMSPPayload
+          - update_application_acl: UpdateApplicationACLPayload
           @Description The payload for the configuration update operation
           @Description Can be one of:
           @Description - AddOrgPayload when type is "add_org"
@@ -1630,13 +1647,14 @@ definitions:
           @Description - AddOrdererOrgPayload when type is "add_orderer_org"
           @Description - RemoveOrdererOrgPayload when type is "remove_orderer_org"
           @Description - UpdateOrdererOrgMSPPayload when type is "update_orderer_org_msp"
+          @Description - UpdateApplicationACLPayload when type is "update_application_acl"
         items:
           type: integer
         type: array
       type:
         description: |-
           Type is the type of configuration update operation
-          enum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout,update_application_policy,update_orderer_policy,update_channel_policy,add_orderer_org,remove_orderer_org,update_orderer_org_msp
+          enum: add_org,remove_org,update_org_msp,set_anchor_peers,add_consenter,remove_consenter,update_consenter,update_etcd_raft_options,update_batch_size,update_batch_timeout,update_application_policy,update_orderer_policy,update_channel_policy,add_orderer_org,remove_orderer_org,update_orderer_org_msp,update_application_acl
         enum:
         - add_org
         - remove_org
@@ -1657,6 +1675,7 @@ definitions:
         - add_orderer_org
         - remove_orderer_org
         - update_orderer_org_msp
+        - update_application_acl
         type: string
     required:
     - payload
@@ -1950,17 +1969,55 @@ definitions:
     - name
     - type
     type: object
+  http.EtcdRaftOptions:
+    properties:
+      electionTick:
+        type: integer
+      heartbeatTick:
+        type: integer
+      maxInflightBlocks:
+        type: integer
+      snapshotIntervalSize:
+        type: integer
+      tickInterval:
+        type: string
+    type: object
   http.FabricNetworkConfig:
     properties:
+      applicationCapabilities:
+        items:
+          type: string
+        type: array
       applicationPolicies:
         additionalProperties:
           $ref: '#/definitions/http.FabricPolicy'
         description: Optional policies
         type: object
+      batchSize:
+        allOf:
+        - $ref: '#/definitions/http.BatchSize'
+        description: Batch configuration
+      batchTimeout:
+        description: e.g., "2s"
+        type: string
+      channelCapabilities:
+        description: Capabilities configuration
+        items:
+          type: string
+        type: array
       channelPolicies:
         additionalProperties:
           $ref: '#/definitions/http.FabricPolicy'
         type: object
+      consensusType:
+        description: Consensus configuration
+        type: string
+      etcdRaftOptions:
+        $ref: '#/definitions/http.EtcdRaftOptions'
+      ordererCapabilities:
+        items:
+          type: string
+        type: array
       ordererOrganizations:
         items:
           $ref: '#/definitions/http.OrganizationConfig'
@@ -1973,6 +2030,12 @@ definitions:
         items:
           $ref: '#/definitions/http.OrganizationConfig'
         type: array
+      smartBFTConsenters:
+        items:
+          $ref: '#/definitions/http.SmartBFTConsenter'
+        type: array
+      smartBFTOptions:
+        $ref: '#/definitions/http.SmartBFTOptions'
     type: object
   http.FabricPolicy:
     properties:
@@ -1987,6 +2050,13 @@ definitions:
         items:
           $ref: '#/definitions/service.NetworkNode'
         type: array
+    type: object
+  http.HostPort:
+    properties:
+      host:
+        type: string
+      port:
+        type: integer
     type: object
   http.ImportBesuNetworkRequest:
     properties:
@@ -2081,6 +2151,12 @@ definitions:
         type: array
       genesisBlock:
         type: string
+      genesisChangeReason:
+        type: string
+      genesisChangedAt:
+        type: string
+      genesisChangedBy:
+        type: integer
       id:
         type: integer
       name:
@@ -2209,6 +2285,22 @@ definitions:
       updatedAt:
         type: string
     type: object
+  http.QbftDiscardValidatorVoteRequest:
+    properties:
+      validatorAddress:
+        type: string
+    required:
+    - validatorAddress
+    type: object
+  http.QbftProposeValidatorVoteRequest:
+    properties:
+      validatorAddress:
+        type: string
+      vote:
+        type: boolean
+    required:
+    - validatorAddress
+    type: object
   http.RemoveConsenterPayload:
     properties:
       host:
@@ -2276,6 +2368,60 @@ definitions:
       transactionId:
         type: string
     type: object
+  http.SmartBFTConsenter:
+    properties:
+      address:
+        $ref: '#/definitions/http.HostPort'
+      clientTLSCert:
+        type: string
+      id:
+        type: integer
+      identity:
+        type: string
+      mspId:
+        type: string
+      serverTLSCert:
+        type: string
+    type: object
+  http.SmartBFTOptions:
+    properties:
+      collectTimeout:
+        type: string
+      decisionsPerLeader:
+        type: integer
+      incomingMessageBufferSize:
+        type: integer
+      leaderHeartbeatCount:
+        type: integer
+      leaderHeartbeatTimeout:
+        type: string
+      leaderRotation:
+        type: string
+      requestAutoRemoveTimeout:
+        type: string
+      requestBatchMaxBytes:
+        type: integer
+      requestBatchMaxCount:
+        type: integer
+      requestBatchMaxInterval:
+        type: string
+      requestComplainTimeout:
+        type: string
+      requestForwardTimeout:
+        type: string
+      requestMaxBytes:
+        type: integer
+      requestPoolSize:
+        type: integer
+      speedUpViewChange:
+        type: boolean
+      syncOnStart:
+        type: boolean
+      viewChangeResendInterval:
+        type: string
+      viewChangeTimeout:
+        type: string
+    type: object
   http.TestProviderRequest:
     properties:
       testEmail:
@@ -2296,6 +2442,16 @@ definitions:
     properties:
       block:
         $ref: '#/definitions/block.Block'
+    type: object
+  http.UpdateApplicationACLPayload:
+    properties:
+      acl_name:
+        type: string
+      policy:
+        type: string
+    required:
+    - acl_name
+    - policy
     type: object
   http.UpdateApplicationCapabilityOperation:
     properties:
@@ -2552,6 +2708,23 @@ definitions:
         type: string
       version:
         type: string
+    type: object
+  http.UpdateGenesisBlockRequest:
+    properties:
+      genesisBlock:
+        type: string
+      reason:
+        type: string
+    required:
+    - genesisBlock
+    - reason
+    type: object
+  http.UpdateGenesisBlockResponse:
+    properties:
+      message:
+        type: string
+      networkId:
+        type: integer
     type: object
   http.UpdateNodeRequest:
     properties:
@@ -2932,6 +3105,68 @@ definitions:
       type:
         $ref: '#/definitions/models.KeyProviderType'
     type: object
+  models.SignRequest:
+    description: Request to sign data using a key
+    properties:
+      context:
+        description: Context for key derivation (base64 encoded)
+        example: Y29udGV4dA==
+        type: string
+      hash_algorithm:
+        description: Hash algorithm to use for signing
+        example: sha2-256
+        type: string
+      input:
+        description: Base64 encoded input data to sign
+        example: SGVsbG8gV29ybGQ=
+        type: string
+      key_version:
+        description: Key version to use for signing (0 means latest)
+        example: 0
+        type: integer
+      marshaling_algorithm:
+        description: Marshaling algorithm for ECDSA (asn1 or jws)
+        example: asn1
+        type: string
+      prehashed:
+        description: Whether input is already hashed
+        example: false
+        type: boolean
+      reference:
+        description: Reference string for batch operations
+        example: batch-ref-1
+        type: string
+      salt_length:
+        description: Salt length for RSA PSS (auto, hash, or integer)
+        example: auto
+        type: string
+      signature_algorithm:
+        description: RSA signature algorithm (pss or pkcs1v15)
+        example: pss
+        type: string
+      signature_context:
+        description: Signature context for Ed25519ctx and Ed25519ph signatures
+        example: c2lnbmF0dXJlLWNvbnRleHQ=
+        type: string
+    required:
+    - input
+    type: object
+  models.SignResponse:
+    description: Response from a signing operation
+    properties:
+      key_version:
+        description: Key version used for signing
+        example: 1
+        type: integer
+      reference:
+        description: Reference from the request (for batch operations)
+        example: batch-ref-1
+        type: string
+      signature:
+        description: Base64 encoded signature
+        example: c2lnbmF0dXJlLWJhc2U2NA==
+        type: string
+    type: object
   notifications.ProviderType:
     enum:
     - SMTP
@@ -3288,6 +3523,9 @@ definitions:
         type: string
       internalIp:
         type: string
+      keyAddress:
+        description: Key information
+        type: string
       keyId:
         type: integer
       metricsEnabled:
@@ -3308,6 +3546,8 @@ definitions:
         type: string
       p2pPort:
         type: integer
+      publicKey:
+        type: string
       rpcHost:
         type: string
       rpcPort:
@@ -3538,6 +3778,19 @@ definitions:
           $ref: '#/definitions/service.NodeDefaults'
         type: array
     type: object
+  service.QbftPendingVotes:
+    additionalProperties:
+      type: boolean
+    type: object
+  service.QbftSignerMetric:
+    properties:
+      address:
+        type: string
+      lastProposedBlockNumber:
+        type: string
+      proposedBlockCount:
+        type: string
+    type: object
   service.Setting:
     properties:
       config:
@@ -3665,6 +3918,10 @@ definitions:
     type: object
   types.DeployPrometheusRequest:
     properties:
+      deployment_mode:
+        $ref: '#/definitions/common.DeploymentMode'
+      docker_config:
+        $ref: '#/definitions/types.DockerDeployConfig'
       prometheus_port:
         type: integer
       prometheus_version:
@@ -3700,6 +3957,11 @@ definitions:
     properties:
       contents:
         type: string
+    type: object
+  types.DockerDeployConfig:
+    properties:
+      network_mode:
+        $ref: '#/definitions/common.NetworkMode'
     type: object
   types.Documentation:
     properties:
@@ -3925,6 +4187,36 @@ definitions:
         type: string
       x-source:
         $ref: '#/definitions/types.XSourceType'
+    type: object
+  types.PrometheusDefaultsResponse:
+    properties:
+      available_ports:
+        items:
+          type: integer
+        type: array
+      deployment_mode:
+        $ref: '#/definitions/common.DeploymentMode'
+      docker_config:
+        $ref: '#/definitions/types.DockerDeployConfig'
+      prometheus_port:
+        type: integer
+      prometheus_version:
+        type: string
+      scrape_interval:
+        type: integer
+    type: object
+  types.RefreshPrometheusRequest:
+    properties:
+      deployment_mode:
+        $ref: '#/definitions/common.DeploymentMode'
+      docker_config:
+        $ref: '#/definitions/types.DockerDeployConfig'
+      prometheus_port:
+        type: integer
+      prometheus_version:
+        type: string
+      scrape_interval:
+        type: integer
     type: object
   types.Service:
     properties:
@@ -5753,6 +6045,10 @@ paths:
           description: ""
           schema:
             $ref: '#/definitions/http.UpdateOrdererOrgMSPPayload'
+        "218":
+          description: ""
+          schema:
+            $ref: '#/definitions/http.UpdateApplicationACLPayload'
       summary: Submit config update proposal
       tags:
       - Fabric Networks
@@ -6080,6 +6376,51 @@ paths:
       summary: Sign a certificate
       tags:
       - Keys
+  /keys/{keyID}/sign-data:
+    post:
+      consumes:
+      - application/json
+      description: Sign data using a specific key with configurable parameters
+      parameters:
+      - description: Key ID to use for signing
+        in: path
+        name: keyID
+        required: true
+        type: integer
+      - description: Signing request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.SignRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.SignResponse'
+        "400":
+          description: Invalid request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Key not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Sign data using a key
+      tags:
+      - Keys
   /keys/all:
     get:
       consumes:
@@ -6149,11 +6490,33 @@ paths:
       summary: Filter keys by algorithm and curve
       tags:
       - Keys
+  /metrics/defaults:
+    get:
+      description: Returns default configuration values including available ports
+        for Prometheus deployment
+      operationId: getDefaults
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.PrometheusDefaultsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get default values for Prometheus deployment
+      tags:
+      - Metrics
   /metrics/deploy:
     post:
       consumes:
       - application/json
       description: Deploys a new Prometheus instance with the specified configuration
+      operationId: deployPrometheus
       parameters:
       - description: Prometheus deployment configuration
         in: body
@@ -6183,10 +6546,40 @@ paths:
       summary: Deploy a new Prometheus instance
       tags:
       - Metrics
+  /metrics/logs:
+    get:
+      description: Streams Prometheus logs with optional tail and follow functionality
+      operationId: tailMetricsLogs
+      parameters:
+      - description: 'Follow logs in real-time (default: false)'
+        in: query
+        name: follow
+        type: boolean
+      - description: 'Number of lines to show from the end (default: 100)'
+        in: query
+        name: tail
+        type: integer
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: Log stream
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Tail Prometheus logs
+      tags:
+      - Metrics
   /metrics/node/{id}:
     get:
       description: Retrieves metrics for a specific node by ID and optional PromQL
         query
+      operationId: getNodeMetrics
       parameters:
       - description: Node ID
         in: path
@@ -6226,6 +6619,7 @@ paths:
       - application/json
       description: Retrieves all values for a specific label, optionally filtered
         by metric matches and node ID
+      operationId: getLabelValues
       parameters:
       - description: Node ID
         in: path
@@ -6266,6 +6660,7 @@ paths:
       consumes:
       - application/json
       description: Execute a custom Prometheus query with optional time range
+      operationId: customQuery
       parameters:
       - description: Node ID
         in: path
@@ -6305,6 +6700,7 @@ paths:
       consumes:
       - application/json
       description: Retrieves metrics for a specific node within a specified time range
+      operationId: getNodeMetricsRange
       parameters:
       - description: Node ID
         in: path
@@ -6351,10 +6747,74 @@ paths:
       summary: Get metrics for a specific node with time range
       tags:
       - Metrics
+  /metrics/port/{port}/check:
+    get:
+      description: Checks if a specific port is available for Prometheus deployment
+      operationId: checkPortAvailability
+      parameters:
+      - description: Port number to check
+        in: path
+        name: port
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Check port availability
+      tags:
+      - Metrics
+  /metrics/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Refreshes the Prometheus deployment with new configuration parameters
+      operationId: refreshPrometheus
+      parameters:
+      - description: Prometheus refresh configuration
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.RefreshPrometheusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Refresh Prometheus deployment
+      tags:
+      - Metrics
   /metrics/reload:
     post:
       description: Triggers a reload of the Prometheus configuration to pick up any
         changes
+      operationId: reloadConfiguration
       produces:
       - application/json
       responses:
@@ -6371,10 +6831,37 @@ paths:
       summary: Reload Prometheus configuration
       tags:
       - Metrics
+  /metrics/start:
+    post:
+      description: Starts the Prometheus instance if it's currently stopped
+      operationId: startPrometheus
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Start Prometheus instance
+      tags:
+      - Metrics
   /metrics/status:
     get:
       description: Returns the current status of the Prometheus instance including
         version, port, and configuration
+      operationId: getStatus
       produces:
       - application/json
       responses:
@@ -6391,9 +6878,36 @@ paths:
       summary: Get Prometheus status
       tags:
       - Metrics
+  /metrics/stop:
+    post:
+      description: Stops the Prometheus instance if it's currently running
+      operationId: stopPrometheus
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Stop Prometheus instance
+      tags:
+      - Metrics
   /metrics/undeploy:
     post:
       description: Stops and removes the Prometheus instance
+      operationId: undeployPrometheus
       produces:
       - application/json
       responses:
@@ -6410,6 +6924,46 @@ paths:
       summary: Undeploy Prometheus instance
       tags:
       - Metrics
+  /networks/{id}/genesis:
+    put:
+      consumes:
+      - application/json
+      description: Update the genesis block for a network with change tracking
+      parameters:
+      - description: Network ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Genesis block update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/http.UpdateGenesisBlockRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.UpdateGenesisBlockResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+      summary: Update genesis block for a network
+      tags:
+      - Fabric Networks
+      - Besu Networks
   /networks/besu:
     get:
       description: Get a paginated list of Besu networks
@@ -6564,6 +7118,39 @@ paths:
       summary: Get network map
       tags:
       - Fabric Networks
+      - Besu Networks
+  /networks/besu/{id}/nodes:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves all nodes associated with a Besu network
+      parameters:
+      - description: Network ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.GetNetworkNodesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+      summary: Get nodes for a Besu network
+      tags:
       - Besu Networks
   /networks/besu/import:
     post:
@@ -7392,6 +7979,16 @@ paths:
         - update_etcd_raft_options: Update etcd raft options for the orderer
         - update_batch_size: Update batch size for the orderer
         - update_batch_timeout: Update batch timeout for the orderer
+        - update_application_policy: Update application policy for the channel
+        - update_orderer_policy: Update orderer policy for the channel
+        - update_channel_policy: Update channel policy for the channel
+        - update_channel_capability: Update channel capability for the channel
+        - update_orderer_capability: Update orderer capability for the channel
+        - update_application_capability: Update application capability for the channel
+        - add_orderer_org: Add a new orderer organization to the channel
+        - remove_orderer_org: Remove an orderer organization from the channel
+        - update_orderer_org_msp: Update an orderer organization's MSP configuration
+        - update_application_acl: Update application ACL for the channel
       parameters:
       - description: Network ID
         in: path
@@ -7905,6 +8502,1073 @@ paths:
           schema:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Restart a node
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/accounts:
+    get:
+      consumes:
+      - application/json
+      description: Lists accounts managed by the node
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Array of account addresses
+          schema:
+            items:
+              type: string
+            type: array
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get accounts managed by the Besu node
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/balance:
+    get:
+      consumes:
+      - application/json
+      description: Gets balance of an address in Wei
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Account address
+        in: query
+        name: address
+        required: true
+        type: string
+      - description: 'Block tag (default: latest)'
+        in: query
+        name: blockTag
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Balance in hex
+          schema:
+            type: string
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get balance of an address
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/block-by-hash:
+    get:
+      consumes:
+      - application/json
+      description: Gets block details by hash
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Block hash
+        in: query
+        name: hash
+        required: true
+        type: string
+      - default: false
+        description: Include full transaction objects
+        in: query
+        name: fullTx
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Block object
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get block by hash
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/block-by-number:
+    get:
+      consumes:
+      - application/json
+      description: Gets block by number or tag
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Block number
+        in: query
+        name: number
+        type: string
+      - description: Block tag (latest, earliest, pending)
+        in: query
+        name: tag
+        type: string
+      - default: false
+        description: Include full transaction objects
+        in: query
+        name: fullTx
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Block object
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get block by number
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/block-number:
+    get:
+      consumes:
+      - application/json
+      description: Gets the latest block number
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Block number in hex
+          schema:
+            type: string
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get latest block number
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/block-transaction-count-by-hash:
+    get:
+      consumes:
+      - application/json
+      description: Gets transaction count in a block by hash
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Block hash
+        in: query
+        name: hash
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Transaction count in hex
+          schema:
+            type: string
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get transaction count in block by hash
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/block-transaction-count-by-number:
+    get:
+      consumes:
+      - application/json
+      description: Gets transaction count by block number
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Block number
+        in: query
+        name: number
+        type: string
+      - description: Block tag (latest, earliest, pending)
+        in: query
+        name: tag
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Transaction count in hex
+          schema:
+            type: string
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get transaction count in block by number
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/chain-id:
+    get:
+      consumes:
+      - application/json
+      description: Gets the chain ID
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Chain ID in hex
+          schema:
+            type: string
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get chain ID
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/code:
+    get:
+      consumes:
+      - application/json
+      description: Gets bytecode at an address (e.g., contract code)
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Contract address
+        in: query
+        name: address
+        required: true
+        type: string
+      - description: 'Block tag (default: latest)'
+        in: query
+        name: blockTag
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Bytecode in hex
+          schema:
+            type: string
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get bytecode at an address
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/fee-history:
+    get:
+      consumes:
+      - application/json
+      description: Gets historical gas fees
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Number of blocks
+        in: query
+        name: blockCount
+        required: true
+        type: string
+      - description: Newest block
+        in: query
+        name: newestBlock
+        required: true
+        type: string
+      - description: Reward percentiles
+        in: query
+        name: rewardPercentiles
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Fee history object
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get fee history
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/logs:
+    post:
+      consumes:
+      - application/json
+      description: Gets event logs based on filter criteria
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Log filter object
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Array of log objects
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get event logs
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/pending-transactions:
+    get:
+      consumes:
+      - application/json
+      description: Gets pending transactions in the mempool
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Array of transaction objects
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get pending transactions
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/protocol-version:
+    get:
+      consumes:
+      - application/json
+      description: Gets Ethereum protocol version
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Protocol version in hex
+          schema:
+            type: string
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get protocol version
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/qbft-discard-validator-vote:
+    post:
+      consumes:
+      - application/json
+      description: Discards a pending vote for a validator proposal
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Discard vote request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/http.QbftDiscardValidatorVoteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Success status
+          schema:
+            type: boolean
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Discard QBFT validator vote
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/qbft-pending-votes:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves a map of pending validator proposals where keys are validator
+        addresses and values are boolean (true indicates pending vote)
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Map of validator addresses to boolean values indicating pending
+            votes
+          schema:
+            $ref: '#/definitions/service.QbftPendingVotes'
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get QBFT pending votes
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/qbft-propose-validator-vote:
+    post:
+      consumes:
+      - application/json
+      description: Proposes a vote to add (true) or remove (false) a validator
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Propose vote request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/http.QbftProposeValidatorVoteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Success status
+          schema:
+            type: boolean
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Propose QBFT validator vote
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/qbft-request-timeout:
+    get:
+      consumes:
+      - application/json
+      description: Gets QBFT request timeout in seconds
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Request timeout in seconds
+          schema:
+            type: int64
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get QBFT request timeout
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/qbft-signer-metrics:
+    get:
+      consumes:
+      - application/json
+      description: Gets QBFT signer metrics
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: QBFT signer metrics
+          schema:
+            items:
+              $ref: '#/definitions/service.QbftSignerMetric'
+            type: array
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get QBFT signer metrics
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/qbft-validators-by-block-hash:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves the list of validators for a specific block by its hash
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Block hash
+        in: query
+        name: blockHash
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of validator addresses
+          schema:
+            items:
+              type: string
+            type: array
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get QBFT validators by block hash
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/qbft-validators-by-block-number:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves the list of validators for a specific block by its number
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Block number (hex string, 'latest', 'earliest', or 'pending')
+        in: query
+        name: blockNumber
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of validator addresses
+          schema:
+            items:
+              type: string
+            type: array
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get QBFT validators by block number
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/storage:
+    get:
+      consumes:
+      - application/json
+      description: Gets storage value at a position for an address
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Contract address
+        in: query
+        name: address
+        required: true
+        type: string
+      - description: Storage position
+        in: query
+        name: position
+        required: true
+        type: string
+      - description: 'Block tag (default: latest)'
+        in: query
+        name: blockTag
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Storage value in hex
+          schema:
+            type: string
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get storage value at a position
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/syncing:
+    get:
+      consumes:
+      - application/json
+      description: Gets sync status
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Sync object or false
+          schema: {}
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get sync status
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/transaction-by-block-hash-and-index:
+    get:
+      consumes:
+      - application/json
+      description: Gets transaction by block hash and index
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Block hash
+        in: query
+        name: hash
+        required: true
+        type: string
+      - description: Transaction index
+        in: query
+        name: index
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Transaction object
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get transaction by block hash and index
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/transaction-by-block-number-and-index:
+    get:
+      consumes:
+      - application/json
+      description: Gets transaction by block number and index
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Block number
+        in: query
+        name: number
+        type: string
+      - description: Block tag (latest, earliest, pending)
+        in: query
+        name: tag
+        type: string
+      - description: Transaction index
+        in: query
+        name: index
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Transaction object
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get transaction by block number and index
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/transaction-by-hash:
+    get:
+      consumes:
+      - application/json
+      description: Gets transaction details by hash
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Transaction hash
+        in: query
+        name: hash
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Transaction object
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get transaction by hash
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/transaction-count:
+    get:
+      consumes:
+      - application/json
+      description: Gets nonce (tx count) for an address
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Account address
+        in: query
+        name: address
+        required: true
+        type: string
+      - description: 'Block tag (default: latest)'
+        in: query
+        name: blockTag
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Transaction count in hex
+          schema:
+            type: string
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get transaction count for an address
+      tags:
+      - Nodes
+  /nodes/{id}/rpc/transaction-receipt:
+    get:
+      consumes:
+      - application/json
+      description: Gets receipt for a transaction
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Transaction hash
+        in: query
+        name: hash
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Transaction receipt
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get transaction receipt
       tags:
       - Nodes
   /nodes/{id}/start:
@@ -9990,6 +11654,36 @@ paths:
       tags:
       - Chaincode
   /sc/fabric/chaincodes/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a chaincode by ID
+      parameters:
+      - description: Chaincode ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: Delete a chaincode
+      tags:
+      - Chaincode
     get:
       consumes:
       - application/json

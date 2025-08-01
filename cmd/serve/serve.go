@@ -315,7 +315,7 @@ func (c *serveCmd) setupServer(queries *db.Queries, authService *auth.AuthServic
 	// Initialize metrics service
 	metricsConfig := metricscommon.DefaultConfig()
 	nodesService := nodesservice.NewNodeService(queries, logger, keyManagementService, organizationService, nodeEventService, configService, settingsService)
-	metricsService, err := metrics.NewService(metricsConfig, queries, nodesService)
+	metricsService, err := metrics.NewService(metricsConfig, queries, nodesService, configService)
 	if err != nil {
 		log.Fatal("Failed to initialize metrics service:", err)
 	}
