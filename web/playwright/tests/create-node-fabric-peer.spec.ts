@@ -71,8 +71,7 @@ test('can create a Fabric peer node using the NodeCreationWizard', async ({ page
 	await page.getByPlaceholder('e.g., 0.0.0.0:9443').fill(`0.0.0.0:${opsPort}`)
 
 	// External Endpoint
-	const extPort = 7000 + (new DataView(crypto.getRandomValues(new Uint8Array(4)).buffer).getUint32(0) % 1000)
-	await page.getByPlaceholder('e.g., peer0.org1.example.com:7051').fill(`127.0.0.1:${extPort}`)
+	await page.getByPlaceholder('e.g., peer0.org1.example.com:7051').fill(`127.0.0.1:${listenPort}`)
 
 	// Go to Review step
 	await page.getByRole('button', { name: /next/i }).click()
