@@ -1,7 +1,8 @@
 import { getNodesDefaultsFabric } from '@/api/client'
 import { getNodesDefaultsFabricOptions, getNodesOptions, getOrganizationsOptions, postNodesMutation } from '@/api/client/@tanstack/react-query.gen'
-import { HttpCreateNodeRequest, TypesFabricOrdererConfig, TypesFabricPeerConfig } from '@/api/client/types.gen'
+import { HttpCreateNodeRequest, HttpNodeResponse, TypesFabricOrdererConfig, TypesFabricPeerConfig } from '@/api/client/types.gen'
 import { FabricNodeForm, FabricNodeFormValues } from '@/components/nodes/fabric-node-form'
+import { NodeListItem } from '@/components/nodes/node-list-item'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
@@ -9,10 +10,12 @@ import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Steps } from '@/components/ui/steps'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { slugify } from '@/utils'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ArrowLeft, ArrowRight, CheckCircle2, Server } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CheckCircle2, Server, AlertCircle, XCircle } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router-dom'
@@ -21,6 +24,134 @@ import { z } from 'zod'
 
 interface NodeConfig extends FabricNodeFormValues {
 	name: string
+}
+
+interface CreationError {
+	nodeName: string
+	error: string
+}
+
+interface CreationResult {
+	success: HttpNodeResponse[]
+	errors: CreationError[]
+}
+
+interface CreationSummaryProps {
+	creationCompleted: boolean
+	creationResults: CreationResult
+	nodeConfigs: NodeConfig[]
+	onResetForm: () => void
+	onRetryFailedNodes: () => void
+}
+
+function CreationSummary({ 
+	creationCompleted, 
+	creationResults, 
+	nodeConfigs, 
+	onResetForm, 
+	onRetryFailedNodes 
+}: CreationSummaryProps) {
+	if (!creationCompleted) return null
+
+	const failedNodes = nodeConfigs.filter(config => 
+		creationResults.errors.some(error => error.nodeName === config.name)
+	)
+
+	return (
+		<div className="space-y-6">
+			<div className="border rounded-lg p-6 bg-muted/50">
+				<h3 className="text-lg font-semibold mb-4">Creation Summary</h3>
+				
+				{creationResults.success.length > 0 && (
+					<div className="mb-6">
+						<h4 className="font-medium text-green-600 mb-3 flex items-center gap-2">
+							<CheckCircle2 className="h-4 w-4" />
+							Successfully Created ({creationResults.success.length})
+						</h4>
+						<div className="space-y-2">
+							{creationResults.success.map((node) => (
+								<NodeListItem 
+									key={node.id?.toString() || node.name || `node-${Math.random()}`} 
+									node={node}
+									isSelected={false}
+									onSelectionChange={() => {}}
+									disabled={false}
+									showCheckbox={false}
+								/>
+							))}
+						</div>
+					</div>
+				)}
+
+				{creationResults.errors.length > 0 && (
+					<div className="mb-6">
+						<h4 className="font-medium text-red-600 mb-3 flex items-center gap-2">
+							<XCircle className="h-4 w-4" />
+							Failed to Create ({creationResults.errors.length})
+						</h4>
+						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+							{failedNodes.map((config) => {
+								const error = creationResults.errors.find(e => e.nodeName === config.name)
+								return (
+									<Card key={config.name} className="p-4 border-red-200 bg-red-50/50">
+										<div className="flex items-center justify-between">
+											<div className="flex items-center gap-4">
+												<div className="h-10 w-10 rounded-lg bg-red-100 flex items-center justify-center">
+													<Server className="h-5 w-5 text-red-600" />
+												</div>
+												<div>
+													<h3 className="font-medium">{config.name}</h3>
+													<p className="text-sm text-muted-foreground">
+														FABRIC • {config.fabricProperties.nodeType === 'FABRIC_PEER' ? 'Peer' : 'Orderer'}
+													</p>
+												</div>
+											</div>
+											<Badge variant="secondary" className="bg-red-100 text-red-700">
+												Failed
+											</Badge>
+										</div>
+										<div className="mt-4 space-y-2">
+											<div className="flex gap-2">
+												<div className="text-xs px-2 py-1 rounded-md bg-red-100 text-red-700">
+													Type: {config.fabricProperties.nodeType === 'FABRIC_PEER' ? 'Peer' : 'Orderer'}
+												</div>
+												{config.fabricProperties.listenAddress && (
+													<div className="text-xs px-2 py-1 rounded-md bg-muted">
+														Listen: {config.fabricProperties.listenAddress}
+													</div>
+												)}
+											</div>
+											<div className="text-sm text-red-600 bg-red-50 p-2 rounded-md">
+												<strong>Error:</strong> {error?.error}
+											</div>
+										</div>
+									</Card>
+								)
+							})}
+						</div>
+					</div>
+				)}
+
+				{creationCompleted && (
+					<div className="mt-6 pt-4 border-t">
+						<div className="flex gap-3 flex-wrap">
+							<Button asChild>
+								<Link to="/nodes">View All Nodes</Link>
+							</Button>
+							<Button variant="outline" onClick={onResetForm}>
+								Create More Nodes
+							</Button>
+							{creationResults.errors.length > 0 && (
+								<Button variant="outline" onClick={onRetryFailedNodes}>
+									Try Again ({creationResults.errors.length} failed)
+								</Button>
+							)}
+						</div>
+					</div>
+				)}
+			</div>
+		</div>
+	)
 }
 
 const steps = [
@@ -65,6 +196,9 @@ export default function BulkCreateNodesPage() {
 		total: number
 		currentNode: string | null
 	}>({ current: 0, total: 0, currentNode: null })
+	const [creationResults, setCreationResults] = useState<CreationResult>({ success: [], errors: [] })
+	const [isCreating, setIsCreating] = useState(false)
+	const [creationCompleted, setCreationCompleted] = useState(false)
 
 	const { data: organizations, isLoading: isLoadingOrgs } = useQuery({
 		...getOrganizationsOptions({query: {limit:1000}}),
@@ -190,7 +324,10 @@ export default function BulkCreateNodesPage() {
 		}
 
 		try {
+			setIsCreating(true)
 			setCreationProgress({ current: 0, total: nodeConfigs.length, currentNode: null })
+			setCreationResults({ success: [], errors: [] })
+			setCreationCompleted(false)
 
 			// Create nodes sequentially to show progress
 			for (let i = 0; i < nodeConfigs.length; i++) {
@@ -201,51 +338,70 @@ export default function BulkCreateNodesPage() {
 					currentNode: config.name,
 				})
 
-				let fabricPeer: TypesFabricPeerConfig | undefined
-				let fabricOrderer: TypesFabricOrdererConfig | undefined
+				try {
+					let fabricPeer: TypesFabricPeerConfig | undefined
+					let fabricOrderer: TypesFabricOrdererConfig | undefined
 
-				if (config.fabricProperties.nodeType === 'FABRIC_PEER') {
-					fabricPeer = {
-						nodeType: 'FABRIC_PEER',
-						mode: config.fabricProperties.mode,
-						organizationId: config.fabricProperties.organizationId,
-						listenAddress: config.fabricProperties.listenAddress,
-						operationsListenAddress: config.fabricProperties.operationsListenAddress,
-						externalEndpoint: config.fabricProperties.externalEndpoint,
-						domainNames: config.fabricProperties.domains || [],
+					if (config.fabricProperties.nodeType === 'FABRIC_PEER') {
+						fabricPeer = {
+							nodeType: 'FABRIC_PEER',
+							mode: config.fabricProperties.mode,
+							organizationId: config.fabricProperties.organizationId,
+							listenAddress: config.fabricProperties.listenAddress,
+							operationsListenAddress: config.fabricProperties.operationsListenAddress,
+							externalEndpoint: config.fabricProperties.externalEndpoint,
+							domainNames: config.fabricProperties.domains || [],
+							name: config.name,
+							chaincodeAddress: config.fabricProperties.chaincodeAddress || '',
+							eventsAddress: config.fabricProperties.eventsAddress || '',
+							mspId: selectedOrg?.mspId!,
+							version: config.fabricProperties.version,
+							addressOverrides: config.fabricProperties.addressOverrides,
+						} as TypesFabricPeerConfig
+					} else {
+						fabricOrderer = {
+							nodeType: 'FABRIC_ORDERER',
+							mode: config.fabricProperties.mode,
+							organizationId: config.fabricProperties.organizationId,
+							listenAddress: config.fabricProperties.listenAddress,
+							operationsListenAddress: config.fabricProperties.operationsListenAddress,
+							externalEndpoint: config.fabricProperties.externalEndpoint,
+							domainNames: config.fabricProperties.domains || [],
+							name: config.name,
+							adminAddress: config.fabricProperties.adminAddress || '',
+							mspId: selectedOrg?.mspId!,
+							version: config.fabricProperties.version,
+						} as TypesFabricOrdererConfig
+					}
+
+					const createNodeDto: HttpCreateNodeRequest = {
 						name: config.name,
-						chaincodeAddress: config.fabricProperties.chaincodeAddress || '',
-						eventsAddress: config.fabricProperties.eventsAddress || '',
-						mspId: selectedOrg?.mspId!,
-						version: config.fabricProperties.version,
-						addressOverrides: config.fabricProperties.addressOverrides,
-					} as TypesFabricPeerConfig
-				} else {
-					fabricOrderer = {
-						nodeType: 'FABRIC_ORDERER',
-						mode: config.fabricProperties.mode,
-						organizationId: config.fabricProperties.organizationId,
-						listenAddress: config.fabricProperties.listenAddress,
-						operationsListenAddress: config.fabricProperties.operationsListenAddress,
-						externalEndpoint: config.fabricProperties.externalEndpoint,
-						domainNames: config.fabricProperties.domains || [],
-						name: config.name,
-						adminAddress: config.fabricProperties.adminAddress || '',
-						mspId: selectedOrg?.mspId!,
-						version: config.fabricProperties.version,
-					} as TypesFabricOrdererConfig
-				}
+						blockchainPlatform: 'FABRIC',
+						fabricPeer,
+						fabricOrderer,
+					}
 
-				const createNodeDto: HttpCreateNodeRequest = {
-					name: config.name,
-					blockchainPlatform: 'FABRIC',
-					fabricPeer,
-					fabricOrderer,
-				}
+					const response = await createNode.mutateAsync({
+						body: createNodeDto,
+					})
 
-				await createNode.mutateAsync({
-					body: createNodeDto,
-				})
+					// Track successful creation with the actual node response
+					setCreationResults(prev => ({
+						...prev,
+						success: [...prev.success, response]
+					}))
+
+				} catch (error: any) {
+					// Track failed creation
+					const errorMessage = error?.error?.message || error?.message || 'Unknown error occurred'
+					setCreationResults(prev => ({
+						...prev,
+						errors: [...prev.errors, {
+							nodeName: config.name,
+							error: errorMessage
+						}]
+					}))
+				}
 			}
 
 			setCreationProgress({
@@ -254,12 +410,25 @@ export default function BulkCreateNodesPage() {
 				currentNode: null,
 			})
 
-			toast.success('All nodes created successfully')
-			navigate('/nodes')
+			setCreationCompleted(true)
+
+			// Show appropriate toast based on results
+			if (creationResults.errors.length === 0) {
+				toast.success('All nodes created successfully')
+			} else if (creationResults.success.length === 0) {
+				toast.error('Failed to create any nodes')
+			} else {
+				toast.success(`Created ${creationResults.success.length} nodes`, {
+					description: `${creationResults.errors.length} nodes failed to create`
+				})
+			}
+
 		} catch (error: any) {
 			toast.error('Failed to create nodes', {
-				description: error.error.message,
+				description: error.error?.message || error.message,
 			})
+		} finally {
+			setIsCreating(false)
 		}
 	}
 
@@ -271,6 +440,49 @@ export default function BulkCreateNodesPage() {
 			return nodeConfigs.length > 0
 		}
 		return true
+	}
+
+	const getCreationStatus = () => {
+		if (creationProgress.total === 0) return null
+		
+		if (creationProgress.current < creationProgress.total) {
+			return 'creating'
+		}
+		
+		if (creationResults.errors.length === 0) {
+			return 'success'
+		} else if (creationResults.success.length === 0) {
+			return 'failed'
+		} else {
+			return 'partial'
+		}
+	}
+
+	const creationStatus = getCreationStatus()
+
+	const resetForm = () => {
+		setCreationCompleted(false)
+		setCreationResults({ success: [], errors: [] })
+		setCreationProgress({ current: 0, total: 0, currentNode: null })
+		setCurrentStep('basic')
+		form.reset({
+			organization: '',
+			peerCount: 0,
+			ordererCount: 0,
+		})
+		setNodeConfigs([])
+	}
+
+	const retryFailedNodes = () => {
+		// Filter out only the failed nodes and retry them
+		const failedNodes = nodeConfigs.filter(config => 
+			creationResults.errors.some(error => error.nodeName === config.name)
+		)
+		setNodeConfigs(failedNodes)
+		setCreationCompleted(false)
+		setCreationResults({ success: [], errors: [] })
+		setCreationProgress({ current: 0, total: 0, currentNode: null })
+		setCurrentStep('review')
 	}
 
 	return (
@@ -403,41 +615,100 @@ export default function BulkCreateNodesPage() {
 						{currentStep === 'review' && (
 							<Card className="p-6">
 								<div className="space-y-6">
-									<div>
-										<h3 className="text-lg font-semibold mb-4">Summary</h3>
-										<dl className="space-y-4">
+									{!creationCompleted && (
+										<>
 											<div>
-												<dt className="text-sm font-medium text-muted-foreground">Organization</dt>
-												<dd className="mt-1">{organizations?.items?.find((org) => org.id?.toString() === form.watch('organization'))?.mspId}</dd>
+												<h3 className="text-lg font-semibold mb-4">Summary</h3>
+												<dl className="space-y-4">
+													<div>
+														<dt className="text-sm font-medium text-muted-foreground">Organization</dt>
+														<dd className="mt-1">{organizations?.items?.find((org) => org.id?.toString() === form.watch('organization'))?.mspId}</dd>
+													</div>
+													<div>
+														<dt className="text-sm font-medium text-muted-foreground">Nodes to Create</dt>
+														<dd className="mt-1">
+															{nodeConfigs.filter((c) => c.fabricProperties.nodeType === 'FABRIC_PEER').length} Peers,{' '}
+															{nodeConfigs.filter((c) => c.fabricProperties.nodeType === 'FABRIC_ORDERER').length} Orderers
+														</dd>
+													</div>
+												</dl>
 											</div>
-											<div>
-												<dt className="text-sm font-medium text-muted-foreground">Nodes to Create</dt>
-												<dd className="mt-1">
-													{nodeConfigs.filter((c) => c.fabricProperties.nodeType === 'FABRIC_PEER').length} Peers,{' '}
-													{nodeConfigs.filter((c) => c.fabricProperties.nodeType === 'FABRIC_ORDERER').length} Orderers
-												</dd>
-											</div>
-										</dl>
-									</div>
 
-									{creationProgress.total > 0 && (
-										<div className="space-y-2">
-											<div className="flex justify-between text-sm">
-												<span>Creating nodes...</span>
-												<span>
-													{creationProgress.current} of {creationProgress.total}
-												</span>
-											</div>
-											<Progress value={(creationProgress.current / creationProgress.total) * 100} />
-											{creationProgress.currentNode && <p className="text-sm text-muted-foreground">Creating {creationProgress.currentNode}...</p>}
-										</div>
+											{creationProgress.total > 0 && (
+												<div className="space-y-4">
+													<div className="flex justify-between text-sm">
+														<span>
+															{creationStatus === 'creating' && 'Creating nodes...'}
+															{creationStatus === 'success' && 'All nodes created successfully'}
+															{creationStatus === 'failed' && 'All nodes failed to create'}
+															{creationStatus === 'partial' && 'Some nodes created successfully'}
+														</span>
+														<span>
+															{creationProgress.current} of {creationProgress.total}
+														</span>
+													</div>
+													<Progress value={(creationProgress.current / creationProgress.total) * 100} />
+													{creationProgress.currentNode && creationStatus === 'creating' && (
+														<p className="text-sm text-muted-foreground">Creating {creationProgress.currentNode}...</p>
+													)}
+												</div>
+											)}
+
+											{creationStatus && creationStatus !== 'creating' && (
+												<div className="space-y-4">
+													{creationResults.success.length > 0 && (
+														<Alert>
+															<CheckCircle2 className="h-4 w-4" />
+															<AlertDescription>
+																<div className="flex items-center gap-2">
+																	<span>Successfully created {creationResults.success.length} nodes:</span>
+																	<div className="flex flex-wrap gap-1">
+																		{creationResults.success.map((node) => (
+																			<Badge key={node.id?.toString() || node.name || `node-${Math.random()}`} variant="secondary" className="text-xs">
+																				{node.name}
+																			</Badge>
+																		))}
+																	</div>
+																</div>
+															</AlertDescription>
+														</Alert>
+													)}
+
+													{creationResults.errors.length > 0 && (
+														<Alert variant="destructive">
+															<XCircle className="h-4 w-4" />
+															<AlertDescription>
+																<div className="space-y-2">
+																	<span>Failed to create {creationResults.errors.length} nodes:</span>
+																	<div className="space-y-1">
+																		{creationResults.errors.map((error, index) => (
+																			<div key={index} className="text-sm">
+																				<strong>{error.nodeName}:</strong> {error.error}
+																			</div>
+																		))}
+																	</div>
+																</div>
+															</AlertDescription>
+														</Alert>
+													)}
+												</div>
+											)}
+										</>
 									)}
+
+									<CreationSummary
+										creationCompleted={creationCompleted}
+										creationResults={creationResults}
+										nodeConfigs={nodeConfigs}
+										onResetForm={resetForm}
+										onRetryFailedNodes={retryFailedNodes}
+									/>
 								</div>
 							</Card>
 						)}
 
 						<div className="flex justify-between">
-							{currentStep !== 'basic' && (
+							{currentStep !== 'basic' && !creationCompleted && (
 								<Button type="button" variant="outline" onClick={() => setCurrentStep(currentStep === 'review' ? 'configure' : 'basic')}>
 									Previous
 								</Button>
@@ -446,19 +717,30 @@ export default function BulkCreateNodesPage() {
 								<Button variant="outline" asChild>
 									<Link to="/nodes">Cancel</Link>
 								</Button>
-								<Button type="submit" disabled={!canProceed() || creationProgress.total > 0}>
-									{currentStep === 'review' ? (
-										<>
-											<CheckCircle2 className="mr-2 h-4 w-4" />
-											Create Nodes
-										</>
-									) : (
-										<>
-											Next
-											<ArrowRight className="ml-2 h-4 w-4" />
-										</>
-									)}
-								</Button>
+								{!creationCompleted && (
+									<Button type="submit" disabled={!canProceed() || isCreating}>
+										{currentStep === 'review' ? (
+											<>
+												{isCreating ? (
+													<>
+														<AlertCircle className="mr-2 h-4 w-4" />
+														Creating...
+													</>
+												) : (
+													<>
+														<CheckCircle2 className="mr-2 h-4 w-4" />
+														Create Nodes
+													</>
+												)}
+											</>
+										) : (
+											<>
+												Next
+												<ArrowRight className="ml-2 h-4 w-4" />
+											</>
+										)}
+									</Button>
+								)}
 							</div>
 						</div>
 					</form>

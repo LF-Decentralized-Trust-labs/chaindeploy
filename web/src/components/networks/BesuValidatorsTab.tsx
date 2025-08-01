@@ -423,6 +423,11 @@ export function BesuValidatorsTab({ nodeId, nodesLoading }: BesuValidatorsTabPro
 									)}
 
 									{/* Pending Votes */}
+									{qbftPendingVotes && Object.keys(qbftPendingVotes).length > 0 && (
+										<div className="text-xs text-muted-foreground mb-2">
+											💡 Click the checkmark to approve the proposed action, X to vote against it, or the alert icon to discard your vote.
+										</div>
+									)}
 									{qbftPendingVotesLoading ? (
 										<div className="text-center py-4">
 											<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mx-auto mb-2"></div>
@@ -455,16 +460,38 @@ export function BesuValidatorsTab({ nodeId, nodesLoading }: BesuValidatorsTabPro
 															{copiedAddresses.has(validator) ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
 														</Button>
 													</div>
-													<Button
-														variant="ghost"
-														size="sm"
-														onClick={() => handleDiscardVote(validator)}
-														disabled={discardVoteMutation.isPending}
-														className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-														title="Discard vote"
-													>
-														<X className="h-4 w-4" />
-													</Button>
+													<div className="flex items-center gap-1">
+														<Button
+															variant="ghost"
+															size="sm"
+															onClick={() => handleVote(validator, willAdd)}
+															disabled={proposeVoteMutation.isPending}
+															className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950/20"
+															title={willAdd ? "Approve adding validator" : "Approve removing validator"}
+														>
+															<Check className="h-4 w-4" />
+														</Button>
+														<Button
+															variant="ghost"
+															size="sm"
+															onClick={() => handleVote(validator, !willAdd)}
+															disabled={proposeVoteMutation.isPending}
+															className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20"
+															title={willAdd ? "Reject adding validator" : "Reject removing validator"}
+														>
+															<X className="h-4 w-4" />
+														</Button>
+														<Button
+															variant="ghost"
+															size="sm"
+															onClick={() => handleDiscardVote(validator)}
+															disabled={discardVoteMutation.isPending}
+															className="h-8 w-8 p-0 text-muted-foreground hover:text-muted-foreground/80"
+															title="Discard vote"
+														>
+															<AlertCircle className="h-4 w-4" />
+														</Button>
+													</div>
 												</div>
 											))}
 										</div>

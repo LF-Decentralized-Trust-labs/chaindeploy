@@ -179,7 +179,7 @@ func (p *LocalPeer) startSystemdService() error {
 // startLaunchdService starts the launchd service
 func (p *LocalPeer) startLaunchdService() error {
 	// Try to stop existing service first
-	// _ = p.stopLaunchdService()
+	_ = p.stopLaunchdService()
 
 	cmd := exec.Command("launchctl", "load", p.getLaunchdPlistPath())
 	if err := cmd.Run(); err != nil {
