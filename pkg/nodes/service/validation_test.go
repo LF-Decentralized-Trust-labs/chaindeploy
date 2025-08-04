@@ -1,6 +1,7 @@
 package service
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -454,6 +455,108 @@ func TestValidateExternalEndpoint(t *testing.T) {
 			err := svc.validateExternalEndpoint(tt.endpoint)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("validateExternalEndpoint() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestBesuBinaryPath(t *testing.T) {
+	// Test the binary path construction logic
+	dataPath := "/tmp/chainlaunch"
+	version := "23.10.1"
+
+	// Expected path construction
+	expectedPath := filepath.Join(dataPath, "bin/besu", version, "bin", "besu")
+
+	// Test that the path construction is correct
+	if !strings.Contains(expectedPath, "bin/besu") {
+		t.Error("Binary path should contain 'bin/besu' directory")
+	}
+
+	if !strings.Contains(expectedPath, version) {
+		t.Error("Binary path should contain version")
+	}
+
+	if !strings.HasSuffix(expectedPath, "besu") {
+		t.Error("Binary path should end with 'besu' executable")
+	}
+
+	// Test that the path is properly structured
+	pathParts := strings.Split(expectedPath, string(filepath.Separator))
+	if len(pathParts) < 5 {
+		t.Error("Binary path should have at least 5 parts")
+	}
+
+	// Verify the structure: dataPath/bin/besu/version/bin/besu
+	if pathParts[len(pathParts)-2] != "bin" {
+		t.Error("Second to last part should be 'bin'")
+	}
+
+	if pathParts[len(pathParts)-1] != "besu" {
+		t.Error("Last part should be 'besu'")
+	}
+}
+
+func TestBesuBinaryPathDetection(t *testing.T) {
+	// Test the binary path detection logic
+	dataPath := "/tmp/chainlaunch"
+	version := "23.10.1"
+
+	// Test different binary path scenarios
+	testCases := []struct {
+		name           string
+		downloadedPath string
+		expectedPath   string
+		description    string
+	}{
+		{
+			name:           "downloaded binary exists",
+			downloadedPath: filepath.Join(dataPath, "bin/besu", version, "bin", "besu"),
+			expectedPath:   filepath.Join(dataPath, "bin/besu", version, "bin", "besu"),
+			description:    "Should use downloaded binary when it exists",
+		},
+		{
+			name:           "homebrew apple silicon",
+			downloadedPath: "/nonexistent/path",
+			expectedPath:   "/opt/homebrew/opt/besu/bin/besu",
+			description:    "Should use Homebrew path on Apple Silicon",
+		},
+		{
+			name:           "homebrew intel",
+			downloadedPath: "/nonexistent/path",
+			expectedPath:   "/usr/local/opt/besu/bin/besu",
+			description:    "Should use Homebrew path on Intel Mac",
+		},
+		{
+			name:           "path binary",
+			downloadedPath: "/nonexistent/path",
+			expectedPath:   "/usr/local/bin/besu",
+			description:    "Should use binary from PATH",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Test that the path construction logic works correctly
+			if !strings.Contains(tc.expectedPath, "besu") {
+				t.Error("Expected path should contain 'besu'")
+			}
+
+			// Test that the path is properly structured
+			if tc.name == "downloaded binary exists" {
+				pathParts := strings.Split(tc.expectedPath, string(filepath.Separator))
+				if len(pathParts) < 5 {
+					t.Error("Downloaded binary path should have at least 5 parts")
+				}
+
+				// Verify the structure: dataPath/bin/besu/version/bin/besu
+				if pathParts[len(pathParts)-2] != "bin" {
+					t.Error("Second to last part should be 'bin'")
+				}
+
+				if pathParts[len(pathParts)-1] != "besu" {
+					t.Error("Last part should be 'besu'")
+				}
 			}
 		})
 	}

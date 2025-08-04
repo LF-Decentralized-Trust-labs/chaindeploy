@@ -261,7 +261,7 @@ func (s *NodeService) startBesuNode(ctx context.Context, dbNode *db.Node) error 
 			MinerAddress:    key.EthereumAddress,
 			ConsensusType:   "qbft", // TODO: get consensus type from network
 			BootNodes:       besuNodeConfig.BootNodes,
-			Version:         "25.4.1", // TODO: get version from network
+			Version:         besuNodeConfig.Version,
 			NodePrivateKey:  strings.TrimPrefix(privateKeyDecrypted, "0x"),
 			Env:             besuNodeConfig.Env,
 			P2PHost:         besuNodeConfig.P2PHost,
@@ -634,17 +634,18 @@ func (s *NodeService) initializeBesuNode(ctx context.Context, dbNode *db.Node, c
 			Type: "besu",
 			Mode: string(config.Mode),
 		},
-		KeyID:          config.KeyID,
-		P2PPort:        config.P2PPort,
-		RPCPort:        config.RPCPort,
-		NetworkID:      config.NetworkID,
-		ExternalIP:     config.ExternalIP,
-		P2PHost:        config.P2PHost,
-		RPCHost:        config.RPCHost,
-		InternalIP:     config.InternalIP,
-		EnodeURL:       enodeURL,
-		MetricsEnabled: config.MetricsEnabled,
-		MetricsPort:    config.MetricsPort,
+		KeyID:           config.KeyID,
+		P2PPort:         config.P2PPort,
+		RPCPort:         config.RPCPort,
+		NetworkID:       config.NetworkID,
+		ExternalIP:      config.ExternalIP,
+		P2PHost:         config.P2PHost,
+		RPCHost:         config.RPCHost,
+		InternalIP:      config.InternalIP,
+		EnodeURL:        enodeURL,
+		MetricsEnabled:  config.MetricsEnabled,
+		MetricsPort:     config.MetricsPort,
+		MetricsProtocol: "PROMETHEUS",
 	}
 
 	// Update node endpoint

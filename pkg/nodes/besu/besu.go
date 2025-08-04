@@ -78,6 +78,14 @@ func (b *LocalBesu) Start() (interface{}, error) {
 		return nil, fmt.Errorf("failed to install Besu: %w", err)
 	}
 
+	// Log which binary will be used for the service
+	b.logServiceBinaryPath()
+
+	// Verify binary exists and is executable
+	if err := b.verifyBinary(); err != nil {
+		return nil, fmt.Errorf("binary verification failed: %w", err)
+	}
+
 	// Write genesis file to config directory
 	genesisPath := filepath.Join(configDir, "genesis.json")
 	if err := os.WriteFile(genesisPath, []byte(b.opts.GenesisFile), 0644); err != nil {
@@ -102,6 +110,92 @@ func (b *LocalBesu) Start() (interface{}, error) {
 	default:
 		return nil, fmt.Errorf("invalid mode: %s", b.mode)
 	}
+}
+
+// GetBinaryPathInfo returns information about the Besu binary paths
+func (b *LocalBesu) GetBinaryPathInfo() map[string]string {
+	info := map[string]string{
+		"downloaded_path": b.GetBinaryPath(),
+		"service_path":    b.GetServiceBinaryPath(),
+		"version":         b.opts.Version,
+		"platform":        runtime.GOOS,
+		"arch":            runtime.GOARCH,
+	}
+
+	// Check if downloaded binary exists
+	if _, err := os.Stat(info["downloaded_path"]); err == nil {
+		info["downloaded_exists"] = "true"
+	} else {
+		info["downloaded_exists"] = "false"
+	}
+
+	// Check if service binary exists
+	if _, err := os.Stat(info["service_path"]); err == nil {
+		info["service_exists"] = "true"
+	} else {
+		info["service_exists"] = "false"
+	}
+
+	return info
+}
+
+// logServiceBinaryPath logs which binary path will be used for the service
+func (b *LocalBesu) logServiceBinaryPath() {
+	binaryPath := b.GetServiceBinaryPath()
+	b.logger.Info("Service will use Besu binary",
+		"path", binaryPath,
+		"nodeID", b.opts.ID,
+		"version", b.opts.Version)
+}
+
+// GetBinaryPath returns the path to the Besu binary
+func (b *LocalBesu) GetBinaryPath() string {
+	binDir := filepath.Join(b.configService.GetDataPath(), "bin/besu", b.opts.Version)
+	return filepath.Join(binDir, "bin", "besu")
+}
+
+// GetServiceBinaryPath returns the path to the Besu binary that should be used in service configuration
+// This method determines the correct binary path after installation, considering different locations
+func (b *LocalBesu) GetServiceBinaryPath() string {
+	// First, try the downloaded binary path
+	downloadedPath := b.GetBinaryPath()
+	if _, err := os.Stat(downloadedPath); err == nil {
+		// Check if it's executable
+		if err := exec.Command(downloadedPath, "--version").Run(); err == nil {
+			b.logger.Info("Using downloaded Besu binary for service", "path", downloadedPath)
+			return downloadedPath
+		}
+	}
+
+	// Check if besu is in PATH
+	if path, err := exec.LookPath("besu"); err == nil {
+		if err := exec.Command(path, "--version").Run(); err == nil {
+			b.logger.Info("Using Besu binary from PATH for service", "path", path)
+			return path
+		}
+	}
+
+	// Fallback to downloaded path (will be handled by error checking)
+	b.logger.Warn("No suitable Besu binary found, using downloaded path", "path", downloadedPath)
+	return downloadedPath
+}
+
+// verifyBinary verifies that the Besu binary exists and is executable
+func (b *LocalBesu) verifyBinary() error {
+	besuBinary := b.GetServiceBinaryPath()
+
+	// Check if binary exists
+	if _, err := os.Stat(besuBinary); os.IsNotExist(err) {
+		return fmt.Errorf("Besu binary not found at %s", besuBinary)
+	}
+
+	// Check if binary is executable
+	if err := exec.Command(besuBinary, "--version").Run(); err != nil {
+		return fmt.Errorf("Besu binary is not executable or failed to run: %w", err)
+	}
+
+	b.logger.Info("Besu binary verified", "path", besuBinary)
+	return nil
 }
 
 // checkPrerequisites checks if required software is installed
@@ -132,11 +226,6 @@ func (b *LocalBesu) checkPrerequisites() error {
 			return fmt.Errorf("Java is not installed or not in PATH: %w", err)
 		}
 
-		// Check Besu installation
-		if err := exec.Command("besu", "--version").Run(); err != nil {
-			return fmt.Errorf("Besu is not installed: %w", err)
-		}
-
 	case "docker":
 		// Check Docker installation using Docker API client
 		cli, err := client.NewClientWithOpts(
@@ -160,16 +249,8 @@ func (b *LocalBesu) checkPrerequisites() error {
 
 // buildCommand builds the command to start Besu
 func (b *LocalBesu) buildCommand(dataDir string, genesisPath string, configDir string) string {
-	var besuBinary string
-	if runtime.GOOS == "darwin" {
-		if runtime.GOARCH == "arm64" {
-			besuBinary = "/opt/homebrew/opt/besu/bin/besu"
-		} else {
-			besuBinary = "/usr/local/opt/besu/bin/besu"
-		}
-	} else {
-		besuBinary = filepath.Join(b.configService.GetDataPath(), "bin/besu", b.opts.Version, "besu")
-	}
+	// Use the service binary path which determines the correct binary after installation
+	besuBinary := b.GetServiceBinaryPath()
 
 	keyPath := filepath.Join(configDir, "key")
 
@@ -270,16 +351,38 @@ func (b *LocalBesu) Stop() error {
 }
 
 func (b *LocalBesu) installBesu() error {
-	if runtime.GOOS == "darwin" {
-		return b.installBesuMacOS()
+	besuBinary := b.GetBinaryPath()
+
+	// Check if binary already exists
+	if _, err := os.Stat(besuBinary); err == nil {
+		b.logger.Info("Besu binary already exists", "path", besuBinary)
+		return nil
 	}
-	return b.downloadBesu(b.opts.Version) // existing Linux download method
+
+	b.logger.Info("Installing Besu binary", "version", b.opts.Version, "platform", runtime.GOOS)
+
+	if runtime.GOOS == "darwin" {
+		err := b.installBesuMacOS()
+		if err != nil {
+			return err
+		}
+		b.logger.Info("Besu installed via Homebrew", "path", besuBinary)
+		return nil
+	}
+
+	err := b.downloadBesu(b.opts.Version)
+	if err != nil {
+		return err
+	}
+
+	b.logger.Info("Besu downloaded and installed", "path", besuBinary)
+	return nil
 }
 
-func (b *LocalBesu) downloadBesu(binDir string) error {
+func (b *LocalBesu) downloadBesu(version string) error {
 	// Construct download URL from GitHub releases
 	downloadURL := fmt.Sprintf("https://github.com/hyperledger/besu/releases/download/%s/besu-%s.zip",
-		b.opts.Version, b.opts.Version)
+		version, version)
 
 	// Create temporary directory for download
 	tmpDir, err := os.MkdirTemp("", "besu-download-*")
@@ -307,7 +410,13 @@ func (b *LocalBesu) downloadBesu(binDir string) error {
 	}
 
 	// Source directory with all Besu files
-	besuDir := filepath.Join(extractDir, fmt.Sprintf("besu-%s", b.opts.Version))
+	besuDir := filepath.Join(extractDir, fmt.Sprintf("besu-%s", version))
+
+	// Create the target directory structure
+	binDir := filepath.Join(b.configService.GetDataPath(), "bin/besu", version)
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		return fmt.Errorf("failed to create target directory: %w", err)
+	}
 
 	// Copy entire directory structure
 	if err := copyDir(besuDir, binDir); err != nil {
@@ -323,11 +432,14 @@ func (b *LocalBesu) downloadBesu(binDir string) error {
 	}
 
 	for _, execPath := range executablePaths {
-		if err := os.Chmod(execPath, 0755); err != nil {
-			return fmt.Errorf("failed to set executable permissions for %s: %w", execPath, err)
+		if _, err := os.Stat(execPath); err == nil {
+			if err := os.Chmod(execPath, 0755); err != nil {
+				return fmt.Errorf("failed to set executable permissions for %s: %w", execPath, err)
+			}
 		}
 	}
 
+	b.logger.Info("Successfully downloaded and installed Besu", "version", version, "path", binDir)
 	return nil
 }
 
@@ -397,8 +509,8 @@ func (b *LocalBesu) installBesuMacOS() error {
 		// Parse installed version
 		installedVersion := strings.TrimSpace(string(output))
 		if strings.Contains(installedVersion, b.opts.Version) {
-			// Correct version is already installed
-			return nil
+			// Correct version is already installed, create symlink structure
+			return b.createMacOSBinaryStructure()
 		}
 
 		// Uninstall current version if it's different
@@ -414,22 +526,37 @@ func (b *LocalBesu) installBesuMacOS() error {
 		return fmt.Errorf("failed to install Besu %s: %w\nOutput: %s", b.opts.Version, err, string(output))
 	}
 
-	// Create symlink to our bin directory
+	// Create binary structure
+	return b.createMacOSBinaryStructure()
+}
+
+// createMacOSBinaryStructure creates the proper directory structure and symlinks for macOS
+func (b *LocalBesu) createMacOSBinaryStructure() error {
 	binDir := filepath.Join(b.configService.GetDataPath(), "bin/besu", b.opts.Version)
-	if err := os.MkdirAll(binDir, 0755); err != nil {
+
+	// Create the bin directory structure
+	if err := os.MkdirAll(filepath.Join(binDir, "bin"), 0755); err != nil {
 		return fmt.Errorf("failed to create bin directory: %w", err)
 	}
 
+	// Determine the Homebrew binary path
 	brewPrefix := "/usr/local/opt/besu/bin/besu"
 	if runtime.GOARCH == "arm64" {
 		brewPrefix = "/opt/homebrew/opt/besu/bin/besu"
 	}
 
-	targetBinary := filepath.Join(binDir, "besu")
+	// Create symlink to our bin directory
+	targetBinary := b.GetBinaryPath()
 	if err := os.Symlink(brewPrefix, targetBinary); err != nil && !os.IsExist(err) {
 		return fmt.Errorf("failed to create symlink: %w", err)
 	}
 
+	// Verify the symlink works
+	if _, err := os.Stat(targetBinary); err != nil {
+		return fmt.Errorf("failed to verify symlink: %w", err)
+	}
+
+	b.logger.Info("Created Besu binary symlink", "path", targetBinary, "target", brewPrefix)
 	return nil
 }
 
@@ -558,64 +685,4 @@ func (b *LocalBesu) TailLogs(ctx context.Context, tail int, follow bool) (<-chan
 	}()
 
 	return logChan, nil
-}
-
-// QBFT_DISCARD_VALIDATOR_VOTE discards a pending vote for a validator proposal
-func (b *LocalBesu) QbftDiscardValidatorVote(validatorAddress string) (bool, error) {
-	// TODO: Implement QBFT discard validator vote
-	// This would typically make an RPC call to the Besu node
-	// For now, return a placeholder implementation
-	b.logger.Info("QBFT discard validator vote called", "validator", validatorAddress)
-	return true, nil
-}
-
-// QBFT_GET_PENDING_VOTES retrieves a map of pending validator proposals and their votes
-func (b *LocalBesu) QbftGetPendingVotes() (map[string][]map[string]interface{}, error) {
-	// TODO: Implement QBFT get pending votes
-	// This would typically make an RPC call to the Besu node
-	// For now, return a placeholder implementation
-	b.logger.Info("QBFT get pending votes called")
-	return map[string][]map[string]interface{}{
-		"0x1234567890abcdef1234567890abcdef12345678": {
-			{
-				"proposer": "0xabcdef1234567890abcdef1234567890abcdef12",
-				"vote":     true,
-			},
-		},
-	}, nil
-}
-
-// QBFT_PROPOSE_VALIDATOR_VOTE proposes a vote to add or remove a validator
-func (b *LocalBesu) QbftProposeValidatorVote(validatorAddress string, vote bool) (bool, error) {
-	// TODO: Implement QBFT propose validator vote
-	// This would typically make an RPC call to the Besu node
-	// For now, return a placeholder implementation
-	b.logger.Info("QBFT propose validator vote called", "validator", validatorAddress, "vote", vote)
-	return true, nil
-}
-
-// QBFT_GET_VALIDATORS_BY_BLOCK_HASH retrieves the list of validators for a specific block hash
-func (b *LocalBesu) QbftGetValidatorsByBlockHash(blockHash string) ([]string, error) {
-	// TODO: Implement QBFT get validators by block hash
-	// This would typically make an RPC call to the Besu node
-	// For now, return a placeholder implementation
-	b.logger.Info("QBFT get validators by block hash called", "blockHash", blockHash)
-	return []string{
-		"0x1234567890abcdef1234567890abcdef12345678",
-		"0xabcdef1234567890abcdef1234567890abcdef12",
-		"0xfedcba9876543210fedcba9876543210fedcba98",
-	}, nil
-}
-
-// QBFT_GET_VALIDATORS_BY_BLOCK_NUMBER retrieves the list of validators for a specific block number
-func (b *LocalBesu) QbftGetValidatorsByBlockNumber(blockNumber string) ([]string, error) {
-	// TODO: Implement QBFT get validators by block number
-	// This would typically make an RPC call to the Besu node
-	// For now, return a placeholder implementation
-	b.logger.Info("QBFT get validators by block number called", "blockNumber", blockNumber)
-	return []string{
-		"0x1234567890abcdef1234567890abcdef12345678",
-		"0xabcdef1234567890abcdef1234567890abcdef12",
-		"0xfedcba9876543210fedcba9876543210fedcba98",
-	}, nil
 }
