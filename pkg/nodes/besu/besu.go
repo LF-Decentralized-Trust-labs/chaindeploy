@@ -1,10 +1,12 @@
 package besu
 
 import (
+	"archive/zip"
 	"bufio"
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -202,28 +204,11 @@ func (b *LocalBesu) verifyBinary() error {
 func (b *LocalBesu) checkPrerequisites() error {
 	switch b.mode {
 	case "service":
-		// Check Java installation
-		javaHome := os.Getenv("JAVA_HOME")
-		if javaHome == "" {
-			return fmt.Errorf("JAVA_HOME environment variable is not set")
-		}
-
-		// Verify JAVA_HOME directory exists
-		if _, err := os.Stat(javaHome); os.IsNotExist(err) {
-			return fmt.Errorf("JAVA_HOME directory does not exist: %s", javaHome)
-		}
-
-		// Check Java version
-		javaCmd := filepath.Join(javaHome, "bin", "java")
-		cmd := exec.Command(javaCmd, "-version")
+		// Only require "java" binary to be available in PATH
+		cmd := exec.Command("java", "-version")
 		output, err := cmd.CombinedOutput()
 		if err != nil {
-			return fmt.Errorf("failed to check Java version: %w\nOutput: %s", err, string(output))
-		}
-
-		// Check if java binary exists in PATH as fallback
-		if err := exec.Command("java", "-version").Run(); err != nil {
-			return fmt.Errorf("Java is not installed or not in PATH: %w", err)
+			return fmt.Errorf("java is not installed or not in PATH: %w\nOutput: %s", err, string(output))
 		}
 
 	case "docker":
@@ -393,8 +378,7 @@ func (b *LocalBesu) downloadBesu(version string) error {
 
 	// Download archive
 	archivePath := filepath.Join(tmpDir, "besu.zip")
-	cmd := exec.Command("curl", "-L", "-o", archivePath, downloadURL)
-	if err := cmd.Run(); err != nil {
+	if err := downloadFile(downloadURL, archivePath); err != nil {
 		return fmt.Errorf("failed to download Besu: %w", err)
 	}
 
@@ -404,8 +388,7 @@ func (b *LocalBesu) downloadBesu(version string) error {
 		return fmt.Errorf("failed to create extraction directory: %w", err)
 	}
 
-	unzipCmd := exec.Command("unzip", archivePath, "-d", extractDir)
-	if err := unzipCmd.Run(); err != nil {
+	if err := extractZip(archivePath, extractDir); err != nil {
 		return fmt.Errorf("failed to extract Besu archive: %w", err)
 	}
 
@@ -440,6 +423,87 @@ func (b *LocalBesu) downloadBesu(version string) error {
 	}
 
 	b.logger.Info("Successfully downloaded and installed Besu", "version", version, "path", binDir)
+	return nil
+}
+
+// downloadFile downloads a file from the given URL to the specified path
+func downloadFile(url, filepath string) error {
+	resp, err := http.Get(url)
+	if err != nil {
+		return fmt.Errorf("failed to download file: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("bad status: %s", resp.Status)
+	}
+
+	out, err := os.Create(filepath)
+	if err != nil {
+		return fmt.Errorf("failed to create file: %w", err)
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
+	}
+
+	return nil
+}
+
+// extractZip extracts a zip file to the specified directory
+func extractZip(zipPath, extractDir string) error {
+	reader, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return fmt.Errorf("failed to open zip file: %w", err)
+	}
+	defer reader.Close()
+
+	for _, file := range reader.File {
+		// Construct the full path for the extracted file
+		path := filepath.Join(extractDir, file.Name)
+
+		// Check for ZipSlip vulnerability
+		if !strings.HasPrefix(path, filepath.Clean(extractDir)+string(os.PathSeparator)) {
+			return fmt.Errorf("illegal file path: %s", file.Name)
+		}
+
+		if file.FileInfo().IsDir() {
+			// Create directory
+			if err := os.MkdirAll(path, file.Mode()); err != nil {
+				return fmt.Errorf("failed to create directory %s: %w", path, err)
+			}
+			continue
+		}
+
+		// Create parent directories if they don't exist
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			return fmt.Errorf("failed to create parent directory for %s: %w", path, err)
+		}
+
+		// Open the file in the zip
+		fileReader, err := file.Open()
+		if err != nil {
+			return fmt.Errorf("failed to open file in zip %s: %w", file.Name, err)
+		}
+
+		// Create the file
+		outFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.Mode())
+		if err != nil {
+			fileReader.Close()
+			return fmt.Errorf("failed to create file %s: %w", path, err)
+		}
+
+		// Copy the file contents
+		_, err = io.Copy(outFile, fileReader)
+		fileReader.Close()
+		outFile.Close()
+		if err != nil {
+			return fmt.Errorf("failed to copy file contents for %s: %w", path, err)
+		}
+	}
+
 	return nil
 }
 

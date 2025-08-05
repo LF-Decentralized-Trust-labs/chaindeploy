@@ -267,6 +267,9 @@ export type ChainlaunchdeployChaincodeDefinition = {
     created_at?: string;
     docker_image?: string;
     endorsement_policy?: string;
+    environment_variables?: {
+        [key: string]: string;
+    };
     id?: number;
     sequence?: number;
     version?: string;
@@ -291,6 +294,9 @@ export type ChainlaunchdeployChaincodeDefinitionResponse = {
     created_at?: string;
     docker_image?: string;
     endorsement_policy?: string;
+    environment_variables?: {
+        [key: string]: string;
+    };
     id?: number;
     sequence?: number;
     version?: string;
@@ -401,6 +407,12 @@ export type ChainlaunchdeployCreateChaincodeDefinitionRequest = {
      */
     endorsement_policy?: string;
     /**
+     * Environment variables for the chaincode container
+     */
+    environment_variables?: {
+        [key: string]: string;
+    };
+    /**
      * Sequence
      * required: true
      */
@@ -434,7 +446,12 @@ export type ChainlaunchdeployCreateChaincodeResponse = {
 };
 
 export type ChainlaunchdeployDeployChaincodeByDefinitionRequest = {
-    [key: string]: unknown;
+    /**
+     * Environment variables for the chaincode container
+     */
+    environment_variables?: {
+        [key: string]: string;
+    };
 };
 
 export type ChainlaunchdeployDeploymentResult = {
@@ -607,6 +624,12 @@ export type ChainlaunchdeployUpdateChaincodeDefinitionRequest = {
      * Endorsement policy
      */
     endorsement_policy?: string;
+    /**
+     * Environment variables for the chaincode container
+     */
+    environment_variables?: {
+        [key: string]: string;
+    };
     /**
      * Sequence
      * required: true
@@ -2138,6 +2161,23 @@ export type ServiceBesuNodeProperties = {
     version?: string;
 };
 
+export type ServiceBesuReadinessInfo = {
+    error?: string;
+    installed?: boolean;
+    path?: string;
+    version?: string;
+};
+
+export type ServiceBesuReadinessResponse = {
+    arch?: string;
+    besu?: ServiceBesuReadinessInfo;
+    errors?: Array<string>;
+    java?: ServiceJavaReadinessInfo;
+    platform?: string;
+    ready?: boolean;
+    warnings?: Array<string>;
+};
+
 export type ServiceCreateSettingParams = {
     config?: ServiceSettingConfig;
 };
@@ -2189,6 +2229,13 @@ export type ServiceFabricPeerProperties = {
     tlsCaCert?: string;
     tlsCert?: string;
     tlsKeyId?: number;
+    version?: string;
+};
+
+export type ServiceJavaReadinessInfo = {
+    error?: string;
+    installed?: boolean;
+    path?: string;
     version?: string;
 };
 
@@ -7065,6 +7112,22 @@ export type GetNodesPlatformByPlatformResponses = {
 
 export type GetNodesPlatformByPlatformResponse = GetNodesPlatformByPlatformResponses[keyof GetNodesPlatformByPlatformResponses];
 
+export type GetNodesReadinessBesuData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/nodes/readiness/besu';
+};
+
+export type GetNodesReadinessBesuResponses = {
+    /**
+     * OK
+     */
+    200: ServiceBesuReadinessResponse;
+};
+
+export type GetNodesReadinessBesuResponse = GetNodesReadinessBesuResponses[keyof GetNodesReadinessBesuResponses];
+
 export type DeleteNodesByIdData = {
     body?: never;
     path: {
@@ -10995,7 +11058,7 @@ export type PostScFabricDefinitionsByDefinitionIdCommitResponse = PostScFabricDe
 
 export type PostScFabricDefinitionsByDefinitionIdDeployData = {
     /**
-     * Docker deploy params
+     * Deployment parameters
      */
     body: ChainlaunchdeployDeployChaincodeByDefinitionRequest;
     path: {

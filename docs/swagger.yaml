@@ -455,6 +455,10 @@ definitions:
         type: string
       endorsement_policy:
         type: string
+      environment_variables:
+        additionalProperties:
+          type: string
+        type: object
       id:
         type: integer
       sequence:
@@ -495,6 +499,10 @@ definitions:
         type: string
       endorsement_policy:
         type: string
+      environment_variables:
+        additionalProperties:
+          type: string
+        type: object
       id:
         type: integer
       sequence:
@@ -615,6 +623,11 @@ definitions:
       endorsement_policy:
         description: Endorsement policy
         type: string
+      environment_variables:
+        additionalProperties:
+          type: string
+        description: Environment variables for the chaincode container
+        type: object
       sequence:
         description: |-
           Sequence
@@ -650,6 +663,12 @@ definitions:
         $ref: '#/definitions/chainlaunchdeploy.ChaincodeResponse'
     type: object
   chainlaunchdeploy.DeployChaincodeByDefinitionRequest:
+    properties:
+      environment_variables:
+        additionalProperties:
+          type: string
+        description: Environment variables for the chaincode container
+        type: object
     type: object
   chainlaunchdeploy.DeploymentResult:
     properties:
@@ -897,6 +916,11 @@ definitions:
       endorsement_policy:
         description: Endorsement policy
         type: string
+      environment_variables:
+        additionalProperties:
+          type: string
+        description: Environment variables for the chaincode container
+        type: object
       sequence:
         description: |-
           Sequence
@@ -3555,6 +3579,38 @@ definitions:
       version:
         type: string
     type: object
+  service.BesuReadinessInfo:
+    properties:
+      error:
+        type: string
+      installed:
+        type: boolean
+      path:
+        type: string
+      version:
+        type: string
+    type: object
+  service.BesuReadinessResponse:
+    properties:
+      arch:
+        type: string
+      besu:
+        $ref: '#/definitions/service.BesuReadinessInfo'
+      errors:
+        items:
+          type: string
+        type: array
+      java:
+        $ref: '#/definitions/service.JavaReadinessInfo'
+      platform:
+        type: string
+      ready:
+        type: boolean
+      warnings:
+        items:
+          type: string
+        type: array
+    type: object
   service.CreateSettingParams:
     properties:
       config:
@@ -3637,6 +3693,17 @@ definitions:
         type: string
       tlsKeyId:
         type: integer
+      version:
+        type: string
+    type: object
+  service.JavaReadinessInfo:
+    properties:
+      error:
+        type: string
+      installed:
+        type: boolean
+      path:
+        type: string
       version:
         type: string
     type: object
@@ -9779,6 +9846,21 @@ paths:
       summary: List nodes by platform
       tags:
       - Nodes
+  /nodes/readiness/besu:
+    get:
+      consumes:
+      - application/json
+      description: Check if Java and Besu are installed and ready for deployment
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/service.BesuReadinessResponse'
+      summary: Check Besu readiness
+      tags:
+      - nodes
   /notifications/providers:
     get:
       consumes:
@@ -11860,14 +11942,14 @@ paths:
     post:
       consumes:
       - application/json
-      description: Deploy chaincode for a given definition using Docker image
+      description: Deploy a chaincode definition using Docker
       parameters:
       - description: Chaincode Definition ID
         in: path
         name: definitionId
         required: true
         type: integer
-      - description: Docker deploy params
+      - description: Deployment parameters
         in: body
         name: request
         required: true
@@ -11890,7 +11972,7 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/response.Response'
-      summary: Deploy chaincode based on chaincode definition (Docker)
+      summary: Deploy a chaincode definition
       tags:
       - Chaincode
   /sc/fabric/definitions/{definitionId}/docker-info:
