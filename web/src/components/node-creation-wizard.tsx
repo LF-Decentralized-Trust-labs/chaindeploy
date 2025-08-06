@@ -316,6 +316,7 @@ function ConfigurationStep({ form, onNext, onBack }: StepProps) {
 									networkId: 1,
 									metricsEnabled: true,
 									requestTimeout: 30,
+									version: '25.7.0',
 									environmentVariables: [],
 							  }
 					}

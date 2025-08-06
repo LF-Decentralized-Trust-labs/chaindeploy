@@ -395,10 +395,12 @@ definitions:
       bytecode:
         description: Compiled contract bytecode
         items:
+          format: int32
           type: integer
         type: array
       chainID:
         description: Chain ID for the target network
+        format: int64
         type: integer
       constructorArgs:
         description: Constructor arguments for the contract
@@ -455,10 +457,6 @@ definitions:
         type: string
       endorsement_policy:
         type: string
-      environment_variables:
-        additionalProperties:
-          type: string
-        type: object
       id:
         type: integer
       sequence:
@@ -499,10 +497,6 @@ definitions:
         type: string
       endorsement_policy:
         type: string
-      environment_variables:
-        additionalProperties:
-          type: string
-        type: object
       id:
         type: integer
       sequence:
@@ -529,6 +523,7 @@ definitions:
       transient:
         additionalProperties:
           items:
+            format: int32
             type: integer
           type: array
         description: 'Optional: Transient data'
@@ -569,6 +564,7 @@ definitions:
       transient:
         additionalProperties:
           items:
+            format: int32
             type: integer
           type: array
         description: 'Optional: Transient data'
@@ -623,11 +619,6 @@ definitions:
       endorsement_policy:
         description: Endorsement policy
         type: string
-      environment_variables:
-        additionalProperties:
-          type: string
-        description: Environment variables for the chaincode container
-        type: object
       sequence:
         description: |-
           Sequence
@@ -722,6 +713,7 @@ definitions:
       packageID:
         type: string
       sequence:
+        format: int64
         type: integer
       version:
         type: string
@@ -742,6 +734,7 @@ definitions:
       collectionsConfig:
         description: Serialized CollectionConfigPackage
         items:
+          format: int32
           type: integer
         type: array
       endorsementPolicy:
@@ -755,6 +748,7 @@ definitions:
       packageID:
         type: string
       sequence:
+        format: int64
         type: integer
       version:
         type: string
@@ -766,6 +760,7 @@ definitions:
       collectionsConfig:
         description: Serialized CollectionConfigPackage
         items:
+          format: int32
           type: integer
         type: array
       endorsementPolicy:
@@ -777,6 +772,7 @@ definitions:
       name:
         type: string
       sequence:
+        format: int64
         type: integer
       version:
         type: string
@@ -798,6 +794,7 @@ definitions:
       packageBytes:
         description: Chaincode package bytes
         items:
+          format: int32
           type: integer
         type: array
       peer:
@@ -814,6 +811,7 @@ definitions:
       name:
         type: string
       sequence:
+        format: int64
         type: integer
       version:
         type: string
@@ -916,11 +914,6 @@ definitions:
       endorsement_policy:
         description: Endorsement policy
         type: string
-      environment_variables:
-        additionalProperties:
-          type: string
-        description: Environment variables for the chaincode container
-        type: object
       sequence:
         description: |-
           Sequence
@@ -2884,6 +2877,7 @@ definitions:
       ipAddresses:
         items:
           items:
+            format: int32
             type: integer
           type: array
         type: array
@@ -3011,6 +3005,7 @@ definitions:
     - 1000000000
     - 60000000000
     - 3600000000000
+    format: int64
     type: integer
     x-enum-varnames:
     - minDuration
@@ -3890,6 +3885,7 @@ definitions:
     - 1000000000
     - 60000000000
     - 3600000000000
+    format: int64
     type: integer
     x-enum-varnames:
     - minDuration

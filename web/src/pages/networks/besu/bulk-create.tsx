@@ -1,5 +1,5 @@
 import { getNodesDefaultsBesuNode, postKeys } from '@/api/client'
-import { getKeyProvidersOptions, getNodesDefaultsBesuNodeOptions, postNetworksBesuMutation, postNodesMutation, getKeysOptions } from '@/api/client/@tanstack/react-query.gen'
+import { getKeyProvidersOptions, getKeysOptions, postNetworksBesuMutation, postNodesMutation } from '@/api/client/@tanstack/react-query.gen'
 import { BesuNodeForm, BesuNodeFormValues } from '@/components/nodes/besu-node-form'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -9,6 +9,14 @@ import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Steps } from '@/components/ui/steps'
 import { hexToNumber, isValidHex, numberToHex } from '@/utils'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { ArrowLeft, ArrowRight, CheckCircle2, Copy, Server } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { Link, useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
+import * as z from 'zod'
 
 // Helper function to convert ETH to WEI
 const ethToWei = (eth: number): string => {
@@ -27,14 +35,6 @@ const ethToHex = (eth: number): string => {
 	const wei = ethToWei(eth)
 	return numberToHex(Number(wei))
 }
-import { zodResolver } from '@hookform/resolvers/zod'
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { ArrowLeft, ArrowRight, CheckCircle2, Server, Copy } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { useForm } from 'react-hook-form'
-import { Link, useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
-import * as z from 'zod'
 
 const steps = [
 	{ id: 'nodes', title: 'Number of Nodes' },
@@ -499,6 +499,7 @@ export default function BulkCreateBesuNetworkPage() {
 					metricsPort: 9545 + index,
 					bootNodes: bootNodes,
 					requestTimeout: 30,
+					version: '25.7.0',
 				} as BesuNodeFormValues
 			})
 
@@ -551,6 +552,7 @@ export default function BulkCreateBesuNetworkPage() {
 							rpcHost: '127.0.0.1',
 							rpcPort: nodeConfig.rpcPort,
 							metricsPort: nodeConfig.metricsPort,
+							version: nodeConfig.version,
 							bootNodes: nodeConfig.bootNodes
 								?.split(',')
 								.map((node) => node.trim())

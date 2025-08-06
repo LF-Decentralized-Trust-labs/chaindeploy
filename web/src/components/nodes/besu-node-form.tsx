@@ -29,6 +29,7 @@ const besuNodeFormSchema = z.object({
 	type: z.literal('besu'),
 	bootNodes: z.string().optional(),
 	requestTimeout: z.number().positive(),
+	version: z.string().default('25.7.0'),
 	environmentVariables: z
 		.array(
 			z.object({
@@ -66,6 +67,7 @@ export function BesuNodeForm({ onSubmit, isSubmitting, hideSubmit, defaultValues
 			metricsHost: '127.0.0.1',
 			metricsPort: 9545,
 			requestTimeout: 30,
+			version: '25.7.0',
 			environmentVariables: [],
 			networkId: networkId,
 			...defaultValues,
@@ -222,6 +224,21 @@ export function BesuNodeForm({ onSubmit, isSubmitting, hideSubmit, defaultValues
 									<SelectItem value="service">Service</SelectItem>
 								</SelectContent>
 							</Select>
+							<FormMessage />
+						</FormItem>
+					)}
+				/>
+
+				<FormField
+					control={form.control}
+					name="version"
+					render={({ field }) => (
+						<FormItem>
+							<FormLabel>Version</FormLabel>
+							<FormControl>
+								<Input {...field} placeholder="25.7.0" />
+							</FormControl>
+							<FormDescription>Besu version to use for this node</FormDescription>
 							<FormMessage />
 						</FormItem>
 					)}

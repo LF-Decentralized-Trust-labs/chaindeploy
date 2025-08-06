@@ -188,12 +188,14 @@ func (b *LocalBesu) verifyBinary() error {
 
 	// Check if binary exists
 	if _, err := os.Stat(besuBinary); os.IsNotExist(err) {
-		return fmt.Errorf("Besu binary not found at %s", besuBinary)
+		return fmt.Errorf("besu binary %s not found", besuBinary)
 	}
 
 	// Check if binary is executable
-	if err := exec.Command(besuBinary, "--version").Run(); err != nil {
-		return fmt.Errorf("Besu binary is not executable or failed to run: %w", err)
+	cmd := exec.Command(besuBinary, "--version")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("besu binary %s is not executable or failed to run: %w\nOutput: %s", besuBinary, err, string(output))
 	}
 
 	b.logger.Info("Besu binary verified", "path", besuBinary)
@@ -365,6 +367,7 @@ func (b *LocalBesu) installBesu() error {
 }
 
 func (b *LocalBesu) downloadBesu(version string) error {
+	b.logger.Info("Downloading Besu", "version", version)
 	// Construct download URL from GitHub releases
 	downloadURL := fmt.Sprintf("https://github.com/hyperledger/besu/releases/download/%s/besu-%s.zip",
 		version, version)

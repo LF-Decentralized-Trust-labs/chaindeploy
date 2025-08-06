@@ -12815,12 +12815,14 @@
                     "description": "Compiled contract bytecode",
                     "type": "array",
                     "items": {
-                        "type": "integer"
+                        "type": "integer",
+                        "format": "int32"
                     }
                 },
                 "chainID": {
                     "description": "Chain ID for the target network",
-                    "type": "integer"
+                    "type": "integer",
+                    "format": "int64"
                 },
                 "constructorArgs": {
                     "description": "Constructor arguments for the contract",
@@ -12902,12 +12904,6 @@
                 "endorsement_policy": {
                     "type": "string"
                 },
-                "environment_variables": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
-                },
                 "id": {
                     "type": "integer"
                 },
@@ -12969,12 +12965,6 @@
                 "endorsement_policy": {
                     "type": "string"
                 },
-                "environment_variables": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
-                },
                 "id": {
                     "type": "integer"
                 },
@@ -13014,7 +13004,8 @@
                     "additionalProperties": {
                         "type": "array",
                         "items": {
-                            "type": "integer"
+                            "type": "integer",
+                            "format": "int32"
                         }
                     }
                 }
@@ -13072,7 +13063,8 @@
                     "additionalProperties": {
                         "type": "array",
                         "items": {
-                            "type": "integer"
+                            "type": "integer",
+                            "format": "int32"
                         }
                     }
                 }
@@ -13140,13 +13132,6 @@
                 "endorsement_policy": {
                     "description": "Endorsement policy",
                     "type": "string"
-                },
-                "environment_variables": {
-                    "description": "Environment variables for the chaincode container",
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
                 },
                 "sequence": {
                     "description": "Sequence\nrequired: true",
@@ -13275,7 +13260,8 @@
                     "type": "string"
                 },
                 "sequence": {
-                    "type": "integer"
+                    "type": "integer",
+                    "format": "int64"
                 },
                 "version": {
                     "type": "string"
@@ -13306,7 +13292,8 @@
                     "description": "Serialized CollectionConfigPackage",
                     "type": "array",
                     "items": {
-                        "type": "integer"
+                        "type": "integer",
+                        "format": "int32"
                     }
                 },
                 "endorsementPolicy": {
@@ -13325,7 +13312,8 @@
                     "type": "string"
                 },
                 "sequence": {
-                    "type": "integer"
+                    "type": "integer",
+                    "format": "int64"
                 },
                 "version": {
                     "type": "string"
@@ -13342,7 +13330,8 @@
                     "description": "Serialized CollectionConfigPackage",
                     "type": "array",
                     "items": {
-                        "type": "integer"
+                        "type": "integer",
+                        "format": "int32"
                     }
                 },
                 "endorsementPolicy": {
@@ -13358,7 +13347,8 @@
                     "type": "string"
                 },
                 "sequence": {
-                    "type": "integer"
+                    "type": "integer",
+                    "format": "int64"
                 },
                 "version": {
                     "type": "string"
@@ -13390,7 +13380,8 @@
                     "description": "Chaincode package bytes",
                     "type": "array",
                     "items": {
-                        "type": "integer"
+                        "type": "integer",
+                        "format": "int32"
                     }
                 },
                 "peer": {
@@ -13414,7 +13405,8 @@
                     "type": "string"
                 },
                 "sequence": {
-                    "type": "integer"
+                    "type": "integer",
+                    "format": "int64"
                 },
                 "version": {
                     "type": "string"
@@ -13563,13 +13555,6 @@
                 "endorsement_policy": {
                     "description": "Endorsement policy",
                     "type": "string"
-                },
-                "environment_variables": {
-                    "description": "Environment variables for the chaincode container",
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
                 },
                 "sequence": {
                     "description": "Sequence\nrequired: true",
@@ -16339,7 +16324,8 @@
                     "items": {
                         "type": "array",
                         "items": {
-                            "type": "integer"
+                            "type": "integer",
+                            "format": "int32"
                         }
                     }
                 },
@@ -16504,6 +16490,7 @@
         },
         "models.Duration": {
             "type": "integer",
+            "format": "int64",
             "enum": [
                 -9223372036854775808,
                 9223372036854775807,
@@ -17794,6 +17781,7 @@
         },
         "time.Duration": {
             "type": "integer",
+            "format": "int64",
             "enum": [
                 -9223372036854775808,
                 9223372036854775807,

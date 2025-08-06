@@ -248,7 +248,10 @@ func (s *NodeService) startBesuNode(ctx context.Context, dbNode *db.Node) error 
 	if err := json.Unmarshal([]byte(network.Config.String), &networkConfig); err != nil {
 		return fmt.Errorf("failed to unmarshal network config: %w", err)
 	}
-
+	version := besuNodeConfig.Version
+	if version == "" {
+		version = "25.7.0"
+	}
 	// Create LocalBesu instance
 	localBesu := besu.NewLocalBesu(
 		besu.StartBesuOpts{
@@ -262,7 +265,7 @@ func (s *NodeService) startBesuNode(ctx context.Context, dbNode *db.Node) error 
 			MinerAddress:    key.EthereumAddress,
 			ConsensusType:   "qbft", // TODO: get consensus type from network
 			BootNodes:       besuNodeConfig.BootNodes,
-			Version:         besuNodeConfig.Version,
+			Version:         version,
 			NodePrivateKey:  strings.TrimPrefix(privateKeyDecrypted, "0x"),
 			Env:             besuNodeConfig.Env,
 			P2PHost:         besuNodeConfig.P2PHost,
