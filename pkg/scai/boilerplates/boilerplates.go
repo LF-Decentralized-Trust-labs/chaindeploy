@@ -32,7 +32,7 @@ type BoilerplateConfig struct {
 	RepoName        string   `yaml:"repoName" json:"repoName"`
 	RepoPath        string   `yaml:"repoPath,omitempty" json:"repoPath,omitempty"`
 	ValidateCommand string   `yaml:"validateCommand,omitempty" json:"validateCommand,omitempty"`
-	SystemPrompt    string   `yaml: "systemPrompt"`
+	SystemPrompt    string   `yaml:"systemPrompt" json:"systemPrompt"`
 }
 
 // BoilerplatesConfig represents the top-level configuration structure

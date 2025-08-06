@@ -16,7 +16,10 @@ interface InstallChaincodeDialogProps {
 	onError?: (error: any) => void
 }
 function InstallChaincodeDialog({ installDialogOpen, setInstallDialogOpen, availablePeers, definitionId, onSuccess, onError }: InstallChaincodeDialogProps) {
-	const [selectedPeers, setSelectedPeers] = useState<Set<string>>(new Set())
+	const [selectedPeers, setSelectedPeers] = useState<Set<string>>(() => {
+		// Initialize with all peer IDs selected by default
+		return new Set(availablePeers.map(peer => peer.nodeId!.toString()))
+	})
 
 	const installMutation = useMutation({
 		...postScFabricDefinitionsByDefinitionIdInstallMutation(),

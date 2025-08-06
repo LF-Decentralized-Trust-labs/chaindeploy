@@ -32,6 +32,7 @@ const formSchema = z.object({
 	bootNodes: z.string().optional(),
 	requestTimeout: z.number().positive(),
 	metricsPort: z.number().min(1024).max(65535),
+	version: z.string().optional(),
 	environmentVariables: z
 		.array(
 			z.object({
@@ -58,6 +59,7 @@ export default function CreateBesuNodePage() {
 			rpcPort: 8545,
 			p2pPort: 30303,
 			requestTimeout: 30,
+			version: '25.7.0',
 			environmentVariables: [],
 		},
 	})
@@ -103,6 +105,7 @@ export default function CreateBesuNodePage() {
 						rpcHost: data.rpcHost,
 						rpcPort: data.rpcPort,
 						metricsPort: data.metricsPort,
+						version: data.version,
 						type: 'BESU',
 						metricsEnabled: true,
 						metricsProtocol: 'PROMETHEUS',
@@ -264,6 +267,21 @@ export default function CreateBesuNodePage() {
 													<SelectItem value="service">Service</SelectItem>
 												</SelectContent>
 											</Select>
+											<FormMessage />
+										</FormItem>
+									)}
+								/>
+
+								<FormField
+									control={form.control}
+									name="version"
+									render={({ field }) => (
+										<FormItem>
+											<FormLabel>Version</FormLabel>
+											<FormControl>
+												<Input {...field} placeholder="25.7.0" />
+											</FormControl>
+											<FormDescription>Besu version to use for this node</FormDescription>
 											<FormMessage />
 										</FormItem>
 									)}

@@ -5927,6 +5927,29 @@
                 }
             }
         },
+        "/nodes/readiness/besu": {
+            "get": {
+                "description": "Check if Java and Besu are installed and ready for deployment",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "nodes"
+                ],
+                "summary": "Check Besu readiness",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/service.BesuReadinessResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/nodes/{id}": {
             "get": {
                 "description": "Get a node by ID",
@@ -11238,7 +11261,7 @@
         },
         "/sc/fabric/definitions/{definitionId}/deploy": {
             "post": {
-                "description": "Deploy chaincode for a given definition using Docker image",
+                "description": "Deploy a chaincode definition using Docker",
                 "consumes": [
                     "application/json"
                 ],
@@ -11248,7 +11271,7 @@
                 "tags": [
                     "Chaincode"
                 ],
-                "summary": "Deploy chaincode based on chaincode definition (Docker)",
+                "summary": "Deploy a chaincode definition",
                 "parameters": [
                     {
                         "type": "integer",
@@ -11258,7 +11281,7 @@
                         "required": true
                     },
                     {
-                        "description": "Docker deploy params",
+                        "description": "Deployment parameters",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -12792,12 +12815,14 @@
                     "description": "Compiled contract bytecode",
                     "type": "array",
                     "items": {
-                        "type": "integer"
+                        "type": "integer",
+                        "format": "int32"
                     }
                 },
                 "chainID": {
                     "description": "Chain ID for the target network",
-                    "type": "integer"
+                    "type": "integer",
+                    "format": "int64"
                 },
                 "constructorArgs": {
                     "description": "Constructor arguments for the contract",
@@ -12979,7 +13004,8 @@
                     "additionalProperties": {
                         "type": "array",
                         "items": {
-                            "type": "integer"
+                            "type": "integer",
+                            "format": "int32"
                         }
                     }
                 }
@@ -13037,7 +13063,8 @@
                     "additionalProperties": {
                         "type": "array",
                         "items": {
-                            "type": "integer"
+                            "type": "integer",
+                            "format": "int32"
                         }
                     }
                 }
@@ -13146,7 +13173,16 @@
             }
         },
         "chainlaunchdeploy.DeployChaincodeByDefinitionRequest": {
-            "type": "object"
+            "type": "object",
+            "properties": {
+                "environment_variables": {
+                    "description": "Environment variables for the chaincode container",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                }
+            }
         },
         "chainlaunchdeploy.DeploymentResult": {
             "type": "object",
@@ -13224,7 +13260,8 @@
                     "type": "string"
                 },
                 "sequence": {
-                    "type": "integer"
+                    "type": "integer",
+                    "format": "int64"
                 },
                 "version": {
                     "type": "string"
@@ -13255,7 +13292,8 @@
                     "description": "Serialized CollectionConfigPackage",
                     "type": "array",
                     "items": {
-                        "type": "integer"
+                        "type": "integer",
+                        "format": "int32"
                     }
                 },
                 "endorsementPolicy": {
@@ -13274,7 +13312,8 @@
                     "type": "string"
                 },
                 "sequence": {
-                    "type": "integer"
+                    "type": "integer",
+                    "format": "int64"
                 },
                 "version": {
                     "type": "string"
@@ -13291,7 +13330,8 @@
                     "description": "Serialized CollectionConfigPackage",
                     "type": "array",
                     "items": {
-                        "type": "integer"
+                        "type": "integer",
+                        "format": "int32"
                     }
                 },
                 "endorsementPolicy": {
@@ -13307,7 +13347,8 @@
                     "type": "string"
                 },
                 "sequence": {
-                    "type": "integer"
+                    "type": "integer",
+                    "format": "int64"
                 },
                 "version": {
                     "type": "string"
@@ -13339,7 +13380,8 @@
                     "description": "Chaincode package bytes",
                     "type": "array",
                     "items": {
-                        "type": "integer"
+                        "type": "integer",
+                        "format": "int32"
                     }
                 },
                 "peer": {
@@ -13363,7 +13405,8 @@
                     "type": "string"
                 },
                 "sequence": {
-                    "type": "integer"
+                    "type": "integer",
+                    "format": "int64"
                 },
                 "version": {
                     "type": "string"
@@ -16281,7 +16324,8 @@
                     "items": {
                         "type": "array",
                         "items": {
-                            "type": "integer"
+                            "type": "integer",
+                            "format": "int32"
                         }
                     }
                 },
@@ -16446,6 +16490,7 @@
         },
         "models.Duration": {
             "type": "integer",
+            "format": "int64",
             "enum": [
                 -9223372036854775808,
                 9223372036854775807,
@@ -17279,6 +17324,55 @@
                 }
             }
         },
+        "service.BesuReadinessInfo": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "installed": {
+                    "type": "boolean"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "service.BesuReadinessResponse": {
+            "type": "object",
+            "properties": {
+                "arch": {
+                    "type": "string"
+                },
+                "besu": {
+                    "$ref": "#/definitions/service.BesuReadinessInfo"
+                },
+                "errors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "java": {
+                    "$ref": "#/definitions/service.JavaReadinessInfo"
+                },
+                "platform": {
+                    "type": "string"
+                },
+                "ready": {
+                    "type": "boolean"
+                },
+                "warnings": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "service.CreateSettingParams": {
             "type": "object",
             "properties": {
@@ -17400,6 +17494,23 @@
                 },
                 "tlsKeyId": {
                     "type": "integer"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "service.JavaReadinessInfo": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "installed": {
+                    "type": "boolean"
+                },
+                "path": {
+                    "type": "string"
                 },
                 "version": {
                     "type": "string"
@@ -17670,6 +17781,7 @@
         },
         "time.Duration": {
             "type": "integer",
+            "format": "int64",
             "enum": [
                 -9223372036854775808,
                 9223372036854775807,

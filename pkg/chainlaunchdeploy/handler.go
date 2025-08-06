@@ -950,17 +950,18 @@ func (h *Handler) CommitChaincodeByDefinition(w http.ResponseWriter, r *http.Req
 }
 
 // Request struct for deploying chaincode by definition using Docker image
-// swagger:parameters deployChaincodeByDefinition
 type DeployChaincodeByDefinitionRequest struct {
+	// Environment variables for the chaincode container
+	EnvironmentVariables map[string]string `json:"environment_variables"`
 }
 
-// @Summary Deploy chaincode based on chaincode definition (Docker)
-// @Description Deploy chaincode for a given definition using Docker image
+// @Summary Deploy a chaincode definition
+// @Description Deploy a chaincode definition using Docker
 // @Tags Chaincode
 // @Accept json
 // @Produce json
 // @Param definitionId path int true "Chaincode Definition ID"
-// @Param request body DeployChaincodeByDefinitionRequest true "Docker deploy params"
+// @Param request body DeployChaincodeByDefinitionRequest true "Deployment parameters"
 // @Success 200 {object} map[string]string
 // @Failure 400 {object} response.Response
 // @Failure 500 {object} response.Response
@@ -969,19 +970,28 @@ func (h *Handler) DeployChaincodeByDefinition(w http.ResponseWriter, r *http.Req
 	definitionIdStr := chi.URLParam(r, "definitionId")
 	definitionId, err := strconv.ParseInt(definitionIdStr, 10, 64)
 	if err != nil {
+		h.logger.Error("Invalid definition ID", "definitionId", definitionIdStr)
 		return errors.NewValidationError("invalid definition ID", map[string]interface{}{"detail": "Invalid definition ID"})
 	}
+
 	var req DeployChaincodeByDefinitionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.logger.Error("Invalid deploy chaincode request body", "error", err)
+		h.logger.Error("Invalid deploy chaincode definition request body", "error", err)
 		return errors.NewValidationError("invalid request body", map[string]interface{}{"detail": err.Error()})
 	}
-	err = h.chaincodeService.DeployChaincodeByDefinition(r.Context(), definitionId)
+
+	// Deploy the chaincode with environment variables from the request
+	err = h.chaincodeService.DeployChaincodeByDefinition(r.Context(), definitionId, req.EnvironmentVariables)
 	if err != nil {
-		h.logger.Error("Failed to deploy chaincode by definition", "error", err)
-		return errors.NewInternalError("failed to deploy chaincode by definition", err, nil)
+		h.logger.Error("Failed to deploy chaincode definition", "error", err)
+		return errors.NewInternalError("failed to deploy chaincode definition", err, nil)
 	}
-	return response.WriteJSON(w, http.StatusOK, map[string]string{"status": "deploy success", "definitionId": definitionIdStr})
+
+	return response.WriteJSON(w, http.StatusOK, map[string]string{
+		"status":        "success",
+		"message":       "Chaincode deployed successfully",
+		"definition_id": definitionIdStr,
+	})
 }
 
 // swagger:parameters updateChaincodeDefinition
