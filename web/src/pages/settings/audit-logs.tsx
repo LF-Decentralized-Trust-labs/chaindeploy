@@ -20,17 +20,17 @@ interface AuditLogDetails {
 	[key: string]: any
 }
 
-const severityColors = {
-	INFO: 'bg-blue-500',
-	WARNING: 'bg-yellow-500',
-	CRITICAL: 'bg-red-500',
-}
+const severityVariants = {
+	INFO: 'default',
+	WARNING: 'secondary',
+	CRITICAL: 'destructive',
+} as const
 
-const outcomeColors = {
-	SUCCESS: 'bg-green-500',
-	FAILURE: 'bg-red-500',
-	PENDING: 'bg-yellow-500',
-}
+const outcomeVariants = {
+	SUCCESS: 'success',
+	FAILURE: 'destructive',
+	PENDING: 'secondary',
+} as const
 
 export default function AuditLogsPage() {
 	const navigate = useNavigate()
@@ -84,9 +84,9 @@ export default function AuditLogsPage() {
 										<TableCell>{log.userIdentity || '-'}</TableCell>
 										<TableCell>{details?.session_id || '-'}</TableCell>
 										<TableCell>{log.eventSource || '-'}</TableCell>
-										<TableCell>{details?.is_security_event && <Badge className="bg-red-500 text-white">Security Event</Badge>}</TableCell>
-										<TableCell>{log.severity && <Badge className={`${severityColors[log.severity]} text-white`}>{log.severity}</Badge>}</TableCell>
-										<TableCell>{log.eventOutcome && <Badge className={`${outcomeColors[log.eventOutcome]} text-white`}>{log.eventOutcome}</Badge>}</TableCell>
+										<TableCell>{details?.is_security_event && <Badge variant="destructive">Security Event</Badge>}</TableCell>
+										<TableCell>{log.severity && <Badge variant={severityVariants[log.severity] || 'default'}>{log.severity}</Badge>}</TableCell>
+										<TableCell>{log.eventOutcome && <Badge variant={outcomeVariants[log.eventOutcome] || 'default'}>{log.eventOutcome}</Badge>}</TableCell>
 										<TableCell>{log.affectedResource || '-'}</TableCell>
 									</TableRow>
 								)

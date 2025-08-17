@@ -38,12 +38,12 @@ export default function AuditLogDetailPage() {
 	const { data, isLoading } = useQuery({
 		...getAuditLogsByIdOptions({ path: { id: id! } }),
 	})
+	const details = useMemo(() => data?.details as AuditLogDetails | undefined, [data?.details])
 
 	if (isLoading) {
 		return <div>Loading...</div>
 	}
 
-	const details = useMemo(() => data?.details as AuditLogDetails | undefined, [data?.details])
 	return (
 		<div className="container mx-auto py-6">
 			<Button variant="ghost" className="mb-4" onClick={() => navigate('/settings/audit-logs')}>
