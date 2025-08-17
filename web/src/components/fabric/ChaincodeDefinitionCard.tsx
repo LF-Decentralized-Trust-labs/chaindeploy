@@ -125,16 +125,6 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 		},
 	})
 
-	// Deploy mutation - now handled by DeployChaincodeDialog
-	const deployMutation = useMutation({
-		...postScFabricDefinitionsByDefinitionIdDeployMutation(),
-		onSuccess: () => {
-			setTimelineKey((prev) => prev + 1)
-			onSuccess?.()
-			refetch?.()
-		},
-	})
-
 	// Undeploy mutation
 	const stopMutation = useMutation({
 		...postScFabricDefinitionsByDefinitionIdUndeployMutation(),

@@ -227,7 +227,7 @@ func (b *LocalBesu) checkPrerequisites() error {
 		// Ping Docker daemon to verify connectivity
 		ctx := context.Background()
 		if _, err := cli.Ping(ctx); err != nil {
-			return fmt.Errorf("Docker daemon is not running or not accessible: %w", err)
+			return fmt.Errorf("docker daemon is not running or not accessible: %w", err)
 		}
 	}
 
@@ -347,15 +347,6 @@ func (b *LocalBesu) installBesu() error {
 	}
 
 	b.logger.Info("Installing Besu binary", "version", b.opts.Version, "platform", runtime.GOOS)
-
-	if runtime.GOOS == "darwin" {
-		err := b.installBesuMacOS()
-		if err != nil {
-			return err
-		}
-		b.logger.Info("Besu installed via Homebrew", "path", besuBinary)
-		return nil
-	}
 
 	err := b.downloadBesu(b.opts.Version)
 	if err != nil {
@@ -548,82 +539,6 @@ func copyDir(src string, dst string) error {
 		}
 	}
 
-	return nil
-}
-
-func (b *LocalBesu) installBesuMacOS() error {
-	// Check if brew is installed
-	if _, err := exec.LookPath("brew"); err != nil {
-		return fmt.Errorf("homebrew is not installed: %w", err)
-	}
-
-	// Add hyperledger/besu tap if not already added
-	tapCmd := exec.Command("brew", "tap", "hyperledger/besu")
-	if err := tapCmd.Run(); err != nil {
-		return fmt.Errorf("failed to tap hyperledger/besu: %w", err)
-	}
-
-	// Check if besu is already installed
-	checkCmd := exec.Command("brew", "list", "hyperledger/besu/besu")
-	if checkCmd.Run() == nil {
-		// Besu is installed, check version
-		versionCmd := exec.Command("besu", "--version")
-		output, err := versionCmd.Output()
-		if err != nil {
-			return fmt.Errorf("failed to get installed Besu version: %w", err)
-		}
-
-		// Parse installed version
-		installedVersion := strings.TrimSpace(string(output))
-		if strings.Contains(installedVersion, b.opts.Version) {
-			// Correct version is already installed, create symlink structure
-			return b.createMacOSBinaryStructure()
-		}
-
-		// Uninstall current version if it's different
-		uninstallCmd := exec.Command("brew", "uninstall", "hyperledger/besu/besu")
-		if err := uninstallCmd.Run(); err != nil {
-			return fmt.Errorf("failed to uninstall existing Besu version: %w", err)
-		}
-	}
-
-	// Install specific version
-	installCmd := exec.Command("brew", "install", "hyperledger/besu/besu")
-	if output, err := installCmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to install Besu %s: %w\nOutput: %s", b.opts.Version, err, string(output))
-	}
-
-	// Create binary structure
-	return b.createMacOSBinaryStructure()
-}
-
-// createMacOSBinaryStructure creates the proper directory structure and symlinks for macOS
-func (b *LocalBesu) createMacOSBinaryStructure() error {
-	binDir := filepath.Join(b.configService.GetDataPath(), "bin/besu", b.opts.Version)
-
-	// Create the bin directory structure
-	if err := os.MkdirAll(filepath.Join(binDir, "bin"), 0755); err != nil {
-		return fmt.Errorf("failed to create bin directory: %w", err)
-	}
-
-	// Determine the Homebrew binary path
-	brewPrefix := "/usr/local/opt/besu/bin/besu"
-	if runtime.GOARCH == "arm64" {
-		brewPrefix = "/opt/homebrew/opt/besu/bin/besu"
-	}
-
-	// Create symlink to our bin directory
-	targetBinary := b.GetBinaryPath()
-	if err := os.Symlink(brewPrefix, targetBinary); err != nil && !os.IsExist(err) {
-		return fmt.Errorf("failed to create symlink: %w", err)
-	}
-
-	// Verify the symlink works
-	if _, err := os.Stat(targetBinary); err != nil {
-		return fmt.Errorf("failed to verify symlink: %w", err)
-	}
-
-	b.logger.Info("Created Besu binary symlink", "path", targetBinary, "target", brewPrefix)
 	return nil
 }
 
