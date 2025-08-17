@@ -240,62 +240,6 @@ func (s *NodeService) validateFabricOrdererConfig(config *types.FabricOrdererCon
 	return nil
 }
 
-// validateBesuNodeConfig validates Besu node configuration
-func (s *NodeService) validateBesuNodeConfig(config *types.BesuNodeConfig) error {
-	// Validate required fields
-	if config.NetworkID == 0 {
-		return fmt.Errorf("network ID is required")
-	}
-	if config.KeyID == 0 {
-		return fmt.Errorf("key ID is required")
-	}
-	if config.P2PPort == 0 {
-		return fmt.Errorf("P2P port is required")
-	}
-	if config.RPCPort == 0 {
-		return fmt.Errorf("RPC port is required")
-	}
-	if config.P2PHost == "" {
-		return fmt.Errorf("P2P host is required")
-	}
-	if config.RPCHost == "" {
-		return fmt.Errorf("RPC host is required")
-	}
-	if config.ExternalIP == "" {
-		return fmt.Errorf("external IP is required")
-	}
-	if config.InternalIP == "" {
-		return fmt.Errorf("internal IP is required")
-	}
-
-	// Validate port ranges
-	if config.P2PPort < 1024 || config.P2PPort > 65535 {
-		return fmt.Errorf("P2P port must be between 1024 and 65535")
-	}
-	if config.RPCPort < 1024 || config.RPCPort > 65535 {
-		return fmt.Errorf("RPC port must be between 1024 and 65535")
-	}
-
-	// Validate IP addresses
-	if err := s.validateIPAddress(config.ExternalIP); err != nil {
-		return fmt.Errorf("invalid external IP: %w", err)
-	}
-	if err := s.validateIPAddress(config.InternalIP); err != nil {
-		return fmt.Errorf("invalid internal IP: %w", err)
-	}
-
-	// Validate deployment mode
-	if config.Mode != "service" && config.Mode != "docker" {
-		return fmt.Errorf("invalid deployment mode: %s (must be 'service' or 'docker')", config.Mode)
-	}
-
-	// Check for port conflicts
-	if config.P2PPort == config.RPCPort {
-		return fmt.Errorf("P2P port and RPC port cannot be the same")
-	}
-
-	return nil
-}
 
 // validateAddressFormat validates that an address has the correct host:port format
 func (s *NodeService) validateAddressFormat(address string) error {

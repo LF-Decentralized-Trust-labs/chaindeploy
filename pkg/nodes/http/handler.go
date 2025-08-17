@@ -2222,3 +2222,4 @@ func (h *NodeHandler) CheckBesuReadiness(w http.ResponseWriter, r *http.Request)
 	response.JSON(w, http.StatusOK, readiness)
 	return nil
 }
+
