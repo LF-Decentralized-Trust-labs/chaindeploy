@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useQuery } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { ArrowLeft } from 'lucide-react'
+import { useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 interface AuditLogDetails {
@@ -19,17 +20,17 @@ interface AuditLogDetails {
 	[key: string]: any
 }
 
-const severityColors = {
-	INFO: 'bg-blue-500',
-	WARNING: 'bg-yellow-500',
-	CRITICAL: 'bg-red-500',
-}
+const severityVariants = {
+	INFO: 'default',
+	WARNING: 'secondary',
+	CRITICAL: 'destructive',
+} as const
 
-const outcomeColors = {
-	SUCCESS: 'bg-green-500',
-	FAILURE: 'bg-red-500',
-	PENDING: 'bg-yellow-500',
-}
+const outcomeVariants = {
+	SUCCESS: 'default',
+	FAILURE: 'destructive',
+	PENDING: 'secondary',
+} as const
 
 export default function AuditLogDetailPage() {
 	const { id } = useParams()
@@ -42,8 +43,7 @@ export default function AuditLogDetailPage() {
 		return <div>Loading...</div>
 	}
 
-	const details = data?.details as AuditLogDetails | undefined
-
+	const details = useMemo(() => data?.details as AuditLogDetails | undefined, [data?.details])
 	return (
 		<div className="container mx-auto py-6">
 			<Button variant="ghost" className="mb-4" onClick={() => navigate('/settings/audit-logs')}>
@@ -76,11 +76,11 @@ export default function AuditLogDetailPage() {
 							</div>
 							<div>
 								<h3 className="text-sm font-medium text-muted-foreground">Severity</h3>
-								{data?.severity && <Badge className={`${severityColors[data.severity]} text-white`}>{data.severity}</Badge>}
+								{data?.severity && <Badge variant={severityVariants[data.severity] || 'default'}>{data.severity}</Badge>}
 							</div>
 							<div>
 								<h3 className="text-sm font-medium text-muted-foreground">Outcome</h3>
-								{data?.eventOutcome && <Badge className={`${outcomeColors[data.eventOutcome]} text-white`}>{data.eventOutcome}</Badge>}
+								{data?.eventOutcome && <Badge variant={outcomeVariants[data.eventOutcome] || 'default'}>{data.eventOutcome}</Badge>}
 							</div>
 							<div>
 								<h3 className="text-sm font-medium text-muted-foreground">Resource</h3>
@@ -127,7 +127,9 @@ export default function AuditLogDetailPage() {
 						{details && Object.keys(details).length > 0 && (
 							<div>
 								<h3 className="text-sm font-medium text-muted-foreground mb-2">Additional Details</h3>
-								<pre className="bg-muted p-4 rounded-lg overflow-auto whitespace-pre-wrap">{JSON.stringify(details, null, 2)}</pre>
+								<pre className="bg-muted/50 text-foreground p-4 rounded-lg overflow-hidden whitespace-pre-wrap break-words break-all word-break-break-all">
+									<code className="break-words break-all word-break-break-all">{JSON.stringify(details, null, 2)}</code>
+								</pre>
 							</div>
 						)}
 					</div>

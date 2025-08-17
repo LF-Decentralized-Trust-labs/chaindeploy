@@ -333,8 +333,8 @@ export function BesuNetworkDetails({ network }: BesuNetworkDetailsProps) {
 												<Copy className="h-4 w-4" />
 											</Button>
 										</div>
-										<pre className="text-sm overflow-auto bg-muted/50 p-4 rounded-md">
-											<code>{JSON.stringify(genesisConfig, null, 2)}</code>
+										<pre className="text-sm overflow-hidden bg-muted/50 p-4 rounded-md whitespace-pre-wrap break-words break-all word-break-break-all">
+											<code className="break-words break-all word-break-break-all">{JSON.stringify(genesisConfig, null, 2)}</code>
 										</pre>
 									</Card>
 								)}

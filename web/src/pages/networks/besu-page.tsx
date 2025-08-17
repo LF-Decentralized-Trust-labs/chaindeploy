@@ -15,7 +15,6 @@ export default function NetworkDetailPage() {
 			path: { id: Number(id) },
 		}),
 	})
-	console.log("genesisBLock", network?.genesisConfig)
 	const genesisConfig = useMemo(() => (network?.genesisConfig ? JSON.parse(network?.genesisConfig as any) : null), [network])
 	if (isLoading) {
 		return (
