@@ -13,7 +13,7 @@ import { BesuNodeDetails } from '@/components/nodes/BesuNodeDetails'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/utils'
@@ -131,9 +131,10 @@ export default function NodeDetailPage() {
 	const [searchParams, setSearchParams] = useSearchParams()
 	const [logs, setLogs] = useState<string>('')
 	const logsRef = useRef<HTMLTextAreaElement>(null)
-	const abortControllerRef = useRef<AbortController | null>(null)
+	const eventSourceRef = useRef<EventSource | null>(null)
 	const [showRenewCertDialog, setShowRenewCertDialog] = useState(false)
 	const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+	const [logRefreshKey, setLogRefreshKey] = useState(0)
 
 	// Get the active tab from URL or default to 'logs'
 	const activeTab = searchParams.get('tab') || 'logs'
@@ -158,33 +159,27 @@ export default function NodeDetailPage() {
 	const startNode = useMutation({
 		...postNodesByIdStartMutation(),
 		onSuccess: () => {
-			toast.success('Node started successfully')
+			refetchEvents()
 			refetch()
-		},
-		onError: (error: any) => {
-			toast.error(`Failed to start node: ${(error as any).error.message}`)
+			setLogRefreshKey(prev => prev + 1)
 		},
 	})
 
 	const stopNode = useMutation({
 		...postNodesByIdStopMutation(),
 		onSuccess: () => {
-			toast.success('Node stopped successfully')
+			refetchEvents()
 			refetch()
-		},
-		onError: (error: any) => {
-			toast.error(`Failed to stop node: ${(error as any).error.message}`)
+			setLogRefreshKey(prev => prev + 1)
 		},
 	})
 
 	const restartNode = useMutation({
 		...postNodesByIdRestartMutation(),
 		onSuccess: () => {
-			toast.success('Node restarted successfully')
+			refetchEvents()
 			refetch()
-		},
-		onError: (error: any) => {
-			toast.error(`Failed to restart node: ${(error as any).error.message}`)
+			setLogRefreshKey(prev => prev + 1)
 		},
 	})
 
@@ -214,22 +209,46 @@ export default function NodeDetailPage() {
 		}),
 	})
 
+	// Function to refresh logs by restarting the EventSource connection
+	const refreshLogs = () => {
+		setLogRefreshKey(prev => prev + 1)
+		setLogs('') // Clear existing logs
+	}
+
 	const handleAction = async (action: string) => {
 		if (!node) return
 
 		try {
 			switch (action) {
 				case 'start':
-					await startNode.mutateAsync({ path: { id: node.id! } })
-					refetchEvents()
+					await toast.promise(
+						startNode.mutateAsync({ path: { id: node.id! } }),
+						{
+							loading: 'Starting node...',
+							success: 'Node started successfully',
+							error: (error: any) => `Failed to start node: ${error?.error?.message || error.message}`,
+						}
+					)
 					break
 				case 'stop':
-					await stopNode.mutateAsync({ path: { id: node.id! } })
-					refetchEvents()
+					await toast.promise(
+						stopNode.mutateAsync({ path: { id: node.id! } }),
+						{
+							loading: 'Stopping node...',
+							success: 'Node stopped successfully',
+							error: (error: any) => `Failed to stop node: ${error?.error?.message || error.message}`,
+						}
+					)
 					break
 				case 'restart':
-					await restartNode.mutateAsync({ path: { id: node.id! } })
-					refetchEvents()
+					await toast.promise(
+						restartNode.mutateAsync({ path: { id: node.id! } }),
+						{
+							loading: 'Restarting node...',
+							success: 'Node restarted successfully',
+							error: (error: any) => `Failed to restart node: ${error?.error?.message || error.message}`,
+						}
+					)
 					break
 				case 'delete':
 					setShowDeleteDialog(true)
@@ -239,7 +258,7 @@ export default function NodeDetailPage() {
 					break
 			}
 		} catch (error) {
-			// Error handling is done in the mutation callbacks
+			// Error handling is now done by toast.promise
 		}
 	}
 
@@ -257,10 +276,16 @@ export default function NodeDetailPage() {
 	}
 
 	useEffect(() => {
+		// Close existing EventSource if it exists
+		if (eventSourceRef.current) {
+			eventSourceRef.current.close()
+		}
+
 		const eventSource = new EventSource(`/api/v1/nodes/${id}/logs?follow=true`, {
 			withCredentials: true,
 		})
 
+		eventSourceRef.current = eventSource
 		let fullText = ''
 
 		eventSource.onmessage = (event) => {
@@ -284,8 +309,11 @@ export default function NodeDetailPage() {
 
 		return () => {
 			eventSource.close()
+			if (eventSourceRef.current === eventSource) {
+				eventSourceRef.current = null
+			}
 		}
-	}, [id])
+	}, [id, logRefreshKey])
 
 	if (isLoading) {
 		return <div>Loading...</div>

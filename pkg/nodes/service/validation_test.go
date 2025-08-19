@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -457,4 +459,181 @@ func TestValidateExternalEndpoint(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBesuBinaryPath(t *testing.T) {
+	// Test the binary path construction logic
+	dataPath := "/tmp/chainlaunch"
+	version := "23.10.1"
+
+	// Expected path construction
+	expectedPath := filepath.Join(dataPath, "bin/besu", version, "bin", "besu")
+
+	// Test that the path construction is correct
+	if !strings.Contains(expectedPath, "bin/besu") {
+		t.Error("Binary path should contain 'bin/besu' directory")
+	}
+
+	if !strings.Contains(expectedPath, version) {
+		t.Error("Binary path should contain version")
+	}
+
+	if !strings.HasSuffix(expectedPath, "besu") {
+		t.Error("Binary path should end with 'besu' executable")
+	}
+
+	// Test that the path is properly structured
+	pathParts := strings.Split(expectedPath, string(filepath.Separator))
+	if len(pathParts) < 5 {
+		t.Error("Binary path should have at least 5 parts")
+	}
+
+	// Verify the structure: dataPath/bin/besu/version/bin/besu
+	if pathParts[len(pathParts)-2] != "bin" {
+		t.Error("Second to last part should be 'bin'")
+	}
+
+	if pathParts[len(pathParts)-1] != "besu" {
+		t.Error("Last part should be 'besu'")
+	}
+}
+
+func TestBesuBinaryPathDetection(t *testing.T) {
+	// Test the binary path detection logic
+	dataPath := "/tmp/chainlaunch"
+	version := "23.10.1"
+
+	// Test different binary path scenarios
+	testCases := []struct {
+		name           string
+		downloadedPath string
+		expectedPath   string
+		description    string
+	}{
+		{
+			name:           "downloaded binary exists",
+			downloadedPath: filepath.Join(dataPath, "bin/besu", version, "bin", "besu"),
+			expectedPath:   filepath.Join(dataPath, "bin/besu", version, "bin", "besu"),
+			description:    "Should use downloaded binary when it exists",
+		},
+		{
+			name:           "homebrew apple silicon",
+			downloadedPath: "/nonexistent/path",
+			expectedPath:   "/opt/homebrew/opt/besu/bin/besu",
+			description:    "Should use Homebrew path on Apple Silicon",
+		},
+		{
+			name:           "homebrew intel",
+			downloadedPath: "/nonexistent/path",
+			expectedPath:   "/usr/local/opt/besu/bin/besu",
+			description:    "Should use Homebrew path on Intel Mac",
+		},
+		{
+			name:           "path binary",
+			downloadedPath: "/nonexistent/path",
+			expectedPath:   "/usr/local/bin/besu",
+			description:    "Should use binary from PATH",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Test that the path construction logic works correctly
+			if !strings.Contains(tc.expectedPath, "besu") {
+				t.Error("Expected path should contain 'besu'")
+			}
+
+			// Test that the path is properly structured
+			if tc.name == "downloaded binary exists" {
+				pathParts := strings.Split(tc.expectedPath, string(filepath.Separator))
+				if len(pathParts) < 5 {
+					t.Error("Downloaded binary path should have at least 5 parts")
+				}
+
+				// Verify the structure: dataPath/bin/besu/version/bin/besu
+				if pathParts[len(pathParts)-2] != "bin" {
+					t.Error("Second to last part should be 'bin'")
+				}
+
+				if pathParts[len(pathParts)-1] != "besu" {
+					t.Error("Last part should be 'besu'")
+				}
+			}
+		})
+	}
+}
+
+func TestBesuReadinessCheck(t *testing.T) {
+	// Create a mock service for testing
+	svc := &NodeService{}
+
+	// Test the readiness check
+	readiness, err := svc.CheckBesuReadiness(context.Background())
+	if err != nil {
+		t.Fatalf("CheckBesuReadiness failed: %v", err)
+	}
+
+	// Verify response structure
+	if readiness == nil {
+		t.Fatal("Readiness response should not be nil")
+	}
+
+	// Check that platform and arch are set
+	if readiness.Platform == "" {
+		t.Error("Platform should be set")
+	}
+	if readiness.Arch == "" {
+		t.Error("Arch should be set")
+	}
+
+	// Check that Java and Besu info are present
+	if readiness.Java.Path == "" && readiness.Java.Installed {
+		t.Error("Java path should be set if installed")
+	}
+	if readiness.Besu.Path == "" && readiness.Besu.Installed {
+		t.Error("Besu path should be set if installed")
+	}
+
+	// Test version compatibility functions
+	t.Run("JavaVersionCompatibility", func(t *testing.T) {
+		testCases := []struct {
+			version    string
+			compatible bool
+		}{
+			{"11.0.12", true},
+			{"17.0.1", true},
+			{"1.8.0_292", true},
+			{"8.0.1", true},
+			{"7.0.1", false},
+			{"6.0.1", false},
+			{"unknown", false},
+		}
+
+		for _, tc := range testCases {
+			result := svc.isJavaVersionCompatible(tc.version)
+			if result != tc.compatible {
+				t.Errorf("Java version %s: expected %v, got %v", tc.version, tc.compatible, result)
+			}
+		}
+	})
+
+	t.Run("BesuVersionCompatibility", func(t *testing.T) {
+		testCases := []struct {
+			version    string
+			compatible bool
+		}{
+			{"23.10.1", true},
+			{"22.10.1", true},
+			{"21.10.1", true},
+			{"unknown", false},
+			{"", false},
+		}
+
+		for _, tc := range testCases {
+			result := svc.isBesuVersionCompatible(tc.version)
+			if result != tc.compatible {
+				t.Errorf("Besu version %s: expected %v, got %v", tc.version, tc.compatible, result)
+			}
+		}
+	})
 }

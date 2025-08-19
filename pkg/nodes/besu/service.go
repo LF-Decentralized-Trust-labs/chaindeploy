@@ -104,6 +104,8 @@ ExecStart={{.Cmd}}
 Restart=on-failure
 RestartSec=10
 LimitNOFILE=65536
+StandardOutput=append:{{.LogPath}}
+StandardError=append:{{.LogPath}}
 {{range .EnvVars}}{{.}}
 {{end}}
 
@@ -115,11 +117,13 @@ WantedBy=multi-user.target
 		ID      string
 		DirPath string
 		Cmd     string
+		LogPath string
 		EnvVars []string
 	}{
 		ID:      b.opts.ID,
 		DirPath: dirPath,
 		Cmd:     cmd,
+		LogPath: b.GetStdOutPath(),
 		EnvVars: envStrings,
 	}
 

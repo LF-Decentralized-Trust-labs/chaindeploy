@@ -15,7 +15,10 @@ interface ApproveChaincodeDialogProps {
 	onError?: (error: any) => void
 }
 function ApproveChaincodeDialog({ approveDialogOpen, setApproveDialogOpen, availablePeers, definitionId, onSuccess, onError }: ApproveChaincodeDialogProps) {
-	const [selectedPeerId, setSelectedPeerId] = useState<string | null>(null)
+	const [selectedPeerId, setSelectedPeerId] = useState<string | null>(() => {
+		// Select the first peer by default if available
+		return availablePeers.length > 0 ? availablePeers[0].nodeId!.toString() : null
+	})
 	const approveMutation = useMutation({
 		...postScFabricDefinitionsByDefinitionIdApproveMutation(),
 		onSuccess: () => {

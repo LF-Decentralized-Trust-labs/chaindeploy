@@ -57,6 +57,7 @@ func (h *NodeHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/defaults/fabric-orderer", response.Middleware(h.GetFabricOrdererDefaults))
 		r.Get("/defaults/fabric", response.Middleware(h.GetFabricNodesDefaults))
 		r.Get("/defaults/besu-node", response.Middleware(h.GetBesuNodeDefaults))
+		r.Get("/readiness/besu", response.Middleware(h.CheckBesuReadiness))
 		r.Get("/{id}", response.Middleware(h.GetNode))
 		r.Post("/{id}/start", response.Middleware(h.StartNode))
 		r.Post("/{id}/stop", response.Middleware(h.StopNode))
@@ -2201,3 +2202,24 @@ func (h *NodeHandler) QbftGetValidatorsByBlockNumber(w http.ResponseWriter, r *h
 
 	return response.WriteJSON(w, http.StatusOK, validators)
 }
+
+// CheckBesuReadiness checks if the system is ready for Besu node deployment
+// @Summary Check Besu readiness
+// @Description Check if Java and Besu are installed and ready for deployment
+// @Tags nodes
+// @Accept json
+// @Produce json
+// @Success 200 {object} service.BesuReadinessResponse
+// @Router /nodes/readiness/besu [get]
+func (h *NodeHandler) CheckBesuReadiness(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	readiness, err := h.service.CheckBesuReadiness(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to check Besu readiness: %w", err)
+	}
+
+	response.JSON(w, http.StatusOK, readiness)
+	return nil
+}
+
