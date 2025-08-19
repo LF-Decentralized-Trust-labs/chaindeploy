@@ -17,6 +17,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
+	fabricclient "github.com/hyperledger/fabric-gateway/pkg/client"
+	"github.com/hyperledger/fabric-protos-go-apiv2/gateway"
+	"google.golang.org/grpc/status"
 )
 
 // Handler handles HTTP requests for smart contract deployment
@@ -450,8 +453,22 @@ func (h *Handler) ApproveFabricChaincode(w http.ResponseWriter, r *http.Request)
 	reporter := NewInMemoryDeploymentStatusReporter()
 	result, err := ApproveChaincode(params, reporter)
 	if err != nil {
-		h.logger.Error("Fabric chaincode approve failed", "error", err)
-		return errors.NewInternalError("approve failed", err, nil)
+		endorseError, ok := err.(*fabricclient.EndorseError)
+		if ok {
+			detailsStr := []string{}
+			for _, detail := range status.Convert(err).Details() {
+				switch detail := detail.(type) {
+				case *gateway.ErrorDetail:
+					detailsStr = append(detailsStr, fmt.Sprintf("- address: %s; mspId: %s; message: %s\n", detail.GetAddress(), detail.GetMspId(), detail.GetMessage()))
+				}
+			}
+			err = fmt.Errorf("failed to approve chaincode: %s (gRPC status: %s)",
+				endorseError.TransactionError.Error(),
+				strings.Join(detailsStr, "\n"))
+		} else {
+			err = fmt.Errorf("failed to approve chaincode: %w", err)
+		}
+		return err
 	}
 	resp := FabricApproveResponse{
 		Status:  "success",
@@ -523,8 +540,22 @@ func (h *Handler) CommitFabricChaincode(w http.ResponseWriter, r *http.Request) 
 	reporter := NewInMemoryDeploymentStatusReporter()
 	result, err := CommitChaincode(params, reporter)
 	if err != nil {
-		h.logger.Error("Fabric chaincode commit failed", "error", err)
-		return errors.NewInternalError("commit failed", err, nil)
+		endorseError, ok := err.(*fabricclient.EndorseError)
+		if ok {
+			detailsStr := []string{}
+			for _, detail := range status.Convert(err).Details() {
+				switch detail := detail.(type) {
+				case *gateway.ErrorDetail:
+					detailsStr = append(detailsStr, fmt.Sprintf("- address: %s; mspId: %s; message: %s\n", detail.GetAddress(), detail.GetMspId(), detail.GetMessage()))
+				}
+			}
+			err = fmt.Errorf("failed to approve chaincode: %s (gRPC status: %s)",
+				endorseError.TransactionError.Error(),
+				strings.Join(detailsStr, "\n"))
+		} else {
+			err = fmt.Errorf("failed to approve chaincode: %w", err)
+		}
+		return err
 	}
 	resp := FabricCommitResponse{
 		Status:  "success",
