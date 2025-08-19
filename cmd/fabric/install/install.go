@@ -332,8 +332,9 @@ func (c installCmd) start() error {
 		err = os.WriteFile(c.envFile, []byte(fmt.Sprintf(`
 CORE_CHAINCODE_ADDRESS=%s
 CORE_CHAINCODE_ID=%s
+CORE_CHAINCODE_ID_NAME=%s
 CORE_PEER_TLS_ENABLED=false
-`, c.chaincodeAddress, packageID)), 0777)
+`, c.chaincodeAddress, packageID, packageID)), 0777)
 		if err != nil {
 			c.logger.Warn("Failed to write .env file: %s", err)
 			return err

@@ -475,6 +475,7 @@ func (d *DockerChaincodeDeployer) Deploy(params DockerDeployParams, reporter Dep
 	env := []string{
 		fmt.Sprintf("CHAINCODE_ID=%s", params.PackageID),
 		fmt.Sprintf("CORE_CHAINCODE_ID=%s", params.PackageID),
+		fmt.Sprintf("CORE_CHAINCODE_ID_NAME=%s", params.PackageID),
 	}
 	// Chaincode address logic
 	chaincodeAddress := params.ChaincodeAddress // Assume this field exists in params, or add as needed
