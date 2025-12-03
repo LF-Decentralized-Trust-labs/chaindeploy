@@ -75,6 +75,7 @@ type FabricOrdererConfig struct {
 // BesuNodeConfig represents the configuration for a Besu node
 type BesuNodeConfig struct {
 	BaseNodeConfig
+	Version     string            `json:"version" validate:"required"`
 	NetworkID   uint              `json:"networkId" validate:"required"`
 	P2PPort     uint              `json:"p2pPort" validate:"required"`
 	RPCPort     uint              `json:"rpcPort" validate:"required"`

@@ -528,6 +528,7 @@ func (f *FabricLifecycle) PreStart(ctx context.Context, params PreStartParams) (
 	env := map[string]string{
 		"CORE_CHAINCODE_ADDRESS": "0.0.0.0:4000",
 		"CORE_CHAINCODE_ID":      packageID,
+		"CORE_CHAINCODE_ID_NAME": packageID,
 		"CORE_PEER_TLS_ENABLED":  "false",
 	}
 

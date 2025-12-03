@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"bytes"
+	"os/exec"
 
 	"github.com/chainlaunch/chainlaunch/pkg/db"
 	"github.com/chainlaunch/chainlaunch/pkg/errors"
@@ -247,7 +248,10 @@ func (s *NodeService) startBesuNode(ctx context.Context, dbNode *db.Node) error 
 	if err := json.Unmarshal([]byte(network.Config.String), &networkConfig); err != nil {
 		return fmt.Errorf("failed to unmarshal network config: %w", err)
 	}
-
+	version := besuNodeConfig.Version
+	if version == "" {
+		version = "25.7.0"
+	}
 	// Create LocalBesu instance
 	localBesu := besu.NewLocalBesu(
 		besu.StartBesuOpts{
@@ -261,7 +265,7 @@ func (s *NodeService) startBesuNode(ctx context.Context, dbNode *db.Node) error 
 			MinerAddress:    key.EthereumAddress,
 			ConsensusType:   "qbft", // TODO: get consensus type from network
 			BootNodes:       besuNodeConfig.BootNodes,
-			Version:         "25.4.1", // TODO: get version from network
+			Version:         version,
 			NodePrivateKey:  strings.TrimPrefix(privateKeyDecrypted, "0x"),
 			Env:             besuNodeConfig.Env,
 			P2PHost:         besuNodeConfig.P2PHost,
@@ -634,17 +638,18 @@ func (s *NodeService) initializeBesuNode(ctx context.Context, dbNode *db.Node, c
 			Type: "besu",
 			Mode: string(config.Mode),
 		},
-		KeyID:          config.KeyID,
-		P2PPort:        config.P2PPort,
-		RPCPort:        config.RPCPort,
-		NetworkID:      config.NetworkID,
-		ExternalIP:     config.ExternalIP,
-		P2PHost:        config.P2PHost,
-		RPCHost:        config.RPCHost,
-		InternalIP:     config.InternalIP,
-		EnodeURL:       enodeURL,
-		MetricsEnabled: config.MetricsEnabled,
-		MetricsPort:    config.MetricsPort,
+		KeyID:           config.KeyID,
+		P2PPort:         config.P2PPort,
+		RPCPort:         config.RPCPort,
+		NetworkID:       config.NetworkID,
+		ExternalIP:      config.ExternalIP,
+		P2PHost:         config.P2PHost,
+		RPCHost:         config.RPCHost,
+		InternalIP:      config.InternalIP,
+		EnodeURL:        enodeURL,
+		MetricsEnabled:  config.MetricsEnabled,
+		MetricsPort:     config.MetricsPort,
+		MetricsProtocol: "PROMETHEUS",
 	}
 
 	// Update node endpoint
@@ -1290,4 +1295,310 @@ func (s *NodeService) GetBesuRPCClient(ctx context.Context, nodeID int64) (*RPCC
 	}
 
 	return NewRPCClient(besuConfig.RPCHost, besuConfig.RPCPort), nil
+}
+
+// BesuReadinessResponse represents the response for Besu readiness check
+type BesuReadinessResponse struct {
+	Ready    bool              `json:"ready"`
+	Java     JavaReadinessInfo `json:"java"`
+	Besu     BesuReadinessInfo `json:"besu"`
+	Platform string            `json:"platform"`
+	Arch     string            `json:"arch"`
+	Warnings []string          `json:"warnings,omitempty"`
+	Errors   []string          `json:"errors,omitempty"`
+}
+
+// JavaReadinessInfo represents Java installation information
+type JavaReadinessInfo struct {
+	Installed bool   `json:"installed"`
+	Version   string `json:"version,omitempty"`
+	Path      string `json:"path,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+// BesuReadinessInfo represents Besu installation information
+type BesuReadinessInfo struct {
+	Installed bool   `json:"installed"`
+	Version   string `json:"version,omitempty"`
+	Path      string `json:"path,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+// CheckBesuReadiness checks if the system is ready for Besu node deployment
+func (s *NodeService) CheckBesuReadiness(ctx context.Context) (*BesuReadinessResponse, error) {
+	response := &BesuReadinessResponse{
+		Platform: runtime.GOOS,
+		Arch:     runtime.GOARCH,
+	}
+
+	// Check Java installation
+	javaInfo := s.checkJavaInstallation()
+	response.Java = javaInfo
+
+	// Check Besu installation
+	besuInfo := s.checkBesuInstallation()
+	response.Besu = besuInfo
+
+	// Determine overall readiness
+	response.Ready = javaInfo.Installed && besuInfo.Installed
+
+	// Add warnings for potential issues
+	if !javaInfo.Installed {
+		response.Errors = append(response.Errors, "Java is not installed or not accessible")
+	}
+	if !besuInfo.Installed {
+		response.Errors = append(response.Errors, "Besu is not installed or not accessible")
+	}
+
+	// Add warnings for version compatibility
+	if javaInfo.Installed && javaInfo.Version != "" {
+		if !s.isJavaVersionCompatible(javaInfo.Version) {
+			response.Warnings = append(response.Warnings,
+				fmt.Sprintf("Java version %s may not be optimal for Besu. Recommended: Java 11 or higher", javaInfo.Version))
+		}
+	}
+
+	if besuInfo.Installed && besuInfo.Version != "" {
+		if !s.isBesuVersionCompatible(besuInfo.Version) {
+			response.Warnings = append(response.Warnings,
+				fmt.Sprintf("Besu version %s may not be optimal. Recommended: Latest stable version", besuInfo.Version))
+		}
+	}
+
+	return response, nil
+}
+
+// checkJavaInstallation checks if Java is installed and accessible
+func (s *NodeService) checkJavaInstallation() JavaReadinessInfo {
+	info := JavaReadinessInfo{}
+
+	// Check JAVA_HOME environment variable
+	javaHome := os.Getenv("JAVA_HOME")
+	if javaHome != "" {
+		// Verify JAVA_HOME directory exists
+		if _, err := os.Stat(javaHome); err == nil {
+			javaCmd := filepath.Join(javaHome, "bin", "java")
+			if version, err := s.getJavaVersion(javaCmd); err == nil {
+				info.Installed = true
+				info.Version = version
+				info.Path = javaCmd
+				return info
+			}
+		}
+	}
+
+	// Check if java is in PATH
+	if path, err := exec.LookPath("java"); err == nil {
+		if version, err := s.getJavaVersion(path); err == nil {
+			info.Installed = true
+			info.Version = version
+			info.Path = path
+			return info
+		}
+	}
+
+	info.Error = "Java is not installed or not accessible"
+	return info
+}
+
+// checkBesuInstallation checks if Besu is installed and accessible
+func (s *NodeService) checkBesuInstallation() BesuReadinessInfo {
+	info := BesuReadinessInfo{}
+
+	// Check if besu is in PATH
+	if path, err := exec.LookPath("besu"); err == nil {
+		if version, err := s.getBesuVersion(path); err == nil {
+			info.Installed = true
+			info.Version = version
+			info.Path = path
+			return info
+		}
+	}
+
+	// Check Homebrew paths (macOS)
+	if runtime.GOOS == "darwin" {
+		brewPaths := []string{
+			"/opt/homebrew/opt/besu/bin/besu", // Apple Silicon
+			"/usr/local/opt/besu/bin/besu",    // Intel
+		}
+
+		for _, brewPath := range brewPaths {
+			if _, err := os.Stat(brewPath); err == nil {
+				if version, err := s.getBesuVersion(brewPath); err == nil {
+					info.Installed = true
+					info.Version = version
+					info.Path = brewPath
+					return info
+				}
+			}
+		}
+	}
+
+	// Check downloaded binary path
+	configService := s.configService
+	if configService != nil {
+		binDir := filepath.Join(configService.GetDataPath(), "bin/besu")
+		if entries, err := os.ReadDir(binDir); err == nil {
+			for _, entry := range entries {
+				if entry.IsDir() {
+					besuPath := filepath.Join(binDir, entry.Name(), "bin", "besu")
+					if _, err := os.Stat(besuPath); err == nil {
+						if version, err := s.getBesuVersion(besuPath); err == nil {
+							info.Installed = true
+							info.Version = version
+							info.Path = besuPath
+							return info
+						}
+					}
+				}
+			}
+		}
+	}
+
+	info.Error = "Besu is not installed or not accessible"
+	return info
+}
+
+// getJavaVersion gets the Java version from a Java binary path
+func (s *NodeService) getJavaVersion(javaPath string) (string, error) {
+	cmd := exec.Command(javaPath, "-version")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("failed to get Java version: %w", err)
+	}
+
+	// Parse version from output (e.g., "openjdk version "11.0.12" 2021-07-20")
+	outputStr := string(output)
+	lines := strings.Split(outputStr, "\n")
+	if len(lines) > 0 {
+		line := lines[0]
+		if strings.Contains(line, "version") {
+			// Extract version number
+			parts := strings.Fields(line)
+			for i, part := range parts {
+				if part == "version" && i+1 < len(parts) {
+					version := strings.Trim(parts[i+1], `"`)
+					return version, nil
+				}
+			}
+		}
+	}
+
+	return "unknown", nil
+}
+
+// getBesuVersion gets the Besu version from a Besu binary path
+func (s *NodeService) getBesuVersion(besuPath string) (string, error) {
+	cmd := exec.Command(besuPath, "--version")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("failed to get Besu version: %w", err)
+	}
+
+	// Parse version from output (e.g., "Hyperledger Besu v23.10.1")
+	outputStr := strings.TrimSpace(string(output))
+	if strings.Contains(outputStr, "Hyperledger Besu") {
+		// Extract version number
+		parts := strings.Fields(outputStr)
+		for i, part := range parts {
+			if strings.HasPrefix(part, "v") && i > 0 {
+				return strings.TrimPrefix(part, "v"), nil
+			}
+		}
+	}
+
+	return "unknown", nil
+}
+
+// isJavaVersionCompatible checks if the Java version is compatible with Besu
+func (s *NodeService) isJavaVersionCompatible(version string) bool {
+	// Basic version check - Java 11 or higher is recommended
+	if strings.Contains(version, "11") || strings.Contains(version, "12") ||
+		strings.Contains(version, "13") || strings.Contains(version, "14") ||
+		strings.Contains(version, "15") || strings.Contains(version, "16") ||
+		strings.Contains(version, "17") || strings.Contains(version, "18") ||
+		strings.Contains(version, "19") || strings.Contains(version, "20") ||
+		strings.Contains(version, "21") {
+		return true
+	}
+
+	// Check for Java 8 (minimum required)
+	if strings.Contains(version, "1.8") || strings.Contains(version, "8") {
+		return true
+	}
+
+	return false
+}
+
+// isBesuVersionCompatible checks if the Besu version is compatible
+func (s *NodeService) isBesuVersionCompatible(version string) bool {
+	// Basic version check - any recent version should be fine
+	// This is a simple check, could be enhanced with more specific version requirements
+	if version == "unknown" {
+		return false
+	}
+
+	// Check if version contains numbers (basic validation)
+	if strings.ContainsAny(version, "0123456789") {
+		return true
+	}
+
+	return false
+}
+
+// validateBesuNodeConfig validates Besu node configuration
+func (s *NodeService) validateBesuNodeConfig(config *types.BesuNodeConfig) error {
+	// Validate required fields
+	if config.NetworkID == 0 {
+		return fmt.Errorf("network ID is required")
+	}
+	if config.KeyID == 0 {
+		return fmt.Errorf("key ID is required")
+	}
+	if config.P2PPort == 0 {
+		return fmt.Errorf("P2P port is required")
+	}
+	if config.RPCPort == 0 {
+		return fmt.Errorf("RPC port is required")
+	}
+	if config.P2PHost == "" {
+		return fmt.Errorf("P2P host is required")
+	}
+	if config.RPCHost == "" {
+		return fmt.Errorf("RPC host is required")
+	}
+	if config.ExternalIP == "" {
+		return fmt.Errorf("external IP is required")
+	}
+	if config.InternalIP == "" {
+		return fmt.Errorf("internal IP is required")
+	}
+
+	// Validate port ranges
+	if config.P2PPort < 1024 || config.P2PPort > 65535 {
+		return fmt.Errorf("P2P port must be between 1024 and 65535")
+	}
+	if config.RPCPort < 1024 || config.RPCPort > 65535 {
+		return fmt.Errorf("RPC port must be between 1024 and 65535")
+	}
+
+	// Validate IP addresses
+	if err := s.validateIPAddress(config.ExternalIP); err != nil {
+		return fmt.Errorf("invalid external IP: %w", err)
+	}
+	if err := s.validateIPAddress(config.InternalIP); err != nil {
+		return fmt.Errorf("invalid internal IP: %w", err)
+	}
+
+	// Validate deployment mode
+	if config.Mode != "service" && config.Mode != "docker" {
+		return fmt.Errorf("invalid deployment mode: %s (must be 'service' or 'docker')", config.Mode)
+	}
+
+	// Check for port conflicts
+	if config.P2PPort == config.RPCPort {
+		return fmt.Errorf("P2P port and RPC port cannot be the same")
+	}
+
+	return nil
 }

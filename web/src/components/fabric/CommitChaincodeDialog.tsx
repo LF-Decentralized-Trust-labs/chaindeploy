@@ -17,7 +17,10 @@ interface CommitChaincodeDialogProps {
 }
 
 function CommitChaincodeDialog({ commitDialogOpen, setCommitDialogOpen, availablePeers, definitionId, onSuccess, onError }: CommitChaincodeDialogProps) {
-	const [selectedPeerId, setSelectedPeerId] = useState<string | null>(null)
+	const [selectedPeerId, setSelectedPeerId] = useState<string | null>(() => {
+		// Select the first peer by default if available
+		return availablePeers.length > 0 ? availablePeers[0].nodeId!.toString() : null
+	})
 	const commitMutation = useMutation({
 		...postScFabricDefinitionsByDefinitionIdCommitMutation(),
 		onSuccess: () => {

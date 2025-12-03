@@ -91,6 +91,7 @@ export default function EditBesuNodePage() {
 		metricsEnabled: node.besuNode?.metricsEnabled ?? false,
 		metricsPort: node.besuNode.metricsPort,
 		metricsHost: node.besuNode.metricsHost,
+		version: node.besuNode?.version || '25.7.0',
 		bootNodes: node.besuNode?.bootNodes?.join(',') || '',
 	}
 

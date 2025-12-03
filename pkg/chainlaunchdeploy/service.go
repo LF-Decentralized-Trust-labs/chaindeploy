@@ -814,7 +814,7 @@ func buildChaincodeDockerLabels(definition *ChaincodeDefinition, chaincode *Chai
 }
 
 // DeployChaincodeByDefinition deploys a chaincode definition using Docker image
-func (s *ChaincodeService) DeployChaincodeByDefinition(ctx context.Context, definitionID int64) error {
+func (s *ChaincodeService) DeployChaincodeByDefinition(ctx context.Context, definitionID int64, environmentVariables map[string]string) error {
 	definition, err := s.GetChaincodeDefinition(ctx, definitionID)
 	if err != nil {
 		eventData := DeployChaincodeEventData{HostPort: "", ContainerPort: "", Result: "failure", ErrorMessage: err.Error()}
@@ -848,7 +848,19 @@ func (s *ChaincodeService) DeployChaincodeByDefinition(ctx context.Context, defi
 	}
 	labels := buildChaincodeDockerLabels(definition, chaincodeDB)
 	reporter := &loggerStatusReporter{logger: s.logger}
-	_, err = DeployChaincodeWithDockerImageWithLabels(definition.DockerImage, packageID, portStr, internalPort, labels, reporter)
+
+	// Create deployment parameters with environment variables from the request
+	params := DockerDeployParams{
+		DockerImage:          definition.DockerImage,
+		PackageID:            packageID,
+		HostPort:             portStr,
+		ContainerPort:        internalPort,
+		Labels:               labels,
+		EnvironmentVariables: environmentVariables, // Use the environment variables from the request
+	}
+
+	deployer := NewDockerChaincodeDeployer()
+	_, err = deployer.Deploy(params, reporter)
 	if err != nil {
 		eventData := DeployChaincodeEventData{HostPort: fmt.Sprintf("%s:%d", host, exposedPort), ContainerPort: internalPort, Result: "failure", ErrorMessage: err.Error()}
 		_ = s.AddChaincodeDefinitionEvent(ctx, definitionID, "deploy", eventData)

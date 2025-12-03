@@ -475,6 +475,7 @@ func (d *DockerChaincodeDeployer) Deploy(params DockerDeployParams, reporter Dep
 	env := []string{
 		fmt.Sprintf("CHAINCODE_ID=%s", params.PackageID),
 		fmt.Sprintf("CORE_CHAINCODE_ID=%s", params.PackageID),
+		fmt.Sprintf("CORE_CHAINCODE_ID_NAME=%s", params.PackageID),
 	}
 	// Chaincode address logic
 	chaincodeAddress := params.ChaincodeAddress // Assume this field exists in params, or add as needed
@@ -489,6 +490,11 @@ func (d *DockerChaincodeDeployer) Deploy(params DockerDeployParams, reporter Dep
 			fmt.Sprintf("CHAINCODE_SERVER_ADDRESS=%s", chaincodeAddress),
 			fmt.Sprintf("CORE_CHAINCODE_ADDRESS=%s", chaincodeAddress),
 		)
+	}
+
+	// Add custom environment variables
+	for key, value := range params.EnvironmentVariables {
+		env = append(env, fmt.Sprintf("%s=%s", key, value))
 	}
 	exposedPort := nat.Port(fmt.Sprintf("%s/tcp", containerPort))
 	config := &container.Config{
@@ -574,6 +580,33 @@ func DeployChaincodeWithDockerImageWithLabels(dockerImage, packageID, hostPort, 
 	return deployer.Deploy(params, reporter)
 }
 
+// DeployChaincodeWithDockerImageWithEnvironmentVariables is a wrapper for DockerChaincodeDeployer.Deploy that adds environment variables
+func DeployChaincodeWithDockerImageWithEnvironmentVariables(dockerImage, packageID, hostPort, containerPort string, environmentVariables map[string]string, reporter DeploymentStatusReporter) (DeploymentResult, error) {
+	params := DockerDeployParams{
+		DockerImage:          dockerImage,
+		PackageID:            packageID,
+		HostPort:             hostPort,
+		ContainerPort:        containerPort,
+		EnvironmentVariables: environmentVariables,
+	}
+	deployer := NewDockerChaincodeDeployer()
+	return deployer.Deploy(params, reporter)
+}
+
+// DeployChaincodeWithDockerImageWithLabelsAndEnvironmentVariables is a wrapper for DockerChaincodeDeployer.Deploy that adds both labels and environment variables
+func DeployChaincodeWithDockerImageWithLabelsAndEnvironmentVariables(dockerImage, packageID, hostPort, containerPort string, labels map[string]string, environmentVariables map[string]string, reporter DeploymentStatusReporter) (DeploymentResult, error) {
+	params := DockerDeployParams{
+		DockerImage:          dockerImage,
+		PackageID:            packageID,
+		HostPort:             hostPort,
+		ContainerPort:        containerPort,
+		Labels:               labels,
+		EnvironmentVariables: environmentVariables,
+	}
+	deployer := NewDockerChaincodeDeployer()
+	return deployer.Deploy(params, reporter)
+}
+
 type fabricDeployer struct{}
 
 // NewFabricDeployer returns a new instance of the Fabric deployer
@@ -624,10 +657,11 @@ func (d *fabricDeployer) DeployEVMContract(params EVMParams, reporter Deployment
 // - HostPort: the port to listen on the host (if empty, a free port is chosen)
 // - ContainerPort: the port to map to inside the container (default "7052" if empty)
 type DockerDeployParams struct {
-	DockerImage      string
-	PackageID        string
-	HostPort         string // Host port to listen on
-	ContainerPort    string // Container port to map to (default 7052)
-	ChaincodeAddress string // Chaincode address to use
-	Labels           map[string]string
+	DockerImage          string            `json:"dockerImage"`
+	PackageID            string            `json:"packageID"`
+	HostPort             string            `json:"hostPort"`         // Host port to listen on
+	ContainerPort        string            `json:"containerPort"`    // Container port to map to (default 7052)
+	ChaincodeAddress     string            `json:"chaincodeAddress"` // Chaincode address to use
+	Labels               map[string]string `json:"labels"`
+	EnvironmentVariables map[string]string `json:"environmentVariables"` // Custom environment variables
 }

@@ -26,6 +26,7 @@ import * as z from 'zod'
 import { ApproveChaincodeDialog } from './ApproveChaincodeDialog'
 import { CommitChaincodeDialog } from './CommitChaincodeDialog'
 import { DefinitionTimeline } from './DefinitionTimeline'
+import { DeployChaincodeDialog } from './DeployChaincodeDialog'
 import { InstallChaincodeDialog } from './InstallChaincodeDialog'
 
 const versionFormSchema = z.object({
@@ -81,6 +82,7 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 	const [installDialogOpen, setInstallDialogOpen] = useState(false)
 	const [approveDialogOpen, setApproveDialogOpen] = useState(false)
 	const [commitDialogOpen, setCommitDialogOpen] = useState(false)
+	const [deployDialogOpen, setDeployDialogOpen] = useState(false)
 
 	// Undeploy dialog state
 	const [stopOpen, setStopOpen] = useState(false)
@@ -120,16 +122,6 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 				message = error.message
 			}
 			toast.error(message)
-		},
-	})
-
-	// Deploy mutation
-	const deployMutation = useMutation({
-		...postScFabricDefinitionsByDefinitionIdDeployMutation(),
-		onSuccess: () => {
-			setTimelineKey((prev) => prev + 1)
-			onSuccess?.()
-			refetch?.()
 		},
 	})
 
@@ -205,26 +197,12 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 			} else if (action === 'commit') {
 				setCommitDialogOpen(true)
 			} else if (action === 'deploy') {
-				try {
-					await toast.promise(
-						deployMutation.mutateAsync({
-							path: { definitionId: v.id },
-							body: {},
-						}),
-						{
-							loading: 'Deploying chaincode...',
-							success: 'Chaincode deployed successfully',
-							error: (err) => `Failed to deploy chaincode: ${err.message || 'Unknown error'}`,
-						}
-					)
-				} catch (error) {
-					// Error is already handled by toast.promise
-				}
+				setDeployDialogOpen(true)
 			} else if (action === 'stop') {
 				setStopOpen(true)
 			}
 		},
-		[deployMutation, v.id]
+		[v.id]
 	)
 
 	return (
@@ -251,8 +229,8 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 								{stopMutation.isPending ? 'Stopping...' : 'Stop Chaincode'}
 							</DropdownMenuItem>
 						)}
-						<DropdownMenuItem onClick={() => handleLifecycleAction('deploy')} disabled={deployMutation.isPending}>
-							{deployMutation.isPending ? 'Deploying...' : 'Deploy'}
+						<DropdownMenuItem onClick={() => handleLifecycleAction('deploy')}>
+							Deploy
 						</DropdownMenuItem>
 					</DropdownMenuContent>
 				</DropdownMenu>
@@ -334,8 +312,8 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 			) : null}
 
 			<div className="mt-2 flex gap-2">
-				<Button key="deploy" size="sm" variant="default" onClick={() => handleLifecycleAction('deploy')} disabled={deployMutation.isPending}>
-					{deployMutation.isPending ? 'Deploying...' : 'Deploy'}
+				<Button key="deploy" size="sm" variant="default" onClick={() => handleLifecycleAction('deploy')}>
+					Deploy
 				</Button>
 				{['install', 'approve', 'commit'].map((action) => (
 					<Button key={action} size="sm" variant="default" onClick={() => handleLifecycleAction(action)}>
@@ -450,6 +428,14 @@ export function ChaincodeDefinitionCard({ definition: v, DefinitionTimelineCompo
 				commitDialogOpen={commitDialogOpen}
 				setCommitDialogOpen={setCommitDialogOpen}
 				availablePeers={availablePeers}
+				definitionId={v.id}
+				onSuccess={() => refetch?.()}
+				onError={(error) => refetch?.()}
+			/>
+			{/* Deploy Dialog */}
+			<DeployChaincodeDialog
+				deployDialogOpen={deployDialogOpen}
+				setDeployDialogOpen={setDeployDialogOpen}
 				definitionId={v.id}
 				onSuccess={() => refetch?.()}
 				onError={(error) => refetch?.()}

@@ -83,26 +83,53 @@ func (s *SettingsService) CreateSetting(ctx context.Context, params CreateSettin
 		return nil, fmt.Errorf("template validation failed: %w", err)
 	}
 
-	configJSON, err := json.Marshal(params.Config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal config: %w", err)
-	}
-
 	// Get existing setting if any
 	settings, err := s.queries.ListSettings(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list settings: %w", err)
 	}
 
+	var configToSave SettingConfig
+	if len(settings) > 0 {
+		// Merge: start with existing config, overwrite with non-zero values from params.Config
+		existing := settings[0]
+		var existingConfig SettingConfig
+		if err := json.Unmarshal([]byte(existing.Config), &existingConfig); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal existing config: %w", err)
+		}
+		configToSave = existingConfig
+
+		// Overwrite only fields that are non-empty in params.Config
+		if params.Config.PeerTemplateCMD != "" {
+			configToSave.PeerTemplateCMD = params.Config.PeerTemplateCMD
+		}
+		if params.Config.OrdererTemplateCMD != "" {
+			configToSave.OrdererTemplateCMD = params.Config.OrdererTemplateCMD
+		}
+		if params.Config.BesuTemplateCMD != "" {
+			configToSave.BesuTemplateCMD = params.Config.BesuTemplateCMD
+		}
+		if params.Config.DefaultNodeExposeIP != "" {
+			configToSave.DefaultNodeExposeIP = params.Config.DefaultNodeExposeIP
+		}
+		// Now save configToSave as usual
+	} else {
+		// No existing setting, use provided config (or defaultConfig if you want)
+		configToSave = params.Config
+	}
+
+	configJSON, err := json.Marshal(configToSave)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal config: %w", err)
+	}
+
 	var dbSetting *db.Setting
 	if len(settings) > 0 {
-		// Update existing setting
 		dbSetting, err = s.queries.UpdateSetting(ctx, &db.UpdateSettingParams{
 			ID:     settings[0].ID,
 			Config: string(configJSON),
 		})
 	} else {
-		// Create new setting
 		dbSetting, err = s.queries.CreateSetting(ctx, string(configJSON))
 	}
 	if err != nil {
@@ -150,6 +177,26 @@ func (s *SettingsService) GetSetting(ctx context.Context) (*Setting, error) {
 
 // initializeDefaultSettings creates the default settings in the database
 func (s *SettingsService) InitializeDefaultSettings(ctx context.Context) (*Setting, error) {
+	// Check if a setting already exists
+	settings, err := s.queries.ListSettings(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list settings: %w", err)
+	}
+	if len(settings) > 0 {
+		// Return the existing setting (unmarshal config)
+		var config SettingConfig
+		if err := json.Unmarshal([]byte(settings[0].Config), &config); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal existing config: %w", err)
+		}
+		return &Setting{
+			ID:        settings[0].ID,
+			Config:    config,
+			CreatedAt: settings[0].CreatedAt.Time,
+			UpdatedAt: settings[0].UpdatedAt.Time,
+		}, nil
+	}
+
+	// No setting exists, create with defaultConfig
 	configJSON, err := json.Marshal(defaultConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal default config: %w", err)
