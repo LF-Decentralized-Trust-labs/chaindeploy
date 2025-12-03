@@ -43,24 +43,29 @@ export default function CreateProviderPage() {
 		notifyBackupSuccess: true,
 		notifyBackupFailure: true,
 		notifyS3ConnIssue: true,
+		notifyDiskSpaceWarning: true,
 	}
 
 	return (
-		<div className="container space-y-6 p-4">
-			<div>
-				<h1 className="text-2xl font-semibold tracking-tight">New Provider</h1>
-				<p className="text-sm text-muted-foreground">Configure SMTP settings and notification preferences</p>
-			</div>
+		<div className="flex-1 p-4 md:p-8">
+			<div className="max-w-7xl mx-auto">
+				<div className="container space-y-6 p-4">
+					<div>
+						<h1 className="text-2xl font-semibold tracking-tight">New Provider</h1>
+						<p className="text-sm text-muted-foreground">Configure SMTP settings and notification preferences</p>
+					</div>
 
-			<ProviderForm
-				defaultValues={defaultValues}
-				onSubmit={async (values) => {
-					await mutation.mutateAsync({ body: values as HttpCreateProviderRequest })
-				}}
-				submitText="Create Provider"
-				onCancel={() => navigate(-1)}
-				isLoading={mutation.isPending}
-			/>
+					<ProviderForm
+						defaultValues={defaultValues}
+						onSubmit={async (values) => {
+							await mutation.mutateAsync({ body: values as HttpCreateProviderRequest })
+						}}
+						submitText="Create Provider"
+						onCancel={() => navigate(-1)}
+						isLoading={mutation.isPending}
+					/>
+				</div>
+			</div>
 		</div>
 	)
 }

@@ -267,9 +267,6 @@ export type ChainlaunchdeployChaincodeDefinition = {
     created_at?: string;
     docker_image?: string;
     endorsement_policy?: string;
-    environment_variables?: {
-        [key: string]: string;
-    };
     id?: number;
     sequence?: number;
     version?: string;
@@ -294,9 +291,6 @@ export type ChainlaunchdeployChaincodeDefinitionResponse = {
     created_at?: string;
     docker_image?: string;
     endorsement_policy?: string;
-    environment_variables?: {
-        [key: string]: string;
-    };
     id?: number;
     sequence?: number;
     version?: string;
@@ -406,12 +400,6 @@ export type ChainlaunchdeployCreateChaincodeDefinitionRequest = {
      * Endorsement policy
      */
     endorsement_policy?: string;
-    /**
-     * Environment variables for the chaincode container
-     */
-    environment_variables?: {
-        [key: string]: string;
-    };
     /**
      * Sequence
      * required: true
@@ -625,12 +613,6 @@ export type ChainlaunchdeployUpdateChaincodeDefinitionRequest = {
      */
     endorsement_policy?: string;
     /**
-     * Environment variables for the chaincode container
-     */
-    environment_variables?: {
-        [key: string]: string;
-    };
-    /**
      * Sequence
      * required: true
      */
@@ -789,6 +771,14 @@ export type HandlerCreateKeyRequest = {
 };
 
 export type HandlerCreateOrganizationRequest = {
+    /**
+     * Certificate validity configuration (Go duration format)
+     */
+    caCertValidFor?: string;
+    /**
+     * Validity for admin/client/peer certificates (e.g., "8760h" for 1 year). Default: 8760h (1 year)
+     */
+    certValidFor?: string;
     /**
      * CA certificate properties
      */
@@ -1319,6 +1309,7 @@ export type HttpCreateProviderRequest = {
     name: string;
     notifyBackupFailure?: boolean;
     notifyBackupSuccess?: boolean;
+    notifyDiskSpaceWarning?: boolean;
     notifyNodeDowntime?: boolean;
     notifyS3ConnIssue?: boolean;
     type: 'SMTP';
@@ -1497,6 +1488,7 @@ export type HttpProviderResponse = {
     name?: string;
     notifyBackupFailure?: boolean;
     notifyBackupSuccess?: boolean;
+    notifyDiskSpaceWarning?: boolean;
     notifyNodeDowntime?: boolean;
     notifyS3ConnIssue?: boolean;
     type?: NotificationsProviderType;
@@ -1768,6 +1760,7 @@ export type HttpUpdateProviderRequest = {
     name: string;
     notifyBackupFailure?: boolean;
     notifyBackupSuccess?: boolean;
+    notifyDiskSpaceWarning?: boolean;
     notifyNodeDowntime?: boolean;
     notifyS3ConnIssue?: boolean;
     type: 'SMTP';
@@ -11736,5 +11729,5 @@ export type PutUsersByIdRoleResponses = {
 export type PutUsersByIdRoleResponse = PutUsersByIdRoleResponses[keyof PutUsersByIdRoleResponses];
 
 export type ClientOptions = {
-    baseUrl: 'http://localhost:8100/api/v1' | 'https://localhost:8100/api/v1' | (string & {});
+    baseUrl: string;
 };

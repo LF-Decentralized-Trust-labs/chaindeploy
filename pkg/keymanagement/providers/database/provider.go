@@ -640,7 +640,7 @@ func (p *DatabaseProvider) generateSelfSignedCert(keyPair *KeyPair, req *types.C
 			PostalCode:         req.PostalCode,
 		},
 		NotBefore:             req.ValidFrom.Add(-time.Minute * 1),
-		NotAfter:              req.ValidFrom.Add(time.Hour * 24 * 365),
+		NotAfter:              req.ValidFrom.Add(req.ValidFor),
 		KeyUsage:              req.KeyUsage,
 		ExtKeyUsage:           req.ExtKeyUsage,
 		BasicConstraintsValid: true,
@@ -735,9 +735,8 @@ func (p *DatabaseProvider) SignCertificate(ctx context.Context, req types.SignCe
 		return nil, fmt.Errorf("failed to generate serial number: %w", err)
 	}
 
-	// Calculate validity period
-	// validUntil := req.ValidFrom.Add(time.Duration(req.ValidFor))
-	validUntil := req.ValidFrom.Add(time.Hour * 24 * 365)
+	// Calculate validity period - respect the requested TTL
+	validUntil := req.ValidFrom.Add(req.ValidFor)
 
 	// Create certificate template
 	template := &x509.Certificate{

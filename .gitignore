@@ -40,3 +40,4 @@ tasks/
 .taskmasterconfig
 scripts
 projects-data-node1
+test-instance-*

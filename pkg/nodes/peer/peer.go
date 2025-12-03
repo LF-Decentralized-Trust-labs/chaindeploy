@@ -41,6 +41,7 @@ import (
 	"github.com/chainlaunch/chainlaunch/pkg/binaries"
 	"github.com/chainlaunch/chainlaunch/pkg/config"
 	"github.com/chainlaunch/chainlaunch/pkg/db"
+	"github.com/chainlaunch/chainlaunch/pkg/docker"
 	fabricservice "github.com/chainlaunch/chainlaunch/pkg/fabric/service"
 	kmodels "github.com/chainlaunch/chainlaunch/pkg/keymanagement/models"
 	keymanagement "github.com/chainlaunch/chainlaunch/pkg/keymanagement/service"
@@ -49,7 +50,6 @@ import (
 	nodetypes "github.com/chainlaunch/chainlaunch/pkg/nodes/types"
 	settingsservice "github.com/chainlaunch/chainlaunch/pkg/settings/service"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	dockerclient "github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
@@ -1218,16 +1218,10 @@ func (p *LocalPeer) startDocker(env map[string]string, mspConfigPath, dataConfig
 	}
 	defer cli.Close()
 
-	// Pull the image first
+	// Pull the image (tries CLI first for credential helpers, falls back to API)
 	imageName := fmt.Sprintf("hyperledger/fabric-peer:%s", p.opts.Version)
-	reader, err := cli.ImagePull(context.Background(), imageName, image.PullOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to pull image %s: %w", imageName, err)
-	}
-	defer reader.Close()
-	_, err = io.Copy(io.Discard, reader) // Wait for pull to complete
-	if err != nil {
-		return nil, fmt.Errorf("failed to pull image %s: %w", imageName, err)
+	if err := docker.PullImageIfNeeded(context.Background(), cli, imageName); err != nil {
+		return nil, err
 	}
 
 	containerName, err := p.getContainerName()

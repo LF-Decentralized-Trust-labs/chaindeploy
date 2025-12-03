@@ -57,6 +57,7 @@ func (s *NotificationService) CreateProvider(ctx context.Context, params notific
 		NotifyBackupSuccess:     params.NotifyBackupSuccess,
 		NotifyBackupFailure:     params.NotifyBackupFailure,
 		NotifyS3ConnectionIssue: params.NotifyS3ConnIssue,
+		NotifyDiskSpaceWarning:  params.NotifyDiskSpaceWarning,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create provider: %w", err)
@@ -94,6 +95,7 @@ func (s *NotificationService) UpdateProvider(ctx context.Context, params notific
 		NotifyBackupSuccess:     params.NotifyBackupSuccess,
 		NotifyBackupFailure:     params.NotifyBackupFailure,
 		NotifyS3ConnectionIssue: params.NotifyS3ConnIssue,
+		NotifyDiskSpaceWarning:  params.NotifyDiskSpaceWarning,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to update provider: %w", err)
@@ -273,15 +275,16 @@ func (s *NotificationService) sendEmail(config notifications.SMTPConfig, from st
 
 func (s *NotificationService) providerToDTO(provider *db.NotificationProvider, config interface{}) *notifications.NotificationProvider {
 	return &notifications.NotificationProvider{
-		ID:                  provider.ID,
-		Type:                notifications.ProviderType(provider.Type),
-		Name:                provider.Name,
-		Config:              config,
-		IsDefault:           provider.IsDefault,
-		NotifyNodeDowntime:  provider.NotifyNodeDowntime,
-		NotifyBackupSuccess: provider.NotifyBackupSuccess,
-		NotifyBackupFailure: provider.NotifyBackupFailure,
-		NotifyS3ConnIssue:   provider.NotifyS3ConnectionIssue,
+		ID:                     provider.ID,
+		Type:                   notifications.ProviderType(provider.Type),
+		Name:                   provider.Name,
+		Config:                 config,
+		IsDefault:              provider.IsDefault,
+		NotifyNodeDowntime:     provider.NotifyNodeDowntime,
+		NotifyBackupSuccess:    provider.NotifyBackupSuccess,
+		NotifyBackupFailure:    provider.NotifyBackupFailure,
+		NotifyS3ConnIssue:      provider.NotifyS3ConnectionIssue,
+		NotifyDiskSpaceWarning: provider.NotifyDiskSpaceWarning,
 		LastTestAt: func() *time.Time {
 			if provider.LastTestAt.Valid {
 				return &provider.LastTestAt.Time
@@ -1272,4 +1275,128 @@ func convertMapToNodeDowntimeData(data map[string]interface{}) (notifications.No
 	return result, nil
 }
 
-// Add other notification content creators as needed...
+// SendDiskSpaceWarningNotification sends a notification for disk space warnings
+func (s *NotificationService) SendDiskSpaceWarningNotification(ctx context.Context, data notifications.DiskSpaceWarningData) error {
+	// Get default notification provider for disk space warnings
+	provider, err := s.queries.GetDefaultNotificationProviderForType(ctx, "DISK_SPACE_WARNING")
+	if err != nil {
+		s.logger.Warn("Failed to get default notification provider for disk space warnings", "error", err)
+		return nil
+	}
+
+	if !provider.NotifyDiskSpaceWarning {
+		// Provider is configured to not notify for disk space warnings
+		return nil
+	}
+
+	var config notifications.SMTPConfig
+	if err := json.Unmarshal([]byte(provider.Config), &config); err != nil {
+		return fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	// Create notification content
+	content := s.createDiskSpaceWarningContent(data)
+
+	// Send the email
+	if err := s.sendEmail(config, config.From, []string{config.From}, content); err != nil {
+		return fmt.Errorf("failed to send disk space warning notification: %w", err)
+	}
+
+	s.logger.Info("Sent disk space warning notification", "path", data.DataPath, "usedPercent", data.UsedPercent)
+	return nil
+}
+
+// createDiskSpaceWarningContent creates the email content for disk space warning notifications
+func (s *NotificationService) createDiskSpaceWarningContent(data notifications.DiskSpaceWarningData) EmailContent {
+	// Format sizes in human-readable format
+	usedFormatted := formatBytes(data.UsedBytes)
+	availableFormatted := formatBytes(data.AvailableBytes)
+	totalFormatted := formatBytes(data.TotalBytes)
+
+	// Create plain text content
+	plainText := fmt.Sprintf(`Disk Space Warning
+
+Disk space usage has exceeded the configured threshold.
+
+Details:
+- Data Path: %s
+- Mount Point: %s
+- Used: %s (%.1f%%)
+- Available: %s
+- Total: %s
+- Threshold: %.1f%%
+- Detected at: %s
+
+Recommended Actions:
+1. Clean up old log files
+2. Remove unused backup files
+3. Consider expanding disk storage
+4. Archive old data
+
+Please take action to free up disk space to avoid service interruptions.`,
+		data.DataPath, data.MountPoint, usedFormatted, data.UsedPercent,
+		availableFormatted, totalFormatted, data.Threshold,
+		data.DetectedTime.Format(time.RFC3339))
+
+	// Create HTML content
+	html := fmt.Sprintf(`
+	<html>
+		<body>
+			<h2 style="color: #ffc107;">⚠️ Disk Space Warning</h2>
+			<p>Disk space usage has exceeded the configured threshold.</p>
+			<div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+				<h3>Details:</h3>
+				<table style="width: 100%%;">
+					<tr>
+						<td style="padding: 8px; font-weight: bold;">Data Path:</td>
+						<td style="padding: 8px;">%s</td>
+					</tr>
+					<tr>
+						<td style="padding: 8px; font-weight: bold;">Mount Point:</td>
+						<td style="padding: 8px;">%s</td>
+					</tr>
+					<tr>
+						<td style="padding: 8px; font-weight: bold;">Used:</td>
+						<td style="padding: 8px;">%s <span style="color: #dc3545;">(%.1f%%)</span></td>
+					</tr>
+					<tr>
+						<td style="padding: 8px; font-weight: bold;">Available:</td>
+						<td style="padding: 8px;">%s</td>
+					</tr>
+					<tr>
+						<td style="padding: 8px; font-weight: bold;">Total:</td>
+						<td style="padding: 8px;">%s</td>
+					</tr>
+					<tr>
+						<td style="padding: 8px; font-weight: bold;">Threshold:</td>
+						<td style="padding: 8px;">%.1f%%</td>
+					</tr>
+					<tr>
+						<td style="padding: 8px; font-weight: bold;">Detected at:</td>
+						<td style="padding: 8px;">%s</td>
+					</tr>
+				</table>
+			</div>
+			<div style="background: #fff3cd; color: #856404; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+				<h3>Recommended Actions:</h3>
+				<ol>
+					<li>Clean up old log files</li>
+					<li>Remove unused backup files</li>
+					<li>Consider expanding disk storage</li>
+					<li>Archive old data</li>
+				</ol>
+			</div>
+			<p style="color: #dc3545;"><strong>Please take action to free up disk space to avoid service interruptions.</strong></p>
+			<hr>
+			<small>Sent from ChainDeploy</small>
+		</body>
+	</html>`, data.DataPath, data.MountPoint, usedFormatted, data.UsedPercent,
+		availableFormatted, totalFormatted, data.Threshold,
+		data.DetectedTime.Format(time.RFC3339))
+
+	return EmailContent{
+		Subject:   "Disk Space Warning - ChainDeploy Alert",
+		PlainText: plainText,
+		HTML:      html,
+	}
+}

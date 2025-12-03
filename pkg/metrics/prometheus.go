@@ -22,10 +22,10 @@ import (
 
 	configservice "github.com/chainlaunch/chainlaunch/pkg/config"
 	"github.com/chainlaunch/chainlaunch/pkg/db"
+	"github.com/chainlaunch/chainlaunch/pkg/docker"
 	"github.com/chainlaunch/chainlaunch/pkg/metrics/common"
 	nodeservice "github.com/chainlaunch/chainlaunch/pkg/nodes/service"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
@@ -232,15 +232,10 @@ func (d *DockerPrometheusDeployer) Start(ctx context.Context) error {
 		}
 	}
 
-	// Pull Prometheus image
+	// Pull Prometheus image (tries CLI first for credential helpers, falls back to API)
 	imageName := fmt.Sprintf("prom/prometheus:%s", d.config.PrometheusVersion)
-	reader, err := d.client.ImagePull(ctx, imageName, image.PullOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to pull Prometheus image: %w", err)
-	}
-	_, err = io.Copy(os.Stdout, reader)
-	if err != nil {
-		return fmt.Errorf("failed to copy Prometheus image: %w", err)
+	if err := docker.PullImageIfNeeded(ctx, d.client, imageName); err != nil {
+		return err
 	}
 
 	// Build command with extra args

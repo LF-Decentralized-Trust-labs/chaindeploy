@@ -37,56 +37,73 @@ export default function UpdateProviderPage() {
 			}
 		},
 	})
+
 	const providerConfig = useMemo(() => {
-		return provider.config as any
+		return provider?.config as any
 	}, [provider])
+
 	if (isLoading) {
-		return <Skeleton className="h-48" />
+		return (
+			<div className="flex-1 p-4 md:p-8">
+				<div className="max-w-7xl mx-auto">
+					<Skeleton className="h-48" />
+				</div>
+			</div>
+		)
 	}
 
 	if (!provider) {
 		return (
-			<div className="container py-6">
-				<p className="text-muted-foreground">Provider not found</p>
+			<div className="flex-1 p-4 md:p-8">
+				<div className="max-w-7xl mx-auto">
+					<div className="container py-6">
+						<p className="text-muted-foreground">Provider not found</p>
+					</div>
+				</div>
 			</div>
 		)
 	}
 
 	return (
-		<div className="container space-y-6">
-			<div>
-				<h1 className="text-2xl font-semibold tracking-tight">Edit Provider</h1>
-				<p className="text-sm text-muted-foreground">Update SMTP settings and notification preferences</p>
-			</div>
+		<div className="flex-1 p-4 md:p-8">
+			<div className="max-w-7xl mx-auto">
+				<div className="container space-y-6">
+					<div>
+						<h1 className="text-2xl font-semibold tracking-tight">Edit Provider</h1>
+						<p className="text-sm text-muted-foreground">Update SMTP settings and notification preferences</p>
+					</div>
 
-			<ProviderForm
-				defaultValues={{
-					isDefault: provider?.isDefault ?? false,
-					name: provider?.name ?? '',
-					type: provider?.type ?? 'SMTP',
-					config: {
-						host: providerConfig?.host ?? '',
-						port: providerConfig?.port ?? 587,
-						username: providerConfig?.username ?? '',
-						password: providerConfig?.password ?? '',
-						from: providerConfig?.from ?? '',
-						tls: providerConfig?.tls ?? true,
-					},
-					notifyNodeDowntime: provider?.notifyNodeDowntime ?? true,
-					notifyBackupSuccess: provider?.notifyBackupSuccess ?? false,
-					notifyBackupFailure: provider?.notifyBackupFailure ?? true,
-					notifyS3ConnIssue: provider?.notifyS3ConnIssue ?? true,
-				}}
-				onSubmit={async (values) => {
-					mutation.mutateAsync({
-						path: { id: Number(id) },
-						body: values as HttpUpdateProviderRequest,
-					})
-				}}
-				submitText="Update Provider"
-				onCancel={() => navigate(-1)}
-				isLoading={mutation.isPending}
-			/>
+					<ProviderForm
+						defaultValues={{
+							isDefault: provider?.isDefault ?? false,
+							name: provider?.name ?? '',
+							type: provider?.type ?? 'SMTP',
+							config: {
+								host: providerConfig?.host ?? '',
+								port: providerConfig?.port ?? 587,
+								username: providerConfig?.username ?? '',
+								password: providerConfig?.password ?? '',
+								from: providerConfig?.from ?? '',
+								tls: providerConfig?.tls ?? true,
+							},
+							notifyNodeDowntime: provider?.notifyNodeDowntime ?? true,
+							notifyBackupSuccess: provider?.notifyBackupSuccess ?? false,
+							notifyBackupFailure: provider?.notifyBackupFailure ?? true,
+							notifyS3ConnIssue: provider?.notifyS3ConnIssue ?? true,
+							notifyDiskSpaceWarning: provider?.notifyDiskSpaceWarning ?? true,
+						}}
+						onSubmit={async (values) => {
+							mutation.mutateAsync({
+								path: { id: Number(id) },
+								body: values as HttpUpdateProviderRequest,
+							})
+						}}
+						submitText="Update Provider"
+						onCancel={() => navigate(-1)}
+						isLoading={mutation.isPending}
+					/>
+				</div>
+			</div>
 		</div>
 	)
 }

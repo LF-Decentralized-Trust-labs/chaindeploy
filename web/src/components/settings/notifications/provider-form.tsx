@@ -24,6 +24,7 @@ const providerFormSchema = z.object({
 	notifyBackupSuccess: z.boolean().optional(),
 	notifyBackupFailure: z.boolean().optional(),
 	notifyS3ConnIssue: z.boolean().optional(),
+	notifyDiskSpaceWarning: z.boolean().optional(),
 })
 
 export type ProviderFormValues = z.infer<typeof providerFormSchema>
@@ -248,6 +249,24 @@ export function ProviderForm({ defaultValues, onSubmit, submitText, onCancel, is
 										<FormLabel>S3 Connection Issues</FormLabel>
 										<FormDescription>
 											Notify when there are problems connecting to S3 storage
+										</FormDescription>
+									</div>
+								</FormItem>
+							)}
+						/>
+
+						<FormField
+							control={form.control}
+							name="notifyDiskSpaceWarning"
+							render={({ field }) => (
+								<FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+									<FormControl>
+										<Checkbox checked={field.value} onCheckedChange={field.onChange} />
+									</FormControl>
+									<div className="space-y-1 leading-none">
+										<FormLabel>Disk Space Warnings</FormLabel>
+										<FormDescription>
+											Notify when disk space usage exceeds threshold (80%)
 										</FormDescription>
 									</div>
 								</FormItem>

@@ -77,21 +77,14 @@ func NewSQLStore(db *db.Queries, nodeService *nodeservice.NodeService) *SQLStore
 // getDeploymentStatusFromDB extracts deployment status from database plugin data
 func (s *SQLStore) getDeploymentStatusFromDB(dbPlugin *db.Plugin) *types.DeploymentStatus {
 	// If no deployment metadata, return not deployed status
-	if dbPlugin.DeploymentMetadata == nil {
-		return &types.DeploymentStatus{
-			Status: "not deployed",
-		}
-	}
-
-	metadataBytes, ok := dbPlugin.DeploymentMetadata.([]byte)
-	if !ok {
+	if dbPlugin.DeploymentMetadata == nil || len(dbPlugin.DeploymentMetadata) == 0 {
 		return &types.DeploymentStatus{
 			Status: "not deployed",
 		}
 	}
 
 	var deploymentMetadata map[string]interface{}
-	if err := json.Unmarshal(metadataBytes, &deploymentMetadata); err != nil {
+	if err := json.Unmarshal(dbPlugin.DeploymentMetadata, &deploymentMetadata); err != nil {
 		return &types.DeploymentStatus{
 			Status: "not deployed",
 		}
@@ -181,23 +174,13 @@ func (s *SQLStore) GetPlugin(ctx context.Context, name string) (*types.Plugin, e
 		return nil, fmt.Errorf("failed to get plugin: %w", err)
 	}
 
-	metadataBytes, ok := dbPlugin.Metadata.([]byte)
-	if !ok {
-		return nil, fmt.Errorf("invalid metadata type: expected []byte")
-	}
-
 	var metadata types.Metadata
-	if err := json.Unmarshal(metadataBytes, &metadata); err != nil {
+	if err := json.Unmarshal(dbPlugin.Metadata, &metadata); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
 	}
 
-	specBytes, ok := dbPlugin.Spec.([]byte)
-	if !ok {
-		return nil, fmt.Errorf("invalid spec type: expected []byte")
-	}
-
 	var spec types.Spec
-	if err := json.Unmarshal(specBytes, &spec); err != nil {
+	if err := json.Unmarshal(dbPlugin.Spec, &spec); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal spec: %w", err)
 	}
 
@@ -223,23 +206,13 @@ func (s *SQLStore) ListPlugins(ctx context.Context) ([]*types.Plugin, error) {
 
 	plugins := make([]*types.Plugin, len(dbPlugins))
 	for i, dbPlugin := range dbPlugins {
-		metadataBytes, ok := dbPlugin.Metadata.([]byte)
-		if !ok {
-			return nil, fmt.Errorf("invalid metadata type: expected []byte")
-		}
-
 		var metadata types.Metadata
-		if err := json.Unmarshal(metadataBytes, &metadata); err != nil {
+		if err := json.Unmarshal(dbPlugin.Metadata, &metadata); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
 		}
 
-		specBytes, ok := dbPlugin.Spec.([]byte)
-		if !ok {
-			return nil, fmt.Errorf("invalid spec type: expected []byte")
-		}
-
 		var spec types.Spec
-		if err := json.Unmarshal(specBytes, &spec); err != nil {
+		if err := json.Unmarshal(dbPlugin.Spec, &spec); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal spec: %w", err)
 		}
 
@@ -341,13 +314,12 @@ func (s *SQLStore) GetDeploymentMetadata(ctx context.Context, name string) (map[
 		return nil, fmt.Errorf("failed to get deployment metadata: %w", err)
 	}
 
-	metadataBytes, ok := metadata.([]byte)
-	if !ok {
-		return nil, fmt.Errorf("invalid deployment metadata type: expected []byte")
+	if metadata == nil || len(metadata) == 0 {
+		return nil, nil
 	}
 
 	var result map[string]interface{}
-	if err := json.Unmarshal(metadataBytes, &result); err != nil {
+	if err := json.Unmarshal(metadata, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal deployment metadata: %w", err)
 	}
 

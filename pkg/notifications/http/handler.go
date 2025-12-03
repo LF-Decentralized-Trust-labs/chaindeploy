@@ -59,14 +59,15 @@ func (h *NotificationHandler) CreateProvider(w http.ResponseWriter, r *http.Requ
 	}
 
 	provider, err := h.service.CreateProvider(r.Context(), notifications.CreateProviderParams{
-		Type:                req.Type,
-		Name:                req.Name,
-		Config:              req.Config,
-		IsDefault:           req.IsDefault,
-		NotifyNodeDowntime:  req.NotifyNodeDowntime,
-		NotifyBackupSuccess: req.NotifyBackupSuccess,
-		NotifyBackupFailure: req.NotifyBackupFailure,
-		NotifyS3ConnIssue:   req.NotifyS3ConnIssue,
+		Type:                   req.Type,
+		Name:                   req.Name,
+		Config:                 req.Config,
+		IsDefault:              req.IsDefault,
+		NotifyNodeDowntime:     req.NotifyNodeDowntime,
+		NotifyBackupSuccess:    req.NotifyBackupSuccess,
+		NotifyBackupFailure:    req.NotifyBackupFailure,
+		NotifyS3ConnIssue:      req.NotifyS3ConnIssue,
+		NotifyDiskSpaceWarning: req.NotifyDiskSpaceWarning,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -156,15 +157,16 @@ func (h *NotificationHandler) UpdateProvider(w http.ResponseWriter, r *http.Requ
 	}
 
 	provider, err := h.service.UpdateProvider(r.Context(), notifications.UpdateProviderParams{
-		ID:                  id,
-		Type:                req.Type,
-		Name:                req.Name,
-		Config:              req.Config,
-		IsDefault:           req.IsDefault,
-		NotifyNodeDowntime:  req.NotifyNodeDowntime,
-		NotifyBackupSuccess: req.NotifyBackupSuccess,
-		NotifyBackupFailure: req.NotifyBackupFailure,
-		NotifyS3ConnIssue:   req.NotifyS3ConnIssue,
+		ID:                     id,
+		Type:                   req.Type,
+		Name:                   req.Name,
+		Config:                 req.Config,
+		IsDefault:              req.IsDefault,
+		NotifyNodeDowntime:     req.NotifyNodeDowntime,
+		NotifyBackupSuccess:    req.NotifyBackupSuccess,
+		NotifyBackupFailure:    req.NotifyBackupFailure,
+		NotifyS3ConnIssue:      req.NotifyS3ConnIssue,
+		NotifyDiskSpaceWarning: req.NotifyDiskSpaceWarning,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

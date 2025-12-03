@@ -142,13 +142,6 @@ export const getAuditLogsById = <ThrowOnError extends boolean = false>(options: 
  */
 export const postAuthChangePassword = <ThrowOnError extends boolean = false>(options: Options<PostAuthChangePasswordData, ThrowOnError>) => {
     return (options.client ?? _heyApiClient).post<PostAuthChangePasswordResponses, PostAuthChangePasswordErrors, ThrowOnError>({
-        security: [
-            {
-                in: 'cookie',
-                name: 'session_id',
-                type: 'apiKey'
-            }
-        ],
         url: '/auth/change-password',
         ...options,
         headers: {
@@ -179,13 +172,6 @@ export const postAuthLogin = <ThrowOnError extends boolean = false>(options: Opt
  */
 export const postAuthLogout = <ThrowOnError extends boolean = false>(options?: Options<PostAuthLogoutData, ThrowOnError>) => {
     return (options?.client ?? _heyApiClient).post<PostAuthLogoutResponses, PostAuthLogoutErrors, ThrowOnError>({
-        security: [
-            {
-                in: 'cookie',
-                name: 'session_id',
-                type: 'apiKey'
-            }
-        ],
         url: '/auth/logout',
         ...options
     });
@@ -197,13 +183,6 @@ export const postAuthLogout = <ThrowOnError extends boolean = false>(options?: O
  */
 export const getAuthMe = <ThrowOnError extends boolean = false>(options?: Options<GetAuthMeData, ThrowOnError>) => {
     return (options?.client ?? _heyApiClient).get<GetAuthMeResponses, GetAuthMeErrors, ThrowOnError>({
-        security: [
-            {
-                in: 'cookie',
-                name: 'session_id',
-                type: 'apiKey'
-            }
-        ],
         url: '/auth/me',
         ...options
     });
@@ -2807,13 +2786,6 @@ export const postSettings = <ThrowOnError extends boolean = false>(options: Opti
  */
 export const getUsers = <ThrowOnError extends boolean = false>(options?: Options<GetUsersData, ThrowOnError>) => {
     return (options?.client ?? _heyApiClient).get<GetUsersResponses, GetUsersErrors, ThrowOnError>({
-        security: [
-            {
-                in: 'cookie',
-                name: 'session_id',
-                type: 'apiKey'
-            }
-        ],
         url: '/users',
         ...options
     });
@@ -2825,13 +2797,6 @@ export const getUsers = <ThrowOnError extends boolean = false>(options?: Options
  */
 export const postUsers = <ThrowOnError extends boolean = false>(options: Options<PostUsersData, ThrowOnError>) => {
     return (options.client ?? _heyApiClient).post<PostUsersResponses, PostUsersErrors, ThrowOnError>({
-        security: [
-            {
-                in: 'cookie',
-                name: 'session_id',
-                type: 'apiKey'
-            }
-        ],
         url: '/users',
         ...options,
         headers: {
@@ -2847,13 +2812,6 @@ export const postUsers = <ThrowOnError extends boolean = false>(options: Options
  */
 export const deleteUsersById = <ThrowOnError extends boolean = false>(options: Options<DeleteUsersByIdData, ThrowOnError>) => {
     return (options.client ?? _heyApiClient).delete<DeleteUsersByIdResponses, DeleteUsersByIdErrors, ThrowOnError>({
-        security: [
-            {
-                in: 'cookie',
-                name: 'session_id',
-                type: 'apiKey'
-            }
-        ],
         url: '/users/{id}',
         ...options
     });
@@ -2865,13 +2823,6 @@ export const deleteUsersById = <ThrowOnError extends boolean = false>(options: O
  */
 export const getUsersById = <ThrowOnError extends boolean = false>(options: Options<GetUsersByIdData, ThrowOnError>) => {
     return (options.client ?? _heyApiClient).get<GetUsersByIdResponses, GetUsersByIdErrors, ThrowOnError>({
-        security: [
-            {
-                in: 'cookie',
-                name: 'session_id',
-                type: 'apiKey'
-            }
-        ],
         url: '/users/{id}',
         ...options
     });
@@ -2883,13 +2834,6 @@ export const getUsersById = <ThrowOnError extends boolean = false>(options: Opti
  */
 export const putUsersById = <ThrowOnError extends boolean = false>(options: Options<PutUsersByIdData, ThrowOnError>) => {
     return (options.client ?? _heyApiClient).put<PutUsersByIdResponses, PutUsersByIdErrors, ThrowOnError>({
-        security: [
-            {
-                in: 'cookie',
-                name: 'session_id',
-                type: 'apiKey'
-            }
-        ],
         url: '/users/{id}',
         ...options,
         headers: {
@@ -2905,13 +2849,6 @@ export const putUsersById = <ThrowOnError extends boolean = false>(options: Opti
  */
 export const putUsersByIdPassword = <ThrowOnError extends boolean = false>(options: Options<PutUsersByIdPasswordData, ThrowOnError>) => {
     return (options.client ?? _heyApiClient).put<PutUsersByIdPasswordResponses, PutUsersByIdPasswordErrors, ThrowOnError>({
-        security: [
-            {
-                in: 'cookie',
-                name: 'session_id',
-                type: 'apiKey'
-            }
-        ],
         url: '/users/{id}/password',
         ...options,
         headers: {
@@ -2927,13 +2864,6 @@ export const putUsersByIdPassword = <ThrowOnError extends boolean = false>(optio
  */
 export const putUsersByIdRole = <ThrowOnError extends boolean = false>(options: Options<PutUsersByIdRoleData, ThrowOnError>) => {
     return (options.client ?? _heyApiClient).put<PutUsersByIdRoleResponses, PutUsersByIdRoleErrors, ThrowOnError>({
-        security: [
-            {
-                in: 'cookie',
-                name: 'session_id',
-                type: 'apiKey'
-            }
-        ],
         url: '/users/{id}/role',
         ...options,
         headers: {

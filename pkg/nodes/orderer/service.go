@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,8 +11,8 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/chainlaunch/chainlaunch/pkg/docker"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	dockerclient "github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
@@ -280,16 +279,10 @@ func (o *LocalOrderer) startDocker(env map[string]string, mspConfigPath, dataCon
 	}
 	defer cli.Close()
 
-	// Pull the image first
+	// Pull the image (tries CLI first for credential helpers, falls back to API)
 	imageName := fmt.Sprintf("hyperledger/fabric-orderer:%s", o.opts.Version)
-	reader, err := cli.ImagePull(context.Background(), imageName, image.PullOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to pull image %s: %w", imageName, err)
-	}
-	defer reader.Close()
-	_, err = io.Copy(io.Discard, reader) // Wait for pull to complete
-	if err != nil {
-		return nil, fmt.Errorf("failed to pull image %s: %w", imageName, err)
+	if err := docker.PullImageIfNeeded(context.Background(), cli, imageName); err != nil {
+		return nil, err
 	}
 
 	containerName := o.getContainerName()

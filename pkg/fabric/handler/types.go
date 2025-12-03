@@ -19,6 +19,10 @@ type CreateOrganizationRequest struct {
 	Locality      []string `json:"locality"`
 	StreetAddress []string `json:"streetAddress"`
 	PostalCode    []string `json:"postalCode"`
+
+	// Certificate validity configuration (Go duration format)
+	CaCertValidFor *string `json:"caCertValidFor,omitempty"` // Validity for CA certificates (e.g., "87600h" for 10 years). Default: 87600h (10 years)
+	CertValidFor   *string `json:"certValidFor,omitempty"`   // Validity for admin/client/peer certificates (e.g., "8760h" for 1 year). Default: 8760h (1 year)
 }
 
 type UpdateOrganizationRequest struct {

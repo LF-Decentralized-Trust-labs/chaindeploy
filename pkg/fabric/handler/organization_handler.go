@@ -4,6 +4,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"net/http"
 	"strconv"
@@ -107,6 +108,27 @@ func (h *OrganizationHandler) CreateOrganization(w http.ResponseWriter, r *http.
 			"detail": err.Error(),
 			"code":   "INVALID_REQUEST_BODY",
 		})
+	}
+
+	// Validate certificate validity durations if provided
+	if req.CaCertValidFor != nil {
+		if _, err := time.ParseDuration(*req.CaCertValidFor); err != nil {
+			return errors.NewValidationError("invalid caCertValidFor duration format", map[string]interface{}{
+				"detail":  fmt.Sprintf("Unable to parse duration '%s': %s", *req.CaCertValidFor, err.Error()),
+				"code":    "INVALID_DURATION_FORMAT",
+				"message": "Duration must be in Go format. Valid examples: '24h' (24 hours), '8760h' (1 year), '87600h' (10 years), '17520h' (2 years), '2h30m' (2 hours 30 minutes), '168h' (1 week)",
+			})
+		}
+	}
+
+	if req.CertValidFor != nil {
+		if _, err := time.ParseDuration(*req.CertValidFor); err != nil {
+			return errors.NewValidationError("invalid certValidFor duration format", map[string]interface{}{
+				"detail":  fmt.Sprintf("Unable to parse duration '%s': %s", *req.CertValidFor, err.Error()),
+				"code":    "INVALID_DURATION_FORMAT",
+				"message": "Duration must be in Go format. Valid examples: '24h' (24 hours), '8760h' (1 year), '87600h' (10 years), '17520h' (2 years), '2h30m' (2 hours 30 minutes), '168h' (1 week)",
+			})
+		}
 	}
 
 	params := service.CreateOrganizationParams{

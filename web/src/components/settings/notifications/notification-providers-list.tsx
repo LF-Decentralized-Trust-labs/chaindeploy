@@ -184,14 +184,50 @@ export function NotificationProvidersList() {
 									</div>
 								</CardHeader>
 								<CardContent>
-									<div className="grid gap-2">
+									<div className="grid gap-3">
 										<div className="text-sm">
 											<span className="font-medium">Host:</span> {(provider.config as any).host}
 										</div>
 										<div className="text-sm">
 											<span className="font-medium">From:</span> {(provider.config as any).from}
 										</div>
-										{provider.isDefault && <div className="text-sm text-muted-foreground">Default Provider</div>}
+										<div className="space-y-2">
+											<div className="text-sm font-medium">Enabled Notifications:</div>
+											<div className="flex flex-wrap gap-2">
+												{provider.notifyNodeDowntime && (
+													<Badge variant="outline" className="text-xs">
+														Node Downtime
+													</Badge>
+												)}
+												{provider.notifyBackupSuccess && (
+													<Badge variant="outline" className="text-xs">
+														Backup Success
+													</Badge>
+												)}
+												{provider.notifyBackupFailure && (
+													<Badge variant="outline" className="text-xs">
+														Backup Failure
+													</Badge>
+												)}
+												{provider.notifyS3ConnIssue && (
+													<Badge variant="outline" className="text-xs">
+														S3 Connection Issues
+													</Badge>
+												)}
+												{provider.notifyDiskSpaceWarning && (
+													<Badge variant="outline" className="text-xs">
+														Disk Space Warnings
+													</Badge>
+												)}
+												{!provider.notifyNodeDowntime &&
+													!provider.notifyBackupSuccess &&
+													!provider.notifyBackupFailure &&
+													!provider.notifyS3ConnIssue &&
+													!provider.notifyDiskSpaceWarning && (
+														<span className="text-xs text-muted-foreground">No notifications enabled</span>
+													)}
+											</div>
+										</div>
 										<div className="text-sm text-muted-foreground">
 											{provider.lastTestAt ? (
 												<>
