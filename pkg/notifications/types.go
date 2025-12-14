@@ -75,12 +75,13 @@ type UpdateProviderParams struct {
 
 // SMTPConfig represents SMTP provider configuration
 type SMTPConfig struct {
-	Host     string `json:"host" validate:"required"`
-	Port     int    `json:"port" validate:"required,min=1,max=65535"`
-	Username string `json:"username" validate:"required"`
-	Password string `json:"password" validate:"required"`
-	From     string `json:"from" validate:"required,email"`
-	TLS      bool   `json:"tls"`
+	Host       string   `json:"host" validate:"required"`
+	Port       int      `json:"port" validate:"required,min=1,max=65535"`
+	Username   string   `json:"username" validate:"required"`
+	Password   string   `json:"password" validate:"required"`
+	From       string   `json:"from" validate:"required,email"`
+	TLS        bool     `json:"tls"`
+	Recipients []string `json:"recipients,omitempty"` // Optional list of recipient email addresses. If empty, defaults to From address.
 }
 
 // TestProviderParams represents parameters for testing a provider

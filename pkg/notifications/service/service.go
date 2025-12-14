@@ -273,6 +273,15 @@ func (s *NotificationService) sendEmail(config notifications.SMTPConfig, from st
 	}
 }
 
+// getRecipients returns the list of recipients for an SMTP config.
+// If Recipients is empty, it defaults to the From address for backward compatibility.
+func getRecipients(config notifications.SMTPConfig) []string {
+	if len(config.Recipients) > 0 {
+		return config.Recipients
+	}
+	return []string{config.From}
+}
+
 func (s *NotificationService) providerToDTO(provider *db.NotificationProvider, config interface{}) *notifications.NotificationProvider {
 	return &notifications.NotificationProvider{
 		ID:                     provider.ID,
@@ -321,7 +330,7 @@ func (s *NotificationService) SendBackupSuccessNotification(ctx context.Context,
 	content := s.createBackupSuccessContent(data)
 
 	// Send the email
-	if err := s.sendEmail(config, config.From, []string{config.From}, content); err != nil {
+	if err := s.sendEmail(config, config.From, getRecipients(config), content); err != nil {
 		return fmt.Errorf("failed to send backup success notification: %w", err)
 	}
 
@@ -352,7 +361,7 @@ func (s *NotificationService) SendBackupFailureNotification(ctx context.Context,
 	content := s.createBackupFailureContent(data)
 
 	// Send the email
-	if err := s.sendEmail(config, config.From, []string{config.From}, content); err != nil {
+	if err := s.sendEmail(config, config.From, getRecipients(config), content); err != nil {
 		return fmt.Errorf("failed to send backup failure notification: %w", err)
 	}
 
@@ -383,7 +392,7 @@ func (s *NotificationService) SendS3ConnectionIssueNotification(ctx context.Cont
 	content := s.createS3ConnIssueContent(data)
 
 	// Send the email
-	if err := s.sendEmail(config, config.From, []string{config.From}, content); err != nil {
+	if err := s.sendEmail(config, config.From, getRecipients(config), content); err != nil {
 		return fmt.Errorf("failed to send S3 connection issue notification: %w", err)
 	}
 
@@ -414,7 +423,7 @@ func (s *NotificationService) SendNodeDowntimeNotification(ctx context.Context, 
 	content := s.createNodeDowntimeContent(data)
 
 	// Send the email
-	if err := s.sendEmail(config, config.From, []string{config.From}, content); err != nil {
+	if err := s.sendEmail(config, config.From, getRecipients(config), content); err != nil {
 		return fmt.Errorf("failed to send node downtime notification: %w", err)
 	}
 
@@ -445,7 +454,7 @@ func (s *NotificationService) SendNodeRecoveryNotification(ctx context.Context, 
 	content := s.createNodeRecoveryContent(data)
 
 	// Send the email
-	if err := s.sendEmail(config, config.From, []string{config.From}, content); err != nil {
+	if err := s.sendEmail(config, config.From, getRecipients(config), content); err != nil {
 		return fmt.Errorf("failed to send node recovery notification: %w", err)
 	}
 
@@ -1298,7 +1307,7 @@ func (s *NotificationService) SendDiskSpaceWarningNotification(ctx context.Conte
 	content := s.createDiskSpaceWarningContent(data)
 
 	// Send the email
-	if err := s.sendEmail(config, config.From, []string{config.From}, content); err != nil {
+	if err := s.sendEmail(config, config.From, getRecipients(config), content); err != nil {
 		return fmt.Errorf("failed to send disk space warning notification: %w", err)
 	}
 

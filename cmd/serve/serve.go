@@ -436,6 +436,26 @@ func (c *serveCmd) setupServer(queries *db.Queries, authService *auth.AuthServic
 		}
 	}()
 
+	// Start disk space monitoring
+	diskSpaceMonitor := monitoring.NewDiskSpaceMonitor(
+		dataPath,
+		notificationService,
+		logger,
+		80.0, // Alert at 80% disk usage
+	)
+
+	// Start disk space monitor in background
+	diskSpaceCtx, diskSpaceCancel := context.WithCancel(context.Background())
+	go diskSpaceMonitor.Start(diskSpaceCtx)
+
+	// Register shutdown handler for disk space monitor
+	go func() {
+		c := make(chan os.Signal, 1)
+		<-c
+		diskSpaceCancel()
+		diskSpaceMonitor.Stop()
+	}()
+
 	// Initialize plugin store and manager
 	pluginStore := plugin.NewSQLStore(queries, nodesService)
 	pluginManager, err := plugin.NewPluginManager(filepath.Join(dataPath, "plugins"), queries, nodesService, keyManagementService, logger)
