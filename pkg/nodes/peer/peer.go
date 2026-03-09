@@ -948,12 +948,14 @@ func (p *LocalPeer) Init() (nodetypes.NodeDeploymentConfig, error) {
 	}
 
 	// Sign Sign Key
+	validFor := kmodels.Duration(time.Hour * 24 * 365)
 	signKeyDB, err = p.keyService.SignCertificate(ctx, signKeyDB.ID, signCAKeyDB.ID, kmodels.CertificateRequest{
 		CommonName:         p.opts.ID,
 		Organization:       []string{org.MspID},
 		OrganizationalUnit: []string{"peer"},
 		DNSNames:           []string{p.opts.ID},
 		IsCA:               true,
+		ValidFor:           validFor,
 		KeyUsage:           x509.KeyUsageCertSign,
 		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 	})
@@ -1011,7 +1013,6 @@ func (p *LocalPeer) Init() (nodetypes.NodeDeploymentConfig, error) {
 	p.opts.DomainNames = domains
 
 	// Sign TLS certificates
-	validFor := kmodels.Duration(time.Hour * 24 * 365)
 	tlsKeyDB, err = p.keyService.SignCertificate(ctx, tlsKeyDB.ID, tlsCAKeyDB.ID, kmodels.CertificateRequest{
 		CommonName:         p.opts.ID,
 		Organization:       []string{org.MspID},
@@ -2322,9 +2323,13 @@ func (p *LocalPeer) CreateOrdererConnection(ctx context.Context, ordererURL stri
 	p.logger.Info("Creating orderer connection",
 		"ordererURL", ordererURL)
 
+	// Strip the grpcs:// or grpc:// scheme from the URL since network.Node.Addr expects host:port only
+	ordererAddr := strings.TrimPrefix(ordererURL, "grpcs://")
+	ordererAddr = strings.TrimPrefix(ordererAddr, "grpc://")
+
 	// Create a network node with the orderer details
 	networkNode := network.Node{
-		Addr:          ordererURL,
+		Addr:          ordererAddr,
 		TLSCACertByte: []byte(ordererTLSCACert),
 	}
 
@@ -2408,8 +2413,12 @@ func Concatenate[T any](slices ...[]T) []T {
 func (p *LocalPeer) CreatePeerConnection(ctx context.Context, peerURL string, peerTLSCACert string) (*grpc.ClientConn, error) {
 	// Create a temporary file for the TLS CA certificate
 
+	// Strip the grpcs:// or grpc:// scheme from the URL since network.Node.Addr expects host:port only
+	peerAddr := strings.TrimPrefix(peerURL, "grpcs://")
+	peerAddr = strings.TrimPrefix(peerAddr, "grpc://")
+
 	networkNode := network.Node{
-		Addr:          peerURL,
+		Addr:          peerAddr,
 		TLSCACertByte: []byte(peerTLSCACert),
 	}
 	peerConn, err := network.DialConnection(networkNode)
