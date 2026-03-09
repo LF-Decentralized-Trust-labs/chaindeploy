@@ -344,6 +344,16 @@ type BesuNodeConfig struct {
 	MetricsPort     int64             `json:"metricsPort"`
 	MetricsProtocol string            `json:"metricsProtocol"`
 	Version         string            `json:"version"`
+	// Gas and access control configuration
+	MinGasPrice   int64  `json:"minGasPrice"`
+	HostAllowList string `json:"hostAllowList"`
+	// Permissions configuration
+	AccountsAllowList []string `json:"accountsAllowList"`
+	NodesAllowList    []string `json:"nodesAllowList"`
+	// JWT Authentication configuration
+	JWTEnabled                 bool   `json:"jwtEnabled"`
+	JWTPublicKeyContent        string `json:"jwtPublicKeyContent"`
+	JWTAuthenticationAlgorithm string `json:"jwtAuthenticationAlgorithm"`
 }
 
 // Add this new type for storage

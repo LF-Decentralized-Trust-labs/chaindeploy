@@ -1,9 +1,10 @@
 package invoke
 
 import (
+	cryptorand "crypto/rand"
 	"fmt"
 	"io"
-	"math/rand/v2"
+	"math/big"
 	"strings"
 
 	"github.com/chainlaunch/chainlaunch/pkg/fabric/networkconfig"
@@ -101,10 +102,12 @@ func (c *invokeChaincodeCmd) run(out io.Writer) error {
 	if len(peers) == 0 {
 		return fmt.Errorf("no peers found for organization %s", c.mspID)
 	}
-	// Get a random peer from the organization's peers
-	// If no specific peer ID is provided, select a random one
-	// Generate a random index
-	randomIndex := rand.Int() % len(peers)
+	// Get a random peer from the organization's peers using crypto/rand
+	randIdx, err := cryptorand.Int(cryptorand.Reader, big.NewInt(int64(len(peers))))
+	if err != nil {
+		return fmt.Errorf("failed to generate random index: %w", err)
+	}
+	randomIndex := randIdx.Int64()
 
 	peerID := peers[randomIndex]
 	c.logger.Infof("Randomly selected peer: %s", peerID)

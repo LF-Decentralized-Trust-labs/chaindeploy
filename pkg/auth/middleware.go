@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -13,26 +14,36 @@ const (
 	SessionCookieName = "session_id"
 )
 
+// ErrMissingEncryptionKey is returned when SESSION_ENCRYPTION_KEY is not set
+var ErrMissingEncryptionKey = fmt.Errorf("SESSION_ENCRYPTION_KEY environment variable is not set")
+
 // getEncryptionKey returns the session encryption key from environment variable
-func getEncryptionKey() []byte {
+func getEncryptionKey() ([]byte, error) {
 	key := os.Getenv("SESSION_ENCRYPTION_KEY")
 	if key == "" {
-		panic("SESSION_ENCRYPTION_KEY environment variable is not set")
+		return nil, ErrMissingEncryptionKey
 	}
-	return []byte(key)
+	return []byte(key), nil
 }
 
 // signSessionID creates a signed version of the session ID
-func signSessionID(sessionID string) string {
-	mac := hmac.New(sha256.New, getEncryptionKey())
+func signSessionID(sessionID string) (string, error) {
+	key, err := getEncryptionKey()
+	if err != nil {
+		return "", err
+	}
+	mac := hmac.New(sha256.New, key)
 	mac.Write([]byte(sessionID))
 	signature := mac.Sum(nil)
-	return base64.URLEncoding.EncodeToString(signature)
+	return base64.URLEncoding.EncodeToString(signature), nil
 }
 
 // verifySessionID verifies the signature of a signed session ID
 func verifySessionID(sessionID, signature string) bool {
-	expectedSignature := signSessionID(sessionID)
+	expectedSignature, err := signSessionID(sessionID)
+	if err != nil {
+		return false
+	}
 	return hmac.Equal([]byte(signature), []byte(expectedSignature))
 }
 

@@ -433,12 +433,14 @@ func (o *LocalOrderer) Init() (interface{}, error) {
 	}
 
 	// Sign Sign Key
+	validFor := kmodels.Duration(time.Hour * 24 * 365)
 	signKeyDB, err = o.keyService.SignCertificate(ctx, signKeyDB.ID, signCAKeyDB.ID, kmodels.CertificateRequest{
 		CommonName:         o.opts.ID,
 		Organization:       []string{org.MspID},
 		OrganizationalUnit: []string{"orderer"},
 		DNSNames:           []string{o.opts.ID},
 		IsCA:               true,
+		ValidFor:           validFor,
 		KeyUsage:           x509.KeyUsageCertSign,
 		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 	})
@@ -465,7 +467,6 @@ func (o *LocalOrderer) Init() (interface{}, error) {
 	}
 
 	// Sign TLS certificates
-	validFor := kmodels.Duration(time.Hour * 24 * 365)
 	// Add localhost and 127.0.0.1 to domain names if not present
 	domainNames := o.opts.DomainNames
 	hasLocalhost := false
@@ -1128,8 +1129,13 @@ func (o *LocalOrderer) GetTLSRootCACert(ctx context.Context) (string, error) {
 // CreateOrdererConnection creates a gRPC connection to an orderer
 func (o *LocalOrderer) CreateOrdererConnection(ctx context.Context, ordererUrl string, ordererTlsCACert string) (*grpc.ClientConn, error) {
 	o.logger.Debug("Creating orderer connection", "url", ordererUrl)
+
+	// Strip the grpcs:// or grpc:// scheme from the URL since network.Node.Addr expects host:port only
+	ordererAddr := strings.TrimPrefix(ordererUrl, "grpcs://")
+	ordererAddr = strings.TrimPrefix(ordererAddr, "grpc://")
+
 	networkNode := network.Node{
-		Addr:          ordererUrl,
+		Addr:          ordererAddr,
 		TLSCACertByte: []byte(ordererTlsCACert),
 	}
 	conn, err := network.DialConnection(networkNode)

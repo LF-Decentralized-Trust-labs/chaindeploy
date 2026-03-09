@@ -1,5 +1,5 @@
 import { GetNodesDefaultsFabricOrdererResponse, GetNodesDefaultsFabricPeerResponse } from '@/api/client'
-import { isValidPEMCertificate } from '@/components/../lib/utils'
+import { isValidPEMCertificate } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
@@ -110,7 +110,7 @@ export function FabricNodeForm({
 			fabricProperties: {
 				nodeType: 'FABRIC_PEER',
 				mode: 'service',
-				version: '3.1.0',
+				version: '3.1.3',
 				organizationId: undefined,
 				listenAddress: defaults?.listenAddress || '',
 				operationsListenAddress: defaults?.operationsListenAddress || '',
@@ -266,9 +266,11 @@ export function FabricNodeForm({
 										</SelectTrigger>
 									</FormControl>
 									<SelectContent>
-										<SelectItem value="2.5.12">2.5.12</SelectItem>
-										<SelectItem value="3.0.0">3.0.0</SelectItem>
+										<SelectItem value="3.1.3">3.1.3</SelectItem>
+										<SelectItem value="3.1.2">3.1.2</SelectItem>
 										<SelectItem value="3.1.0">3.1.0</SelectItem>
+										<SelectItem value="3.0.0">3.0.0</SelectItem>
+										<SelectItem value="2.5.12">2.5.12</SelectItem>
 									</SelectContent>
 								</Select>
 								<FormDescription>Select the Fabric version to use</FormDescription>

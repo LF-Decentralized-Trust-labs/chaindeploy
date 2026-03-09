@@ -12,11 +12,11 @@ import { FormControl, FormField, FormItem, FormLabel } from '@/components/ui/for
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, Server } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { FormProvider, useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { BesuNodeForm } from './nodes/besu-node-form'
+import { BesuNodeForm, BesuNodeFormValues } from './nodes/besu-node-form'
 import { FabricNodeForm } from './nodes/fabric-node-form'
 import { ProtocolSelector } from './protocol-selector'
 
@@ -165,6 +165,7 @@ function ConfigurationStep({ form, onNext, onBack }: StepProps) {
 		...getNodesDefaultsFabricOrdererOptions(),
 		enabled: protocol === 'fabric' && nodeType === 'orderer',
 	})
+
 	// Besu queries
 	const { data: besuDefaults } = useQuery({
 		...getNodesDefaultsBesuNodeOptions({
@@ -172,6 +173,90 @@ function ConfigurationStep({ form, onNext, onBack }: StepProps) {
 		}),
 		enabled: protocol === 'besu',
 	})
+
+	// Get the appropriate defaults based on protocol and node type
+	const fabricDefaults = useMemo(() => {
+		if (nodeType === 'peer' && peerDefaults) {
+			return peerDefaults
+		}
+		if (nodeType === 'orderer' && ordererDefaults) {
+			return ordererDefaults
+		}
+		return null
+	}, [nodeType, peerDefaults, ordererDefaults])
+
+	const besuDefaultsData = useMemo(() => {
+		return besuDefaults?.defaults?.[0] || null
+	}, [besuDefaults])
+
+	// Check if fabric defaults are available
+	const fabricDefaultsAvailable = useMemo(() => {
+		return (nodeType === 'peer' && peerDefaults) ||
+			(nodeType === 'orderer' && ordererDefaults) ||
+			(form.getValues().configuration && Object.keys(form.getValues().configuration).length > 0)
+	}, [nodeType, peerDefaults, ordererDefaults, form])
+
+	// Get default values for forms
+	const fabricDefaultValues = useMemo(() => {
+		return {
+			name: form.getValues().name,
+			fabricProperties: {
+				nodeType: (nodeType === 'peer' ? 'FABRIC_PEER' : 'FABRIC_ORDERER') as 'FABRIC_PEER' | 'FABRIC_ORDERER',
+				mode: fabricDefaults?.mode || 'service',
+				version: '2.5.12',
+				organizationId: organizations?.[0]?.id || 0,
+				listenAddress: fabricDefaults?.listenAddress || '',
+				operationsListenAddress: fabricDefaults?.operationsListenAddress || '',
+				externalEndpoint: fabricDefaults?.externalEndpoint || '',
+				domains: [],
+				addressOverrides: [],
+				...(fabricDefaults?.chaincodeAddress && { chaincodeAddress: fabricDefaults.chaincodeAddress }),
+				...(fabricDefaults?.eventsAddress && { eventsAddress: fabricDefaults.eventsAddress }),
+				...(fabricDefaults?.adminAddress && { adminAddress: fabricDefaults.adminAddress }),
+			},
+		}
+	}, [fabricDefaults, organizations, nodeType, form])
+
+	const besuDefaultValues = useMemo(() => {
+		const existingConfig = form.getValues().configuration
+
+		if (existingConfig && Object.keys(existingConfig).length > 0) {
+			return {
+				...existingConfig,
+				name: form.getValues().name,
+			}
+		}
+
+		return {
+			name: form.getValues().name,
+			blockchainPlatform: 'BESU' as const,
+			type: 'besu' as const,
+			mode: besuDefaultsData?.mode || 'service',
+			rpcHost: besuDefaultsData?.rpcHost?.split(':')[0] || '0.0.0.0',
+			rpcPort: besuDefaultsData?.rpcPort || 8545,
+			p2pHost: besuDefaultsData?.p2pHost?.split(':')[0] || '0.0.0.0',
+			p2pPort: besuDefaultsData?.p2pPort || 30303,
+			externalIp: besuDefaultsData?.externalIp || '0.0.0.0',
+			internalIp: besuDefaultsData?.internalIp || '0.0.0.0',
+			keyId: 0,
+			networkId: 1,
+			requestTimeout: 30,
+			environmentVariables: besuDefaultsData?.environmentVariables ? Object.entries(besuDefaultsData.environmentVariables).map(([key, value]) => ({ key, value })) : [],
+			...(besuDefaultsData?.metricsEnabled !== undefined && { metricsEnabled: besuDefaultsData.metricsEnabled }),
+			...(besuDefaultsData?.metricsHost && { metricsHost: besuDefaultsData.metricsHost }),
+			...(besuDefaultsData?.metricsPort && { metricsPort: besuDefaultsData.metricsPort }),
+			...(besuDefaultsData?.metricsProtocol && { metricsProtocol: besuDefaultsData.metricsProtocol }),
+			// New fields - gas and access control
+			minGasPrice: 0,
+			hostAllowList: '',
+			accountsAllowList: [],
+			nodesAllowList: [],
+			// JWT Authentication
+			jwtEnabled: false,
+			jwtPublicKeyContent: '',
+			jwtAuthenticationAlgorithm: '',
+		}
+	}, [besuDefaultsData, form])
 
 	const handleFabricSubmit = (data: any) => {
 		const organization = organizations?.items?.find((org) => org.id === data.fabricProperties.organizationId)
@@ -211,14 +296,12 @@ function ConfigurationStep({ form, onNext, onBack }: StepProps) {
 		onNext()
 	}
 
-	const handleBesuSubmit = (data: any) => {
+	const handleBesuSubmit = (data: BesuNodeFormValues) => {
 		form.setValue('name', data.name)
 		form.setValue('configuration', {
 			...data,
-			bootNodes: data.bootNodes
-				?.split('\n')
-				.map((node: string) => node.trim())
-				.filter(Boolean),
+			// bootNodes is already an array from the form's transform
+			bootNodes: data.bootNodes?.map((node: string) => node.trim())?.filter(Boolean),
 			env: data.environmentVariables?.reduce(
 				(acc: any, { key, value }: any) => ({
 					...acc,
@@ -256,7 +339,7 @@ function ConfigurationStep({ form, onNext, onBack }: StepProps) {
 				</dl>
 			</div>
 
-			{protocol === 'fabric' && (
+			{protocol === 'fabric' && fabricDefaultValues && (
 				<FabricNodeForm
 					onSubmit={handleFabricSubmit}
 					isSubmitting={false}
@@ -272,54 +355,25 @@ function ConfigurationStep({ form, onNext, onBack }: StepProps) {
 										...form.getValues().configuration,
 									},
 							  }
-							: {
-									name: form.getValues().name,
-									fabricProperties: {
-										nodeType: nodeType === 'peer' ? 'FABRIC_PEER' : 'FABRIC_ORDERER',
-										mode: 'service',
-										version: '3.1.0',
-										organizationId: organizations?.[0]?.id || 0,
-										listenAddress: '',
-										operationsListenAddress: '',
-										externalEndpoint: '',
-										domains: [],
-										addressOverrides: [],
-									},
-							  }
+							: fabricDefaultValues
 					}
 					submitText="Next"
 				/>
 			)}
-			{protocol === 'besu' && besuDefaults && besuDefaults.defaults && besuDefaults.defaults[0] && (
+			{protocol === 'fabric' && !fabricDefaultsAvailable && (
+				<div className="flex items-center justify-center p-8">
+					<div className="text-center">
+						<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+						<p className="text-sm text-muted-foreground">Loading node configuration defaults...</p>
+					</div>
+				</div>
+			)}
+			{protocol === 'besu' && (
 				<BesuNodeForm
 					onSubmit={handleBesuSubmit}
 					isSubmitting={false}
 					hideSubmit={false}
-					defaultValues={
-						form.getValues().configuration && Object.keys(form.getValues().configuration).length > 0
-							? {
-									...form.getValues().configuration,
-									name: form.getValues().name,
-							  }
-							: {
-									name: form.getValues().name,
-									blockchainPlatform: 'BESU',
-									type: 'besu',
-									mode: 'service',
-									rpcHost: besuDefaults?.defaults?.[0]?.rpcHost?.split(':')[0] || '0.0.0.0',
-									rpcPort: besuDefaults?.defaults?.[0]?.rpcPort || 8545,
-									p2pHost: besuDefaults?.defaults?.[0]?.p2pHost?.split(':')[0] || '0.0.0.0',
-									p2pPort: besuDefaults?.defaults?.[0]?.p2pPort || 30303,
-									externalIp: besuDefaults?.defaults?.[0]?.externalIp || '0.0.0.0',
-									internalIp: besuDefaults?.defaults?.[0]?.internalIp || '0.0.0.0',
-									keyId: 0,
-									networkId: 1,
-									metricsEnabled: true,
-									requestTimeout: 30,
-									version: '25.7.0',
-									environmentVariables: [],
-							  }
-					}
+					defaultValues={besuDefaultValues}
 					submitButtonText="Next"
 				/>
 			)}
@@ -409,11 +463,11 @@ function ReviewStep({ form, onBack }: StepProps) {
 					internalIp: config.internalIp || '0.0.0.0',
 
 					bootNodes: Array.isArray(config.bootNodes)
-						? config.bootNodes.filter(Boolean).map((node) => (typeof node === 'string' ? node.trim() : node))
+						? config.bootNodes.filter(Boolean).map((node: string) => (typeof node === 'string' ? node.trim() : node))
 						: typeof config.bootNodes === 'string'
 						? config.bootNodes
 								.split(/[,\n]/)
-								.map((node) => node.trim())
+								.map((node: string) => node.trim())
 								.filter(Boolean)
 						: [],
 					env: config.environmentVariables?.reduce(
@@ -462,9 +516,7 @@ function ReviewStep({ form, onBack }: StepProps) {
 							<dd className="col-span-2 text-sm">{formData.name}</dd>
 						</div>
 						{Object.entries(formData.configuration || {}).map(([key, value]) => {
-							// Skip rendering objects or arrays directly to prevent recursion
-							// and potential rendering issues
-							let displayValue
+							let displayValue: React.ReactNode
 
 							if (value === undefined || value === null || value === '') {
 								displayValue = <span className="text-muted-foreground italic">No value provided</span>
@@ -534,8 +586,8 @@ export function NodeCreationWizard() {
 		<div className="max-w-4xl mx-auto">
 			<div className="mb-8">
 				<div className="flex items-center justify-center space-x-12">
-					{steps.map((_, i) => (
-						<div key={i} className={`flex items-center ${i < steps.length - 1 ? 'after:content-[""] after:block after:w-24 after:h-px after:bg-border after:ml-12' : ''}`}>
+					{steps.map((s, i) => (
+						<div key={s.title} className={`flex items-center ${i < steps.length - 1 ? 'after:content-[""] after:block after:w-24 after:h-px after:bg-border after:ml-12' : ''}`}>
 							<div
 								className={`flex items-center justify-center w-8 h-8 rounded-full border-2 ${
 									i === step ? 'border-primary bg-primary text-primary-foreground' : i < step ? 'border-primary text-primary' : 'border-muted-foreground text-muted-foreground'

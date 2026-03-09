@@ -189,8 +189,10 @@ const PluginsPage = () => {
 			<AlertDialog open={!!pluginToDelete} onOpenChange={(open) => !open && setPluginToDelete(null)}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>Are you sure?</AlertDialogTitle>
-						<AlertDialogDescription>This will permanently delete the plugin "{pluginToDelete}". This action cannot be undone.</AlertDialogDescription>
+						<AlertDialogTitle>Delete Plugin</AlertDialogTitle>
+						<AlertDialogDescription>
+							Are you sure you want to delete the plugin <span className="font-medium">{pluginToDelete}</span>? This action cannot be undone and will permanently remove the plugin.
+						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>

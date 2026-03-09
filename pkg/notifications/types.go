@@ -6,11 +6,11 @@ import "time"
 type NotificationType string
 
 const (
-	NotificationTypeNodeDowntime  NotificationType = "NODE_DOWNTIME"
-	NotificationTypeBackupSuccess NotificationType = "BACKUP_SUCCESS"
-	NotificationTypeBackupFailure NotificationType = "BACKUP_FAILURE"
-	
-	NotificationTypeS3ConnIssue   NotificationType = "S3_CONNECTION_ISSUE"
+	NotificationTypeNodeDowntime     NotificationType = "NODE_DOWNTIME"
+	NotificationTypeBackupSuccess    NotificationType = "BACKUP_SUCCESS"
+	NotificationTypeBackupFailure    NotificationType = "BACKUP_FAILURE"
+	NotificationTypeS3ConnIssue      NotificationType = "S3_CONNECTION_ISSUE"
+	NotificationTypeDiskSpaceWarning NotificationType = "DISK_SPACE_WARNING"
 )
 
 // NotificationDeliveryType represents different notification providers
@@ -29,55 +29,59 @@ const (
 
 // NotificationProvider represents a notification provider configuration
 type NotificationProvider struct {
-	ID                  int64        `json:"id"`
-	Type                ProviderType `json:"type"`
-	Name                string       `json:"name"`
-	Config              interface{}  `json:"config"`
-	IsDefault           bool         `json:"isDefault"`
-	NotifyNodeDowntime  bool         `json:"notifyNodeDowntime"`
-	NotifyBackupSuccess bool         `json:"notifyBackupSuccess"`
-	NotifyBackupFailure bool         `json:"notifyBackupFailure"`
-	NotifyS3ConnIssue   bool         `json:"notifyS3ConnIssue"`
-	LastTestAt          *time.Time   `json:"lastTestAt,omitempty"`
-	LastTestStatus      string       `json:"lastTestStatus,omitempty"`
-	LastTestMessage     string       `json:"lastTestMessage,omitempty"`
-	CreatedAt           time.Time    `json:"createdAt"`
-	UpdatedAt           time.Time    `json:"updatedAt,omitempty"`
+	ID                     int64        `json:"id"`
+	Type                   ProviderType `json:"type"`
+	Name                   string       `json:"name"`
+	Config                 interface{}  `json:"config"`
+	IsDefault              bool         `json:"isDefault"`
+	NotifyNodeDowntime     bool         `json:"notifyNodeDowntime"`
+	NotifyBackupSuccess    bool         `json:"notifyBackupSuccess"`
+	NotifyBackupFailure    bool         `json:"notifyBackupFailure"`
+	NotifyS3ConnIssue      bool         `json:"notifyS3ConnIssue"`
+	NotifyDiskSpaceWarning bool         `json:"notifyDiskSpaceWarning"`
+	LastTestAt             *time.Time   `json:"lastTestAt,omitempty"`
+	LastTestStatus         string       `json:"lastTestStatus,omitempty"`
+	LastTestMessage        string       `json:"lastTestMessage,omitempty"`
+	CreatedAt              time.Time    `json:"createdAt"`
+	UpdatedAt              time.Time    `json:"updatedAt,omitempty"`
 }
 
 // CreateProviderParams represents parameters for creating a provider
 type CreateProviderParams struct {
-	Type                ProviderType `validate:"required,oneof=SMTP"`
-	Name                string       `validate:"required,min=1,max=255"`
-	Config              interface{}  `validate:"required"`
-	IsDefault           bool
-	NotifyNodeDowntime  bool
-	NotifyBackupSuccess bool
-	NotifyBackupFailure bool
-	NotifyS3ConnIssue   bool
+	Type                   ProviderType `validate:"required,oneof=SMTP"`
+	Name                   string       `validate:"required,min=1,max=255"`
+	Config                 interface{}  `validate:"required"`
+	IsDefault              bool
+	NotifyNodeDowntime     bool
+	NotifyBackupSuccess    bool
+	NotifyBackupFailure    bool
+	NotifyS3ConnIssue      bool
+	NotifyDiskSpaceWarning bool
 }
 
 // UpdateProviderParams represents parameters for updating a provider
 type UpdateProviderParams struct {
-	ID                  int64        `validate:"required"`
-	Type                ProviderType `validate:"required,oneof=SMTP"`
-	Name                string       `validate:"required,min=1,max=255"`
-	Config              interface{}  `validate:"required"`
-	IsDefault           bool
-	NotifyNodeDowntime  bool
-	NotifyBackupSuccess bool
-	NotifyBackupFailure bool
-	NotifyS3ConnIssue   bool
+	ID                     int64        `validate:"required"`
+	Type                   ProviderType `validate:"required,oneof=SMTP"`
+	Name                   string       `validate:"required,min=1,max=255"`
+	Config                 interface{}  `validate:"required"`
+	IsDefault              bool
+	NotifyNodeDowntime     bool
+	NotifyBackupSuccess    bool
+	NotifyBackupFailure    bool
+	NotifyS3ConnIssue      bool
+	NotifyDiskSpaceWarning bool
 }
 
 // SMTPConfig represents SMTP provider configuration
 type SMTPConfig struct {
-	Host     string `json:"host" validate:"required"`
-	Port     int    `json:"port" validate:"required,min=1,max=65535"`
-	Username string `json:"username" validate:"required"`
-	Password string `json:"password" validate:"required"`
-	From     string `json:"from" validate:"required,email"`
-	TLS      bool   `json:"tls"`
+	Host       string   `json:"host" validate:"required"`
+	Port       int      `json:"port" validate:"required,min=1,max=65535"`
+	Username   string   `json:"username" validate:"required"`
+	Password   string   `json:"password" validate:"required"`
+	From       string   `json:"from" validate:"required,email"`
+	TLS        bool     `json:"tls"`
+	Recipients []string `json:"recipients,omitempty"` // Optional list of recipient email addresses. If empty, defaults to From address.
 }
 
 // TestProviderParams represents parameters for testing a provider
@@ -159,4 +163,16 @@ type NodeUpData struct {
 	Duration         string        `json:"duration"`
 	ResponseTime     time.Duration `json:"responseTime"`
 	DowntimeDuration time.Duration `json:"downtimeDuration"`
+}
+
+// DiskSpaceWarningData represents data for disk space warning notifications
+type DiskSpaceWarningData struct {
+	DataPath       string    `json:"dataPath"`
+	UsedBytes      int64     `json:"usedBytes"`
+	AvailableBytes int64     `json:"availableBytes"`
+	TotalBytes     int64     `json:"totalBytes"`
+	UsedPercent    float64   `json:"usedPercent"`
+	Threshold      float64   `json:"threshold"`
+	DetectedTime   time.Time `json:"detectedTime"`
+	MountPoint     string    `json:"mountPoint"`
 }

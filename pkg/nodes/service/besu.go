@@ -26,17 +26,31 @@ import (
 
 // GetBesuPorts attempts to find available ports for P2P and RPC, starting from default ports
 func GetBesuPorts(baseP2PPort, baseRPCPort uint) (p2pPort uint, rpcPort uint, err error) {
+	// Bounds check for base ports
+	if baseP2PPort > 65535 {
+		return 0, 0, fmt.Errorf("base P2P port %d exceeds maximum port number 65535", baseP2PPort)
+	}
+	if baseRPCPort > 65535 {
+		return 0, 0, fmt.Errorf("base RPC port %d exceeds maximum port number 65535", baseRPCPort)
+	}
+
 	maxAttempts := 100
 	// Try to find available ports for P2P and RPC
 	p2pPorts, err := findConsecutivePorts(int(baseP2PPort), 1, int(baseP2PPort)+maxAttempts)
 	if err != nil {
 		return 0, 0, fmt.Errorf("could not find available P2P port: %w", err)
 	}
+	if p2pPorts[0] < 0 || p2pPorts[0] > 65535 {
+		return 0, 0, fmt.Errorf("resolved P2P port %d is out of valid range", p2pPorts[0])
+	}
 	p2pPort = uint(p2pPorts[0])
 
 	rpcPorts, err := findConsecutivePorts(int(baseRPCPort), 1, int(baseRPCPort)+maxAttempts)
 	if err != nil {
 		return 0, 0, fmt.Errorf("could not find available RPC port: %w", err)
+	}
+	if rpcPorts[0] < 0 || rpcPorts[0] > 65535 {
+		return 0, 0, fmt.Errorf("resolved RPC port %d is out of valid range", rpcPorts[0])
 	}
 	rpcPort = uint(rpcPorts[0])
 
@@ -614,6 +628,23 @@ func (s *NodeService) cleanupBesuResources(ctx context.Context, node *db.Node) e
 
 // initializeBesuNode initializes a Besu node
 func (s *NodeService) initializeBesuNode(ctx context.Context, dbNode *db.Node, config *types.BesuNodeConfig) (types.NodeDeploymentConfig, error) {
+	// First, verify Besu binary is available
+	version := config.Version
+	if version == "" {
+		version = "24.1.0" // Default version
+	}
+
+	s.logger.Debug("Verifying Besu binary", "version", version)
+	verifyReq := BesuVersionVerificationRequest{Version: version}
+	verifyResp, err := s.VerifyBesuVersion(ctx, verifyReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify Besu binary: %w", err)
+	}
+	if !verifyResp.Success {
+		return nil, fmt.Errorf("Besu binary verification failed: %s", verifyResp.Error)
+	}
+	s.logger.Debug("Besu binary verified", "actualVersion", verifyResp.ActualVersion)
+
 	// Validate key exists
 	key, err := s.keymanagementService.GetKey(ctx, int(config.KeyID))
 	if err != nil {
@@ -622,6 +653,61 @@ func (s *NodeService) initializeBesuNode(ctx context.Context, dbNode *db.Node, c
 	if key.EthereumAddress == "" {
 		return nil, fmt.Errorf("key %d has no ethereum address", config.KeyID)
 	}
+
+	// Get network for genesis file and chain ID
+	network, err := s.db.GetNetwork(ctx, config.NetworkID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get network: %w", err)
+	}
+
+	var networkConfig networktypes.BesuNetworkConfig
+	if err := json.Unmarshal([]byte(network.Config.String), &networkConfig); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal network config: %w", err)
+	}
+
+	privateKeyDecrypted, err := s.keymanagementService.GetDecryptedPrivateKey(int(config.KeyID))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt key: %w", err)
+	}
+
+	// Validate Besu node configuration using comprehensive validation
+	opts := besu.StartBesuOpts{
+		ID:                         dbNode.Slug,
+		GenesisFile:                network.GenesisBlockB64.String,
+		NetworkID:                  config.NetworkID,
+		ChainID:                    networkConfig.ChainID,
+		P2PPort:                    fmt.Sprintf("%d", config.P2PPort),
+		RPCPort:                    fmt.Sprintf("%d", config.RPCPort),
+		P2PHost:                    config.P2PHost,
+		RPCHost:                    config.RPCHost,
+		MinerAddress:               key.EthereumAddress,
+		ConsensusType:              "qbft",
+		BootNodes:                  config.BootNodes,
+		Version:                    version,
+		NodePrivateKey:             strings.TrimPrefix(privateKeyDecrypted, "0x"),
+		Env:                        config.Env,
+		MetricsEnabled:             config.MetricsEnabled,
+		MetricsPort:                config.MetricsPort,
+		MetricsProtocol:            config.MetricsProtocol,
+		MinGasPrice:                config.MinGasPrice,
+		HostAllowList:              config.HostAllowList,
+		AccountsAllowList:          config.AccountsAllowList,
+		NodesAllowList:             config.NodesAllowList,
+		JWTEnabled:                 config.JWTEnabled,
+		JWTPublicKeyContent:        config.JWTPublicKeyContent,
+		JWTAuthenticationAlgorithm: besu.JWTAlgorithm(config.JWTAuthenticationAlgorithm),
+	}
+
+	if err := opts.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid Besu configuration: %w", err)
+	}
+
+	// Network-level validation: check for port conflicts with existing nodes
+	validator := NewNetworkLevelValidator(s)
+	if err := validator.ValidateBesuPorts(ctx, &opts, dbNode.ID); err != nil {
+		return nil, fmt.Errorf("network validation failed: %w", err)
+	}
+
 	enodeURL := fmt.Sprintf("enode://%s@%s:%d", key.PublicKey[2:], config.ExternalIP, config.P2PPort)
 
 	// Validate ports

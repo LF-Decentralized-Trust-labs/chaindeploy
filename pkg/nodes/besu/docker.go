@@ -3,13 +3,12 @@ package besu
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/chainlaunch/chainlaunch/pkg/docker"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
@@ -68,17 +67,10 @@ func (b *LocalBesu) startDocker(env map[string]string, dataDir, configDir string
 	// Prepare container configuration
 	containerName := b.getContainerName()
 	imageName := fmt.Sprintf("hyperledger/besu:%s", b.opts.Version)
-	// Pull the image
-	reader, err := cli.ImagePull(ctx, imageName, image.PullOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to pull image %s: %w", imageName, err)
-	}
-	defer reader.Close()
 
-	// Wait for the pull to complete
-	_, err = io.Copy(io.Discard, reader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read image pull response: %w", err)
+	// Pull the image (tries CLI first for credential helpers, falls back to API)
+	if err := docker.PullImageIfNeeded(ctx, cli, imageName); err != nil {
+		return nil, err
 	}
 	// Create port bindings
 	portBindings := nat.PortMap{
@@ -117,9 +109,6 @@ func (b *LocalBesu) startDocker(env map[string]string, dataDir, configDir string
 	// Create host config with bind mounts instead of volumes
 	hostConfig := &container.HostConfig{
 		PortBindings: portBindings,
-		RestartPolicy: container.RestartPolicy{
-			Name: container.RestartPolicyUnlessStopped,
-		},
 		Mounts: []mount.Mount{
 			{
 				Type:   mount.TypeBind,
@@ -137,15 +126,6 @@ func (b *LocalBesu) startDocker(env map[string]string, dataDir, configDir string
 	// Remove existing container if it exists
 	if err := b.removeExistingContainer(ctx, cli, containerName); err != nil {
 		return nil, err
-	}
-	// Pull the image
-	reader, err = cli.ImagePull(ctx, imageName, image.PullOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to pull image: %w", err)
-	}
-	_, err = io.Copy(io.Discard, reader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read image pull response: %w", err)
 	}
 
 	// Create container
@@ -191,7 +171,8 @@ func (b *LocalBesu) removeExistingContainer(ctx context.Context, cli *client.Cli
 		for _, name := range c.Names {
 			if name == "/"+containerName {
 				if err := cli.ContainerRemove(ctx, c.ID, container.RemoveOptions{
-					Force: true,
+					Force:         true,
+					RemoveVolumes: true,
 				}); err != nil {
 					return fmt.Errorf("failed to remove existing container: %w", err)
 				}

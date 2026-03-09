@@ -48,8 +48,8 @@ func (s *NetworkService) UpdateOrganizationCRL(ctx context.Context, networkID, o
 		return "", fmt.Errorf("failed to update CRL: %w", err)
 	}
 
-	logrus.Info("Reloading network block after updating CRL, waiting 3 seconds")
-	time.Sleep(3 * time.Second)
+	logrus.Info("Reloading network block after updating CRL, waiting 500ms")
+	time.Sleep(500 * time.Millisecond)
 
 	// Reload network block
 	if err := s.ReloadFabricNetworkBlock(ctx, networkID); err != nil {
@@ -89,66 +89,88 @@ func (s *NetworkService) UpdateFabricNetwork(ctx context.Context, networkID int6
 		signingOrgIDs = append(signingOrgIDs, org.MspID)
 	}
 
-	ordererAddress, ordererTLSCert, err := s.getOrdererAddressAndCertForNetwork(ctx, networkID, fabricDeployer)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get orderer address and TLS certificate: %w", err)
+	// Collect all available orderers for failover
+	type ordererEntry struct {
+		address string
+		tlsCert string
 	}
+	var orderers []ordererEntry
 
-	res, err := fabricDeployer.UpdateChannelConfig(ctx, networkID, proposal.ConfigUpdateEnvelope, signingOrgIDs, ordererAddress, ordererTLSCert)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update channel config: %w", err)
-	}
-	s.logger.Info("Channel config updated", "txID", res)
-	return proposal, nil
-}
-
-func (s *NetworkService) getOrdererAddressAndCertForNetwork(ctx context.Context, networkID int64, fabricDeployer *fabric.FabricDeployer) (string, string, error) {
-
-	// Try to get orderer info from network nodes first
+	// Get orderers from network nodes (registry)
 	networkNodes, err := s.GetNetworkNodes(ctx, networkID)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to get network nodes: %w", err)
-	}
-
-	var ordererAddress, ordererTLSCert string
-
-	// Look for orderer in our registry
-	for _, node := range networkNodes {
-		if node.Node.NodeType == nodetypes.NodeTypeFabricOrderer {
-			if node.Node.FabricOrderer == nil {
-				continue
+		s.logger.Warn("UpdateFabricNetwork: Failed to get network nodes", "error", err)
+	} else {
+		for _, node := range networkNodes {
+			if node.Node.NodeType == nodetypes.NodeTypeFabricOrderer && node.Node.FabricOrderer != nil {
+				orderers = append(orderers, ordererEntry{
+					address: node.Node.FabricOrderer.ExternalEndpoint,
+					tlsCert: node.Node.FabricOrderer.TLSCACert,
+				})
 			}
-			ordererAddress = node.Node.FabricOrderer.ExternalEndpoint
-			ordererTLSCert = node.Node.FabricOrderer.TLSCACert
-			break
 		}
 	}
 
-	// If no orderer found in registry, try to get from current config block
-	if ordererAddress == "" {
-		// Get current config block
-		configBlock, err := fabricDeployer.GetCurrentChannelConfig(networkID)
+	// Get orderers from config block
+	configBlock, err := fabricDeployer.GetCurrentChannelConfig(networkID)
+	if err != nil {
+		s.logger.Warn("UpdateFabricNetwork: Failed to get config block", "error", err)
+	} else {
+		configOrderers, err := fabricDeployer.GetOrderersFromConfigBlock(ctx, configBlock)
 		if err != nil {
-			return "", "", fmt.Errorf("failed to get current config block: %w", err)
+			s.logger.Warn("UpdateFabricNetwork: Failed to get orderers from config block", "error", err)
+		} else {
+			for _, o := range configOrderers {
+				found := false
+				for _, existing := range orderers {
+					if existing.address == o.URL {
+						found = true
+						break
+					}
+				}
+				if !found {
+					orderers = append(orderers, ordererEntry{address: o.URL, tlsCert: o.TLSCert})
+				}
+			}
 		}
-
-		// Extract orderer info from config block
-		ordererInfo, err := fabricDeployer.GetOrderersFromConfigBlock(ctx, configBlock)
-		if err != nil {
-			return "", "", fmt.Errorf("failed to get orderer info from config: %w", err)
-		}
-		if len(ordererInfo) == 0 {
-			return "", "", fmt.Errorf("no orderer found in config block")
-		}
-		ordererAddress = ordererInfo[0].URL
-		ordererTLSCert = ordererInfo[0].TLSCert
 	}
 
-	if ordererAddress == "" {
-		return "", "", fmt.Errorf("no orderer found in network or config block")
+	if len(orderers) == 0 {
+		return nil, fmt.Errorf("no orderers found for network %d", networkID)
 	}
 
-	return ordererAddress, ordererTLSCert, nil
+	s.logger.Info("UpdateFabricNetwork: Attempting to update channel config",
+		"networkID", networkID,
+		"availableOrderers", len(orderers),
+	)
+
+	// Try each orderer until one succeeds
+	var lastErr error
+	for i, orderer := range orderers {
+		s.logger.Info("UpdateFabricNetwork: Trying orderer",
+			"ordererIndex", i+1,
+			"totalOrderers", len(orderers),
+			"ordererURL", orderer.address,
+		)
+
+		res, err := fabricDeployer.UpdateChannelConfig(ctx, networkID, proposal.ConfigUpdateEnvelope, signingOrgIDs, orderer.address, orderer.tlsCert)
+		if err == nil {
+			s.logger.Info("UpdateFabricNetwork: Successfully updated channel config",
+				"txID", res,
+				"ordererURL", orderer.address,
+			)
+			return proposal, nil
+		}
+
+		lastErr = err
+		s.logger.Warn("UpdateFabricNetwork: Failed with orderer, trying next",
+			"ordererIndex", i+1,
+			"ordererURL", orderer.address,
+			"error", err,
+		)
+	}
+
+	return nil, fmt.Errorf("failed to update channel config after trying all %d orderers: %w", len(orderers), lastErr)
 }
 
 func (s *NetworkService) GetFabricChainInfo(ctx context.Context, networkID int64) (*ChainInfo, error) {
@@ -260,13 +282,13 @@ func (s *NetworkService) ImportFabricNetworkWithOrg(ctx context.Context, params 
 	}
 
 	// Import the network using the Fabric deployer
-	networkID, err := fabricDeployer.ImportNetworkWithOrg(ctx, params.ChannelID, params.OrganizationID, params.OrdererURL, params.OrdererTLSCert, params.Description)
+	network, err := fabricDeployer.ImportNetworkWithOrg(ctx, params.ChannelID, params.OrganizationID, params.OrdererURL, params.OrdererTLSCert, params.Description)
 	if err != nil {
 		return nil, fmt.Errorf("failed to import Fabric network with org: %w", err)
 	}
 
 	return &ImportNetworkResult{
-		NetworkID: networkID,
+		NetworkID: network.ID,
 		Message:   "Fabric network imported successfully with organization",
 	}, nil
 }
@@ -284,13 +306,13 @@ func (s *NetworkService) importFabricNetwork(ctx context.Context, params ImportN
 	}
 
 	// Import the network using the Fabric deployer
-	networkID, err := fabricDeployer.ImportNetwork(ctx, params.GenesisFile, params.Description)
+	network, err := fabricDeployer.ImportNetwork(ctx, params.GenesisFile, params.Description)
 	if err != nil {
 		return nil, fmt.Errorf("failed to import Fabric network: %w", err)
 	}
 
 	return &ImportNetworkResult{
-		NetworkID: networkID,
+		NetworkID: network.ID,
 		Message:   "Fabric network imported successfully",
 	}, nil
 }
@@ -323,65 +345,118 @@ func (s *NetworkService) SetAnchorPeers(ctx context.Context, networkID, organiza
 		}
 	}
 
+	// Collect all available orderers to try (failover support)
+	type ordererInfo struct {
+		address string
+		tlsCert string
+		source  string // "registry", "config_block", or "genesis_block"
+	}
+	var orderers []ordererInfo
+
 	// Try to get orderer info from network nodes first
 	networkNodes, err := s.GetNetworkNodes(ctx, networkID)
 	if err != nil {
 		return "", fmt.Errorf("failed to get network nodes: %w", err)
 	}
 
-	var ordererAddress, ordererTLSCert string
-
-	// Look for orderer in our registry
+	// Look for orderers in our registry
 	for _, node := range networkNodes {
 		if node.Node.NodeType == nodetypes.NodeTypeFabricOrderer {
 			if node.Node.FabricOrderer == nil {
 				continue
 			}
-			ordererAddress = node.Node.FabricOrderer.ExternalEndpoint
-			ordererTLSCert = node.Node.FabricOrderer.TLSCACert
-			break
+			orderers = append(orderers, ordererInfo{
+				address: node.Node.FabricOrderer.ExternalEndpoint,
+				tlsCert: node.Node.FabricOrderer.TLSCACert,
+				source:  "registry",
+			})
 		}
 	}
 
-	// If no orderer found in registry, try to get from current config block
-	if ordererAddress == "" {
-		// Get current config block
-		configBlock, err := fabricDeployer.GetCurrentChannelConfig(networkID)
+	// Also get orderers from config block to ensure we have all available orderers
+	configBlock, err := fabricDeployer.GetCurrentChannelConfig(networkID)
+	if err != nil {
+		logrus.Warnf("SetAnchorPeers: Failed to get current config block, continuing with registry orderers only: %v", err)
+	} else {
+		configOrderers, err := fabricDeployer.GetOrderersFromConfigBlock(ctx, configBlock)
 		if err != nil {
-			return "", fmt.Errorf("failed to get current config block: %w", err)
+			logrus.Warnf("SetAnchorPeers: Failed to get orderers from config block: %v", err)
+		} else {
+			for _, o := range configOrderers {
+				// Check if this orderer is already in our list
+				found := false
+				for _, existing := range orderers {
+					if existing.address == o.URL {
+						found = true
+						break
+					}
+				}
+				if !found {
+					orderers = append(orderers, ordererInfo{
+						address: o.URL,
+						tlsCert: o.TLSCert,
+						source:  "config_block",
+					})
+				}
+			}
 		}
-
-		// Extract orderer info from config block
-		ordererInfo, err := fabricDeployer.GetOrderersFromConfigBlock(ctx, configBlock)
-		if err != nil {
-			return "", fmt.Errorf("failed to get orderer info from config: %w", err)
-		}
-		if len(ordererInfo) == 0 {
-			return "", fmt.Errorf("no orderer found in config block")
-		}
-		ordererAddress = ordererInfo[0].URL
-		ordererTLSCert = ordererInfo[0].TLSCert
 	}
 
-	if ordererAddress == "" {
+	// Also try to get orderers from genesis block as additional fallback
+	genesisOrderers, err := fabricDeployer.GetOrderersFromGenesisBlock(ctx, networkID)
+	if err != nil {
+		logrus.Debugf("SetAnchorPeers: Failed to get orderers from genesis block (may not exist): %v", err)
+	} else {
+		for _, o := range genesisOrderers {
+			found := false
+			for _, existing := range orderers {
+				if existing.address == o.URL {
+					found = true
+					break
+				}
+			}
+			if !found {
+				orderers = append(orderers, ordererInfo{
+					address: o.URL,
+					tlsCert: o.TLSCert,
+					source:  "genesis_block",
+				})
+			}
+		}
+	}
+
+	if len(orderers) == 0 {
 		return "", fmt.Errorf("no orderer found in network or config block")
 	}
 
-	// Set anchor peers using deployer with the found orderer info
-	txID, err := fabricDeployer.SetAnchorPeersWithOrderer(ctx, networkID, organizationID, deployerAnchorPeers, ordererAddress, ordererTLSCert)
-	if err != nil {
-		return "", err
+	logrus.Infof("SetAnchorPeers: Found %d orderers, will try each until success", len(orderers))
+
+	// Try each orderer until one succeeds
+	var lastErr error
+	for i, orderer := range orderers {
+		logrus.Infof("SetAnchorPeers: Attempting orderer %d/%d (%s, source=%s)", i+1, len(orderers), orderer.address, orderer.source)
+
+		txID, err := fabricDeployer.SetAnchorPeersWithOrderer(ctx, networkID, organizationID, deployerAnchorPeers, orderer.address, orderer.tlsCert)
+		if err == nil {
+			logrus.Infof("SetAnchorPeers: Successfully set anchor peers via orderer %s, txID=%s", orderer.address, txID)
+
+			logrus.Info("Reloading network block after setting anchor peers, waiting 500ms")
+			time.Sleep(500 * time.Millisecond)
+
+			// Reload network block
+			if err := s.ReloadFabricNetworkBlock(ctx, networkID); err != nil {
+				logrus.Errorf("Failed to reload network block after setting anchor peers: %v", err)
+			}
+
+			return txID, nil
+		}
+
+		logrus.Warnf("SetAnchorPeers: Failed with orderer %s: %v", orderer.address, err)
+		lastErr = err
 	}
 
-	logrus.Info("Reloading network block after setting anchor peers, waiting 3 seconds")
-	time.Sleep(3 * time.Second)
-
-	// Reload network block
-	if err := s.ReloadFabricNetworkBlock(ctx, networkID); err != nil {
-		logrus.Errorf("Failed to reload network block after setting anchor peers: %v", err)
-	}
-
-	return txID, nil
+	// All orderers failed
+	return "", fmt.Errorf("failed to set anchor peers after trying all %d orderers, last error: %w", len(orderers), lastErr)
 }
 
 // ReloadFabricNetworkBlock reloads the network block for a given network ID

@@ -218,11 +218,21 @@ func (s *NetworkService) CreateNetwork(ctx context.Context, name, description st
 
 	deployer, err := s.deployerFactory.GetDeployer(string(baseConfig.Type))
 	if err != nil {
+		// Rollback: delete the network from database
+		s.logger.Error("Failed to get deployer, rolling back network", "network_id", network.ID, "error", err)
+		if deleteErr := s.db.DeleteNetwork(ctx, network.ID); deleteErr != nil {
+			s.logger.Error("Failed to delete network after deployer error", "network_id", network.ID, "error", deleteErr)
+		}
 		return nil, fmt.Errorf("failed to get deployer: %w", err)
 	}
 
 	genesisBlock, err := deployer.CreateGenesisBlock(network.ID, config)
 	if err != nil {
+		// Rollback: delete the network from database
+		s.logger.Error("Failed to create genesis block, rolling back network", "network_id", network.ID, "error", err)
+		if deleteErr := s.db.DeleteNetwork(ctx, network.ID); deleteErr != nil {
+			s.logger.Error("Failed to delete network after genesis block error", "network_id", network.ID, "error", deleteErr)
+		}
 		return nil, fmt.Errorf("failed to create genesis block: %w", err)
 	}
 	genesisBlockB64 := base64.StdEncoding.EncodeToString(genesisBlock)
@@ -230,6 +240,11 @@ func (s *NetworkService) CreateNetwork(ctx context.Context, name, description st
 
 	// Update network status to running after successful genesis block creation
 	if err := s.UpdateNetworkStatus(ctx, network.ID, NetworkStatusGenesisBlockCreated); err != nil {
+		// Rollback: delete the network from database
+		s.logger.Error("Failed to update network status, rolling back network", "network_id", network.ID, "error", err)
+		if deleteErr := s.db.DeleteNetwork(ctx, network.ID); deleteErr != nil {
+			s.logger.Error("Failed to delete network after status update error", "network_id", network.ID, "error", deleteErr)
+		}
 		return nil, fmt.Errorf("failed to update network status: %w", err)
 	}
 

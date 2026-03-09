@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Skeleton } from '@/components/ui/skeleton'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/utils'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -209,12 +210,6 @@ export default function NodeDetailPage() {
 		}),
 	})
 
-	// Function to refresh logs by restarting the EventSource connection
-	const refreshLogs = () => {
-		setLogRefreshKey(prev => prev + 1)
-		setLogs('') // Clear existing logs
-	}
-
 	const handleAction = async (action: string) => {
 		if (!node) return
 
@@ -316,7 +311,57 @@ export default function NodeDetailPage() {
 	}, [id, logRefreshKey])
 
 	if (isLoading) {
-		return <div>Loading...</div>
+		return (
+			<div className="flex-1 space-y-6 p-8">
+				{/* Header Skeleton */}
+				<div className="flex items-center justify-between">
+					<div>
+						<Skeleton className="h-8 w-48 mb-2" />
+						<div className="flex items-center gap-4 mt-1">
+							<Skeleton className="h-4 w-40" />
+							<Skeleton className="h-5 w-20 rounded-full" />
+							<Skeleton className="h-4 w-32" />
+						</div>
+					</div>
+					<Skeleton className="h-9 w-28" />
+				</div>
+
+				{/* Details Skeleton */}
+				<Card>
+					<CardHeader>
+						<Skeleton className="h-5 w-36" />
+					</CardHeader>
+					<CardContent>
+						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+							{[1, 2, 3, 4, 5, 6].map(i => (
+								<div key={i} className="space-y-2">
+									<Skeleton className="h-4 w-24" />
+									<Skeleton className="h-4 w-48" />
+								</div>
+							))}
+						</div>
+					</CardContent>
+				</Card>
+
+				{/* Tabs Skeleton */}
+				<div className="space-y-4">
+					<div className="flex gap-2">
+						<Skeleton className="h-9 w-20" />
+						<Skeleton className="h-9 w-20" />
+						<Skeleton className="h-9 w-20" />
+					</div>
+					<Card>
+						<CardContent className="pt-6">
+							<div className="space-y-2">
+								{[1, 2, 3, 4, 5].map(i => (
+									<Skeleton key={i} className="h-4 w-full" />
+								))}
+							</div>
+						</CardContent>
+					</Card>
+				</div>
+			</div>
+		)
 	}
 
 	if (error) {
@@ -472,12 +517,14 @@ export default function NodeDetailPage() {
 				<AlertDialogContent>
 					<AlertDialogHeader>
 						<AlertDialogTitle>Renew Certificates</AlertDialogTitle>
-						<AlertDialogDescription>Are you sure you want to renew the certificates for this node? This will generate new TLS and signing certificates.</AlertDialogDescription>
+						<AlertDialogDescription>
+							Are you sure you want to renew the certificates for <span className="font-medium">{node?.name}</span>? This will generate new TLS and signing certificates. The node may need to be restarted for changes to take effect.
+						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>
 						<AlertDialogAction onClick={handleRenewCertificates} disabled={renewCertificates.isPending}>
-							Renew Certificates
+							{renewCertificates.isPending ? 'Renewing...' : 'Renew Certificates'}
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>
@@ -487,7 +534,9 @@ export default function NodeDetailPage() {
 				<AlertDialogContent>
 					<AlertDialogHeader>
 						<AlertDialogTitle>Delete Node</AlertDialogTitle>
-						<AlertDialogDescription>Are you sure you want to delete this node? This action cannot be undone.</AlertDialogDescription>
+						<AlertDialogDescription>
+							Are you sure you want to delete the node <span className="font-medium">{node?.name}</span>? This action cannot be undone and will permanently remove the node and all associated data.
+						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -501,7 +550,7 @@ export default function NodeDetailPage() {
 							disabled={deleteNode.isPending}
 							className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 						>
-							Delete
+							{deleteNode.isPending ? 'Deleting...' : 'Delete'}
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>

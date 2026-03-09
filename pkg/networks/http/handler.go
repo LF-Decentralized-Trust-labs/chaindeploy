@@ -1,8 +1,10 @@
 package http
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -11,9 +13,9 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/hyperledger/fabric-config/configtx"
 
-	"encoding/base64"
-
+	"github.com/chainlaunch/chainlaunch/pkg/errors"
 	httpchainlaunch "github.com/chainlaunch/chainlaunch/pkg/http"
+	"github.com/chainlaunch/chainlaunch/pkg/http/response"
 	"github.com/chainlaunch/chainlaunch/pkg/networks/service"
 	"github.com/chainlaunch/chainlaunch/pkg/networks/service/fabric"
 	"github.com/chainlaunch/chainlaunch/pkg/networks/service/types"
@@ -342,6 +344,10 @@ func (h *Handler) FabricNetworkCreate(w http.ResponseWriter, r *http.Request) {
 	// Create network using service
 	network, err := h.networkService.CreateNetwork(r.Context(), req.Name, req.Description, configBytes)
 	if err != nil {
+		if mve, ok := errors.GetMultiValidationError(err); ok {
+			response.WriteMultiValidationError(w, mve)
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "create_network_failed", err.Error())
 		return
 	}
@@ -932,7 +938,9 @@ func mapNetworkToResponse(n service.Network) NetworkResponse {
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("Error writing JSON response: %v", err)
+	}
 }
 
 func writeError(w http.ResponseWriter, code int, error string, message string) {
@@ -1059,6 +1067,10 @@ func (h *Handler) BesuNetworkCreate(w http.ResponseWriter, r *http.Request) {
 	// Create the network
 	network, err := h.networkService.CreateNetwork(r.Context(), req.Name, req.Description, configBytes)
 	if err != nil {
+		if mve, ok := errors.GetMultiValidationError(err); ok {
+			response.WriteMultiValidationError(w, mve)
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "create_network_failed", err.Error())
 		return
 	}

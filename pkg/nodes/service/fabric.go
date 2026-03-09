@@ -419,6 +419,34 @@ func (s *NodeService) stopFabricPeer(ctx context.Context, dbNode *db.Node) error
 	return nil
 }
 
+// stopFabricPeerWithConfig stops a Fabric peer using a specific deployment config (e.g., old mode before switching)
+func (s *NodeService) stopFabricPeerWithConfig(ctx context.Context, dbNode *db.Node, deployConfig *types.FabricPeerDeploymentConfig) error {
+	nodeConfig, err := utils.LoadNodeConfig([]byte(dbNode.NodeConfig.String))
+	if err != nil {
+		return fmt.Errorf("failed to deserialize node config: %w", err)
+	}
+	peerNodeConfig, ok := nodeConfig.(*types.FabricPeerConfig)
+	if !ok {
+		return fmt.Errorf("failed to assert node config to FabricPeerConfig")
+	}
+
+	org, err := s.orgService.GetOrganization(ctx, peerNodeConfig.OrganizationID)
+	if err != nil {
+		return fmt.Errorf("failed to get organization: %w", err)
+	}
+
+	// Create a temporary config with the specified mode
+	tempConfig := *peerNodeConfig
+	tempConfig.Mode = deployConfig.Mode
+
+	localPeer := s.getPeerFromConfig(dbNode, org, &tempConfig)
+	if err := localPeer.Stop(); err != nil {
+		return fmt.Errorf("failed to stop peer: %w", err)
+	}
+
+	return nil
+}
+
 // startFabricOrderer starts a Fabric orderer node
 func (s *NodeService) startFabricOrderer(ctx context.Context, dbNode *db.Node) error {
 	nodeConfig, err := utils.LoadNodeConfig([]byte(dbNode.NodeConfig.String))
@@ -471,6 +499,34 @@ func (s *NodeService) stopFabricOrderer(ctx context.Context, dbNode *db.Node) er
 	return nil
 }
 
+// stopFabricOrdererWithConfig stops a Fabric orderer using a specific deployment config (e.g., old mode before switching)
+func (s *NodeService) stopFabricOrdererWithConfig(ctx context.Context, dbNode *db.Node, deployConfig *types.FabricOrdererDeploymentConfig) error {
+	nodeConfig, err := utils.LoadNodeConfig([]byte(dbNode.NodeConfig.String))
+	if err != nil {
+		return fmt.Errorf("failed to deserialize node config: %w", err)
+	}
+	ordererNodeConfig, ok := nodeConfig.(*types.FabricOrdererConfig)
+	if !ok {
+		return fmt.Errorf("failed to assert node config to FabricOrdererConfig")
+	}
+
+	org, err := s.orgService.GetOrganization(ctx, ordererNodeConfig.OrganizationID)
+	if err != nil {
+		return fmt.Errorf("failed to get organization: %w", err)
+	}
+
+	// Create a temporary config with the specified mode
+	tempConfig := *ordererNodeConfig
+	tempConfig.Mode = deployConfig.Mode
+
+	localOrderer := s.getOrdererFromConfig(dbNode, org, &tempConfig)
+	if err := localOrderer.Stop(); err != nil {
+		return fmt.Errorf("failed to stop orderer: %w", err)
+	}
+
+	return nil
+}
+
 // UpdateFabricPeer updates a Fabric peer node configuration
 func (s *NodeService) UpdateFabricPeer(ctx context.Context, opts UpdateFabricPeerOpts) (*NodeResponse, error) {
 	// Get the node from database
@@ -509,20 +565,11 @@ func (s *NodeService) UpdateFabricPeer(ctx context.Context, opts UpdateFabricPee
 
 	// --- MODE CHANGE LOGIC ---
 	modeChanged := false
-	var newMode string
-	if opts.Mode != "" {
-		if opts.Mode != peerConfig.Mode {
-			modeChanged = true
-			newMode = opts.Mode
-		}
-	}
-	// If mode is changing, stop the node first
-	if modeChanged {
-		if err := s.stopFabricPeer(ctx, node); err != nil {
-			s.logger.Warn("Failed to stop peer before mode change", "error", err)
-		}
-		peerConfig.Mode = newMode
-		deployPeerConfig.Mode = newMode
+	oldMode := deployPeerConfig.Mode
+	if opts.Mode != "" && opts.Mode != peerConfig.Mode {
+		modeChanged = true
+		peerConfig.Mode = opts.Mode
+		deployPeerConfig.Mode = opts.Mode
 	}
 
 	// Update configuration fields if provided
@@ -531,18 +578,30 @@ func (s *NodeService) UpdateFabricPeer(ctx context.Context, opts UpdateFabricPee
 		deployPeerConfig.ExternalEndpoint = opts.ExternalEndpoint
 	}
 	if opts.ListenAddress != "" && opts.ListenAddress != peerConfig.ListenAddress {
+		if err := s.validateAddressFormat(opts.ListenAddress); err != nil {
+			return nil, fmt.Errorf("invalid listen address: %w", err)
+		}
 		peerConfig.ListenAddress = opts.ListenAddress
 		deployPeerConfig.ListenAddress = opts.ListenAddress
 	}
 	if opts.EventsAddress != "" && opts.EventsAddress != peerConfig.EventsAddress {
+		if err := s.validateAddressFormat(opts.EventsAddress); err != nil {
+			return nil, fmt.Errorf("invalid events address: %w", err)
+		}
 		peerConfig.EventsAddress = opts.EventsAddress
 		deployPeerConfig.EventsAddress = opts.EventsAddress
 	}
 	if opts.OperationsListenAddress != "" && opts.OperationsListenAddress != peerConfig.OperationsListenAddress {
+		if err := s.validateAddressFormat(opts.OperationsListenAddress); err != nil {
+			return nil, fmt.Errorf("invalid operations listen address: %w", err)
+		}
 		peerConfig.OperationsListenAddress = opts.OperationsListenAddress
 		deployPeerConfig.OperationsListenAddress = opts.OperationsListenAddress
 	}
 	if opts.ChaincodeAddress != "" && opts.ChaincodeAddress != peerConfig.ChaincodeAddress {
+		if err := s.validateAddressFormat(opts.ChaincodeAddress); err != nil {
+			return nil, fmt.Errorf("invalid chaincode address: %w", err)
+		}
 		peerConfig.ChaincodeAddress = opts.ChaincodeAddress
 		deployPeerConfig.ChaincodeAddress = opts.ChaincodeAddress
 	}
@@ -610,10 +669,19 @@ func (s *NodeService) UpdateFabricPeer(ctx context.Context, opts UpdateFabricPee
 		return nil, fmt.Errorf("failed to synchronize peer config: %w", err)
 	}
 
-	// If mode changed, start the node with the new mode
+	// If mode changed, stop the node with old mode and start with new mode
 	if modeChanged {
+		// Create a temporary deployment config with old mode for stopping
+		oldDeployConfig := *deployPeerConfig
+		oldDeployConfig.Mode = oldMode
+
+		if err := s.stopFabricPeerWithConfig(ctx, node, &oldDeployConfig); err != nil {
+			s.logger.Warn("Failed to stop peer with old mode", "error", err, "oldMode", oldMode)
+			// Continue anyway to try starting with new mode
+		}
+
 		if err := s.startFabricPeer(ctx, node); err != nil {
-			s.logger.Warn("Failed to start peer after mode change", "error", err)
+			return nil, fmt.Errorf("failed to start peer with new mode: %w", err)
 		}
 	}
 
@@ -665,19 +733,11 @@ func (s *NodeService) UpdateFabricOrderer(ctx context.Context, opts UpdateFabric
 
 	// --- MODE CHANGE LOGIC ---
 	modeChanged := false
-	var newMode string
-	if opts.Mode != "" {
-		if opts.Mode != ordererConfig.Mode {
-			modeChanged = true
-			newMode = opts.Mode
-		}
-	}
-	if modeChanged {
-		if err := s.stopFabricOrderer(ctx, node); err != nil {
-			s.logger.Warn("Failed to stop orderer before mode change", "error", err)
-		}
-		ordererConfig.Mode = newMode
-		deployOrdererConfig.Mode = newMode
+	oldMode := deployOrdererConfig.Mode
+	if opts.Mode != "" && opts.Mode != ordererConfig.Mode {
+		modeChanged = true
+		ordererConfig.Mode = opts.Mode
+		deployOrdererConfig.Mode = opts.Mode
 	}
 
 	// Update configuration fields if provided
@@ -686,14 +746,23 @@ func (s *NodeService) UpdateFabricOrderer(ctx context.Context, opts UpdateFabric
 		deployOrdererConfig.ExternalEndpoint = opts.ExternalEndpoint
 	}
 	if opts.ListenAddress != "" && opts.ListenAddress != ordererConfig.ListenAddress {
+		if err := s.validateAddressFormat(opts.ListenAddress); err != nil {
+			return nil, fmt.Errorf("invalid listen address: %w", err)
+		}
 		ordererConfig.ListenAddress = opts.ListenAddress
 		deployOrdererConfig.ListenAddress = opts.ListenAddress
 	}
 	if opts.AdminAddress != "" && opts.AdminAddress != ordererConfig.AdminAddress {
+		if err := s.validateAddressFormat(opts.AdminAddress); err != nil {
+			return nil, fmt.Errorf("invalid admin address: %w", err)
+		}
 		ordererConfig.AdminAddress = opts.AdminAddress
 		deployOrdererConfig.AdminAddress = opts.AdminAddress
 	}
 	if opts.OperationsListenAddress != "" && opts.OperationsListenAddress != ordererConfig.OperationsListenAddress {
+		if err := s.validateAddressFormat(opts.OperationsListenAddress); err != nil {
+			return nil, fmt.Errorf("invalid operations listen address: %w", err)
+		}
 		ordererConfig.OperationsListenAddress = opts.OperationsListenAddress
 		deployOrdererConfig.OperationsListenAddress = opts.OperationsListenAddress
 	}
@@ -746,10 +815,19 @@ func (s *NodeService) UpdateFabricOrderer(ctx context.Context, opts UpdateFabric
 		},
 	})
 
-	// If mode changed, start the node with the new mode
+	// If mode changed, stop the node with old mode and start with new mode
 	if modeChanged {
+		// Create a temporary deployment config with old mode for stopping
+		oldDeployConfig := *deployOrdererConfig
+		oldDeployConfig.Mode = oldMode
+
+		if err := s.stopFabricOrdererWithConfig(ctx, node, &oldDeployConfig); err != nil {
+			s.logger.Warn("Failed to stop orderer with old mode", "error", err, "oldMode", oldMode)
+			// Continue anyway to try starting with new mode
+		}
+
 		if err := s.startFabricOrderer(ctx, node); err != nil {
-			s.logger.Warn("Failed to start orderer after mode change", "error", err)
+			return nil, fmt.Errorf("failed to start orderer with new mode: %w", err)
 		}
 	}
 
@@ -1027,6 +1105,30 @@ func (s *NodeService) renewPeerCertificates(ctx context.Context, dbNode *db.Node
 		return fmt.Errorf("failed to renew peer certificates: %w", err)
 	}
 
+	// Fetch renewed certificate data from key database and persist updated deployment config
+	signKey, err := s.db.GetKeyByID(ctx, peerDeployConfig.SignKeyID)
+	if err == nil && signKey.Certificate.Valid {
+		peerDeployConfig.SignCert = signKey.Certificate.String
+	}
+
+	tlsKey, err := s.db.GetKeyByID(ctx, peerDeployConfig.TLSKeyID)
+	if err == nil && tlsKey.Certificate.Valid {
+		peerDeployConfig.TLSCert = tlsKey.Certificate.String
+	}
+
+	updatedDeploymentConfig, err := json.Marshal(peerDeployConfig)
+	if err != nil {
+		return fmt.Errorf("failed to marshal updated deployment config: %w", err)
+	}
+
+	if _, err := s.db.UpdateNodeDeploymentConfig(ctx, &db.UpdateNodeDeploymentConfigParams{
+		ID:               dbNode.ID,
+		DeploymentConfig: sql.NullString{String: string(updatedDeploymentConfig), Valid: true},
+	}); err != nil {
+		s.logger.Warn("Failed to update deployment config after certificate renewal", "error", err)
+		// Don't return error - renewal was successful, just couldn't persist new config
+	}
+
 	// Create certificate renewal completed event
 	if err := s.eventService.CreateEvent(ctx, dbNode.ID, NodeEventRenewedCertificates, map[string]interface{}{
 		"node_id": dbNode.ID,
@@ -1076,6 +1178,30 @@ func (s *NodeService) renewOrdererCertificates(ctx context.Context, dbNode *db.N
 	err = localOrderer.RenewCertificates(ordererDeployConfig)
 	if err != nil {
 		return fmt.Errorf("failed to renew orderer certificates: %w", err)
+	}
+
+	// Fetch renewed certificate data from key database and persist updated deployment config
+	signKey, err := s.db.GetKeyByID(ctx, ordererDeployConfig.SignKeyID)
+	if err == nil && signKey.Certificate.Valid {
+		ordererDeployConfig.SignCert = signKey.Certificate.String
+	}
+
+	tlsKey, err := s.db.GetKeyByID(ctx, ordererDeployConfig.TLSKeyID)
+	if err == nil && tlsKey.Certificate.Valid {
+		ordererDeployConfig.TLSCert = tlsKey.Certificate.String
+	}
+
+	updatedDeploymentConfig, err := json.Marshal(ordererDeployConfig)
+	if err != nil {
+		return fmt.Errorf("failed to marshal updated deployment config: %w", err)
+	}
+
+	if _, err := s.db.UpdateNodeDeploymentConfig(ctx, &db.UpdateNodeDeploymentConfigParams{
+		ID:               dbNode.ID,
+		DeploymentConfig: sql.NullString{String: string(updatedDeploymentConfig), Valid: true},
+	}); err != nil {
+		s.logger.Warn("Failed to update deployment config after certificate renewal", "error", err)
+		// Don't return error - renewal was successful, just couldn't persist new config
 	}
 
 	// Create certificate renewal completed event

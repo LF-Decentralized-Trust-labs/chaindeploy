@@ -267,32 +267,32 @@ func (d *BesuDeployer) decodePEMPublicKey(hexStr string) (string, error) {
 }
 
 // ImportNetwork imports a Besu network from a genesis file
-func (d *BesuDeployer) ImportNetwork(ctx context.Context, genesisFile []byte, name, description string) (string, error) {
+func (d *BesuDeployer) ImportNetwork(ctx context.Context, genesisFile []byte, name, description string) (*db.Network, error) {
 	// Parse the genesis file
 	var genesisConfig map[string]interface{}
 	if err := json.Unmarshal(genesisFile, &genesisConfig); err != nil {
-		return "", fmt.Errorf("failed to parse Besu genesis file: %w", err)
+		return nil, fmt.Errorf("failed to parse Besu genesis file: %w", err)
 	}
 
 	// Validate required fields
 	if _, ok := genesisConfig["config"]; !ok {
-		return "", fmt.Errorf("invalid Besu genesis file: missing config section")
+		return nil, fmt.Errorf("invalid Besu genesis file: missing config section")
 	}
 
 	// Validate chainId exists
 	config, ok := genesisConfig["config"].(map[string]interface{})
 	if !ok {
-		return "", fmt.Errorf("invalid Besu genesis file: config section is not an object")
+		return nil, fmt.Errorf("invalid Besu genesis file: config section is not an object")
 	}
 	if _, ok := config["chainId"]; !ok {
-		return "", fmt.Errorf("invalid Besu genesis file: missing chainId in config section")
+		return nil, fmt.Errorf("invalid Besu genesis file: missing chainId in config section")
 	}
 
 	// Generate a unique network ID
 	networkID := uuid.New().String()
 
 	// Create network in database
-	_, err := d.db.CreateNetworkFull(ctx, &db.CreateNetworkFullParams{
+	network, err := d.db.CreateNetworkFull(ctx, &db.CreateNetworkFullParams{
 		Name:        name,
 		Platform:    "besu",
 		Description: sql.NullString{String: description, Valid: description != ""},
@@ -304,8 +304,8 @@ func (d *BesuDeployer) ImportNetwork(ctx context.Context, genesisFile []byte, na
 		},
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to create network: %w", err)
+		return nil, fmt.Errorf("failed to create network: %w", err)
 	}
 
-	return networkID, nil
+	return network, nil
 }

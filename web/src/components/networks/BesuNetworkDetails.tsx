@@ -1,16 +1,19 @@
 import { HttpBesuNetworkResponse } from '@/api/client'
 import { getNodesPlatformByPlatformOptions } from '@/api/client/@tanstack/react-query.gen'
+import { BesuSmartContractTutorial } from '@/components/networks/BesuSmartContractTutorial'
 import { BesuValidatorsTab } from '@/components/networks/BesuValidatorsTab'
 import { BesuBlockExplorer } from '@/components/networks/BesuBlockExplorer'
 import { ValidatorList } from '@/components/networks/validator-list'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { Activity, ArrowLeft, Code, Copy, Edit, Network, Save, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import * as z from 'zod'
+import rlp from 'rlp'
+import { Buffer } from 'buffer'
 import { BesuIcon } from '../icons/besu-icon'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Badge } from '../ui/badge'
@@ -106,13 +109,73 @@ const genesisFormSchema = z.object({
 
 type GenesisFormValues = z.infer<typeof genesisFormSchema>
 
+// Utility function to parse validators from Besu QBFT genesis extraData using RLP
+const parseValidatorsFromBesuQbftExtraData = (extraData: string): { vanity: string; proposer: string; validators: string[]; seals: string[] } => {
+	if (!extraData || extraData === '0x') {
+		return { vanity: '', proposer: '', validators: [], seals: [] }
+	}
+
+	try {
+		// Remove the '0x' prefix and convert hex to a Buffer
+		const encoded = Buffer.from(extraData.slice(2), 'hex')
+
+		// Decode the RLP data
+		const decoded = rlp.decode(encoded)
+
+		// Helper function to convert Buffer/Uint8Array to hex string
+		const bufferToHex = (buffer: Buffer | Uint8Array): string => {
+			if (Buffer.isBuffer(buffer)) {
+				return '0x' + buffer.toString('hex')
+			} else if (buffer instanceof Uint8Array) {
+				return '0x' + Array.from(buffer).map(b => b.toString(16).padStart(2, '0')).join('')
+			}
+			return '0x' + buffer.toString()
+		}
+
+		// Helper function to check if something is a buffer-like object
+		const isBufferLike = (obj: unknown): obj is Buffer | Uint8Array => {
+			return Buffer.isBuffer(obj) || obj instanceof Uint8Array
+		}
+
+		// Parse the decoded data
+		// Besu QBFT extraData format: [vanity, validators, seals]
+		const vanity = decoded[0] && isBufferLike(decoded[0]) ? bufferToHex(decoded[0]) : ''
+		const validators = decoded[1] ? 
+			(Array.isArray(decoded[1]) ? 
+				decoded[1].filter(isBufferLike).map(v => bufferToHex(v)) : 
+				isBufferLike(decoded[1]) ? [bufferToHex(decoded[1])] : []
+			) : []
+		const seals = decoded[2] ? 
+			(Array.isArray(decoded[2]) ? 
+				decoded[2].filter(isBufferLike).map(s => bufferToHex(s)) : 
+				isBufferLike(decoded[2]) ? [bufferToHex(decoded[2])] : []
+			) : []
+
+		return { vanity, proposer: '', validators, seals }
+	} catch (error) {
+		console.error('Error parsing Besu QBFT extraData with RLP:', error)
+
+		// Fallback: try to parse as raw hex if RLP fails
+		try {
+			const cleanData = extraData.startsWith('0x') ? extraData.slice(2) : extraData
+			if (cleanData.length >= 40) {
+				// Try to extract at least one validator address
+				const validator = `0x${cleanData.slice(0, 40)}`
+				return { vanity: '', proposer: '', validators: [validator], seals: [] }
+			}
+		} catch (fallbackError) {
+			console.error('Fallback parsing also failed:', fallbackError)
+		}
+
+		return { vanity: '', proposer: '', validators: [], seals: [] }
+	}
+}
+
 export function BesuNetworkDetails({ network }: BesuNetworkDetailsProps) {
 	const [searchParams, setSearchParams] = useSearchParams()
 	const currentTab = (searchParams.get('tab') || 'details') as BesuTabValue
 	const [isEditingGenesis, setIsEditingGenesis] = useState(false)
 	const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null)
-
-	const queryClient = useQueryClient()
 
 	// Fetch BESU nodes for the network
 	const { data: besuNodes, isLoading: nodesLoading } = useQuery({
@@ -256,12 +319,79 @@ export function BesuNetworkDetails({ network }: BesuNetworkDetailsProps) {
 									<p className="text-sm text-muted-foreground">{initialConfig?.consensus || 'Not specified'}</p>
 								</div>
 
-								{initialConfig?.initialValidators && (
+							{(() => {
+								const { vanity, validators, seals } = parseValidatorsFromBesuQbftExtraData(genesisConfig?.extraData || '')
+								return validators.length > 0 ? (
+									<div>
+										<h3 className="text-sm font-medium mb-2">Validators ({validators.length})</h3>
+										{vanity && (
+											<div className="mb-3">
+												<h4 className="text-xs font-medium text-muted-foreground mb-1">Vanity Data</h4>
+												<div className="flex items-center gap-2">
+													<Badge variant="secondary" className="font-mono text-xs">
+														{vanity}
+													</Badge>
+													<Button
+														variant="ghost"
+														size="sm"
+														onClick={() => navigator.clipboard.writeText(vanity)}
+														className="h-6 w-6 p-0"
+													>
+														<Copy className="h-3 w-3" />
+													</Button>
+												</div>
+											</div>
+										)}
+										<div className="mb-3">
+											<h4 className="text-xs font-medium text-muted-foreground mb-2">Validator Addresses</h4>
+											<div className="space-y-2">
+												{validators.map((validator) => (
+													<div key={validator} className="flex items-center gap-2">
+														<Badge variant="outline" className="font-mono text-xs">
+															{validator}
+														</Badge>
+														<Button
+															variant="ghost"
+															size="sm"
+															onClick={() => navigator.clipboard.writeText(validator)}
+															className="h-6 w-6 p-0"
+														>
+															<Copy className="h-3 w-3" />
+														</Button>
+													</div>
+												))}
+											</div>
+										</div>
+										{seals.length > 0 && (
+											<div>
+												<h4 className="text-xs font-medium text-muted-foreground mb-2">Seals ({seals.length})</h4>
+												<div className="space-y-2">
+													{seals.map((seal) => (
+														<div key={seal} className="flex items-center gap-2">
+															<Badge variant="outline" className="font-mono text-xs">
+																{seal}
+															</Badge>
+															<Button
+																variant="ghost"
+																size="sm"
+																onClick={() => navigator.clipboard.writeText(seal)}
+																className="h-6 w-6 p-0"
+															>
+																<Copy className="h-3 w-3" />
+															</Button>
+														</div>
+													))}
+												</div>
+											</div>
+										)}
+									</div>
+								) : initialConfig?.initialValidators ? (
 									<div>
 										<h3 className="text-sm font-medium mb-2">Validators</h3>
 										<ValidatorList validatorIds={initialConfig.initialValidators} />
 									</div>
-								)}
+								) : null
+							})()}
 							</div>
 						}
 						genesis={
@@ -333,9 +463,9 @@ export function BesuNetworkDetails({ network }: BesuNetworkDetailsProps) {
 												<Copy className="h-4 w-4" />
 											</Button>
 										</div>
-										<pre className="text-sm overflow-auto bg-muted/50 p-4 rounded-md">
-											<code>{JSON.stringify(genesisConfig, null, 2)}</code>
-										</pre>
+									<pre className="text-sm overflow-hidden bg-muted/50 p-4 rounded-md whitespace-pre-wrap break-words break-all">
+										<code className="break-words break-all">{JSON.stringify(genesisConfig, null, 2)}</code>
+									</pre>
 									</Card>
 								)}
 							</div>
@@ -384,19 +514,33 @@ export function BesuNetworkDetails({ network }: BesuNetworkDetailsProps) {
 									</Card>
 								)}
 
-								{/* Validators Tab Content */}
-								<BesuValidatorsTab nodeId={selectedNodeId || 0} nodesLoading={nodesLoading} />
+							{/* Validators Tab Content */}
+							<BesuValidatorsTab 
+								nodeId={selectedNodeId || 0} 
+								nodesLoading={nodesLoading} 
+								networkValidators={parseValidatorsFromBesuQbftExtraData(genesisConfig?.extraData || '').validators}
+							/>
 							</div>
 						}
 						explorer={
 							<div className="space-y-6">
 
-								{/* Explorer Tab Content */}
-								<BesuBlockExplorer 
-									nodesLoading={nodesLoading}
-									networkNodes={networkNodes}
-								/>
+							{/* Explorer Tab Content */}
+							<BesuBlockExplorer
+								nodesLoading={nodesLoading}
+								networkNodes={networkNodes}
+								networkId={network.id}
+							/>
 							</div>
+						}
+						tutorial={
+							<BesuSmartContractTutorial
+								rpcEndpoint={networkNodes[0]?.besuNode?.rpcHost && networkNodes[0]?.besuNode?.rpcPort
+									? `http://${networkNodes[0].besuNode.rpcHost}:${networkNodes[0].besuNode.rpcPort}`
+									: undefined
+								}
+								chainId={genesisConfig?.config?.chainId}
+							/>
 						}
 					/>
 				</Card>

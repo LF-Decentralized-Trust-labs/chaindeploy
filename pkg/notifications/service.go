@@ -20,4 +20,7 @@ type Service interface {
 
 	// SendNodeRecoveryNotification sends a notification about a node that has recovered
 	SendNodeRecoveryNotification(ctx context.Context, data NodeUpData) error
+
+	// SendDiskSpaceWarningNotification sends a notification about disk space usage
+	SendDiskSpaceWarningNotification(ctx context.Context, data DiskSpaceWarningData) error
 }

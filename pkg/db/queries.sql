@@ -822,9 +822,11 @@ INSERT INTO notification_providers (
     notify_backup_success,
     notify_backup_failure,
     notify_s3_connection_issue,
+    notify_disk_space_warning,
     created_at,
     updated_at
 ) VALUES (
+    ?,
     ?,
     ?,
     ?,
@@ -847,6 +849,7 @@ SET type = ?,
     notify_backup_success = ?,
     notify_backup_failure = ?,
     notify_s3_connection_issue = ?,
+    notify_disk_space_warning = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
 RETURNING *;
@@ -889,7 +892,8 @@ WHERE (
     (? = 'NODE_DOWNTIME' AND notify_node_downtime = 1) OR
     (? = 'BACKUP_SUCCESS' AND notify_backup_success = 1) OR
     (? = 'BACKUP_FAILURE' AND notify_backup_failure = 1) OR
-    (? = 'S3_CONNECTION_ISSUE' AND notify_s3_connection_issue = 1)
+    (? = 'S3_CONNECTION_ISSUE' AND notify_s3_connection_issue = 1) OR
+    (? = 'DISK_SPACE_WARNING' AND notify_disk_space_warning = 1)
 )
 ORDER BY created_at DESC;
 
@@ -912,7 +916,8 @@ WHERE is_default = true
     (:notification_type = 'BACKUP_SUCCESS' AND notify_backup_success = true) OR
     (:notification_type = 'BACKUP_FAILURE' AND notify_backup_failure = true) OR
     (:notification_type = 'NODE_DOWNTIME' AND notify_node_downtime = true) OR
-    (:notification_type = 'S3_CONNECTION_ISSUE' AND notify_s3_connection_issue = true)
+    (:notification_type = 'S3_CONNECTION_ISSUE' AND notify_s3_connection_issue = true) OR
+    (:notification_type = 'DISK_SPACE_WARNING' AND notify_disk_space_warning = true)
   )
 LIMIT 1;
 

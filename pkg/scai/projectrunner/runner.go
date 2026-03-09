@@ -10,11 +10,10 @@ import (
 	"time"
 
 	"github.com/chainlaunch/chainlaunch/pkg/db"
+	"github.com/chainlaunch/chainlaunch/pkg/docker"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
-	"github.com/docker/docker/errdefs"
 	"github.com/docker/go-connections/nat"
 )
 
@@ -43,20 +42,9 @@ func (r *Runner) Start(ctx context.Context, projectID string, projectDir string,
 		_ = r.docker.ContainerRemove(ctx, dockerContainer.ID, container.RemoveOptions{Force: true})
 	}
 
-	// Check if image exists locally
-	_, err = r.docker.ImageInspect(ctx, imageName)
-	if errdefs.IsNotFound(err) {
-		// Pull the image if not found locally
-		rc, err := r.docker.ImagePull(ctx, imageName, image.PullOptions{})
-		if err != nil {
-			return 0, fmt.Errorf("failed to pull image %s: %w", imageName, err)
-		}
-		_, err = io.Copy(io.Discard, rc)
-		if err != nil {
-			return 0, fmt.Errorf("failed to pull image %s: %w", imageName, err)
-		}
-	} else if err != nil {
-		return 0, fmt.Errorf("failed to inspect image %s: %w", imageName, err)
+	// Pull the image (tries CLI first for credential helpers, falls back to API)
+	if err := docker.PullImageIfNeeded(ctx, r.docker, imageName); err != nil {
+		return 0, err
 	}
 
 	// Create container host config with port binding

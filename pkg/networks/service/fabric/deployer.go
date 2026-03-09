@@ -729,16 +729,48 @@ func (d *FabricDeployer) UpdateChannelConfig(ctx context.Context, networkID int6
 		return "", fmt.Errorf("failed to unmarshal config update envelope: %w", err)
 	}
 
-	// Collect signatures from the specified organizations
+	// Extract the ConfigUpdateEnvelope from the payload
+	payload, err := protoutil.UnmarshalPayload(envelope.Payload)
+	if err != nil {
+		return "", fmt.Errorf("failed to unmarshal payload: %w", err)
+	}
+
+	configUpdateEnv, err := protoutil.UnmarshalConfigUpdateEnvelope(payload.Data)
+	if err != nil {
+		return "", fmt.Errorf("failed to unmarshal config update envelope: %w", err)
+	}
+
+	// Collect signatures from all specified organizations
+	var signatures []*cb.ConfigSignature
 	for _, orgID := range signingOrgIDs {
 		// Get organization details and MSP
 		orgService := org.NewOrganizationService(d.orgService, d.keyMgmt, d.logger, orgID, d.db)
 
-		// Sign the config update
-		envelope, err = orgService.CreateConfigSignature(ctx, network.Name, envelope)
+		// Sign the config update — returns just the ConfigSignature
+		configSignature, err := orgService.CreateConfigSignature(ctx, network.Name, envelope)
 		if err != nil {
 			return "", fmt.Errorf("failed to sign config update for org %s: %w", orgID, err)
 		}
+		signatures = append(signatures, configSignature)
+	}
+
+	// Build a new ConfigUpdateEnvelope with all collected signatures
+	newConfigUpdateEnvelope := &cb.ConfigUpdateEnvelope{
+		ConfigUpdate: configUpdateEnv.ConfigUpdate,
+		Signatures:   signatures,
+	}
+
+	// Use the first org's identity to create the signed envelope
+	firstOrgID := signingOrgIDs[0]
+	firstOrgService := org.NewOrganizationService(d.orgService, d.keyMgmt, d.logger, firstOrgID, d.db)
+	signer, err := firstOrgService.GetAdminIdentity(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get signer for org %s: %w", firstOrgID, err)
+	}
+
+	signedEnvelope, err := protoutil.CreateSignedEnvelope(cb.HeaderType_CONFIG_UPDATE, network.Name, signer, newConfigUpdateEnvelope, 0, 0)
+	if err != nil {
+		return "", fmt.Errorf("failed to create signed envelope: %w", err)
 	}
 
 	ordererConn, err := d.createOrdererConnection(ordererAddress, ordererTLSCert)
@@ -750,7 +782,7 @@ func (d *FabricDeployer) UpdateChannelConfig(ctx context.Context, networkID int6
 	if err != nil {
 		return "", fmt.Errorf("failed to create orderer client: %w", err)
 	}
-	err = ordererClient.Send(envelope)
+	err = ordererClient.Send(signedEnvelope)
 	if err != nil {
 		return "", fmt.Errorf("failed to send envelope: %w", err)
 	}
@@ -767,9 +799,13 @@ func (d *FabricDeployer) createOrdererConnection(ordererURL string, ordererTLSCA
 	d.logger.Info("Creating orderer connection",
 		"ordererURL", ordererURL)
 
+	// Strip the grpcs:// or grpc:// scheme from the URL since network.Node.Addr expects host:port only
+	ordererAddr := strings.TrimPrefix(ordererURL, "grpcs://")
+	ordererAddr = strings.TrimPrefix(ordererAddr, "grpc://")
+
 	// Create a network node with the orderer details
 	networkNode := network.Node{
-		Addr:          ordererURL,
+		Addr:          ordererAddr,
 		TLSCACertByte: []byte(ordererTLSCACert),
 	}
 
@@ -2110,10 +2146,7 @@ func (d *FabricDeployer) FetchCurrentChannelConfig(ctx context.Context, networkI
 		}
 		for _, orderer := range orderers {
 			// Remove the grpcs:// prefix if present
-			address := orderer.URL
-			if strings.HasPrefix(address, "grpcs://") {
-				address = strings.TrimPrefix(address, "grpcs://")
-			}
+			address := strings.TrimPrefix(orderer.URL, "grpcs://")
 			orderersList = append(orderersList, struct {
 				address string
 				tlsCert string
@@ -2415,32 +2448,32 @@ func (d *FabricDeployer) GetOrderersFromGenesisBlock(ctx context.Context, networ
 }
 
 // ImportNetworkWithOrg imports a Fabric network using organization details and orderer information
-func (d *FabricDeployer) ImportNetworkWithOrg(ctx context.Context, channelID string, orgID int64, ordererURL string, ordererTLSCert []byte, description string) (string, error) {
+func (d *FabricDeployer) ImportNetworkWithOrg(ctx context.Context, channelID string, orgID int64, ordererURL string, ordererTLSCert []byte, description string) (*db.Network, error) {
 	// Get organization details
 
 	// Validate orderer URL format
 	if !strings.HasPrefix(ordererURL, "grpcs://") {
-		return "", fmt.Errorf("invalid orderer URL format: must start with grpcs://")
+		return nil, fmt.Errorf("invalid orderer URL format: must start with grpcs://")
 	}
 	org, err := d.orgService.GetOrganization(ctx, orgID)
 	if err != nil {
-		return "", fmt.Errorf("failed to get organization: %w", err)
+		return nil, fmt.Errorf("failed to get organization: %w", err)
 	}
 	orgService := fabricorg.NewOrganizationService(d.orgService, d.keyMgmt, d.logger, org.MspID, d.db)
 
 	// Validate TLS certificate
 	block, _ := pem.Decode(ordererTLSCert)
 	if block == nil {
-		return "", fmt.Errorf("failed to decode TLS certificate PEM")
+		return nil, fmt.Errorf("failed to decode TLS certificate PEM")
 	}
 
 	_, err = x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse TLS certificate: %w", err)
+		return nil, fmt.Errorf("failed to parse TLS certificate: %w", err)
 	}
 	genesisBlock, err := orgService.GetGenesisBlock(ctx, channelID, ordererURL, ordererTLSCert)
 	if err != nil {
-		return "", fmt.Errorf("failed to get genesis block: %w", err)
+		return nil, fmt.Errorf("failed to get genesis block: %w", err)
 	}
 	// Create network config
 	networkConfig := types.FabricNetworkConfig{
@@ -2459,11 +2492,11 @@ func (d *FabricDeployer) ImportNetworkWithOrg(ctx context.Context, channelID str
 
 	configBytes, err := json.Marshal(networkConfig)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal network config: %w", err)
+		return nil, fmt.Errorf("failed to marshal network config: %w", err)
 	}
 
 	// Create network in database
-	_, err = d.db.CreateNetworkFull(ctx, &db.CreateNetworkFullParams{
+	network, err := d.db.CreateNetworkFull(ctx, &db.CreateNetworkFullParams{
 		Name:        channelID,
 		Platform:    "fabric",
 		Description: sql.NullString{String: description, Valid: description != ""},
@@ -2476,56 +2509,56 @@ func (d *FabricDeployer) ImportNetworkWithOrg(ctx context.Context, channelID str
 		Config:    sql.NullString{String: string(configBytes), Valid: true},
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to create network in database: %w", err)
+		return nil, fmt.Errorf("failed to create network in database: %w", err)
 	}
 
-	return channelID, nil
+	return network, nil
 }
 
 // ImportNetwork imports a Fabric network from a genesis block
-func (d *FabricDeployer) ImportNetwork(ctx context.Context, genesisFile []byte, description string) (string, error) {
+func (d *FabricDeployer) ImportNetwork(ctx context.Context, genesisFile []byte, description string) (*db.Network, error) {
 	// Parse and validate the genesis block
 	block := &cb.Block{}
 	if err := proto.Unmarshal(genesisFile, block); err != nil {
-		return "", fmt.Errorf("failed to unmarshal genesis block: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal genesis block: %w", err)
 	}
 
 	// Validate the block header
 	if block.Header == nil {
-		return "", fmt.Errorf("invalid genesis block: missing header")
+		return nil, fmt.Errorf("invalid genesis block: missing header")
 	}
 
 	// Additional Fabric-specific validations
 	if block.Data == nil || len(block.Data.Data) == 0 {
-		return "", fmt.Errorf("invalid genesis block: missing data")
+		return nil, fmt.Errorf("invalid genesis block: missing data")
 	}
 
 	// Extract channel name from block
 	envelope := &cb.Envelope{}
 	if err := proto.Unmarshal(block.Data.Data[0], envelope); err != nil {
-		return "", fmt.Errorf("failed to unmarshal envelope: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal envelope: %w", err)
 	}
 
 	payload := &cb.Payload{}
 	if err := proto.Unmarshal(envelope.Payload, payload); err != nil {
-		return "", fmt.Errorf("failed to unmarshal payload: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal payload: %w", err)
 	}
 
 	header := &cb.ChannelHeader{}
 	if err := proto.Unmarshal(payload.Header.ChannelHeader, header); err != nil {
-		return "", fmt.Errorf("failed to unmarshal channel header: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal channel header: %w", err)
 	}
 
 	channelName := header.ChannelId
 	if channelName == "" {
-		return "", fmt.Errorf("invalid genesis block: missing channel name")
+		return nil, fmt.Errorf("invalid genesis block: missing channel name")
 	}
 
 	// Generate a unique network ID
 	networkID := uuid.New().String()
 
 	// Create network in database
-	_, err := d.db.CreateNetworkFull(ctx, &db.CreateNetworkFullParams{
+	network, err := d.db.CreateNetworkFull(ctx, &db.CreateNetworkFullParams{
 		Name:        channelName,
 		Platform:    "fabric",
 		Description: sql.NullString{String: description, Valid: description != ""},
@@ -2537,10 +2570,10 @@ func (d *FabricDeployer) ImportNetwork(ctx context.Context, genesisFile []byte, 
 		},
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to create network: %w", err)
+		return nil, fmt.Errorf("failed to create network: %w", err)
 	}
 
-	return networkID, nil
+	return network, nil
 }
 
 func CreateConfigUpdateEnvelope(channelID string, configUpdate *cb.ConfigUpdate) ([]byte, error) {

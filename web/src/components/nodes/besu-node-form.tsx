@@ -11,33 +11,90 @@ import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 
+// Besu versions from https://github.com/hyperledger/besu/releases
+const BESU_VERSIONS = [
+	'25.7.0',
+	'25.6.0',
+	'25.5.0',
+	'25.4.0',
+	'25.3.0',
+	'25.2.0',
+	'25.1.0',
+	'24.12.2',
+]
+
 const besuNodeFormSchema = z.object({
-	name: z.string().min(3).max(50),
+	name: z.string().min(3, 'Node name must be at least 3 characters').max(50, 'Node name must be less than 50 characters'),
 	blockchainPlatform: z.literal('BESU'),
-	externalIp: z.string().ip(),
-	internalIp: z.string().ip(),
-	keyId: z.number(),
-	networkId: z.number().positive(),
+	externalIp: z.string().ip('Please enter a valid IP address'),
+	internalIp: z.string().ip('Please enter a valid IP address'),
+	keyId: z.number().positive('Please select a valid key'),
+	networkId: z.number().positive('Please select a valid network'),
 	mode: z.enum(['service', 'docker']).default('service'),
-	p2pHost: z.string(),
-	p2pPort: z.number().min(1024).max(65535),
-	rpcHost: z.string(),
-	rpcPort: z.number().min(1024).max(65535),
+	p2pHost: z.string().min(1, 'P2P host is required'),
+	p2pPort: z.number().min(1024, 'Port must be between 1024 and 65535').max(65535, 'Port must be between 1024 and 65535'),
+	rpcHost: z.string().min(1, 'RPC host is required'),
+	rpcPort: z.number().min(1024, 'Port must be between 1024 and 65535').max(65535, 'Port must be between 1024 and 65535'),
 	metricsEnabled: z.boolean().default(true),
 	metricsHost: z.string().default('127.0.0.1'),
-	metricsPort: z.number().min(1024).max(65535).optional(),
+	metricsPort: z.number().min(1024, 'Port must be between 1024 and 65535').max(65535, 'Port must be between 1024 and 65535').optional(),
 	type: z.literal('besu'),
-	bootNodes: z.string().optional(),
-	requestTimeout: z.number().positive(),
-	version: z.string().default('25.7.0'),
+	bootNodes: z.union([
+		z.array(z.string()),
+		z.string()
+	]).optional().transform((val) => {
+		if (typeof val === 'string') {
+			return val.split(/[,\s]+/).map(node => node.trim()).filter(Boolean)
+		}
+		return val || []
+	}),
+	requestTimeout: z.number().positive('Request timeout must be a positive number'),
+	version: z.string().min(1, 'Version is required').default('25.7.0'),
 	environmentVariables: z
 		.array(
 			z.object({
-				key: z.string(),
+				key: z.string().min(1, 'Environment variable key is required'),
 				value: z.string(),
 			})
 		)
 		.optional(),
+	// Gas and access control configuration
+	minGasPrice: z.number().min(0, 'Minimum gas price must be 0 or greater').optional(),
+	hostAllowList: z.string().optional(),
+	// Permissions configuration
+	accountsAllowList: z.union([
+		z.array(z.string()),
+		z.string()
+	]).optional().transform((val) => {
+		if (typeof val === 'string') {
+			return val.split(/[,\s]+/).map(acc => acc.trim()).filter(Boolean)
+		}
+		return val || []
+	}),
+	nodesAllowList: z.union([
+		z.array(z.string()),
+		z.string()
+	]).optional().transform((val) => {
+		if (typeof val === 'string') {
+			return val.split(/[,\s]+/).map(node => node.trim()).filter(Boolean)
+		}
+		return val || []
+	}),
+	// JWT Authentication configuration
+	jwtEnabled: z.boolean().default(false),
+	jwtPublicKeyContent: z.string().optional(),
+	jwtAuthenticationAlgorithm: z.string().optional(),
+}).refine((data) => {
+	// If JWT is enabled, require JWT-related fields
+	if (data.jwtEnabled) {
+		if (!data.jwtPublicKeyContent || !data.jwtAuthenticationAlgorithm) {
+			return false
+		}
+	}
+	return true
+}, {
+	message: "JWT public key content and algorithm are required when JWT is enabled",
+	path: ["jwtPublicKeyContent"]
 })
 
 export type BesuNodeFormValues = z.infer<typeof besuNodeFormSchema>
@@ -70,25 +127,38 @@ export function BesuNodeForm({ onSubmit, isSubmitting, hideSubmit, defaultValues
 			version: '25.7.0',
 			environmentVariables: [],
 			networkId: networkId,
+			// Gas and access control configuration
+			minGasPrice: 0,
+			hostAllowList: '',
+			// Permissions configuration
+			accountsAllowList: [],
+			nodesAllowList: [],
+			// JWT Authentication configuration
+			jwtEnabled: false,
+			jwtPublicKeyContent: '',
+			jwtAuthenticationAlgorithm: '',
 			...defaultValues,
 		},
+		mode: 'onChange',
 	})
 
 	const { data: besuDefaultConfig } = useQuery(getNodesDefaultsBesuNodeOptions())
 	const { data: networks } = useQuery(getNetworksBesuOptions({}))
 	const { data: keys } = useQuery(getKeysOptions({}))
+
+	const { errors } = form.formState
+
 	useEffect(() => {
 		// Set form values from defaultValues if they exist
 		if (defaultValues) {
-			// Use Object.entries to iterate through all properties of defaultValues
 			Object.entries(defaultValues).forEach(([key, value]) => {
-				// Only set the value if it's defined
 				if (value !== undefined) {
 					form.setValue(key as keyof BesuNodeFormValues, value)
 				}
 			})
 		}
-	}, [defaultValues])
+	}, [defaultValues, form.setValue])
+
 	useEffect(() => {
 		if (besuDefaultConfig && !defaultValues) {
 			const { p2pHost, p2pPort, rpcHost, rpcPort, externalIp, internalIp } = besuDefaultConfig.defaults![0]
@@ -118,9 +188,27 @@ export function BesuNodeForm({ onSubmit, isSubmitting, hideSubmit, defaultValues
 		return () => subscription.unsubscribe()
 	}, [form.watch, onChange])
 
+	// Enhanced form submission handler with validation
+	const handleFormSubmit = async (data: BesuNodeFormValues) => {
+		if (typeof onSubmit !== 'function') {
+			return
+		}
+
+		const isValid = await form.trigger()
+		if (!isValid) {
+			return
+		}
+
+		try {
+			await onSubmit(data)
+		} catch (error) {
+			console.error('Form submission failed:', error)
+		}
+	}
+
 	return (
 		<Form {...form}>
-			<form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+			<form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-6">
 				<FormField
 					control={form.control}
 					name="name"
@@ -235,9 +323,20 @@ export function BesuNodeForm({ onSubmit, isSubmitting, hideSubmit, defaultValues
 					render={({ field }) => (
 						<FormItem>
 							<FormLabel>Version</FormLabel>
-							<FormControl>
-								<Input {...field} placeholder="25.7.0" />
-							</FormControl>
+							<Select onValueChange={field.onChange} value={field.value}>
+								<FormControl>
+									<SelectTrigger>
+										<SelectValue placeholder="Select Besu version" />
+									</SelectTrigger>
+								</FormControl>
+								<SelectContent>
+									{BESU_VERSIONS.map((version) => (
+										<SelectItem key={version} value={version}>
+											{version}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
 							<FormDescription>Besu version to use for this node</FormDescription>
 							<FormMessage />
 						</FormItem>
@@ -366,7 +465,20 @@ export function BesuNodeForm({ onSubmit, isSubmitting, hideSubmit, defaultValues
 						<FormItem>
 							<FormLabel>Boot Nodes</FormLabel>
 							<FormControl>
-								<Input {...field} placeholder="Enter boot nodes (comma-separated)" />
+								<Input 
+									{...field} 
+									value={Array.isArray(field.value) ? field.value.join(', ') : field.value || ''}
+									onChange={(e) => {
+										const inputValue = e.target.value
+										field.onChange(inputValue)
+									}}
+									onBlur={(e) => {
+										const inputValue = e.target.value
+										const bootNodes = inputValue.split(/[,\s]+/).map(node => node.trim()).filter(Boolean)
+										field.onChange(bootNodes)
+									}}
+									placeholder="Enter boot nodes (comma-separated)" 
+								/>
 							</FormControl>
 							<FormDescription>Comma-separated list of boot node URLs</FormDescription>
 							<FormMessage />
@@ -374,10 +486,177 @@ export function BesuNodeForm({ onSubmit, isSubmitting, hideSubmit, defaultValues
 					)}
 				/>
 
+				<FormField
+					control={form.control}
+					name="minGasPrice"
+					render={({ field }) => (
+						<FormItem>
+							<FormLabel>Minimum Gas Price</FormLabel>
+							<FormControl>
+								<Input 
+									type="number" 
+									{...field} 
+									onChange={(e) => field.onChange(Number(e.target.value))}
+									placeholder="0" 
+								/>
+							</FormControl>
+							<FormDescription>Minimum gas price in wei for transactions</FormDescription>
+							<FormMessage />
+						</FormItem>
+					)}
+				/>
+
+				<FormField
+					control={form.control}
+					name="hostAllowList"
+					render={({ field }) => (
+						<FormItem>
+							<FormLabel>Host Allow List</FormLabel>
+							<FormControl>
+								<Input {...field} placeholder="Enter allowed hosts (comma-separated)" />
+							</FormControl>
+							<FormDescription>Comma-separated list of allowed hostnames or IP addresses</FormDescription>
+							<FormMessage />
+						</FormItem>
+					)}
+				/>
+
+				<FormField
+					control={form.control}
+					name="accountsAllowList"
+					render={({ field }) => (
+						<FormItem>
+							<FormLabel>Accounts Allow List</FormLabel>
+							<FormControl>
+								<Input 
+									{...field} 
+									value={Array.isArray(field.value) ? field.value.join(', ') : field.value || ''}
+									onChange={(e) => {
+										const inputValue = e.target.value
+										field.onChange(inputValue)
+									}}
+									onBlur={(e) => {
+										const inputValue = e.target.value
+										const accounts = inputValue.split(/[,\s]+/).map(acc => acc.trim()).filter(Boolean)
+										field.onChange(accounts)
+									}}
+									placeholder="Enter allowed account addresses (comma-separated)" 
+								/>
+							</FormControl>
+							<FormDescription>Comma-separated list of allowed account addresses</FormDescription>
+							<FormMessage />
+						</FormItem>
+					)}
+				/>
+
+				<FormField
+					control={form.control}
+					name="nodesAllowList"
+					render={({ field }) => (
+						<FormItem>
+							<FormLabel>Nodes Allow List</FormLabel>
+							<FormControl>
+								<Input 
+									{...field} 
+									value={Array.isArray(field.value) ? field.value.join(', ') : field.value || ''}
+									onChange={(e) => {
+										const inputValue = e.target.value
+										field.onChange(inputValue)
+									}}
+									onBlur={(e) => {
+										const inputValue = e.target.value
+										const nodes = inputValue.split(/[,\s]+/).map(node => node.trim()).filter(Boolean)
+										field.onChange(nodes)
+									}}
+									placeholder="Enter allowed node IDs (comma-separated)" 
+								/>
+							</FormControl>
+							<FormDescription>Comma-separated list of allowed node IDs</FormDescription>
+							<FormMessage />
+						</FormItem>
+					)}
+				/>
+
+				<FormField
+					control={form.control}
+					name="jwtEnabled"
+					render={({ field }) => (
+						<FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+							<div className="space-y-0.5">
+								<FormLabel className="text-base">Enable JWT Authentication</FormLabel>
+								<FormDescription>
+									Enable JWT-based authentication for this node
+								</FormDescription>
+							</div>
+							<FormControl>
+								<Switch
+									checked={field.value}
+									onCheckedChange={field.onChange}
+								/>
+							</FormControl>
+						</FormItem>
+					)}
+				/>
+
+				{form.watch('jwtEnabled') && (
+					<>
+						<FormField
+							control={form.control}
+							name="jwtPublicKeyContent"
+							render={({ field }) => (
+								<FormItem>
+									<FormLabel>JWT Public Key Content</FormLabel>
+									<FormControl>
+										<Input {...field} placeholder="Enter JWT public key content" />
+									</FormControl>
+									<FormDescription>Public key content for JWT verification</FormDescription>
+									<FormMessage />
+								</FormItem>
+							)}
+						/>
+
+						<FormField
+							control={form.control}
+							name="jwtAuthenticationAlgorithm"
+							render={({ field }) => (
+								<FormItem>
+									<FormLabel>JWT Authentication Algorithm</FormLabel>
+									<FormControl>
+										<Input {...field} placeholder="e.g., RS256, ES256" />
+									</FormControl>
+									<FormDescription>Algorithm used for JWT authentication</FormDescription>
+									<FormMessage />
+								</FormItem>
+							)}
+						/>
+					</>
+				)}
+
 				{!hideSubmit && (
-					<Button type="submit" disabled={isSubmitting}>
-						{isSubmitting ? submitButtonLoadingText : submitButtonText}
-					</Button>
+					<div className="space-y-4">
+						{Object.keys(errors).length > 0 && (
+							<div className="p-4 bg-red-50 border border-red-200 rounded-lg dark:bg-red-950 dark:border-red-800">
+								<h4 className="text-sm font-medium text-red-800 dark:text-red-200 mb-2">Please fix the following errors:</h4>
+								<ul className="text-sm text-red-700 dark:text-red-300 space-y-1">
+									{Object.entries(errors).map(([fieldName, error]) => (
+										<li key={fieldName}>
+											<strong className="capitalize">{fieldName.replace(/([A-Z])/g, ' $1').trim()}:</strong> {error?.message || 'Invalid value'}
+										</li>
+									))}
+								</ul>
+							</div>
+						)}
+
+						<Button
+							type="submit"
+							disabled={isSubmitting}
+							onClick={async () => {
+								await form.trigger()
+							}}
+						>
+							{isSubmitting ? submitButtonLoadingText : submitButtonText}
+						</Button>
+					</div>
 				)}
 			</form>
 		</Form>

@@ -259,7 +259,35 @@ type ResticSnapshot struct {
 	} `json:"summary"`
 }
 
-// Update getBackupSize to use total_bytes_processed from summary
+// resticStatsOutput represents the JSON output of `restic stats`
+type resticStatsOutput struct {
+	TotalSize      int64 `json:"total_size"`
+	TotalFileCount int   `json:"total_file_count"`
+}
+
+// getBackupSizeViaStats uses `restic stats latest --json` to get the snapshot size.
+// This works across all restic versions, unlike the summary field in snapshots which
+// was only added in restic 0.17.0.
+func (s *BackupService) getBackupSizeViaStats(env []string) (int64, error) {
+	cmd := exec.Command("restic", "stats", "latest", "--json")
+	cmd.Env = append(os.Environ(), env...)
+	output, err := cmd.Output()
+	if err != nil {
+		return 0, fmt.Errorf("restic stats failed: %w", err)
+	}
+	s.logger.Debugf("Restic stats output: %s", string(output))
+
+	var stats resticStatsOutput
+	if err := json.Unmarshal(output, &stats); err != nil {
+		return 0, fmt.Errorf("failed to parse restic stats output: %w", err)
+	}
+
+	return stats.TotalSize, nil
+}
+
+// getBackupSize returns the size of the latest backup snapshot.
+// It first tries the snapshot summary (restic >= 0.17.0), then falls back
+// to `restic stats` for older versions where the summary field is absent.
 func (s *BackupService) getBackupSize(env []string) (int64, error) {
 	cmd := exec.Command("restic", "snapshots", "latest", "--json")
 	cmd.Env = append(os.Environ(), env...)
@@ -278,8 +306,15 @@ func (s *BackupService) getBackupSize(env []string) (int64, error) {
 		return 0, fmt.Errorf("no snapshots found")
 	}
 
-	// Return total bytes processed from the latest snapshot
-	return snapshots[0].Summary.TotalBytesProcessed, nil
+	// Try the summary field first (available in restic >= 0.17.0)
+	if snapshots[0].Summary.TotalBytesProcessed > 0 {
+		return snapshots[0].Summary.TotalBytesProcessed, nil
+	}
+
+	// Fall back to `restic stats` for older restic versions (e.g. 0.16.x)
+	// where the summary field is not populated in snapshot JSON
+	s.logger.Debugf("Snapshot summary has 0 bytes, falling back to restic stats")
+	return s.getBackupSizeViaStats(env)
 }
 
 // Update performS3Backup to include S3 connection issue notifications

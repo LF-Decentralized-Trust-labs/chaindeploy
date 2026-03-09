@@ -1163,6 +1163,13 @@ definitions:
     type: object
   handler.CreateOrganizationRequest:
     properties:
+      caCertValidFor:
+        description: Certificate validity configuration (Go duration format)
+        type: string
+      certValidFor:
+        description: 'Validity for admin/client/peer certificates (e.g., "8760h" for
+          1 year). Default: 8760h (1 year)'
+        type: string
       country:
         description: CA certificate properties
         items:
@@ -1972,6 +1979,8 @@ definitions:
         type: boolean
       notifyBackupSuccess:
         type: boolean
+      notifyDiskSpaceWarning:
+        type: boolean
       notifyNodeDowntime:
         type: boolean
       notifyS3ConnIssue:
@@ -2122,7 +2131,7 @@ definitions:
       message:
         type: string
       networkId:
-        type: string
+        type: integer
     type: object
   http.ListBesuNetworksResponse:
     properties:
@@ -2292,6 +2301,8 @@ definitions:
       notifyBackupFailure:
         type: boolean
       notifyBackupSuccess:
+        type: boolean
+      notifyDiskSpaceWarning:
         type: boolean
       notifyNodeDowntime:
         type: boolean
@@ -2839,6 +2850,8 @@ definitions:
       notifyBackupFailure:
         type: boolean
       notifyBackupSuccess:
+        type: boolean
+      notifyDiskSpaceWarning:
         type: boolean
       notifyNodeDowntime:
         type: boolean
@@ -3907,6 +3920,11 @@ definitions:
     type: object
   types.BesuNodeConfig:
     properties:
+      accountsAllowList:
+        description: Permissions configuration
+        items:
+          type: string
+        type: array
       bootNodes:
         items:
           type: string
@@ -3917,7 +3935,16 @@ definitions:
         type: object
       externalIp:
         type: string
+      hostAllowList:
+        type: string
       internalIp:
+        type: string
+      jwtAuthenticationAlgorithm:
+        type: string
+      jwtEnabled:
+        description: JWT Authentication configuration
+        type: boolean
+      jwtPublicKeyContent:
         type: string
       keyId:
         type: integer
@@ -3927,12 +3954,19 @@ definitions:
         type: integer
       metricsProtocol:
         type: string
+      minGasPrice:
+        description: Gas and access control configuration
+        type: integer
       mode:
         description: '@Description The deployment mode (service or docker)'
         example: service
         type: string
       networkId:
         type: integer
+      nodesAllowList:
+        items:
+          type: string
+        type: array
       p2pHost:
         type: string
       p2pPort:

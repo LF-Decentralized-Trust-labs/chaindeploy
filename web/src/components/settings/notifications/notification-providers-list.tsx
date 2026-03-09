@@ -184,14 +184,50 @@ export function NotificationProvidersList() {
 									</div>
 								</CardHeader>
 								<CardContent>
-									<div className="grid gap-2">
+									<div className="grid gap-3">
 										<div className="text-sm">
 											<span className="font-medium">Host:</span> {(provider.config as any).host}
 										</div>
 										<div className="text-sm">
 											<span className="font-medium">From:</span> {(provider.config as any).from}
 										</div>
-										{provider.isDefault && <div className="text-sm text-muted-foreground">Default Provider</div>}
+										<div className="space-y-2">
+											<div className="text-sm font-medium">Enabled Notifications:</div>
+											<div className="flex flex-wrap gap-2">
+												{provider.notifyNodeDowntime && (
+													<Badge variant="outline" className="text-xs">
+														Node Downtime
+													</Badge>
+												)}
+												{provider.notifyBackupSuccess && (
+													<Badge variant="outline" className="text-xs">
+														Backup Success
+													</Badge>
+												)}
+												{provider.notifyBackupFailure && (
+													<Badge variant="outline" className="text-xs">
+														Backup Failure
+													</Badge>
+												)}
+												{provider.notifyS3ConnIssue && (
+													<Badge variant="outline" className="text-xs">
+														S3 Connection Issues
+													</Badge>
+												)}
+												{provider.notifyDiskSpaceWarning && (
+													<Badge variant="outline" className="text-xs">
+														Disk Space Warnings
+													</Badge>
+												)}
+												{!provider.notifyNodeDowntime &&
+													!provider.notifyBackupSuccess &&
+													!provider.notifyBackupFailure &&
+													!provider.notifyS3ConnIssue &&
+													!provider.notifyDiskSpaceWarning && (
+														<span className="text-xs text-muted-foreground">No notifications enabled</span>
+													)}
+											</div>
+										</div>
 										<div className="text-sm text-muted-foreground">
 											{provider.lastTestAt ? (
 												<>
@@ -269,8 +305,10 @@ export function NotificationProvidersList() {
 			<AlertDialog open={deleteProviderId !== null} onOpenChange={(open) => !open && setDeleteProviderId(null)}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>Are you sure you want to delete this provider?</AlertDialogTitle>
-						<AlertDialogDescription>This action cannot be undone. This will permanently delete this notification provider and remove it from our servers.</AlertDialogDescription>
+						<AlertDialogTitle>Delete Notification Provider</AlertDialogTitle>
+						<AlertDialogDescription>
+							Are you sure you want to delete the notification provider <span className="font-medium">{providers?.find((p: any) => p.id === deleteProviderId)?.name || `#${deleteProviderId}`}</span>? This action cannot be undone and will permanently remove this provider and all associated configurations.
+						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>

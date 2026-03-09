@@ -13927,6 +13927,14 @@
                 "name"
             ],
             "properties": {
+                "caCertValidFor": {
+                    "description": "Certificate validity configuration (Go duration format)",
+                    "type": "string"
+                },
+                "certValidFor": {
+                    "description": "Validity for admin/client/peer certificates (e.g., \"8760h\" for 1 year). Default: 8760h (1 year)",
+                    "type": "string"
+                },
                 "country": {
                     "description": "CA certificate properties",
                     "type": "array",
@@ -14969,6 +14977,9 @@
                 "notifyBackupSuccess": {
                     "type": "boolean"
                 },
+                "notifyDiskSpaceWarning": {
+                    "type": "boolean"
+                },
                 "notifyNodeDowntime": {
                     "type": "boolean"
                 },
@@ -15192,7 +15203,7 @@
                     "type": "string"
                 },
                 "networkId": {
-                    "type": "string"
+                    "type": "integer"
                 }
             }
         },
@@ -15450,6 +15461,9 @@
                     "type": "boolean"
                 },
                 "notifyBackupSuccess": {
+                    "type": "boolean"
+                },
+                "notifyDiskSpaceWarning": {
                     "type": "boolean"
                 },
                 "notifyNodeDowntime": {
@@ -16265,6 +16279,9 @@
                     "type": "boolean"
                 },
                 "notifyBackupSuccess": {
+                    "type": "boolean"
+                },
+                "notifyDiskSpaceWarning": {
                     "type": "boolean"
                 },
                 "notifyNodeDowntime": {
@@ -17830,6 +17847,13 @@
                 "rpcPort"
             ],
             "properties": {
+                "accountsAllowList": {
+                    "description": "Permissions configuration",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "bootNodes": {
                     "type": "array",
                     "items": {
@@ -17845,7 +17869,20 @@
                 "externalIp": {
                     "type": "string"
                 },
+                "hostAllowList": {
+                    "type": "string"
+                },
                 "internalIp": {
+                    "type": "string"
+                },
+                "jwtAuthenticationAlgorithm": {
+                    "type": "string"
+                },
+                "jwtEnabled": {
+                    "description": "JWT Authentication configuration",
+                    "type": "boolean"
+                },
+                "jwtPublicKeyContent": {
                     "type": "string"
                 },
                 "keyId": {
@@ -17860,6 +17897,10 @@
                 "metricsProtocol": {
                     "type": "string"
                 },
+                "minGasPrice": {
+                    "description": "Gas and access control configuration",
+                    "type": "integer"
+                },
                 "mode": {
                     "description": "@Description The deployment mode (service or docker)",
                     "type": "string",
@@ -17867,6 +17908,12 @@
                 },
                 "networkId": {
                     "type": "integer"
+                },
+                "nodesAllowList": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "p2pHost": {
                     "type": "string"

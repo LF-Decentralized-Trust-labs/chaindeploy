@@ -199,7 +199,7 @@ type ImportNetworkRequest struct {
 }
 
 type ImportNetworkResponse struct {
-	NetworkID string `json:"networkId"`
+	NetworkID int64  `json:"networkId"`
 	Message   string `json:"message"`
 }
 

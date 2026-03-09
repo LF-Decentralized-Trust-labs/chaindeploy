@@ -1,14 +1,15 @@
-import { Activity, Copy, Hash, Package, TrendingUp, ArrowLeft, ExternalLink, Clock, Zap } from 'lucide-react'
+import { Copy, Hash, Package, ArrowLeft, Clock, Zap } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useParams, Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import { TransactionItem } from '@/components/networks/transaction-item'
 import { toast } from 'sonner'
 import {
 	getNodesByIdRpcBlockByNumberOptions,
 	getNodesByIdRpcBlockTransactionCountByNumberOptions,
-	getNodesByIdRpcTransactionByBlockNumberAndIndexOptions,
 } from '@/api/client/@tanstack/react-query.gen'
 
 export default function BesuBlockDetailsPage() {
@@ -16,11 +17,11 @@ export default function BesuBlockDetailsPage() {
 	const nodeIdNumber = nodeId ? parseInt(nodeId) : 0
 	const blockNumberInt = blockNumber ? parseInt(blockNumber) : 0
 
-	// Get block details
+	// Get block details with full transactions
 	const { data: block, isLoading: blockLoading } = useQuery({
 		...getNodesByIdRpcBlockByNumberOptions({
 			path: { id: nodeIdNumber },
-			query: { number: blockNumberInt.toString(), tag: blockNumberInt.toString() },
+			query: { number: blockNumberInt.toString(), tag: blockNumberInt.toString(), fullTx: true },
 		}),
 		enabled: !!nodeIdNumber && !!blockNumberInt,
 	})
@@ -34,14 +35,7 @@ export default function BesuBlockDetailsPage() {
 		enabled: !!nodeIdNumber && !!blockNumberInt,
 	})
 
-	// Get transactions for the block (we'll fetch them one by one for now)
-	const { data: transactions, isLoading: transactionsLoading } = useQuery({
-		...getNodesByIdRpcTransactionByBlockNumberAndIndexOptions({
-			path: { id: nodeIdNumber },
-			query: { number: blockNumberInt.toString(), tag: blockNumberInt.toString(), index: '0x0' },
-		}),
-		enabled: !!nodeIdNumber && !!blockNumberInt && !!transactionCount && parseInt(String(transactionCount)) > 0,
-	})
+	const transactions: any[] = Array.isArray(block?.transactions) ? block.transactions : []
 
 	const copyToClipboard = (text: string) => {
 		navigator.clipboard.writeText(text)
@@ -54,11 +48,6 @@ export default function BesuBlockDetailsPage() {
 		return `${hash.slice(0, 6)}...${hash.slice(-4)}`
 	}
 
-	// Format block number to hex
-	const formatBlockNumberToHex = (number: number) => {
-		return `0x${number.toString(16)}`
-	}
-
 	// Format timestamp
 	const formatTimestamp = (timestamp: string) => {
 		if (!timestamp) return 'N/A'
@@ -66,7 +55,7 @@ export default function BesuBlockDetailsPage() {
 		return date.toLocaleString()
 	}
 
-	// Generate array of transaction indices for the block
+	// Generate array of transaction indices for the block (fallback if fullTx not available)
 	const getTransactionIndices = () => {
 		if (!transactionCount) return []
 		const count = parseInt(String(transactionCount))
@@ -104,12 +93,65 @@ export default function BesuBlockDetailsPage() {
 				</div>
 
 				{blockLoading ? (
-					<Card>
-						<CardContent className="text-center py-12">
-							<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-							<p className="text-muted-foreground">Loading block details...</p>
-						</CardContent>
-					</Card>
+					<div className="space-y-6">
+						{/* Block Overview Skeleton */}
+						<Card>
+							<CardHeader>
+								<Skeleton className="h-5 w-32" />
+								<Skeleton className="h-4 w-48" />
+							</CardHeader>
+							<CardContent>
+								<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+									{[1, 2, 3, 4, 5, 6].map(i => (
+										<div key={i} className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+											<div className="flex items-center gap-3">
+												<Skeleton className="h-4 w-4 rounded" />
+												<div>
+													<Skeleton className="h-4 w-24 mb-1" />
+													<Skeleton className="h-3 w-36" />
+												</div>
+											</div>
+										</div>
+									))}
+								</div>
+							</CardContent>
+						</Card>
+
+						{/* Transactions Skeleton */}
+						<Card>
+							<CardHeader>
+								<Skeleton className="h-5 w-28" />
+								<Skeleton className="h-4 w-40" />
+							</CardHeader>
+							<CardContent>
+								<div className="space-y-3">
+									{[1, 2, 3].map(i => (
+										<div key={i} className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
+											<div className="flex items-center gap-4">
+												<Skeleton className="w-3 h-3 rounded-full" />
+												<div>
+													<Skeleton className="h-4 w-32 mb-1" />
+													<Skeleton className="h-3 w-48" />
+												</div>
+											</div>
+											<Skeleton className="h-8 w-24" />
+										</div>
+									))}
+								</div>
+							</CardContent>
+						</Card>
+
+						{/* Raw Data Skeleton */}
+						<Card>
+							<CardHeader>
+								<Skeleton className="h-5 w-32" />
+								<Skeleton className="h-4 w-56" />
+							</CardHeader>
+							<CardContent>
+								<Skeleton className="h-48 w-full rounded-md" />
+							</CardContent>
+						</Card>
+					</div>
 				) : (
 					<div className="space-y-6">
 						{/* Block Overview */}
@@ -222,14 +264,20 @@ export default function BesuBlockDetailsPage() {
 							<CardHeader>
 								<CardTitle className="text-base">Transactions</CardTitle>
 								<CardDescription>
-									{transactionCountLoading ? 'Loading...' : `${transactionCount || 0} transactions in this block`}
+									{transactionCountLoading
+										? 'Loading...'
+										: transactions.length > 0
+											? `${transactions.length} transaction${transactions.length > 1 ? 's' : ''} in this block`
+											: 'No transactions in this block'
+									}
 								</CardDescription>
 							</CardHeader>
 							<CardContent>
-								{transactionsLoading ? (
-									<div className="text-center py-8">
-										<div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto mb-3"></div>
-										<p className="text-sm text-muted-foreground">Loading transactions...</p>
+								{Array.isArray(transactions) && transactions.length > 0 ? (
+									<div className="space-y-3">
+										{transactions.map((tx: any, idx: number) => (
+											<TransactionItem key={idx} tx={tx} index={idx} />
+										))}
 									</div>
 								) : transactionIndices.length > 0 ? (
 									<div className="space-y-3">
@@ -240,7 +288,7 @@ export default function BesuBlockDetailsPage() {
 													<div>
 														<p className="font-medium">Transaction #{index}</p>
 														<p className="text-sm text-muted-foreground">
-															Index: {index} • Block: {blockNumber}
+															Index: {index} - Block: {blockNumber}
 														</p>
 													</div>
 												</div>
@@ -282,4 +330,4 @@ export default function BesuBlockDetailsPage() {
 			</div>
 		</div>
 	)
-} 
+}

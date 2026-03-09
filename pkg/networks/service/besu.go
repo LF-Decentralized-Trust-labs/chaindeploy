@@ -20,13 +20,13 @@ func (s *NetworkService) importBesuNetwork(ctx context.Context, params ImportNet
 	}
 
 	// Import the network using the Besu deployer
-	networkID, err := besuDeployer.ImportNetwork(ctx, params.GenesisFile, params.Name, params.Description)
+	network, err := besuDeployer.ImportNetwork(ctx, params.GenesisFile, params.Name, params.Description)
 	if err != nil {
 		return nil, fmt.Errorf("failed to import Besu network: %w", err)
 	}
 
 	return &ImportNetworkResult{
-		NetworkID: networkID,
+		NetworkID: network.ID,
 		Message:   "Besu network imported successfully",
 	}, nil
 }

@@ -27,6 +27,13 @@ import (
 	"github.com/hyperledger/fabric-protos-go-apiv2/peer/lifecycle"
 )
 
+// MonitoringService interface for node monitoring
+type MonitoringService interface {
+	AddNodeToMonitor(nodeID int64, name string, endpoint string, platform string, nodeType string, networkNames []string) error
+	TriggerImmediateCheckForNode(ctx context.Context, nodeID int64)
+	RemoveNode(nodeID int64) error
+}
+
 // NodeService handles business logic for node management
 type NodeService struct {
 	db                   *db.Queries
@@ -37,6 +44,7 @@ type NodeService struct {
 	configService        *config.ConfigService
 	settingsService      *settingsservice.SettingsService
 	metricsService       metricscommon.Service
+	monitoringService    MonitoringService
 }
 
 // CreateNodeRequest represents the service-layer request to create a node
@@ -74,25 +82,31 @@ func (s *NodeService) SetMetricsService(metricsService metricscommon.Service) {
 	s.metricsService = metricsService
 }
 
+func (s *NodeService) SetMonitoringService(monitoringService MonitoringService) {
+	s.monitoringService = monitoringService
+}
+
 func (s *NodeService) validateCreateNodeRequest(req CreateNodeRequest) error {
+	validationErrors := errors.NewMultiValidationError("Node validation failed")
+
 	if req.Name == "" {
-		return fmt.Errorf("name is required")
+		validationErrors.Add("name", "name is required")
 	}
 
 	switch req.BlockchainPlatform {
 	case types.PlatformFabric:
 		if req.FabricPeer == nil && req.FabricOrderer == nil {
-			return fmt.Errorf("fabric configuration is required")
+			validationErrors.Add("fabricPeer/fabricOrderer", "fabric configuration is required (either peer or orderer)")
 		}
 		if req.FabricPeer != nil && req.FabricOrderer != nil {
-			return fmt.Errorf("cannot specify both peer and orderer configurations")
+			validationErrors.Add("fabricPeer/fabricOrderer", "cannot specify both peer and orderer configurations")
 		}
 
 		// Validate Fabric peer configuration
 		if req.FabricPeer != nil {
 			req.FabricPeer.DomainNames = s.ensureExternalEndpointInDomains(req.FabricPeer.ExternalEndpoint, req.FabricPeer.DomainNames)
 			if err := s.validateFabricPeerConfig(req.FabricPeer); err != nil {
-				return fmt.Errorf("invalid fabric peer configuration: %w", err)
+				validationErrors.Add("fabricPeer", fmt.Sprintf("invalid fabric peer configuration: %v", err))
 			}
 		}
 
@@ -100,21 +114,25 @@ func (s *NodeService) validateCreateNodeRequest(req CreateNodeRequest) error {
 		if req.FabricOrderer != nil {
 			req.FabricOrderer.DomainNames = s.ensureExternalEndpointInDomains(req.FabricOrderer.ExternalEndpoint, req.FabricOrderer.DomainNames)
 			if err := s.validateFabricOrdererConfig(req.FabricOrderer); err != nil {
-				return fmt.Errorf("invalid fabric orderer configuration: %w", err)
+				validationErrors.Add("fabricOrderer", fmt.Sprintf("invalid fabric orderer configuration: %v", err))
 			}
 		}
 
 	case types.PlatformBesu:
 		if req.BesuNode == nil {
-			return fmt.Errorf("besu configuration is required")
+			validationErrors.Add("besuNode", "besu configuration is required")
+		} else if err := s.validateBesuNodeConfig(req.BesuNode); err != nil {
+			validationErrors.Add("besuNode", fmt.Sprintf("invalid besu configuration: %v", err))
 		}
-		if err := s.validateBesuNodeConfig(req.BesuNode); err != nil {
-			return fmt.Errorf("invalid besu configuration: %w", err)
-		}
+	case "":
+		validationErrors.Add("blockchainPlatform", "blockchain platform is required")
 	default:
-		return fmt.Errorf("unsupported blockchain platform: %s", req.BlockchainPlatform)
+		validationErrors.AddWithValue("blockchainPlatform", "unsupported blockchain platform", string(req.BlockchainPlatform))
 	}
 
+	if validationErrors.HasErrors() {
+		return validationErrors
+	}
 	return nil
 }
 
@@ -239,7 +257,6 @@ func (s *NodeService) validateFabricOrdererConfig(config *types.FabricOrdererCon
 
 	return nil
 }
-
 
 // validateAddressFormat validates that an address has the correct host:port format
 func (s *NodeService) validateAddressFormat(address string) error {
@@ -470,7 +487,8 @@ func (s *NodeService) GetNodeByID(ctx context.Context, id int64) (*NodeResponse,
 // CreateNode creates a new node
 func (s *NodeService) CreateNode(ctx context.Context, req CreateNodeRequest) (*NodeResponse, error) {
 	if err := s.validateCreateNodeRequest(req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+		// Return the validation error directly (not wrapped) so it can be detected as MultiValidationError
+		return nil, err
 	}
 
 	// Generate slug from name
@@ -535,8 +553,12 @@ func (s *NodeService) CreateNode(ctx context.Context, req CreateNodeRequest) (*N
 	// Initialize the node based on its type
 	deploymentConfig, err := s.initializeNode(ctx, node, req)
 	if err != nil {
-		// Update node status to failed if initialization fails
-		s.updateNodeStatusWithError(ctx, node.ID, types.NodeStatusError, fmt.Sprintf("Failed to initialize node: %v", err))
+		// Delete the node from database since initialization failed
+		// This ensures no orphaned records exist for nodes that can't run
+		s.logger.Error("Failed to initialize node, rolling back", "node_id", node.ID, "error", err)
+		if deleteErr := s.db.DeleteNode(ctx, node.ID); deleteErr != nil {
+			s.logger.Error("Failed to delete node after initialization failure", "node_id", node.ID, "error", deleteErr)
+		}
 		return nil, fmt.Errorf("failed to initialize node: %w", err)
 	}
 
@@ -557,18 +579,37 @@ func (s *NodeService) CreateNode(ctx context.Context, req CreateNodeRequest) (*N
 
 	// Start the node
 	if err := s.startNode(ctx, node); err != nil {
+		s.logger.Error("Failed to start node, attempting cleanup and rollback", "node_id", node.ID, "error", err)
+
+		// Attempt to stop/cleanup any partially started containers/services
+		if cleanupErr := s.cleanupNodeResources(ctx, node); cleanupErr != nil {
+			s.logger.Error("Failed to cleanup after start failure", "node_id", node.ID, "error", cleanupErr)
+		}
+
+		// Delete the node from database since startup failed
+		if deleteErr := s.db.DeleteNode(ctx, node.ID); deleteErr != nil {
+			s.logger.Error("Failed to delete node after startup failure", "node_id", node.ID, "error", deleteErr)
+		}
+
 		return nil, fmt.Errorf("failed to start node: %w", err)
 	}
 
-	// Use default validation timeout of 60 seconds
-	validationTimeout := 60 * time.Second
-
 	// Validate node connectivity with retry and exponential backoff
-	if err := s.validateNodeConnectivityWithRetry(ctx, node, validationTimeout); err != nil {
-		s.logger.Error("Node connectivity validation failed after retries", "node_id", node.ID, "error", err)
-		// Update node status to error if validation fails
-		s.updateNodeStatusWithError(ctx, node.ID, types.NodeStatusError, fmt.Sprintf("Node connectivity validation failed after retries: %v", err))
-		return nil, fmt.Errorf("node connectivity validation failed after retries: %w", err)
+	if err := s.validateNodeConnectivityWithRetry(ctx, node, 30*time.Second); err != nil {
+		s.logger.Warn("Node connectivity validation failed, restarting node and retrying", "node_id", node.ID, "error", err)
+
+		// Restart the node and try again with shorter timeout
+		if restartErr := s.restartNode(ctx, node); restartErr != nil {
+			s.logger.Error("Failed to restart node after connectivity failure", "node_id", node.ID, "error", restartErr)
+		} else {
+			// Try validation again with shorter timeout after restart
+			if retryErr := s.validateNodeConnectivityWithRetry(ctx, node, 10*time.Second); retryErr != nil {
+				s.logger.Warn("Node connectivity validation still failed after restart", "node_id", node.ID, "error", retryErr)
+				// Continue anyway as node might still be starting up
+			} else {
+				s.logger.Info("Node connectivity validation successful after restart", "node_id", node.ID)
+			}
+		}
 	}
 
 	node, err = s.db.GetNode(ctx, node.ID)
@@ -924,11 +965,7 @@ func (s *NodeService) mapDBNodeToServiceNode(dbNode *db.Node) (*Node, *NodeRespo
 				nodeResponse.FabricOrderer.TLSKeyID = ordererDeployConfig.TLSKeyID
 				nodeResponse.FabricOrderer.SignKeyID = ordererDeployConfig.SignKeyID
 				nodeResponse.FabricOrderer.Mode = config.Mode
-			}
-			// Add certificate information
-			ordererConfig, ok := nodeConfig.(*types.FabricOrdererConfig)
-			ordererDeployConfig, ok := deploymentConfig.(*types.FabricOrdererDeploymentConfig)
-			if ok && ordererConfig != nil {
+
 				// Get certificates from key service
 				signKey, err := s.keymanagementService.GetKey(ctx, int(ordererDeployConfig.SignKeyID))
 				if err == nil && signKey.Certificate != nil {
@@ -941,7 +978,7 @@ func (s *NodeService) mapDBNodeToServiceNode(dbNode *db.Node) (*Node, *NodeRespo
 				}
 
 				// Get CA certificates from organization
-				org, err := s.orgService.GetOrganization(ctx, ordererConfig.OrganizationID)
+				org, err := s.orgService.GetOrganization(ctx, config.OrganizationID)
 				if err == nil {
 					if org.SignKeyID.Valid {
 						signCAKey, err := s.keymanagementService.GetKey(ctx, int(org.SignKeyID.Int64))
@@ -1144,6 +1181,41 @@ func (s *NodeService) startNode(ctx context.Context, dbNode *db.Node) error {
 	return nil
 }
 
+// restartNode restarts a node by stopping and starting it
+func (s *NodeService) restartNode(ctx context.Context, dbNode *db.Node) error {
+	s.logger.Info("Restarting node", "node_id", dbNode.ID, "name", dbNode.Name)
+
+	// Stop the node first
+	var stopErr error
+	switch types.NodeType(dbNode.NodeType.String) {
+	case types.NodeTypeFabricPeer:
+		stopErr = s.stopFabricPeer(ctx, dbNode)
+	case types.NodeTypeFabricOrderer:
+		stopErr = s.stopFabricOrderer(ctx, dbNode)
+	case types.NodeTypeBesuFullnode:
+		stopErr = s.stopBesuNode(ctx, dbNode)
+	default:
+		return fmt.Errorf("unsupported node type for restart: %s", dbNode.NodeType.String)
+	}
+
+	if stopErr != nil {
+		s.logger.Error("Failed to stop node during restart", "error", stopErr)
+		return fmt.Errorf("failed to stop node during restart: %w", stopErr)
+	}
+
+	// Wait briefly to ensure clean shutdown
+	time.Sleep(2 * time.Second)
+
+	// Start the node again
+	if err := s.startNode(ctx, dbNode); err != nil {
+		s.logger.Error("Failed to start node during restart", "error", err)
+		return fmt.Errorf("failed to start node during restart: %w", err)
+	}
+
+	s.logger.Info("Node restarted successfully", "node_id", dbNode.ID, "name", dbNode.Name)
+	return nil
+}
+
 // DeleteNode deletes a node by ID
 func (s *NodeService) DeleteNode(ctx context.Context, id int64) error {
 	// Get the node first to check its type and deployment config
@@ -1180,7 +1252,14 @@ func (s *NodeService) DeleteNode(ctx context.Context, id int64) error {
 		return fmt.Errorf("failed to delete node from database: %w", err)
 	}
 
-	// Publish node deleted event
+	// Remove node from monitoring
+	if s.monitoringService != nil {
+		if err := s.monitoringService.RemoveNode(id); err != nil {
+			s.logger.Warn("Failed to remove node from monitoring", "error", err)
+		}
+	}
+
+	// Reload metrics configuration
 	s.metricsService.Reload(ctx)
 
 	return nil

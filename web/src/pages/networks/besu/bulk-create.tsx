@@ -1,22 +1,24 @@
-import { getNodesDefaultsBesuNode, postKeys } from '@/api/client'
-import { getKeyProvidersOptions, getKeysOptions, postNetworksBesuMutation, postNodesMutation } from '@/api/client/@tanstack/react-query.gen'
+import { getNodesDefaultsBesuNode, postKeys, HttpCreateBesuNetworkRequest } from '@/api/client'
+import { getKeyProvidersOptions, getKeysOptions, postNetworksBesuMutation, postNodesMutation, deleteNodesByIdMutation } from '@/api/client/@tanstack/react-query.gen'
 import { BesuNodeForm, BesuNodeFormValues } from '@/components/nodes/besu-node-form'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Steps } from '@/components/ui/steps'
-import { hexToNumber, isValidHex, numberToHex } from '@/utils'
+import { hexToNumber, isValidHex, numberToHex, numberToNonceHex } from '@/utils'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ArrowLeft, ArrowRight, CheckCircle2, Copy, Server } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CheckCircle2, Copy, Server, RefreshCw, Trash2, ChevronDown, ChevronRight, AlertCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import * as z from 'zod'
+import { usePageTitle } from '@/hooks/use-page-title'
 
 // Helper function to convert ETH to WEI
 const ethToWei = (eth: number): string => {
@@ -43,8 +45,22 @@ const steps = [
 	{ id: 'review', title: 'Review & Create' },
 ]
 
+// Besu versions from https://github.com/hyperledger/besu/releases
+const besuVersions = [
+	'25.7.0',
+	'25.6.0',
+	'25.5.0',
+	'25.4.0',
+	'25.3.0',
+	'25.2.0',
+	'25.1.0',
+	'24.12.2',
+]
+
 const nodesStepSchema = z.object({
 	numberOfNodes: z.number().min(1).max(10),
+	networkName: z.string().min(1, 'Network name is required'),
+	version: z.string().min(1, 'Version is required'),
 })
 
 const networkStepSchema = z.object({
@@ -57,6 +73,10 @@ const networkStepSchema = z.object({
 	difficulty: z.string().refine((val) => isValidHex(val), { message: 'Must be a valid hex value starting with 0x' }),
 	epochLength: z.number(),
 	gasLimit: z.string().refine((val) => isValidHex(val), { message: 'Must be a valid hex value starting with 0x' }),
+	externalValidatorKeys: z.array(z.object({
+		ethereumAddress: z.string(),
+		publicKey: z.string(),
+	})).optional(),
 	mixHash: z.string().refine((val) => isValidHex(val), { message: 'Must be a valid hex value starting with 0x' }),
 	nonce: z.string().refine((val) => isValidHex(val), { message: 'Must be a valid hex value starting with 0x' }),
 	requestTimeout: z.number(),
@@ -83,8 +103,9 @@ const defaultNetworkValues: Partial<NetworkStepValues> = {
 	difficulty: numberToHex(1),
 	epochLength: 30000,
 	gasLimit: numberToHex(700000000),
+	externalValidatorKeys: [],
 	mixHash: '0x63746963616c2062797a616e74696e65206661756c7420746f6c6572616e6365',
-	nonce: numberToHex(0),
+	nonce: numberToNonceHex(0),
 	requestTimeout: 10,
 	timestamp: numberToHex(new Date().getUTCSeconds()),
 	alloc: [],
@@ -93,6 +114,7 @@ const defaultNetworkValues: Partial<NetworkStepValues> = {
 type Step = 'nodes' | 'network' | 'nodes-config' | 'review'
 
 export default function BulkCreateBesuNetworkPage() {
+	usePageTitle('Bulk Besu')
 	const navigate = useNavigate()
 	const [currentStep, setCurrentStep] = useState<Step>(() => {
 		if (typeof window !== 'undefined') {
@@ -123,7 +145,26 @@ export default function BulkCreateBesuNetworkPage() {
 		currentNode: string | null
 	}>({ current: 0, total: 0, currentNode: null })
 
+	const [nodeCreationResults, setNodeCreationResults] = useState<Record<string, {
+		status: 'pending' | 'success' | 'error'
+		error?: string
+		nodeId?: number
+		nodeStatus?: 'RUNNING' | 'STOPPED' | 'ERROR' | string
+	}>>({})
+
+	const [failedNodes, setFailedNodes] = useState<string[]>([])
+	const [, setCreatedNodeIds] = useState<number[]>([])
+	const [hasAttemptedCreation, setHasAttemptedCreation] = useState(false)
+	const [expandedNodes, setExpandedNodes] = useState<Record<number, boolean>>(() => {
+		// Expand first node by default
+		return { 0: true }
+	})
+
+	const createNode = useMutation(postNodesMutation())
+	const deleteNode = useMutation(deleteNodesByIdMutation())
+
 	const [nodeConfigs, setNodeConfigs] = useState<BesuNodeFormValues[]>([])
+	const [besuVerificationError, setBesuVerificationError] = useState<string | null>(null)
 	const { data: providersData } = useQuery({
 		...getKeyProvidersOptions({}),
 	})
@@ -139,9 +180,8 @@ export default function BulkCreateBesuNetworkPage() {
 	const ensureValidatorAllocations = () => {
 		if (validatorKeys.length > 0) {
 			const currentAlloc = networkForm.getValues('alloc')
-			const validatorAddresses = validatorKeys.map(key => key.ethereumAddress)
 			const existingValidatorAddresses = currentAlloc.map(alloc => alloc.account)
-			
+
 			// Find validator keys that aren't in allocations yet
 			const newValidatorAllocations = validatorKeys
 				.filter(key => !existingValidatorAddresses.includes(key.ethereumAddress))
@@ -149,7 +189,7 @@ export default function BulkCreateBesuNetworkPage() {
 					account: key.ethereumAddress,
 					balance: ethToHex(1000000), // 1 million ETH
 				}))
-			
+
 			if (newValidatorAllocations.length > 0) {
 				networkForm.setValue('alloc', [...currentAlloc, ...newValidatorAllocations])
 			}
@@ -160,7 +200,7 @@ export default function BulkCreateBesuNetworkPage() {
 		resolver: zodResolver(nodesStepSchema),
 		defaultValues: (() => {
 			const savedData = localStorage.getItem('besuBulkCreateNodesForm')
-			return savedData ? JSON.parse(savedData) : { numberOfNodes: 4 }
+			return savedData ? JSON.parse(savedData) : { numberOfNodes: 4, networkName: '', version: '25.7.0' }
 		})(),
 	})
 
@@ -185,9 +225,90 @@ export default function BulkCreateBesuNetworkPage() {
 		})(),
 	})
 
-	const createNode = useMutation(postNodesMutation())
+	const clearLocalStorage = () => {
+		localStorage.removeItem('besuBulkCreateNodesForm')
+		localStorage.removeItem('besuBulkCreateNetworkForm')
+		localStorage.removeItem('besuBulkCreateStep')
+		localStorage.removeItem('besuBulkCreateKeys')
+		localStorage.removeItem('besuBulkCreateNodeConfigs')
+		localStorage.removeItem('besuBulkCreateNetworkId')
+		setHasAttemptedCreation(false)
+		setBesuVerificationError(null)
+	}
 
+	const retryAllFailedNodes = async () => {
+		const networkId = localStorage.getItem('besuBulkCreateNetworkId')
+		if (!networkId) {
+			toast.error('Network ID not found')
+			return
+		}
 
+		const failedNodeConfigs = nodeConfigs.filter(config => failedNodes.includes(config.name))
+
+		for (let i = 0; i < failedNodeConfigs.length; i++) {
+			const nodeConfig = failedNodeConfigs[i]
+			const nodeIndex = nodeConfigs.findIndex(config => config.name === nodeConfig.name)
+			await createSingleNode(nodeConfig, networkId, nodeIndex)
+		}
+	}
+
+	const continueWithSuccessful = () => {
+		clearLocalStorage()
+		toast.success('Continuing with successfully created nodes')
+		navigate('/networks')
+	}
+
+	const toggleNodeExpansion = (nodeIndex: number) => {
+		setExpandedNodes(prev => ({
+			...prev,
+			[nodeIndex]: !prev[nodeIndex]
+		}))
+	}
+
+	const expandAllNodes = () => {
+		const allExpanded = Array.from({ length: nodesForm.getValues('numberOfNodes') }, (_, i) => i)
+			.reduce((acc, i) => ({ ...acc, [i]: true }), {})
+		setExpandedNodes(allExpanded)
+	}
+
+	const collapseAllNodes = () => {
+		setExpandedNodes({})
+	}
+
+	const deleteAndRecreateNode = async (nodeName: string) => {
+		const result = nodeCreationResults[nodeName]
+		if (!result?.nodeId) {
+			toast.error('Node ID not found')
+			return
+		}
+
+		try {
+			// Delete the node first
+			await deleteNode.mutateAsync({ path: { id: result.nodeId } })
+
+			// Remove from created nodes list
+			setCreatedNodeIds(prev => prev.filter(id => id !== result.nodeId))
+
+			// Reset the node result
+			setNodeCreationResults(prev => {
+				const newResults = { ...prev }
+				delete newResults[nodeName]
+				return newResults
+			})
+
+			setFailedNodes(prev => prev.filter(name => name !== nodeName))
+
+			toast.success('Node deleted successfully. You can now retry creation.')
+
+			// Retry creation immediately
+			await retryNodeCreation(nodeName)
+
+		} catch (error: any) {
+			toast.error('Failed to delete node', {
+				description: error.message,
+			})
+		}
+	}
 
 	// Save form data to localStorage whenever it changes
 	useEffect(() => {
@@ -223,6 +344,11 @@ export default function BulkCreateBesuNetworkPage() {
 		}
 	}, [nodeConfigs])
 
+	// Clear verification error when version changes
+	useEffect(() => {
+		setBesuVerificationError(null)
+	}, [nodesForm.watch('version')])
+
 	// Add a useEffect to update the form when validatorKeys change
 	useEffect(() => {
 		if (validatorKeys.length > 0) {
@@ -230,12 +356,11 @@ export default function BulkCreateBesuNetworkPage() {
 				'selectedValidatorKeys',
 				validatorKeys.map((key) => key.id)
 			)
-			
+
 			// Add validator keys to initial allocations if they're not already there
 			const currentAlloc = networkForm.getValues('alloc')
-			const validatorAddresses = validatorKeys.map(key => key.ethereumAddress)
 			const existingValidatorAddresses = currentAlloc.map(alloc => alloc.account)
-			
+
 			// Find validator keys that aren't in allocations yet
 			const newValidatorAllocations = validatorKeys
 				.filter(key => !existingValidatorAddresses.includes(key.ethereumAddress))
@@ -243,7 +368,7 @@ export default function BulkCreateBesuNetworkPage() {
 					account: key.ethereumAddress,
 					balance: ethToHex(1000000), // 1 million ETH
 				}))
-			
+
 			if (newValidatorAllocations.length > 0) {
 				networkForm.setValue('alloc', [...currentAlloc, ...newValidatorAllocations])
 			}
@@ -283,12 +408,12 @@ export default function BulkCreateBesuNetworkPage() {
 						const defaultNode = besuDefaultNodes.data.defaults![index]!
 
 						const { p2pHost, p2pPort, rpcHost, rpcPort, metricsPort, externalIp, internalIp } = defaultNode
-						let bootNodes = ''
+						let bootNodes: string[] = []
 						if (index > 0 && validatorKeys[0]?.publicKey) {
 							// For all nodes after the first one, use the first node as bootnode
 							const firstNodeExternalIp = besuDefaultNodes.data.defaults![0]?.externalIp || '127.0.0.1'
 							const firstNodeP2pPort = besuDefaultNodes.data.defaults![0]?.p2pPort || '30303'
-							bootNodes = `enode://${validatorKeys[0].publicKey.substring(2)}@${firstNodeExternalIp}:${firstNodeP2pPort}`
+							bootNodes = [`enode://${validatorKeys[0].publicKey.substring(2)}@${firstNodeExternalIp}:${firstNodeP2pPort}`]
 						}
 
 						return {
@@ -304,11 +429,25 @@ export default function BulkCreateBesuNetworkPage() {
 							p2pPort: Number(p2pPort),
 							rpcHost: rpcHost,
 							rpcPort: Number(rpcPort),
-												metricsEnabled: true,
-					metricsHost: '127.0.0.1',
-					metricsPort,
-					bootNodes: bootNodes,
-					requestTimeout: 30,
+							metricsEnabled: true,
+							metricsHost: '127.0.0.1',
+							metricsPort,
+							metricsProtocol: 'PROMETHEUS',
+							bootNodes: bootNodes,
+							requestTimeout: 30,
+							version: nodesForm.getValues('version') || '25.7.0',
+							// Gas and access control configuration
+							minGasPrice: 0,
+							hostAllowList: '',
+							// Permissions configuration
+							accountsAllowList: [],
+							nodesAllowList: [],
+							// JWT Authentication configuration
+							jwtEnabled: false,
+							jwtPublicKeyContent: '',
+							jwtAuthenticationAlgorithm: '',
+							// Other configuration
+							environmentVariables: [],
 						} as BesuNodeFormValues
 					})
 					setNodeConfigs(newNodeConfigs)
@@ -366,16 +505,15 @@ export default function BulkCreateBesuNetworkPage() {
 				ethereumAddress: key.data!.ethereumAddress!,
 			}))
 			setValidatorKeys(newValidatorKeys)
-			
+
 			// Add validator keys to initial allocations
 			const validatorAllocations = newValidatorKeys.map((key) => ({
 				account: key.ethereumAddress,
 				balance: ethToHex(1000000), // Start with 1 million ETH balance for validators
 			}))
-			
-			// Update the network form with validator allocations
+
 			networkForm.setValue('alloc', validatorAllocations)
-			
+
 			setCreationProgress({ current: 0, total: 0, currentNode: null })
 			return newValidatorKeys
 		} catch (error: any) {
@@ -388,21 +526,25 @@ export default function BulkCreateBesuNetworkPage() {
 
 	const onNodesStepSubmit = async (data: NodesStepValues) => {
 		try {
-			const newValidatorKeys = await createValidatorKeys(data.numberOfNodes, networkForm.getValues('networkName'))
+			// Set the network name in the network form from nodes form
+			networkForm.setValue('networkName', data.networkName)
+
+			const newValidatorKeys = await createValidatorKeys(data.numberOfNodes, data.networkName)
 			networkForm.setValue(
 				'selectedValidatorKeys',
 				newValidatorKeys.map((key) => key.id)
 			)
-			
+
 			// Add validator keys to initial allocations
 			const validatorAllocations = newValidatorKeys.map((key) => ({
 				account: key.ethereumAddress,
-				balance: ethToHex(1000000), // 1 million ETH
+				balance: ethToHex(1000000), // Start with 1 million ETH balance for validators
 			}))
+
 			networkForm.setValue('alloc', validatorAllocations)
-			
+
 			setCurrentStep('network')
-		} catch (error) {
+		} catch (error: any) {
 			// Error is already handled in createValidatorKeys
 		}
 	}
@@ -418,7 +560,7 @@ export default function BulkCreateBesuNetworkPage() {
 			}
 
 			// Create network
-			const networkData = {
+			const networkData: HttpCreateBesuNetworkRequest = {
 				name: data.networkName,
 				description: data.networkDescription,
 				config: {
@@ -442,7 +584,7 @@ export default function BulkCreateBesuNetworkPage() {
 			}
 
 			const network = await createNetwork.mutateAsync({
-				body: networkData,
+				body: networkData as HttpCreateBesuNetworkRequest,
 			})
 
 			if (!network.id) {
@@ -473,13 +615,13 @@ export default function BulkCreateBesuNetworkPage() {
 				// Parse default addresses for this node
 				const { p2pHost, p2pPort, rpcHost, rpcPort, externalIp, internalIp } = defaultNode
 
-				let bootNodes = ''
+				let bootNodes: string[] = []
 				if (index > 0 && validatorKeys[0]?.publicKey) {
 					// For all nodes after the first one, use the first node as bootnode
 					// Use the first node's external IP and p2p port
 					const firstNodeExternalIp = besuDefaultNodes.data.defaults![0]?.externalIp || '127.0.0.1'
 					const firstNodeP2pPort = besuDefaultNodes.data.defaults![0]?.p2pPort || '30303'
-					bootNodes = `enode://${validatorKeys[0].publicKey.substring(2)}@${firstNodeExternalIp}:${Number(firstNodeP2pPort)}`
+					bootNodes = [`enode://${validatorKeys[0].publicKey.substring(2)}@${firstNodeExternalIp}:${Number(firstNodeP2pPort)}`]
 				}
 
 				return {
@@ -499,7 +641,21 @@ export default function BulkCreateBesuNetworkPage() {
 					metricsPort: 9545 + index,
 					bootNodes: bootNodes,
 					requestTimeout: 30,
-					version: '25.7.0',
+					version: nodesForm.getValues('version') || '25.7.0',
+					// Gas and access control configuration
+					minGasPrice: 0,
+					hostAllowList: '',
+					// Permissions configuration
+					accountsAllowList: [],
+					nodesAllowList: [],
+					// JWT Authentication configuration
+					jwtEnabled: false,
+					jwtPublicKeyContent: '',
+					jwtAuthenticationAlgorithm: '',
+					// Metrics configuration
+					metricsEnabled: true,
+					metricsProtocol: 'PROMETHEUS',
+					environmentVariables: [],
 				} as BesuNodeFormValues
 			})
 
@@ -518,71 +674,196 @@ export default function BulkCreateBesuNetworkPage() {
 		setCurrentStep('review')
 	}
 
+	const createSingleNode = async (nodeConfig: BesuNodeFormValues, networkId: string, _index: number): Promise<{ status: 'success' | 'error', nodeId: number, nodeStatus?: string, error?: string }> => {
+		try {
+			const result = await createNode.mutateAsync({
+				body: {
+					name: nodeConfig.name,
+					blockchainPlatform: nodeConfig.blockchainPlatform,
+					besuNode: {
+						type: nodeConfig.type,
+						mode: nodeConfig.mode,
+						networkId: parseInt(networkId),
+						externalIp: nodeConfig.externalIp,
+						internalIp: nodeConfig.internalIp,
+						keyId: nodeConfig.keyId,
+						p2pHost: '127.0.0.1',
+						p2pPort: nodeConfig.p2pPort,
+						rpcHost: '127.0.0.1',
+						rpcPort: nodeConfig.rpcPort,
+						metricsPort: nodeConfig.metricsPort,
+						version: nodeConfig.version || nodesForm.getValues('version') || '25.7.0',
+						bootNodes: Array.isArray(nodeConfig.bootNodes)
+							? nodeConfig.bootNodes.map((node) => node.trim()).filter(Boolean)
+							: typeof nodeConfig.bootNodes === 'string'
+								? (nodeConfig.bootNodes as string).split(',').map((node) => node.trim()).filter(Boolean)
+								: [],
+						metricsEnabled: true,
+						metricsProtocol: 'PROMETHEUS',
+						minGasPrice: nodeConfig.minGasPrice,
+						hostAllowList: nodeConfig.hostAllowList,
+						accountsAllowList: nodeConfig.accountsAllowList,
+						nodesAllowList: nodeConfig.nodesAllowList,
+						jwtEnabled: nodeConfig.jwtEnabled,
+						jwtPublicKeyContent: nodeConfig.jwtPublicKeyContent,
+						jwtAuthenticationAlgorithm: nodeConfig.jwtAuthenticationAlgorithm,
+					},
+				},
+			})
+
+			// Verify the response has a valid node ID
+			if (!result.id) {
+				throw new Error('Node created but no ID returned')
+			}
+
+			// Check if node status indicates immediate failure
+			if (result.status === 'ERROR' || result.status === 'FAILED') {
+				throw new Error(`Node created with error status: ${result.status}`)
+			}
+
+			return { status: 'success', nodeId: result.id, nodeStatus: result.status }
+
+		} catch (error: any) {
+			const errorMessage = error.response?.data?.message || error.message || 'Unknown error'
+			return { status: 'error', nodeId: 0, error: errorMessage }
+		}
+	}
+
+	const retryNodeCreation = async (nodeName: string) => {
+		const networkId = localStorage.getItem('besuBulkCreateNetworkId')
+		if (!networkId) {
+			toast.error('Network ID not found')
+			return
+		}
+		const result = nodeCreationResults[nodeName]
+		if (result?.nodeId) {
+			try {
+				await deleteNode.mutateAsync({ path: { id: result.nodeId } })
+				// Remove from created nodes list
+				setCreatedNodeIds(prev => prev.filter(id => id !== result.nodeId))
+				// Reset the node result
+				setNodeCreationResults(prev => {
+					const newResults = { ...prev }
+					delete newResults[nodeName]
+					return newResults
+				})
+				setFailedNodes(prev => prev.filter(name => name !== nodeName))
+			} catch (error: any) {
+				// Silently handle deletion errors - node might not exist
+				console.warn(`Failed to delete node ${result.nodeId}:`, error.message)
+			}
+		}
+
+		const nodeIndex = nodeConfigs.findIndex(config => config.name === nodeName)
+		if (nodeIndex === -1) {
+			toast.error('Node configuration not found. Please refresh the page and try again.')
+			return
+		}
+
+		const nodeConfig = nodeConfigs[nodeIndex]
+		if (!nodeConfig) {
+			toast.error('Invalid node configuration')
+			return
+		}
+
+		// Update the node configuration to ensure it has the latest network ID
+		const updatedNodeConfig = {
+			...nodeConfig,
+			networkId: parseInt(networkId)
+		}
+
+		// Update the nodeConfigs array with the updated configuration
+		setNodeConfigs(prev => {
+			const newConfigs = [...prev]
+			newConfigs[nodeIndex] = updatedNodeConfig
+			return newConfigs
+		})
+
+		return await createSingleNode(updatedNodeConfig, networkId, nodeIndex)
+	}
+
+	const removeFailedNode = (nodeName: string) => {
+		setNodeConfigs(prev => prev.filter(config => config.name !== nodeName))
+		setNodeCreationResults(prev => {
+			const newResults = { ...prev }
+			delete newResults[nodeName]
+			return newResults
+		})
+		setFailedNodes(prev => prev.filter(name => name !== nodeName))
+		toast.success('Node removed from creation list')
+	}
+
 	const onReviewStepSubmit = async () => {
 		try {
 			setCreationProgress({ current: 0, total: nodeConfigs.length, currentNode: null })
+			setHasAttemptedCreation(true)
+			// Reset state for new creation attempt
+			setNodeCreationResults({})
+			setFailedNodes([])
 
 			const networkId = localStorage.getItem('besuBulkCreateNetworkId')
 			if (!networkId) {
 				throw new Error('Network ID not found')
 			}
 
-			// Create nodes
-			for (let i = 0; i < nodeConfigs.length; i++) {
-				const nodeConfig = nodeConfigs[i]
-				setCreationProgress((prev) => ({
-					...prev,
-					current: prev.current + 1,
-					currentNode: `Creating node ${i + 1} of ${nodeConfigs.length}`,
-				}))
-
-				await createNode.mutateAsync({
-					body: {
-						name: nodeConfig.name,
-						blockchainPlatform: nodeConfig.blockchainPlatform,
-						besuNode: {
-							type: nodeConfig.type,
-							mode: nodeConfig.mode,
-							networkId: parseInt(networkId),
-							externalIp: nodeConfig.externalIp,
-							internalIp: nodeConfig.internalIp,
-							keyId: nodeConfig.keyId,
-							p2pHost: '127.0.0.1',
-							p2pPort: nodeConfig.p2pPort,
-							rpcHost: '127.0.0.1',
-							rpcPort: nodeConfig.rpcPort,
-							metricsPort: nodeConfig.metricsPort,
-							version: nodeConfig.version,
-							bootNodes: nodeConfig.bootNodes
-								?.split(',')
-								.map((node) => node.trim())
-								.filter(Boolean),
-							metricsEnabled: true,
-						},
-					},
-				})
-			}
-
-			setCreationProgress((prev) => ({
+			// Start creating nodes immediately
+			setCreationProgress(prev => ({
 				...prev,
-				current: prev.total,
-				currentNode: null,
+				currentNode: `Creating ${nodeConfigs.length} nodes in parallel...`,
 			}))
 
-			// Clear localStorage only after successful submission
-			localStorage.removeItem('besuBulkCreateNodesForm')
-			localStorage.removeItem('besuBulkCreateNetworkForm')
-			localStorage.removeItem('besuBulkCreateStep')
-			localStorage.removeItem('besuBulkCreateKeys')
-			localStorage.removeItem('besuBulkCreateNodeConfigs')
-			localStorage.removeItem('besuBulkCreateNetworkId')
+			const nodeCreationPromises = nodeConfigs.map((nodeConfig, index) =>
+				createSingleNode(nodeConfig, networkId, index).then(result => {
+					setCreationProgress(prev => ({
+						...prev,
+						current: prev.current + 1,
+						currentNode: `${prev.current + 1} of ${nodeConfigs.length} nodes processed`,
+					}))
+					return result
+				})
+			)
 
-			toast.success('Nodes created successfully')
-			navigate('/networks')
-		} catch (error: any) {
-			toast.error('Failed to create nodes', {
-				description: error.message,
+			const nodesCreated = await Promise.allSettled(nodeCreationPromises)
+
+			const failedNodesList: string[] = []
+			nodesCreated.forEach((result, index) => {
+				const nodeName = nodeConfigs[index].name
+				if (result.status === 'fulfilled' && result.value.status === 'success') {
+					setNodeCreationResults(prev => ({
+						...prev,
+						[nodeName]: {
+							status: 'success',
+							nodeId: result.value.nodeId,
+							nodeStatus: result.value.nodeStatus as any,
+						},
+					}))
+					setCreatedNodeIds(prev => [...prev, result.value.nodeId])
+				} else {
+					failedNodesList.push(nodeName)
+					const errorMessage = result.status === 'rejected' ? (result.reason?.message || 'Unknown error') : (result.value?.error || 'Failed to create node')
+					setNodeCreationResults(prev => ({
+						...prev,
+						[nodeName]: { status: 'error', error: errorMessage },
+					}))
+				}
 			})
+
+			setFailedNodes(failedNodesList)
+			setCreationProgress(prev => ({ ...prev, currentNode: null }))
+
+			// Navigate to the Besu network detail page when creation finishes
+			if (failedNodesList.length === 0) {
+				try {
+					const finalNetworkId = localStorage.getItem('besuBulkCreateNetworkId') || networkId
+					if (finalNetworkId) {
+						navigate(`/networks/${finalNetworkId}/besu?congrats=true`)
+					}
+				} catch (_) {
+					// ignore navigation errors
+				}
+			}
+		} catch (error: any) {
+			toast.error('Failed to create nodes', { description: error.message })
 		}
 	}
 
@@ -598,21 +879,74 @@ export default function BulkCreateBesuNetworkPage() {
 					</Button>
 				</div>
 
-				<div className="flex items-center gap-4 mb-8">
-					<Server className="h-8 w-8" />
-					<div>
-						<h1 className="text-2xl font-semibold">Create Besu Network</h1>
-						<p className="text-muted-foreground">Create a new Besu network with multiple nodes</p>
+				<div className="flex items-center justify-between mb-8">
+					<div className="flex items-center gap-4">
+						<Server className="h-8 w-8" />
+						<div>
+							<h1 className="text-2xl font-semibold">Create Besu Network</h1>
+							<p className="text-muted-foreground">Create a new Besu network with multiple nodes</p>
+						</div>
 					</div>
+					<Button
+						variant="outline"
+						onClick={() => {
+							clearLocalStorage()
+							// Reset all form states
+							nodesForm.reset({ numberOfNodes: 4, networkName: '', version: '25.7.0' })
+							networkForm.reset({
+								...defaultNetworkValues,
+								timestamp: numberToHex(Math.floor(new Date().getTime() / 1000)),
+								selectedValidatorKeys: [],
+							})
+							setValidatorKeys([])
+							setNodeConfigs([])
+							setCurrentStep('nodes')
+							setNodeCreationResults({})
+							setFailedNodes([])
+							setCreatedNodeIds([])
+							setHasAttemptedCreation(false)
+							setCreationProgress({ current: 0, total: 0, currentNode: null })
+							setExpandedNodes({ 0: true })
+							toast.success('Form reset successfully')
+						}}
+					>
+						<RefreshCw className="mr-2 h-4 w-4" />
+						Reset Form
+					</Button>
 				</div>
 
 				<Steps steps={steps} currentStep={currentStep} className="mb-8" />
+
+				{besuVerificationError && (
+					<Alert className="mb-6" variant="destructive">
+						<AlertCircle className="h-4 w-4" />
+						<AlertTitle>Besu version verification failed</AlertTitle>
+						<AlertDescription className="whitespace-pre-line">
+							{besuVerificationError}
+						</AlertDescription>
+					</Alert>
+				)}
 
 				{currentStep === 'nodes' && (
 					<Form {...nodesForm}>
 						<form onSubmit={nodesForm.handleSubmit(onNodesStepSubmit)} className="space-y-8">
 							<Card className="p-6">
 								<div className="space-y-6">
+									<FormField
+										control={nodesForm.control}
+										name="networkName"
+										render={({ field }) => (
+											<FormItem>
+												<FormLabel>Network Name</FormLabel>
+												<FormControl>
+													<Input placeholder="mybesunetwork" {...field} />
+												</FormControl>
+												<FormDescription>A unique name for your network</FormDescription>
+												<FormMessage />
+											</FormItem>
+										)}
+									/>
+
 									<FormField
 										control={nodesForm.control}
 										name="numberOfNodes"
@@ -627,12 +961,38 @@ export default function BulkCreateBesuNetworkPage() {
 											</FormItem>
 										)}
 									/>
+
+									<FormField
+										control={nodesForm.control}
+										name="version"
+										render={({ field }) => (
+											<FormItem>
+												<FormLabel>Besu Version</FormLabel>
+												<Select onValueChange={field.onChange} defaultValue={field.value}>
+													<FormControl>
+														<SelectTrigger>
+															<SelectValue placeholder="Select Besu version" />
+														</SelectTrigger>
+													</FormControl>
+													<SelectContent>
+														{besuVersions.map((version) => (
+															<SelectItem key={version} value={version}>
+																{version}
+															</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
+												<FormDescription>Version of Besu to use for all nodes</FormDescription>
+												<FormMessage />
+											</FormItem>
+										)}
+									/>
 								</div>
 							</Card>
 
 							<div className="flex justify-between">
 								<Button variant="outline" asChild>
-									<Link to="/networks">Cancel</Link>
+									<Link to="/networks" onClick={clearLocalStorage}>Cancel</Link>
 								</Button>
 								<Button type="submit">
 									Next
@@ -673,7 +1033,7 @@ export default function BulkCreateBesuNetworkPage() {
 									<FormField
 										control={networkForm.control}
 										name="selectedValidatorKeys"
-										render={({}) => (
+										render={({ }) => (
 											<FormItem>
 												<FormLabel>Validator Keys</FormLabel>
 												<FormDescription>Validator keys generated for your network</FormDescription>
@@ -708,7 +1068,7 @@ export default function BulkCreateBesuNetworkPage() {
 																		<span className="text-muted-foreground">Public Key:</span>
 																		<div className="flex items-center gap-2">
 																			<code className="text-xs bg-muted px-2 py-1 rounded">
-																				{key.publicKey.length > 20 
+																				{key.publicKey.length > 20
 																					? `${key.publicKey.slice(0, 10)}...${key.publicKey.slice(-10)}`
 																					: key.publicKey
 																				}
@@ -915,12 +1275,12 @@ export default function BulkCreateBesuNetworkPage() {
 													<FormControl>
 														<Input
 															type="number"
-															value={field.value === '0x0' ? 0 : hexToNumber(field.value)}
-															onChange={(e) => field.onChange(numberToHex(Number(e.target.value)))}
+															value={hexToNumber(field.value)}
+															onChange={(e) => field.onChange(numberToNonceHex(Number(e.target.value)))}
 															min={0}
 														/>
 													</FormControl>
-													<FormDescription>Genesis block nonce (will be converted to hex)</FormDescription>
+													<FormDescription>Genesis block nonce (will be converted to hex, 8 bytes)</FormDescription>
 													<FormMessage />
 												</FormItem>
 											)}
@@ -961,7 +1321,7 @@ export default function BulkCreateBesuNetworkPage() {
 														// Check if this allocation corresponds to a validator key
 														const validatorKey = validatorKeys.find(key => key.ethereumAddress === allocation.account)
 														const isValidatorKey = !!validatorKey
-														
+
 														return (
 															<div key={index} className="border rounded-lg p-4 space-y-3">
 																{isValidatorKey ? (
@@ -1074,7 +1434,7 @@ export default function BulkCreateBesuNetworkPage() {
 																											description: `Additional key for network allocation`,
 																										},
 																									})
-																									
+
 																									if (newKey.data?.ethereumAddress) {
 																										const newAlloc = [...field.value]
 																										newAlloc[index] = { ...newAlloc[index], account: newKey.data.ethereumAddress }
@@ -1198,6 +1558,82 @@ export default function BulkCreateBesuNetworkPage() {
 											</FormItem>
 										)}
 									/>
+
+									{/* External Validator Keys Section */}
+									<FormField
+										control={networkForm.control}
+										name="externalValidatorKeys"
+										render={({ field }) => (
+											<FormItem>
+												<FormLabel>External Validator Keys (Optional)</FormLabel>
+												<FormDescription className="mb-3">
+													Add external validator keys by providing their Ethereum address and public key
+												</FormDescription>
+												<div className="space-y-3">
+													{(field.value || []).map((extKey, index) => (
+														<div key={index} className="p-3 border rounded-lg space-y-2">
+															<div className="grid grid-cols-1 gap-2">
+																<div>
+																	<label className="text-sm font-medium text-muted-foreground mb-1 block">
+																		Ethereum Address
+																	</label>
+																	<Input
+																		placeholder="0x..."
+																		value={extKey.ethereumAddress}
+																		onChange={(e) => {
+																			const currentKeys = [...(field.value || [])]
+																			currentKeys[index] = { ...currentKeys[index], ethereumAddress: e.target.value }
+																			field.onChange(currentKeys)
+																		}}
+																		className="font-mono text-xs"
+																	/>
+																</div>
+																<div>
+																	<label className="text-sm font-medium text-muted-foreground mb-1 block">
+																		Public Key
+																	</label>
+																	<Input
+																		placeholder="0x04..."
+																		value={extKey.publicKey}
+																		onChange={(e) => {
+																			const currentKeys = [...(field.value || [])]
+																			currentKeys[index] = { ...currentKeys[index], publicKey: e.target.value }
+																			field.onChange(currentKeys)
+																		}}
+																		className="font-mono text-xs"
+																	/>
+																</div>
+															</div>
+															<div className="flex justify-end">
+																<Button
+																	type="button"
+																	variant="outline"
+																	size="sm"
+																	onClick={() => {
+																		const currentKeys = (field.value || []).filter((_, i) => i !== index)
+																		field.onChange(currentKeys)
+																	}}
+																>
+																	Remove
+																</Button>
+															</div>
+														</div>
+													))}
+													<Button
+														type="button"
+														variant="outline"
+														size="sm"
+														onClick={() => {
+															field.onChange([...(field.value || []), { ethereumAddress: '', publicKey: '' }])
+														}}
+													>
+														Add External Validator Key
+													</Button>
+												</div>
+												<FormMessage />
+											</FormItem>
+										)}
+									/>
 								</div>
 							</Card>
 
@@ -1207,7 +1643,7 @@ export default function BulkCreateBesuNetworkPage() {
 								</Button>
 								<div className="flex gap-4">
 									<Button variant="outline" asChild>
-										<Link to="/networks">Cancel</Link>
+										<Link to="/networks" onClick={clearLocalStorage}>Cancel</Link>
 									</Button>
 									<Button type="submit">
 										Next
@@ -1223,19 +1659,41 @@ export default function BulkCreateBesuNetworkPage() {
 					<div className="space-y-8">
 						<Card className="p-6">
 							<div className="space-y-6">
-								<h3 className="text-lg font-semibold">Configure Nodes</h3>
-								<p className="text-muted-foreground">Configure {nodesForm.getValues('numberOfNodes')} nodes for your network</p>
+								<div className="flex items-center justify-between">
+									<div>
+										<h3 className="text-lg font-semibold">Configure Nodes</h3>
+										<p className="text-muted-foreground">Configure {nodesForm.getValues('numberOfNodes')} nodes for your network</p>
+									</div>
+									<div className="flex items-center gap-2">
+										<Button
+											type="button"
+											variant="outline"
+											size="sm"
+											onClick={expandAllNodes}
+										>
+											Expand All
+										</Button>
+										<Button
+											type="button"
+											variant="outline"
+											size="sm"
+											onClick={collapseAllNodes}
+										>
+											Collapse All
+										</Button>
+									</div>
+								</div>
 
 								{Array.from({ length: nodesForm.getValues('numberOfNodes') }).map((_, index) => {
 									const networkId = localStorage.getItem('besuBulkCreateNetworkId')
 									const networkName = networkForm.getValues('networkName')
 
 									// Calculate bootnodes based on node position
-									let bootNodes = ''
+									let bootNodes: string[] = []
 									if (index > 0) {
 										// For all nodes after the first one, use only the first node as bootnode
-										const firstNodeP2PPort = 30303
-										bootNodes = `enode://${validatorKeys[0]?.publicKey.substring(2)}@127.0.0.1:${firstNodeP2PPort}`
+										const firstNodeP2PPort = 30303 + index
+										bootNodes = [`enode://${validatorKeys[0]?.publicKey.substring(2)}@127.0.0.1:${firstNodeP2PPort}`]
 									}
 
 									const defaultNodeConfig = {
@@ -1255,64 +1713,97 @@ export default function BulkCreateBesuNetworkPage() {
 										metricsPort: 9545 + index,
 										bootNodes: bootNodes,
 										requestTimeout: 30,
+										version: nodesForm.getValues('version') || '25.7.0',
+										// Gas and access control configuration
+										minGasPrice: 0,
+										hostAllowList: '',
+										// Permissions configuration
+										accountsAllowList: [],
+										nodesAllowList: [],
+										// JWT Authentication configuration
+										jwtEnabled: false,
+										jwtPublicKeyContent: '',
+										jwtAuthenticationAlgorithm: '',
+										// Metrics configuration
+										metricsEnabled: true,
+										metricsProtocol: 'PROMETHEUS',
+										environmentVariables: [],
 									} as BesuNodeFormValues
 
 									// Get the validator key and its allocation for this node
 									const validatorKey = validatorKeys[index]
 									const allocation = networkForm.getValues('alloc').find(alloc => alloc.account === validatorKey?.ethereumAddress)
-									const initialBalance = allocation ? weiToEth(hexToNumber(allocation.balance).toString()) : 0
-									
+
+									const isExpanded = expandedNodes[index]
+
 									return (
-										<div key={index} className="space-y-4">
-											<div className="flex items-center justify-between">
-												<h4 className="font-medium">
-													Node {index + 1} {index < 2 ? '(Bootnode + Validator)' : '(Validator)'}
-												</h4>
-												<div className="flex items-center gap-2">
-													<span className="text-sm text-muted-foreground">Initial Balance:</span>
-													<span className="font-mono text-sm bg-muted px-2 py-1 rounded">
-														{(() => {
-															if (allocation?.balance === '0x0') return '0 ETH'
-															const weiValue = hexToNumber(allocation?.balance || '0x0')
-															const ethValue = weiToEth(weiValue.toString())
-															return Math.round(ethValue * 1e10) / 1e10 + ' ETH'
-														})()}
-													</span>
-												</div>
-											</div>
-											{validatorKey && (
-												<div className="text-sm text-muted-foreground mb-4">
+										<div key={index} className="border rounded-lg">
+											<div
+												className="p-4 cursor-pointer hover:bg-muted/50 transition-colors"
+												onClick={() => toggleNodeExpansion(index)}
+											>
+												<div className="flex items-center justify-between">
 													<div className="flex items-center gap-2">
-														<span>Validator Address:</span>
-														<code className="text-xs bg-muted px-2 py-1 rounded">
-															{validatorKey.ethereumAddress}
-														</code>
-														<Button
-															type="button"
-															variant="ghost"
-															size="sm"
-															className="h-6 w-6 p-0"
-															onClick={() => {
-																navigator.clipboard.writeText(validatorKey.ethereumAddress)
-																toast.success('Address copied to clipboard')
-															}}
-														>
-															<Copy className="h-3 w-3" />
-														</Button>
+														{isExpanded ? (
+															<ChevronDown className="h-4 w-4 text-muted-foreground" />
+														) : (
+															<ChevronRight className="h-4 w-4 text-muted-foreground" />
+														)}
+														<h4 className="font-medium">
+															Node {index + 1} {index < 2 ? '(Bootnode + Validator)' : '(Validator)'}
+														</h4>
+													</div>
+													<div className="flex items-center gap-2">
+														<span className="text-sm text-muted-foreground">Initial Balance:</span>
+														<span className="font-mono text-sm bg-muted px-2 py-1 rounded">
+															{(() => {
+																if (allocation?.balance === '0x0') return '0 ETH'
+																const weiValue = hexToNumber(allocation?.balance || '0x0')
+																const ethValue = weiToEth(weiValue.toString())
+																return Math.round(ethValue * 1e10) / 1e10 + ' ETH'
+															})()}
+														</span>
 													</div>
 												</div>
+											</div>
+
+											{isExpanded && (
+												<div className="px-4 pb-4 space-y-4">
+													{validatorKey && (
+														<div className="text-sm text-muted-foreground">
+															<div className="flex items-center gap-2">
+																<span>Validator Address:</span>
+																<code className="text-xs bg-muted px-2 py-1 rounded">
+																	{validatorKey.ethereumAddress}
+																</code>
+																<Button
+																	type="button"
+																	variant="ghost"
+																	size="sm"
+																	className="h-6 w-6 p-0"
+																	onClick={(e) => {
+																		e.stopPropagation()
+																		navigator.clipboard.writeText(validatorKey.ethereumAddress)
+																		toast.success('Address copied to clipboard')
+																	}}
+																>
+																	<Copy className="h-3 w-3" />
+																</Button>
+															</div>
+														</div>
+													)}
+													<BesuNodeForm
+														defaultValues={nodeConfigs[index] || defaultNodeConfig}
+														onChange={(values) => {
+															const newConfigs = [...nodeConfigs]
+															newConfigs[index] = values
+															setNodeConfigs(newConfigs)
+														}}
+														hideSubmit
+														onSubmit={() => { }}
+													/>
+												</div>
 											)}
-											<BesuNodeForm
-												defaultValues={nodeConfigs[index] || defaultNodeConfig}
-												onChange={(values) => {
-													const newConfigs = [...nodeConfigs]
-													newConfigs[index] = values
-													setNodeConfigs(newConfigs)
-												}}
-												hideSubmit
-												onSubmit={() => {}}
-											/>
-											<hr className="my-6" />
 										</div>
 									)
 								})}
@@ -1325,7 +1816,7 @@ export default function BulkCreateBesuNetworkPage() {
 							</Button>
 							<div className="flex gap-4">
 								<Button variant="outline" asChild>
-									<Link to="/networks">Cancel</Link>
+									<Link to="/networks" onClick={clearLocalStorage}>Cancel</Link>
 								</Button>
 								<Button type="button" onClick={onNodesConfigStepSubmit} disabled={nodeConfigs.length !== nodesForm.getValues('numberOfNodes')}>
 									Next
@@ -1352,21 +1843,134 @@ export default function BulkCreateBesuNetworkPage() {
 											<dd className="mt-1">{nodesForm.getValues('numberOfNodes')}</dd>
 										</div>
 										<div>
+											<dt className="text-sm font-medium text-muted-foreground">Besu Version</dt>
+											<dd className="mt-1">{nodesForm.getValues('version')}</dd>
+										</div>
+										<div>
 											<dt className="text-sm font-medium text-muted-foreground">Chain ID</dt>
 											<dd className="mt-1">{networkForm.getValues('chainId')}</dd>
 										</div>
 										<div>
 											<dt className="text-sm font-medium text-muted-foreground">Nodes</dt>
 											<dd className="mt-1">
-												<ul className="list-disc list-inside">
-													{nodeConfigs?.map((config, index) => (
-														<li key={index}>{config?.name}</li>
-													))}
-												</ul>
+												<div className="space-y-2">
+													{nodeConfigs?.map((config, index) => {
+														const nodeName = config?.name
+														const result = nodeCreationResults[nodeName]
+														// Show as created if we have attempted creation or have results
+														const isCreated = hasAttemptedCreation || !!result
+
+														return (
+															<div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+																<div className="flex items-center gap-3">
+																	<div className={`h-3 w-3 rounded-full shrink-0 ${!isCreated
+																		? 'bg-muted'
+																		: result?.status === 'success'
+																			? result?.nodeStatus === 'ERROR'
+																				? 'bg-red-500'
+																				: result?.nodeStatus === 'RUNNING'
+																					? 'bg-green-500'
+																					: result?.nodeStatus === 'STOPPED'
+																						? 'bg-yellow-500'
+																						: 'bg-blue-500'
+																			: result?.status === 'error'
+																				? 'bg-red-500'
+																				: 'bg-yellow-500 animate-pulse'
+																		}`} />
+																	<div>
+																		<p className="font-medium">{nodeName}</p>
+																		{result?.status === 'error' && (
+																			<p className="text-sm text-red-600">{result.error}</p>
+																		)}
+																		{result?.status === 'success' && (
+																			<>
+																				{result?.nodeStatus === 'ERROR' && (
+																					<p className="text-sm text-red-600">Node created but status is ERROR</p>
+																				)}
+																				{result?.nodeStatus === 'RUNNING' && (
+																					<p className="text-sm text-green-600">Running successfully</p>
+																				)}
+																				{result?.nodeStatus === 'STOPPED' && (
+																					<p className="text-sm text-yellow-600">Created successfully (Stopped)</p>
+																				)}
+																				{!result?.nodeStatus && (
+																					<p className="text-sm text-blue-600">Created successfully (Checking status...)</p>
+																				)}
+																			</>
+																		)}
+																		{result?.status === 'pending' && (
+																			<p className="text-sm text-yellow-600">Creating...</p>
+																		)}
+																	</div>
+																</div>
+
+																{isCreated && (result?.status === 'error' || result?.nodeStatus === 'ERROR') && (
+																	<div className="flex items-center gap-2">
+																		{result?.nodeStatus === 'ERROR' ? (
+																			<Button
+																				type="button"
+																				size="sm"
+																				variant="outline"
+																				className="border-red-200 hover:bg-red-50"
+																				onClick={() => deleteAndRecreateNode(nodeName)}
+																				disabled={result?.status === 'pending'}
+																			>
+																				{result?.status === 'pending' ? (
+																					<div className="h-3 w-3 rounded-full bg-current animate-pulse" />
+																				) : (
+																					<Trash2 className="h-3 w-3" />
+																				)}
+																				{result?.status === 'pending' ? 'Recreating...' : 'Delete & Recreate'}
+																			</Button>
+																		) : (
+																			<Button
+																				type="button"
+																				size="sm"
+																				variant="outline"
+																				className="border-red-200 hover:bg-red-50"
+																				onClick={() => retryNodeCreation(nodeName)}
+																				disabled={result?.status === 'pending'}
+																			>
+																				{result?.status === 'pending' ? (
+																					<div className="h-3 w-3 rounded-full bg-current animate-pulse" />
+																				) : (
+																					<RefreshCw className="h-3 w-3" />
+																				)}
+																				{result?.status === 'pending' ? 'Retrying...' : 'Retry'}
+																			</Button>
+																		)}
+																		<Button
+																			type="button"
+																			size="sm"
+																			variant="outline"
+																			className="border-red-200 hover:bg-red-50 text-red-600"
+																			onClick={() => removeFailedNode(nodeName)}
+																			disabled={result?.status === 'pending'}
+																		>
+																			<Trash2 className="h-3 w-3" />
+																			Remove
+																		</Button>
+																	</div>
+																)}
+															</div>
+														)
+													})}
+												</div>
 											</dd>
 										</div>
 									</dl>
 								</div>
+
+								{/* Error summary for failed nodes */}
+								{failedNodes.length > 0 && (
+									<Alert variant="destructive">
+										<AlertCircle className="h-4 w-4" />
+										<AlertTitle>Some nodes failed to create</AlertTitle>
+										<AlertDescription>
+											{failedNodes.length} of {nodeConfigs.length} nodes failed. You can retry individual nodes or retry all failed nodes using the buttons below.
+										</AlertDescription>
+									</Alert>
+								)}
 
 								{creationProgress.total > 0 && (
 									<div className="space-y-2">
@@ -1389,12 +1993,30 @@ export default function BulkCreateBesuNetworkPage() {
 							</Button>
 							<div className="flex gap-4">
 								<Button variant="outline" asChild>
-									<Link to="/networks">Cancel</Link>
+									<Link to="/networks" onClick={clearLocalStorage}>Cancel</Link>
 								</Button>
-								<Button type="button" onClick={onReviewStepSubmit}>
-									<CheckCircle2 className="mr-2 h-4 w-4" />
-									Create Network
-								</Button>
+
+								{/* Show additional buttons when there are failed nodes */}
+								{failedNodes.length > 0 && creationProgress.total > 0 && (
+									<>
+										<Button type="button" variant="outline" onClick={retryAllFailedNodes}>
+											<RefreshCw className="mr-2 h-4 w-4" />
+											Retry Failed ({failedNodes.length})
+										</Button>
+										<Button type="button" onClick={continueWithSuccessful}>
+											<CheckCircle2 className="mr-2 h-4 w-4" />
+											Continue with Successful
+										</Button>
+									</>
+								)}
+
+								{/* Show create button only if not started or no failures */}
+								{(creationProgress.total === 0 || failedNodes.length === 0) && (
+									<Button type="button" onClick={onReviewStepSubmit}>
+										<CheckCircle2 className="mr-2 h-4 w-4" />
+										Create Network
+									</Button>
+								)}
 							</div>
 						</div>
 					</div>

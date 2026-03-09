@@ -41,6 +41,7 @@ import (
 	"github.com/chainlaunch/chainlaunch/pkg/binaries"
 	"github.com/chainlaunch/chainlaunch/pkg/config"
 	"github.com/chainlaunch/chainlaunch/pkg/db"
+	"github.com/chainlaunch/chainlaunch/pkg/docker"
 	fabricservice "github.com/chainlaunch/chainlaunch/pkg/fabric/service"
 	kmodels "github.com/chainlaunch/chainlaunch/pkg/keymanagement/models"
 	keymanagement "github.com/chainlaunch/chainlaunch/pkg/keymanagement/service"
@@ -49,7 +50,6 @@ import (
 	nodetypes "github.com/chainlaunch/chainlaunch/pkg/nodes/types"
 	settingsservice "github.com/chainlaunch/chainlaunch/pkg/settings/service"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	dockerclient "github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
@@ -948,12 +948,14 @@ func (p *LocalPeer) Init() (nodetypes.NodeDeploymentConfig, error) {
 	}
 
 	// Sign Sign Key
+	validFor := kmodels.Duration(time.Hour * 24 * 365)
 	signKeyDB, err = p.keyService.SignCertificate(ctx, signKeyDB.ID, signCAKeyDB.ID, kmodels.CertificateRequest{
 		CommonName:         p.opts.ID,
 		Organization:       []string{org.MspID},
 		OrganizationalUnit: []string{"peer"},
 		DNSNames:           []string{p.opts.ID},
 		IsCA:               true,
+		ValidFor:           validFor,
 		KeyUsage:           x509.KeyUsageCertSign,
 		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 	})
@@ -1011,7 +1013,6 @@ func (p *LocalPeer) Init() (nodetypes.NodeDeploymentConfig, error) {
 	p.opts.DomainNames = domains
 
 	// Sign TLS certificates
-	validFor := kmodels.Duration(time.Hour * 24 * 365)
 	tlsKeyDB, err = p.keyService.SignCertificate(ctx, tlsKeyDB.ID, tlsCAKeyDB.ID, kmodels.CertificateRequest{
 		CommonName:         p.opts.ID,
 		Organization:       []string{org.MspID},
@@ -1218,16 +1219,10 @@ func (p *LocalPeer) startDocker(env map[string]string, mspConfigPath, dataConfig
 	}
 	defer cli.Close()
 
-	// Pull the image first
+	// Pull the image (tries CLI first for credential helpers, falls back to API)
 	imageName := fmt.Sprintf("hyperledger/fabric-peer:%s", p.opts.Version)
-	reader, err := cli.ImagePull(context.Background(), imageName, image.PullOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to pull image %s: %w", imageName, err)
-	}
-	defer reader.Close()
-	_, err = io.Copy(io.Discard, reader) // Wait for pull to complete
-	if err != nil {
-		return nil, fmt.Errorf("failed to pull image %s: %w", imageName, err)
+	if err := docker.PullImageIfNeeded(context.Background(), cli, imageName); err != nil {
+		return nil, err
 	}
 
 	containerName, err := p.getContainerName()
@@ -2328,9 +2323,13 @@ func (p *LocalPeer) CreateOrdererConnection(ctx context.Context, ordererURL stri
 	p.logger.Info("Creating orderer connection",
 		"ordererURL", ordererURL)
 
+	// Strip the grpcs:// or grpc:// scheme from the URL since network.Node.Addr expects host:port only
+	ordererAddr := strings.TrimPrefix(ordererURL, "grpcs://")
+	ordererAddr = strings.TrimPrefix(ordererAddr, "grpc://")
+
 	// Create a network node with the orderer details
 	networkNode := network.Node{
-		Addr:          ordererURL,
+		Addr:          ordererAddr,
 		TLSCACertByte: []byte(ordererTLSCACert),
 	}
 
@@ -2414,8 +2413,12 @@ func Concatenate[T any](slices ...[]T) []T {
 func (p *LocalPeer) CreatePeerConnection(ctx context.Context, peerURL string, peerTLSCACert string) (*grpc.ClientConn, error) {
 	// Create a temporary file for the TLS CA certificate
 
+	// Strip the grpcs:// or grpc:// scheme from the URL since network.Node.Addr expects host:port only
+	peerAddr := strings.TrimPrefix(peerURL, "grpcs://")
+	peerAddr = strings.TrimPrefix(peerAddr, "grpc://")
+
 	networkNode := network.Node{
-		Addr:          peerURL,
+		Addr:          peerAddr,
 		TLSCACertByte: []byte(peerTLSCACert),
 	}
 	peerConn, err := network.DialConnection(networkNode)

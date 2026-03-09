@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"net"
 	"regexp"
 	"strconv"
@@ -12,9 +11,9 @@ import (
 	"time"
 
 	"github.com/chainlaunch/chainlaunch/pkg/audit"
+	"github.com/chainlaunch/chainlaunch/pkg/docker"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 	"github.com/google/uuid"
@@ -368,22 +367,11 @@ func findFreePort() (int, error) {
 	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
-// pullImageIfNeeded pulls the Docker image if not present locally
+// pullImageIfNeeded pulls the Docker image if not present locally.
+// It tries docker CLI first (to use credential helpers like ecr-login),
+// then falls back to Docker API if CLI fails.
 func (d *DockerChaincodeDeployer) pullImageIfNeeded(ctx context.Context, imageName string) error {
-	_, _, err := d.client.ImageInspectWithRaw(ctx, imageName)
-	if err == nil {
-		return nil // Image exists locally
-	}
-	reader, err := d.client.ImagePull(ctx, imageName, image.PullOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to pull image %s: %v", imageName, err)
-	}
-	defer reader.Close()
-	_, err = io.Copy(io.Discard, reader)
-	if err != nil {
-		return fmt.Errorf("error while pulling image: %v", err)
-	}
-	return nil
+	return docker.PullImageIfNeeded(ctx, d.client, imageName)
 }
 
 // sanitizeContainerName replaces any character not in [a-zA-Z0-9_.-] with '-'

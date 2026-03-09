@@ -108,3 +108,68 @@ func IsType(err error, target ErrorType) bool {
 	}
 	return false
 }
+
+// ValidationFieldError represents a single field validation error
+type ValidationFieldError struct {
+	Field   string `json:"field"`
+	Message string `json:"message"`
+	Value   string `json:"value,omitempty"` // The invalid value (if safe to expose)
+}
+
+// MultiValidationError represents multiple validation errors
+// This is used when a request has multiple invalid fields
+type MultiValidationError struct {
+	Message string                 `json:"message"`
+	Errors  []ValidationFieldError `json:"errors"`
+}
+
+func (e *MultiValidationError) Error() string {
+	if len(e.Errors) == 0 {
+		return e.Message
+	}
+	return fmt.Sprintf("%s: %d validation error(s)", e.Message, len(e.Errors))
+}
+
+// Add adds a new validation error
+func (e *MultiValidationError) Add(field, message string) {
+	e.Errors = append(e.Errors, ValidationFieldError{
+		Field:   field,
+		Message: message,
+	})
+}
+
+// AddWithValue adds a new validation error with the invalid value
+func (e *MultiValidationError) AddWithValue(field, message, value string) {
+	e.Errors = append(e.Errors, ValidationFieldError{
+		Field:   field,
+		Message: message,
+		Value:   value,
+	})
+}
+
+// HasErrors returns true if there are any validation errors
+func (e *MultiValidationError) HasErrors() bool {
+	return len(e.Errors) > 0
+}
+
+// NewMultiValidationError creates a new MultiValidationError
+func NewMultiValidationError(message string) *MultiValidationError {
+	return &MultiValidationError{
+		Message: message,
+		Errors:  []ValidationFieldError{},
+	}
+}
+
+// IsMultiValidationError checks if an error is a MultiValidationError
+func IsMultiValidationError(err error) bool {
+	_, ok := err.(*MultiValidationError)
+	return ok
+}
+
+// GetMultiValidationError extracts MultiValidationError from an error if it exists
+func GetMultiValidationError(err error) (*MultiValidationError, bool) {
+	if mve, ok := err.(*MultiValidationError); ok {
+		return mve, true
+	}
+	return nil, false
+}

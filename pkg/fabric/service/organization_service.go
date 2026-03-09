@@ -53,6 +53,10 @@ type CreateOrganizationParams struct {
 	Description string
 	ProviderID  int64
 
+	// Certificate validity durations
+	CaCertValidFor *time.Duration // Validity for CA certificates (default: 10 years)
+	CertValidFor   *time.Duration // Validity for admin/client certificates (default: 1 year)
+
 	// CA certificate properties
 	Country       []string
 	Province      []string
@@ -180,6 +184,16 @@ func (s *OrganizationService) CreateOrganization(ctx context.Context, params Cre
 		return nil, fmt.Errorf("organization with MSP ID '%s' already exists", params.MspID)
 	}
 
+	// Set default certificate validity durations
+	caCertValidFor := time.Hour * 24 * 365 * 10 // 10 years
+	if params.CaCertValidFor != nil {
+		caCertValidFor = *params.CaCertValidFor
+	}
+	certValidFor := time.Hour * 24 * 365 // 1 year
+	if params.CertValidFor != nil {
+		certValidFor = *params.CertValidFor
+	}
+
 	description := fmt.Sprintf("Sign key for organization %s", params.MspID)
 	curve := models.ECCurveP256
 	// Create SIGN key
@@ -209,6 +223,7 @@ func (s *OrganizationService) CreateOrganization(ctx context.Context, params Cre
 			Province:           params.Province,
 			StreetAddress:      params.StreetAddress,
 			PostalCode:         params.PostalCode,
+			ValidFor:           models.Duration(caCertValidFor),
 		},
 	}
 	signKey, err := s.keyManagement.CreateKey(ctx, signKeyReq, providerID)
@@ -243,6 +258,7 @@ func (s *OrganizationService) CreateOrganization(ctx context.Context, params Cre
 		StreetAddress:      params.StreetAddress,
 		PostalCode:         params.PostalCode,
 		KeyUsage:           x509.KeyUsageCertSign,
+		ValidFor:           models.Duration(certValidFor),
 	})
 	if err != nil {
 		_ = s.keyManagement.DeleteKey(ctx, signKey.ID)
@@ -277,6 +293,7 @@ func (s *OrganizationService) CreateOrganization(ctx context.Context, params Cre
 		StreetAddress:      params.StreetAddress,
 		PostalCode:         params.PostalCode,
 		KeyUsage:           x509.KeyUsageCertSign,
+		ValidFor:           models.Duration(certValidFor),
 	})
 	if err != nil {
 		_ = s.keyManagement.DeleteKey(ctx, signKey.ID)
@@ -304,6 +321,7 @@ func (s *OrganizationService) CreateOrganization(ctx context.Context, params Cre
 			Province:           params.Province,
 			StreetAddress:      params.StreetAddress,
 			PostalCode:         params.PostalCode,
+			ValidFor:           models.Duration(caCertValidFor),
 		},
 	}
 	tlsKey, err := s.keyManagement.CreateKey(ctx, tlsKeyReq, providerID)
@@ -345,6 +363,7 @@ func (s *OrganizationService) CreateOrganization(ctx context.Context, params Cre
 		StreetAddress:      params.StreetAddress,
 		PostalCode:         params.PostalCode,
 		KeyUsage:           x509.KeyUsageCertSign,
+		ValidFor:           models.Duration(certValidFor),
 	})
 	if err != nil {
 		_ = s.keyManagement.DeleteKey(ctx, signKey.ID)
