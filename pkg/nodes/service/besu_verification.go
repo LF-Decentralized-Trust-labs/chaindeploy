@@ -9,8 +9,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
+
+// validBesuVersion matches semantic versions like "24.1.0", "25.3.1-RC1"
+var validBesuVersion = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$`)
 
 // BesuVersionVerificationRequest represents the request to verify a Besu version
 type BesuVersionVerificationRequest struct {
@@ -33,6 +37,13 @@ func (s *NodeService) VerifyBesuVersion(ctx context.Context, req BesuVersionVeri
 	version := req.Version
 	if version == "" {
 		version = "24.1.0" // Default Besu version
+	}
+
+	if !validBesuVersion.MatchString(version) {
+		return &BesuVersionVerificationResponse{
+			Version: version,
+			Error:   "invalid version format: must be semver (e.g. 24.1.0)",
+		}, nil
 	}
 
 	s.logger.Info("Starting Besu version verification", "version", version)

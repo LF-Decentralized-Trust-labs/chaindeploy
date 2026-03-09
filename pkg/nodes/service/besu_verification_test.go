@@ -6,6 +6,24 @@ import (
 	"testing"
 )
 
+// --- Version validation tests ---
+
+func TestValidBesuVersion(t *testing.T) {
+	valid := []string{"24.1.0", "25.3.1", "24.1.0-RC1", "0.0.1"}
+	for _, v := range valid {
+		if !validBesuVersion.MatchString(v) {
+			t.Errorf("expected %q to be valid", v)
+		}
+	}
+
+	invalid := []string{"../../../etc/passwd", "24.1.0; rm -rf /", "v24.1.0", "", "24.1", "foo", "24/1/0"}
+	for _, v := range invalid {
+		if validBesuVersion.MatchString(v) {
+			t.Errorf("expected %q to be invalid", v)
+		}
+	}
+}
+
 // --- BesuVersionVerificationRequest/Response struct tests ---
 
 func TestBesuVersionVerificationRequest_Fields(t *testing.T) {
