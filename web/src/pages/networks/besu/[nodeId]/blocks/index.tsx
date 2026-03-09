@@ -35,7 +35,7 @@ export default function BesuBlocksPage() {
 	const endBlock = latestBlock ? Math.max(0, latestBlock - ((currentPage + 1) * blocksPerPage) + 1) : 0
 
 	// Get blocks for the current page
-	const { data: blocks, isLoading: blocksLoading } = useQuery({
+	const { isLoading: blocksLoading } = useQuery({
 		...getNodesByIdRpcBlockByNumberOptions({
 			path: { id: nodeIdNumber },
 			query: { number: startBlock.toString(), tag: startBlock.toString() },
@@ -69,7 +69,7 @@ export default function BesuBlocksPage() {
 		// Since we show blocks in descending order (latest first), we need to calculate the page
 		const blockIndex = latestBlock - blockNumber
 		const targetPage = Math.floor(blockIndex / blocksPerPage)
-		
+
 		setCurrentPage(targetPage)
 		setJumpToBlock('')
 		toast.success(`Jumped to page containing block ${blockNumber}`)
@@ -86,12 +86,6 @@ export default function BesuBlocksPage() {
 				return newSet
 			})
 		}, 2000)
-	}
-
-	// Format block hash for better readability
-	const formatHash = (hash: string) => {
-		if (hash.length <= 10) return hash
-		return `${hash.slice(0, 6)}...${hash.slice(-4)}`
 	}
 
 	// Format block number to hex

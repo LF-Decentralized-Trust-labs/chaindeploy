@@ -120,7 +120,7 @@ export default function EditFabricNodePage() {
 				fabricProperties: {
 					nodeType: 'FABRIC_PEER',
 					mode: node.fabricPeer?.mode || 'service',
-					version: node.fabricPeer?.version || '3.0.0',
+					version: node.fabricPeer?.version || '3.1.3',
 					organizationId: node.fabricPeer?.organizationId,
 					listenAddress: node.fabricPeer?.listenAddress || '',
 					operationsListenAddress: node.fabricPeer?.operationsAddress || '',
@@ -144,7 +144,7 @@ export default function EditFabricNodePage() {
 				fabricProperties: {
 					nodeType: 'FABRIC_ORDERER',
 					mode: node.fabricOrderer?.mode || 'service',
-					version: node.fabricOrderer?.version || '3.0.0',
+					version: node.fabricOrderer?.version || '3.1.3',
 					organizationId: node.fabricOrderer?.organizationId,
 					listenAddress: node.fabricOrderer?.listenAddress || '',
 					operationsListenAddress: node.fabricOrderer?.operationsAddress || '',

@@ -199,13 +199,19 @@ export default function KeyManagementPage() {
 			<AlertDialog open={!!keyToDelete} onOpenChange={(open) => !open && setKeyToDelete(null)}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>Are you sure?</AlertDialogTitle>
-						<AlertDialogDescription>This action cannot be undone. This will permanently delete the key.</AlertDialogDescription>
+						<AlertDialogTitle>Delete Key</AlertDialogTitle>
+						<AlertDialogDescription>
+							Are you sure you want to delete the key <span className="font-medium">{keyToDelete?.name}</span>? This action cannot be undone and will permanently remove the key and all associated data.
+						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>
-						<AlertDialogAction disabled={deleteKey.isPending} onClick={() => keyToDelete && deleteKey.mutate({ path: { id: keyToDelete.id! } })}>
-							Delete
+						<AlertDialogAction
+							disabled={deleteKey.isPending}
+							onClick={() => keyToDelete && deleteKey.mutate({ path: { id: keyToDelete.id! } })}
+							className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+						>
+							{deleteKey.isPending ? 'Deleting...' : 'Delete'}
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>

@@ -15203,7 +15203,7 @@
                     "type": "string"
                 },
                 "networkId": {
-                    "type": "string"
+                    "type": "integer"
                 }
             }
         },
@@ -17847,6 +17847,13 @@
                 "rpcPort"
             ],
             "properties": {
+                "accountsAllowList": {
+                    "description": "Permissions configuration",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "bootNodes": {
                     "type": "array",
                     "items": {
@@ -17862,7 +17869,20 @@
                 "externalIp": {
                     "type": "string"
                 },
+                "hostAllowList": {
+                    "type": "string"
+                },
                 "internalIp": {
+                    "type": "string"
+                },
+                "jwtAuthenticationAlgorithm": {
+                    "type": "string"
+                },
+                "jwtEnabled": {
+                    "description": "JWT Authentication configuration",
+                    "type": "boolean"
+                },
+                "jwtPublicKeyContent": {
                     "type": "string"
                 },
                 "keyId": {
@@ -17877,6 +17897,10 @@
                 "metricsProtocol": {
                     "type": "string"
                 },
+                "minGasPrice": {
+                    "description": "Gas and access control configuration",
+                    "type": "integer"
+                },
                 "mode": {
                     "description": "@Description The deployment mode (service or docker)",
                     "type": "string",
@@ -17884,6 +17908,12 @@
                 },
                 "networkId": {
                     "type": "integer"
+                },
+                "nodesAllowList": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "p2pHost": {
                     "type": "string"

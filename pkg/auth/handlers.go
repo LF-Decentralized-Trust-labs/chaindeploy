@@ -76,7 +76,11 @@ func (h *Handler) LoginHandler(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// Sign the session ID
-	signature := signSessionID(session.ID)
+	signature, err := signSessionID(session.ID)
+	if err != nil {
+		log.Printf("Error signing session ID: %v", err)
+		return errors.NewInternalError("failed to sign session", err, nil)
+	}
 	signedSessionID := session.ID + "." + signature
 
 	// Set session cookie

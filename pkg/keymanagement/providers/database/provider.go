@@ -739,6 +739,7 @@ func (p *DatabaseProvider) SignCertificate(ctx context.Context, req types.SignCe
 	validUntil := req.ValidFrom.Add(req.ValidFor)
 
 	// Create certificate template
+	// Backdate NotBefore by 1 minute for clock-skew tolerance (same as self-signed certs)
 	template := &x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
@@ -751,7 +752,7 @@ func (p *DatabaseProvider) SignCertificate(ctx context.Context, req types.SignCe
 			StreetAddress:      req.StreetAddress,
 			PostalCode:         req.PostalCode,
 		},
-		NotBefore:             req.ValidFrom,
+		NotBefore:             req.ValidFrom.Add(-time.Minute * 1),
 		NotAfter:              validUntil,
 		KeyUsage:              req.KeyUsage,
 		ExtKeyUsage:           req.ExtKeyUsage,

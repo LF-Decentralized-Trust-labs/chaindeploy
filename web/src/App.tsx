@@ -58,6 +58,7 @@ const UsersPage = lazy(() => import('./pages/users'))
 const AccountPage = lazy(() => import('./pages/account'))
 const AuditLogsPage = lazy(() => import('@/pages/settings/audit-logs'))
 const AuditLogDetailPage = lazy(() => import('@/pages/settings/audit-logs/[id]'))
+const DashboardPage = lazy(() => import('./pages/dashboard'))
 const AnalyticsPage = lazy(() => import('./pages/platform/analytics'))
 const FabricChaincodesPage = lazy(() => import('./pages/smart-contracts/fabric'))
 const BesuContractsPage = lazy(() => import('./pages/smart-contracts/besu'))
@@ -104,7 +105,8 @@ const App2 = () => {
 										<Suspense fallback={<PageLoading />}>
 											<Routes>
 												<Route path="/">
-													<Route path="/" element={<Navigate to="/nodes" replace />} />
+													<Route path="/" element={<Navigate to="/dashboard" replace />} />
+													<Route path="dashboard" element={<DashboardPage />} />
 													<Route path="account" element={<AccountPage />} />
 													<Route path="nodes" element={<NodesPage />} />
 													<Route path="smart-contracts" element={<SmartContractsPage />} />
@@ -200,7 +202,8 @@ const App = () => {
 											<Suspense fallback={<PageLoading />}>
 												<Routes>
 													<Route path="/">
-														<Route path="/" element={<Navigate to="/nodes" replace />} />
+														<Route path="/" element={<Navigate to="/dashboard" replace />} />
+														<Route path="dashboard" element={<DashboardPage />} />
 														<Route path="account" element={<AccountPage />} />
 														<Route path="nodes" element={<NodesPage />} />
 														<Route path="smart-contracts" element={<SmartContractsPage />} />

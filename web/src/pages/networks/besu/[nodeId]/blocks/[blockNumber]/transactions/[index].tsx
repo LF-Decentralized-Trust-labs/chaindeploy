@@ -1,4 +1,4 @@
-import { Activity, Copy, Hash, Package, TrendingUp, ArrowLeft, ExternalLink, Clock, Zap, Send, Receipt } from 'lucide-react'
+import { Activity, Copy, Hash, Package, TrendingUp, ArrowLeft, Zap, Send, Receipt, FileText } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useParams, Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
@@ -24,32 +24,104 @@ export default function BesuTransactionDetailsPage() {
 		enabled: !!nodeIdNumber && !!blockNumberInt && indexInt >= 0,
 	})
 
-	const copyToClipboard = (text: string) => {
-		navigator.clipboard.writeText(text)
-		toast.success('Copied to clipboard')
+	const copyToClipboard = async (text: string, label?: string) => {
+		try {
+			await navigator.clipboard.writeText(text)
+			toast.success(`${label || 'Value'} copied to clipboard`)
+		} catch (error) {
+			toast.error('Failed to copy to clipboard')
+		}
 	}
 
-	// Format hash for better readability
-	const formatHash = (hash: string) => {
-		if (hash.length <= 10) return hash
-		return `${hash.slice(0, 6)}...${hash.slice(-4)}`
+	// Format value from wei to ether (handles hex strings)
+	const formatWei = (value: string | number | undefined) => {
+		if (!value) return '0 ETH'
+		const wei = typeof value === 'string' ? parseInt(value, 16) : value
+		if (wei === 0) return '0 ETH'
+		const eth = wei / Math.pow(10, 18)
+		return `${eth.toFixed(6)} ETH`
 	}
 
-	// Format value from wei to ether
-	const formatValue = (value: string) => {
+	// Format gas value (handles hex strings)
+	const formatGasValue = (value: string | number | undefined) => {
 		if (!value) return '0'
-		const wei = BigInt(value)
-		const eth = Number(wei) / Math.pow(10, 18)
-		return eth.toFixed(6)
+		const num = typeof value === 'string' ? parseInt(value, 16) : value
+		return num.toLocaleString()
 	}
 
-	// Format gas price
-	const formatGasPrice = (gasPrice: string) => {
+	// Format gas price to Gwei
+	const formatGasPrice = (gasPrice: string | number | undefined) => {
 		if (!gasPrice) return 'N/A'
-		const wei = BigInt(gasPrice)
-		const gwei = Number(wei) / Math.pow(10, 9)
+		const wei = typeof gasPrice === 'string' ? parseInt(gasPrice, 16) : gasPrice
+		const gwei = wei / Math.pow(10, 9)
 		return `${gwei.toFixed(2)} Gwei`
 	}
+
+	// Format a number from hex
+	const formatNumber = (value: string | number | undefined) => {
+		if (!value) return '0'
+		return typeof value === 'string' ? parseInt(value, 16) : value
+	}
+
+	// Get transaction type label
+	const getTransactionType = (type: string | undefined) => {
+		if (!type) return 'Legacy'
+		const typeNum = typeof type === 'string' ? parseInt(type, 16) : type
+		switch (typeNum) {
+			case 0: return 'Legacy'
+			case 1: return 'EIP-2930'
+			case 2: return 'EIP-1559'
+			default: return `Type ${typeNum}`
+		}
+	}
+
+	// Decode input data client-side
+	const decodeInputData = (hex: string) => {
+		if (!hex || hex === '0x' || hex === '0x0') return null
+
+		try {
+			const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex
+
+			// Function calls are at least 4 bytes (function selector)
+			if (cleanHex.length >= 8) {
+				const functionSelector = '0x' + cleanHex.slice(0, 8)
+				const parameters = cleanHex.length > 8 ? '0x' + cleanHex.slice(8) : null
+
+				return {
+					type: 'function_call',
+					functionSelector,
+					parameters,
+					parameterCount: parameters ? (cleanHex.length - 8) / 64 : 0
+				}
+			}
+
+			// Try to decode as string if it's mostly printable
+			let result = ''
+			let printableCount = 0
+			for (let i = 0; i < cleanHex.length; i += 2) {
+				const hexPair = cleanHex.substring(i, i + 2)
+				const charCode = parseInt(hexPair, 16)
+				if (charCode >= 32 && charCode <= 126) {
+					result += String.fromCharCode(charCode)
+					printableCount++
+				} else {
+					result += '.'
+				}
+			}
+
+			const totalBytes = cleanHex.length / 2
+			if (printableCount / totalBytes >= 0.5) {
+				return { type: 'string', value: result }
+			}
+
+			return { type: 'binary', value: hex }
+		} catch (error) {
+			return null
+		}
+	}
+
+	const tx = transaction as any
+	const inputDecoded = tx?.input ? decodeInputData(tx.input) : null
 
 	return (
 		<div className="flex-1 p-8">
@@ -69,9 +141,16 @@ export default function BesuTransactionDetailsPage() {
 							<h1 className="text-2xl font-semibold">Transaction #{index}</h1>
 							<p className="text-muted-foreground">Transaction details from block {blockNumber}</p>
 						</div>
-						<Badge variant="outline" className="text-sm">
-							Node {nodeId}
-						</Badge>
+						<div className="flex items-center gap-2">
+							{tx && (
+								<Badge variant="outline" className="text-sm">
+									{getTransactionType(tx.type)}
+								</Badge>
+							)}
+							<Badge variant="outline" className="text-sm">
+								Node {nodeId}
+							</Badge>
+						</div>
 					</div>
 				</div>
 
@@ -91,157 +170,323 @@ export default function BesuTransactionDetailsPage() {
 								<CardDescription>Basic information about this transaction</CardDescription>
 							</CardHeader>
 							<CardContent>
-								<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-									<div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
-										<div className="flex items-center gap-3">
+								<div className="grid gap-4">
+									{/* Transaction Hash */}
+									<div className="flex items-center justify-between py-3 border-b">
+										<div className="flex items-center gap-2">
 											<Hash className="h-4 w-4 text-muted-foreground" />
-											<div>
-												<p className="text-sm font-medium">Transaction Hash</p>
-												<p className="text-sm text-muted-foreground font-mono">
-													{formatHash(String(transaction?.hash || 'N/A'))}
-												</p>
-											</div>
+											<span className="font-medium">Transaction Hash</span>
 										</div>
-										<Button
-											variant="ghost"
-											size="sm"
-											onClick={() => copyToClipboard(String(transaction?.hash || ''))}
-											className="h-8 w-8 p-0"
-										>
-											<Copy className="h-4 w-4" />
-										</Button>
+										<div className="flex items-center gap-2">
+											<code className="text-sm font-mono bg-muted px-2 py-1 rounded">
+												{String(tx?.hash || 'N/A')}
+											</code>
+											{tx?.hash && (
+												<Button
+													variant="ghost"
+													size="sm"
+													onClick={() => copyToClipboard(String(tx.hash), 'Transaction hash')}
+												>
+													<Copy className="h-4 w-4" />
+												</Button>
+											)}
+										</div>
 									</div>
 
-									<div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
-										<div className="flex items-center gap-3">
+									{/* Block Number */}
+									<div className="flex items-center justify-between py-3 border-b">
+										<div className="flex items-center gap-2">
 											<Package className="h-4 w-4 text-muted-foreground" />
-											<div>
-												<p className="text-sm font-medium">Block Number</p>
-												<p className="text-sm text-muted-foreground">{blockNumber}</p>
-											</div>
+											<span className="font-medium">Block Number</span>
 										</div>
-										<Button
-											variant="ghost"
-											size="sm"
-											onClick={() => copyToClipboard(blockNumber)}
-											className="h-8 w-8 p-0"
-										>
-											<Copy className="h-4 w-4" />
-										</Button>
+										<div className="flex items-center gap-2">
+											<span className="text-sm font-mono">{blockNumber}</span>
+											<Button
+												variant="ghost"
+												size="sm"
+												onClick={() => copyToClipboard(blockNumber!)}
+											>
+												<Copy className="h-4 w-4" />
+											</Button>
+										</div>
 									</div>
 
-									<div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
-										<div className="flex items-center gap-3">
+									{/* From */}
+									<div className="flex items-center justify-between py-3 border-b">
+										<div className="flex items-center gap-2">
 											<Send className="h-4 w-4 text-muted-foreground" />
-											<div>
-												<p className="text-sm font-medium">From</p>
-												<p className="text-sm text-muted-foreground font-mono">
-													{formatHash(String(transaction?.from || 'N/A'))}
-												</p>
-											</div>
+											<span className="font-medium">From</span>
 										</div>
-										<Button
-											variant="ghost"
-											size="sm"
-											onClick={() => copyToClipboard(String(transaction?.from || ''))}
-											className="h-8 w-8 p-0"
-										>
-											<Copy className="h-4 w-4" />
-										</Button>
+										<div className="flex items-center gap-2">
+											<code className="text-sm font-mono bg-muted px-2 py-1 rounded">
+												{String(tx?.from || 'N/A')}
+											</code>
+											{tx?.from && (
+												<Button
+													variant="ghost"
+													size="sm"
+													onClick={() => copyToClipboard(String(tx.from), 'From address')}
+												>
+													<Copy className="h-4 w-4" />
+												</Button>
+											)}
+										</div>
 									</div>
 
-									<div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
-										<div className="flex items-center gap-3">
+									{/* To */}
+									<div className="flex items-center justify-between py-3 border-b">
+										<div className="flex items-center gap-2">
 											<Receipt className="h-4 w-4 text-muted-foreground" />
-											<div>
-												<p className="text-sm font-medium">To</p>
-												<p className="text-sm text-muted-foreground font-mono">
-													{formatHash(String(transaction?.to || 'N/A'))}
-												</p>
-											</div>
+											<span className="font-medium">To</span>
 										</div>
-										<Button
-											variant="ghost"
-											size="sm"
-											onClick={() => copyToClipboard(String(transaction?.to || ''))}
-											className="h-8 w-8 p-0"
-										>
-											<Copy className="h-4 w-4" />
-										</Button>
+										<div className="flex items-center gap-2">
+											<code className="text-sm font-mono bg-muted px-2 py-1 rounded">
+												{tx?.to ? String(tx.to) : 'Contract Creation'}
+											</code>
+											{tx?.to && (
+												<Button
+													variant="ghost"
+													size="sm"
+													onClick={() => copyToClipboard(String(tx.to), 'To address')}
+												>
+													<Copy className="h-4 w-4" />
+												</Button>
+											)}
+										</div>
 									</div>
 
-									<div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
-										<div className="flex items-center gap-3">
+									{/* Value */}
+									<div className="flex items-center justify-between py-3 border-b">
+										<div className="flex items-center gap-2">
 											<TrendingUp className="h-4 w-4 text-muted-foreground" />
-											<div>
-												<p className="text-sm font-medium">Value</p>
-												<p className="text-sm text-muted-foreground">
-													{formatValue(String(transaction?.value || '0'))} ETH
-												</p>
-											</div>
+											<span className="font-medium">Value</span>
 										</div>
+										<span className="text-sm font-mono">
+											{formatWei(tx?.value)}
+										</span>
 									</div>
 
-									<div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
-										<div className="flex items-center gap-3">
+									{/* Transaction Type */}
+									<div className="flex items-center justify-between py-3 border-b">
+										<div className="flex items-center gap-2">
+											<Activity className="h-4 w-4 text-muted-foreground" />
+											<span className="font-medium">Transaction Type</span>
+										</div>
+										<Badge variant="secondary">
+											{getTransactionType(tx?.type)}
+										</Badge>
+									</div>
+
+									{/* Gas Price */}
+									<div className="flex items-center justify-between py-3 border-b">
+										<div className="flex items-center gap-2">
 											<Zap className="h-4 w-4 text-muted-foreground" />
-											<div>
-												<p className="text-sm font-medium">Gas Price</p>
-												<p className="text-sm text-muted-foreground">
-													{formatGasPrice(String(transaction?.gasPrice || 'N/A'))}
-												</p>
-											</div>
+											<span className="font-medium">Gas Price</span>
 										</div>
+										<span className="text-sm font-mono">
+											{formatGasPrice(tx?.gasPrice)}
+										</span>
 									</div>
 
-									<div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
-										<div className="flex items-center gap-3">
+									{/* Gas Limit */}
+									<div className="flex items-center justify-between py-3 border-b">
+										<div className="flex items-center gap-2">
 											<Zap className="h-4 w-4 text-muted-foreground" />
-											<div>
-												<p className="text-sm font-medium">Gas Limit</p>
-												<p className="text-sm text-muted-foreground">
-													{String(transaction?.gas || 'N/A')}
-												</p>
-											</div>
+											<span className="font-medium">Gas Limit</span>
 										</div>
+										<span className="text-sm font-mono">
+											{formatGasValue(tx?.gas)}
+										</span>
 									</div>
 
-									<div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
-										<div className="flex items-center gap-3">
+									{/* Nonce */}
+									<div className="flex items-center justify-between py-3 border-b">
+										<div className="flex items-center gap-2">
 											<Hash className="h-4 w-4 text-muted-foreground" />
-											<div>
-												<p className="text-sm font-medium">Nonce</p>
-												<p className="text-sm text-muted-foreground">
-													{String(transaction?.nonce || 'N/A')}
-												</p>
-											</div>
+											<span className="font-medium">Nonce</span>
 										</div>
+										<span className="text-sm font-mono">
+											{formatNumber(tx?.nonce)}
+										</span>
 									</div>
 
-									<div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
-										<div className="flex items-center gap-3">
-											<Hash className="h-4 w-4 text-muted-foreground" />
-											<div>
-												<p className="text-sm font-medium">Input Data</p>
-												<p className="text-sm text-muted-foreground font-mono">
-													{String(transaction?.input || '0x').length > 66 
-														? `${String(transaction?.input || '0x').slice(0, 66)}...` 
-														: String(transaction?.input || '0x')}
-												</p>
+									{/* Chain ID */}
+									{tx?.chainId && (
+										<div className="flex items-center justify-between py-3 border-b">
+											<div className="flex items-center gap-2">
+												<Hash className="h-4 w-4 text-muted-foreground" />
+												<span className="font-medium">Chain ID</span>
 											</div>
+											<span className="text-sm font-mono">
+												{formatNumber(tx.chainId)}
+											</span>
 										</div>
-										<Button
-											variant="ghost"
-											size="sm"
-											onClick={() => copyToClipboard(String(transaction?.input || ''))}
-											className="h-8 w-8 p-0"
-										>
-											<Copy className="h-4 w-4" />
-										</Button>
-									</div>
+									)}
 								</div>
 							</CardContent>
 						</Card>
+
+						{/* Signature Details */}
+						{tx && (tx.r || tx.s || tx.v) && (
+							<Card>
+								<CardHeader>
+									<CardTitle className="text-base flex items-center gap-2">
+										<FileText className="h-4 w-4" />
+										Signature
+									</CardTitle>
+									<CardDescription>ECDSA signature components</CardDescription>
+								</CardHeader>
+								<CardContent>
+									<div className="grid gap-4">
+										{/* R Value */}
+										<div className="flex items-center justify-between py-3 border-b">
+											<span className="font-medium text-muted-foreground">R:</span>
+											<div className="flex items-center gap-2">
+												<code className="text-xs font-mono bg-muted px-2 py-1 rounded truncate max-w-[400px]">
+													{tx.r || 'N/A'}
+												</code>
+												{tx.r && (
+													<Button
+														variant="ghost"
+														size="sm"
+														onClick={() => copyToClipboard(tx.r, 'R value')}
+													>
+														<Copy className="h-4 w-4" />
+													</Button>
+												)}
+											</div>
+										</div>
+
+										{/* S Value */}
+										<div className="flex items-center justify-between py-3 border-b">
+											<span className="font-medium text-muted-foreground">S:</span>
+											<div className="flex items-center gap-2">
+												<code className="text-xs font-mono bg-muted px-2 py-1 rounded truncate max-w-[400px]">
+													{tx.s || 'N/A'}
+												</code>
+												{tx.s && (
+													<Button
+														variant="ghost"
+														size="sm"
+														onClick={() => copyToClipboard(tx.s, 'S value')}
+													>
+														<Copy className="h-4 w-4" />
+													</Button>
+												)}
+											</div>
+										</div>
+
+										{/* V Value */}
+										<div className="flex items-center justify-between py-3">
+											<span className="font-medium text-muted-foreground">V:</span>
+											<span className="font-mono">{tx.v || 'N/A'}</span>
+										</div>
+									</div>
+								</CardContent>
+							</Card>
+						)}
+
+						{/* Input Data */}
+						{tx?.input && tx.input !== '0x' && (
+							<Card>
+								<CardHeader>
+									<CardTitle className="text-base flex items-center gap-2">
+										<Zap className="h-4 w-4" />
+										Input Data
+									</CardTitle>
+									<CardDescription>Transaction calldata and decoded information</CardDescription>
+								</CardHeader>
+								<CardContent>
+									<div className="space-y-4">
+										{/* Raw Hex Data */}
+										<div>
+											<span className="text-sm font-medium text-muted-foreground mb-2 block">Raw Data:</span>
+											<div className="flex items-start gap-2">
+												<code className="text-xs font-mono bg-muted/50 p-3 rounded block w-full overflow-x-auto">
+													{tx.input}
+												</code>
+												<Button
+													variant="ghost"
+													size="sm"
+													onClick={() => copyToClipboard(tx.input, 'Input data')}
+												>
+													<Copy className="h-4 w-4" />
+												</Button>
+											</div>
+										</div>
+
+										{/* Client-side Decoded Analysis */}
+										{inputDecoded && inputDecoded.type === 'function_call' && (
+											<div className="space-y-3 pt-3 border-t">
+												<div>
+													<span className="text-sm font-medium text-muted-foreground mb-2 block">Function Selector:</span>
+													<div className="flex items-center gap-2">
+														<code className="text-sm font-mono bg-muted px-2 py-1 rounded">
+															{inputDecoded.functionSelector}
+														</code>
+														<Button
+															variant="ghost"
+															size="sm"
+															onClick={() => copyToClipboard(inputDecoded.functionSelector, 'Function selector')}
+														>
+															<Copy className="h-4 w-4" />
+														</Button>
+													</div>
+												</div>
+												{inputDecoded.parameters && (
+													<div>
+														<span className="text-sm font-medium text-muted-foreground mb-2 block">
+															Raw Parameters ({Math.floor(inputDecoded.parameterCount)} words):
+														</span>
+														<div className="flex items-start gap-2">
+															<code className="text-xs font-mono bg-muted/50 p-3 rounded block w-full overflow-x-auto">
+																{inputDecoded.parameters}
+															</code>
+															<Button
+																variant="ghost"
+																size="sm"
+																onClick={() => copyToClipboard(inputDecoded.parameters!, 'Parameters')}
+															>
+																<Copy className="h-4 w-4" />
+															</Button>
+														</div>
+													</div>
+												)}
+												{!inputDecoded.parameters && (
+													<p className="text-sm text-muted-foreground">
+														No parameters (function takes no arguments)
+													</p>
+												)}
+											</div>
+										)}
+
+										{inputDecoded && inputDecoded.type === 'string' && (
+											<div className="pt-3 border-t">
+												<span className="text-sm font-medium text-muted-foreground mb-2 block">Decoded String:</span>
+												<div className="flex items-start gap-2">
+													<code className="text-xs font-mono bg-muted/50 p-3 rounded block w-full overflow-x-auto break-all">
+														{inputDecoded.value}
+													</code>
+													<Button
+														variant="ghost"
+														size="sm"
+														onClick={() => copyToClipboard(inputDecoded.value!, 'Decoded string')}
+													>
+														<Copy className="h-4 w-4" />
+													</Button>
+												</div>
+											</div>
+										)}
+
+										{inputDecoded && inputDecoded.type === 'binary' && (
+											<p className="text-sm text-muted-foreground pt-3 border-t">
+												Binary data - no readable content detected
+											</p>
+										)}
+									</div>
+								</CardContent>
+							</Card>
+						)}
 
 						{/* Raw Transaction Data */}
 						<Card>
@@ -262,4 +507,4 @@ export default function BesuTransactionDetailsPage() {
 			</div>
 		</div>
 	)
-} 
+}

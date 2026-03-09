@@ -1,9 +1,10 @@
 package query
 
 import (
+	cryptorand "crypto/rand"
 	"fmt"
 	"io"
-	"math/rand/v2"
+	"math/big"
 	"strings"
 
 	"github.com/chainlaunch/chainlaunch/pkg/fabric/networkconfig"
@@ -101,7 +102,11 @@ func (c *queryChaincodeCmd) run(out io.Writer) error {
 		return fmt.Errorf("no peers found for organization %s", c.mspID)
 	}
 
-	randomIndex := rand.Int() % len(peers)
+	randIdx, err := cryptorand.Int(cryptorand.Reader, big.NewInt(int64(len(peers))))
+	if err != nil {
+		return fmt.Errorf("failed to generate random index: %w", err)
+	}
+	randomIndex := randIdx.Int64()
 	peerID := peers[randomIndex]
 	c.logger.Infof("Randomly selected peer: %s", peerID)
 

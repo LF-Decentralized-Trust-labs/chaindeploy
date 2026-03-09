@@ -1397,7 +1397,7 @@ export type HttpImportFabricNetworkWithOrgRequest = {
 
 export type HttpImportNetworkResponse = {
     message?: string;
-    networkId?: string;
+    networkId?: number;
 };
 
 export type HttpListBesuNetworksResponse = {
@@ -2354,21 +2354,37 @@ export type TypesAddressOverride = {
 };
 
 export type TypesBesuNodeConfig = {
+    /**
+     * Permissions configuration
+     */
+    accountsAllowList?: Array<string>;
     bootNodes?: Array<string>;
     env?: {
         [key: string]: string;
     };
     externalIp: string;
+    hostAllowList?: string;
     internalIp: string;
+    jwtAuthenticationAlgorithm?: string;
+    /**
+     * JWT Authentication configuration
+     */
+    jwtEnabled?: boolean;
+    jwtPublicKeyContent?: string;
     keyId: number;
     metricsEnabled?: boolean;
     metricsPort?: number;
     metricsProtocol?: string;
     /**
+     * Gas and access control configuration
+     */
+    minGasPrice?: number;
+    /**
      * @Description The deployment mode (service or docker)
      */
     mode?: string;
     networkId: number;
+    nodesAllowList?: Array<string>;
     p2pHost: string;
     p2pPort: number;
     rpcHost: string;
@@ -5028,14 +5044,14 @@ export type PostKeysByKeyIdSignDataResponses = {
 
 export type PostKeysByKeyIdSignDataResponse = PostKeysByKeyIdSignDataResponses[keyof PostKeysByKeyIdSignDataResponses];
 
-export type GetMetricsDefaultsData = {
+export type GetDefaultsData = {
     body?: never;
     path?: never;
     query?: never;
     url: '/metrics/defaults';
 };
 
-export type GetMetricsDefaultsErrors = {
+export type GetDefaultsErrors = {
     /**
      * Internal Server Error
      */
@@ -5044,18 +5060,18 @@ export type GetMetricsDefaultsErrors = {
     };
 };
 
-export type GetMetricsDefaultsError = GetMetricsDefaultsErrors[keyof GetMetricsDefaultsErrors];
+export type GetDefaultsError = GetDefaultsErrors[keyof GetDefaultsErrors];
 
-export type GetMetricsDefaultsResponses = {
+export type GetDefaultsResponses = {
     /**
      * OK
      */
     200: TypesPrometheusDefaultsResponse;
 };
 
-export type GetMetricsDefaultsResponse = GetMetricsDefaultsResponses[keyof GetMetricsDefaultsResponses];
+export type GetDefaultsResponse = GetDefaultsResponses[keyof GetDefaultsResponses];
 
-export type PostMetricsDeployData = {
+export type DeployPrometheusData = {
     /**
      * Prometheus deployment configuration
      */
@@ -5065,7 +5081,7 @@ export type PostMetricsDeployData = {
     url: '/metrics/deploy';
 };
 
-export type PostMetricsDeployErrors = {
+export type DeployPrometheusErrors = {
     /**
      * Bad Request
      */
@@ -5080,18 +5096,18 @@ export type PostMetricsDeployErrors = {
     };
 };
 
-export type PostMetricsDeployError = PostMetricsDeployErrors[keyof PostMetricsDeployErrors];
+export type DeployPrometheusError = DeployPrometheusErrors[keyof DeployPrometheusErrors];
 
-export type PostMetricsDeployResponses = {
+export type DeployPrometheusResponses = {
     /**
      * OK
      */
     200: TypesMessageResponse;
 };
 
-export type PostMetricsDeployResponse = PostMetricsDeployResponses[keyof PostMetricsDeployResponses];
+export type DeployPrometheusResponse = DeployPrometheusResponses[keyof DeployPrometheusResponses];
 
-export type GetMetricsLogsData = {
+export type TailMetricsLogsData = {
     body?: never;
     path?: never;
     query?: {
@@ -5107,7 +5123,7 @@ export type GetMetricsLogsData = {
     url: '/metrics/logs';
 };
 
-export type GetMetricsLogsErrors = {
+export type TailMetricsLogsErrors = {
     /**
      * Internal Server Error
      */
@@ -5116,18 +5132,18 @@ export type GetMetricsLogsErrors = {
     };
 };
 
-export type GetMetricsLogsError = GetMetricsLogsErrors[keyof GetMetricsLogsErrors];
+export type TailMetricsLogsError = TailMetricsLogsErrors[keyof TailMetricsLogsErrors];
 
-export type GetMetricsLogsResponses = {
+export type TailMetricsLogsResponses = {
     /**
      * Log stream
      */
     200: string;
 };
 
-export type GetMetricsLogsResponse = GetMetricsLogsResponses[keyof GetMetricsLogsResponses];
+export type TailMetricsLogsResponse = TailMetricsLogsResponses[keyof TailMetricsLogsResponses];
 
-export type GetMetricsNodeByIdData = {
+export type GetNodeMetricsData = {
     body?: never;
     path: {
         /**
@@ -5144,7 +5160,7 @@ export type GetMetricsNodeByIdData = {
     url: '/metrics/node/{id}';
 };
 
-export type GetMetricsNodeByIdErrors = {
+export type GetNodeMetricsErrors = {
     /**
      * Bad Request
      */
@@ -5159,9 +5175,9 @@ export type GetMetricsNodeByIdErrors = {
     };
 };
 
-export type GetMetricsNodeByIdError = GetMetricsNodeByIdErrors[keyof GetMetricsNodeByIdErrors];
+export type GetNodeMetricsError = GetNodeMetricsErrors[keyof GetNodeMetricsErrors];
 
-export type GetMetricsNodeByIdResponses = {
+export type GetNodeMetricsResponses = {
     /**
      * OK
      */
@@ -5170,9 +5186,9 @@ export type GetMetricsNodeByIdResponses = {
     };
 };
 
-export type GetMetricsNodeByIdResponse = GetMetricsNodeByIdResponses[keyof GetMetricsNodeByIdResponses];
+export type GetNodeMetricsResponse = GetNodeMetricsResponses[keyof GetNodeMetricsResponses];
 
-export type GetMetricsNodeByIdLabelByLabelValuesData = {
+export type GetLabelValuesData = {
     body?: never;
     path: {
         /**
@@ -5193,7 +5209,7 @@ export type GetMetricsNodeByIdLabelByLabelValuesData = {
     url: '/metrics/node/{id}/label/{label}/values';
 };
 
-export type GetMetricsNodeByIdLabelByLabelValuesErrors = {
+export type GetLabelValuesErrors = {
     /**
      * Bad request
      */
@@ -5208,18 +5224,18 @@ export type GetMetricsNodeByIdLabelByLabelValuesErrors = {
     };
 };
 
-export type GetMetricsNodeByIdLabelByLabelValuesError = GetMetricsNodeByIdLabelByLabelValuesErrors[keyof GetMetricsNodeByIdLabelByLabelValuesErrors];
+export type GetLabelValuesError = GetLabelValuesErrors[keyof GetLabelValuesErrors];
 
-export type GetMetricsNodeByIdLabelByLabelValuesResponses = {
+export type GetLabelValuesResponses = {
     /**
      * Label values
      */
     200: TypesLabelValuesResponse;
 };
 
-export type GetMetricsNodeByIdLabelByLabelValuesResponse = GetMetricsNodeByIdLabelByLabelValuesResponses[keyof GetMetricsNodeByIdLabelByLabelValuesResponses];
+export type GetLabelValuesResponse = GetLabelValuesResponses[keyof GetLabelValuesResponses];
 
-export type PostMetricsNodeByIdQueryData = {
+export type CustomQueryData = {
     /**
      * Query parameters
      */
@@ -5234,7 +5250,7 @@ export type PostMetricsNodeByIdQueryData = {
     url: '/metrics/node/{id}/query';
 };
 
-export type PostMetricsNodeByIdQueryErrors = {
+export type CustomQueryErrors = {
     /**
      * Bad Request
      */
@@ -5249,18 +5265,18 @@ export type PostMetricsNodeByIdQueryErrors = {
     };
 };
 
-export type PostMetricsNodeByIdQueryError = PostMetricsNodeByIdQueryErrors[keyof PostMetricsNodeByIdQueryErrors];
+export type CustomQueryError = CustomQueryErrors[keyof CustomQueryErrors];
 
-export type PostMetricsNodeByIdQueryResponses = {
+export type CustomQueryResponses = {
     /**
      * OK
      */
     200: CommonQueryResult;
 };
 
-export type PostMetricsNodeByIdQueryResponse = PostMetricsNodeByIdQueryResponses[keyof PostMetricsNodeByIdQueryResponses];
+export type CustomQueryResponse = CustomQueryResponses[keyof CustomQueryResponses];
 
-export type GetMetricsNodeByIdRangeData = {
+export type GetNodeMetricsRangeData = {
     body?: never;
     path: {
         /**
@@ -5289,7 +5305,7 @@ export type GetMetricsNodeByIdRangeData = {
     url: '/metrics/node/{id}/range';
 };
 
-export type GetMetricsNodeByIdRangeErrors = {
+export type GetNodeMetricsRangeErrors = {
     /**
      * Bad request
      */
@@ -5304,18 +5320,18 @@ export type GetMetricsNodeByIdRangeErrors = {
     };
 };
 
-export type GetMetricsNodeByIdRangeError = GetMetricsNodeByIdRangeErrors[keyof GetMetricsNodeByIdRangeErrors];
+export type GetNodeMetricsRangeError = GetNodeMetricsRangeErrors[keyof GetNodeMetricsRangeErrors];
 
-export type GetMetricsNodeByIdRangeResponses = {
+export type GetNodeMetricsRangeResponses = {
     /**
      * Metrics data
      */
     200: TypesMetricsDataResponse;
 };
 
-export type GetMetricsNodeByIdRangeResponse = GetMetricsNodeByIdRangeResponses[keyof GetMetricsNodeByIdRangeResponses];
+export type GetNodeMetricsRangeResponse = GetNodeMetricsRangeResponses[keyof GetNodeMetricsRangeResponses];
 
-export type GetMetricsPortByPortCheckData = {
+export type CheckPortAvailabilityData = {
     body?: never;
     path: {
         /**
@@ -5327,7 +5343,7 @@ export type GetMetricsPortByPortCheckData = {
     url: '/metrics/port/{port}/check';
 };
 
-export type GetMetricsPortByPortCheckErrors = {
+export type CheckPortAvailabilityErrors = {
     /**
      * Bad Request
      */
@@ -5336,9 +5352,9 @@ export type GetMetricsPortByPortCheckErrors = {
     };
 };
 
-export type GetMetricsPortByPortCheckError = GetMetricsPortByPortCheckErrors[keyof GetMetricsPortByPortCheckErrors];
+export type CheckPortAvailabilityError = CheckPortAvailabilityErrors[keyof CheckPortAvailabilityErrors];
 
-export type GetMetricsPortByPortCheckResponses = {
+export type CheckPortAvailabilityResponses = {
     /**
      * OK
      */
@@ -5347,9 +5363,9 @@ export type GetMetricsPortByPortCheckResponses = {
     };
 };
 
-export type GetMetricsPortByPortCheckResponse = GetMetricsPortByPortCheckResponses[keyof GetMetricsPortByPortCheckResponses];
+export type CheckPortAvailabilityResponse = CheckPortAvailabilityResponses[keyof CheckPortAvailabilityResponses];
 
-export type PostMetricsRefreshData = {
+export type RefreshPrometheusData = {
     /**
      * Prometheus refresh configuration
      */
@@ -5359,7 +5375,7 @@ export type PostMetricsRefreshData = {
     url: '/metrics/refresh';
 };
 
-export type PostMetricsRefreshErrors = {
+export type RefreshPrometheusErrors = {
     /**
      * Bad Request
      */
@@ -5374,25 +5390,25 @@ export type PostMetricsRefreshErrors = {
     };
 };
 
-export type PostMetricsRefreshError = PostMetricsRefreshErrors[keyof PostMetricsRefreshErrors];
+export type RefreshPrometheusError = RefreshPrometheusErrors[keyof RefreshPrometheusErrors];
 
-export type PostMetricsRefreshResponses = {
+export type RefreshPrometheusResponses = {
     /**
      * OK
      */
     200: TypesMessageResponse;
 };
 
-export type PostMetricsRefreshResponse = PostMetricsRefreshResponses[keyof PostMetricsRefreshResponses];
+export type RefreshPrometheusResponse = RefreshPrometheusResponses[keyof RefreshPrometheusResponses];
 
-export type PostMetricsReloadData = {
+export type ReloadConfigurationData = {
     body?: never;
     path?: never;
     query?: never;
     url: '/metrics/reload';
 };
 
-export type PostMetricsReloadErrors = {
+export type ReloadConfigurationErrors = {
     /**
      * Internal Server Error
      */
@@ -5401,25 +5417,25 @@ export type PostMetricsReloadErrors = {
     };
 };
 
-export type PostMetricsReloadError = PostMetricsReloadErrors[keyof PostMetricsReloadErrors];
+export type ReloadConfigurationError = ReloadConfigurationErrors[keyof ReloadConfigurationErrors];
 
-export type PostMetricsReloadResponses = {
+export type ReloadConfigurationResponses = {
     /**
      * OK
      */
     200: TypesMessageResponse;
 };
 
-export type PostMetricsReloadResponse = PostMetricsReloadResponses[keyof PostMetricsReloadResponses];
+export type ReloadConfigurationResponse = ReloadConfigurationResponses[keyof ReloadConfigurationResponses];
 
-export type PostMetricsStartData = {
+export type StartPrometheusData = {
     body?: never;
     path?: never;
     query?: never;
     url: '/metrics/start';
 };
 
-export type PostMetricsStartErrors = {
+export type StartPrometheusErrors = {
     /**
      * Bad Request
      */
@@ -5434,25 +5450,25 @@ export type PostMetricsStartErrors = {
     };
 };
 
-export type PostMetricsStartError = PostMetricsStartErrors[keyof PostMetricsStartErrors];
+export type StartPrometheusError = StartPrometheusErrors[keyof StartPrometheusErrors];
 
-export type PostMetricsStartResponses = {
+export type StartPrometheusResponses = {
     /**
      * OK
      */
     200: TypesMessageResponse;
 };
 
-export type PostMetricsStartResponse = PostMetricsStartResponses[keyof PostMetricsStartResponses];
+export type StartPrometheusResponse = StartPrometheusResponses[keyof StartPrometheusResponses];
 
-export type GetMetricsStatusData = {
+export type GetStatusData = {
     body?: never;
     path?: never;
     query?: never;
     url: '/metrics/status';
 };
 
-export type GetMetricsStatusErrors = {
+export type GetStatusErrors = {
     /**
      * Internal Server Error
      */
@@ -5461,25 +5477,25 @@ export type GetMetricsStatusErrors = {
     };
 };
 
-export type GetMetricsStatusError = GetMetricsStatusErrors[keyof GetMetricsStatusErrors];
+export type GetStatusError = GetStatusErrors[keyof GetStatusErrors];
 
-export type GetMetricsStatusResponses = {
+export type GetStatusResponses = {
     /**
      * OK
      */
     200: GithubComChainlaunchChainlaunchPkgMetricsCommonStatus;
 };
 
-export type GetMetricsStatusResponse = GetMetricsStatusResponses[keyof GetMetricsStatusResponses];
+export type GetStatusResponse = GetStatusResponses[keyof GetStatusResponses];
 
-export type PostMetricsStopData = {
+export type StopPrometheusData = {
     body?: never;
     path?: never;
     query?: never;
     url: '/metrics/stop';
 };
 
-export type PostMetricsStopErrors = {
+export type StopPrometheusErrors = {
     /**
      * Bad Request
      */
@@ -5494,25 +5510,25 @@ export type PostMetricsStopErrors = {
     };
 };
 
-export type PostMetricsStopError = PostMetricsStopErrors[keyof PostMetricsStopErrors];
+export type StopPrometheusError = StopPrometheusErrors[keyof StopPrometheusErrors];
 
-export type PostMetricsStopResponses = {
+export type StopPrometheusResponses = {
     /**
      * OK
      */
     200: TypesMessageResponse;
 };
 
-export type PostMetricsStopResponse = PostMetricsStopResponses[keyof PostMetricsStopResponses];
+export type StopPrometheusResponse = StopPrometheusResponses[keyof StopPrometheusResponses];
 
-export type PostMetricsUndeployData = {
+export type UndeployPrometheusData = {
     body?: never;
     path?: never;
     query?: never;
     url: '/metrics/undeploy';
 };
 
-export type PostMetricsUndeployErrors = {
+export type UndeployPrometheusErrors = {
     /**
      * Internal Server Error
      */
@@ -5521,16 +5537,16 @@ export type PostMetricsUndeployErrors = {
     };
 };
 
-export type PostMetricsUndeployError = PostMetricsUndeployErrors[keyof PostMetricsUndeployErrors];
+export type UndeployPrometheusError = UndeployPrometheusErrors[keyof UndeployPrometheusErrors];
 
-export type PostMetricsUndeployResponses = {
+export type UndeployPrometheusResponses = {
     /**
      * OK
      */
     200: TypesMessageResponse;
 };
 
-export type PostMetricsUndeployResponse = PostMetricsUndeployResponses[keyof PostMetricsUndeployResponses];
+export type UndeployPrometheusResponse = UndeployPrometheusResponses[keyof UndeployPrometheusResponses];
 
 export type GetNetworksBesuData = {
     body?: never;
@@ -11729,5 +11745,5 @@ export type PutUsersByIdRoleResponses = {
 export type PutUsersByIdRoleResponse = PutUsersByIdRoleResponses[keyof PutUsersByIdRoleResponses];
 
 export type ClientOptions = {
-    baseUrl: string;
+    baseUrl: 'http://localhost:8100/api/v1' | 'https://localhost:8100/api/v1' | (string & {});
 };

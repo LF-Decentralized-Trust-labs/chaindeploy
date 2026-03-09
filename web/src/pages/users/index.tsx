@@ -179,8 +179,10 @@ const UsersPage = () => {
 			<AlertDialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>Are you sure?</AlertDialogTitle>
-						<AlertDialogDescription>This will permanently delete this user. This action cannot be undone.</AlertDialogDescription>
+						<AlertDialogTitle>Delete User</AlertDialogTitle>
+						<AlertDialogDescription>
+							Are you sure you want to delete the user <span className="font-medium">{users?.find((u: any) => u.id === userToDelete)?.username || `#${userToDelete}`}</span>? This action cannot be undone and will permanently remove the user account.
+						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>

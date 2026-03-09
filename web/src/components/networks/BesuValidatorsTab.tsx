@@ -26,9 +26,10 @@ import { Alert, AlertDescription } from '../ui/alert'
 interface BesuValidatorsTabProps {
 	nodeId: number
 	nodesLoading: boolean
+	networkValidators?: string[]
 }
 
-export function BesuValidatorsTab({ nodeId, nodesLoading }: BesuValidatorsTabProps) {
+export function BesuValidatorsTab({ nodeId, nodesLoading, networkValidators }: BesuValidatorsTabProps) {
 	const [voteValidatorDialogOpen, setVoteValidatorDialogOpen] = useState(false)
 	const [voteValidatorLoading, setVoteValidatorLoading] = useState(false)
 	const [copiedAddresses, setCopiedAddresses] = useState<Set<string>>(new Set())
@@ -49,8 +50,12 @@ export function BesuValidatorsTab({ nodeId, nodesLoading }: BesuValidatorsTabPro
 			path: { id: nodeId },
 			query: { blockNumber: 'latest' },
 		}),
-		enabled: !!nodeId,
+		enabled: !!nodeId && !networkValidators,
 	})
+
+	// Use network validators if available, otherwise fall back to RPC query
+	const currentValidators = networkValidators || qbftValidatorsByBlockNumber || []
+	const isLoadingValidators = !networkValidators && qbftValidatorsByBlockNumberLoading
 
 	// Query for available EC secp256k1 keys
 	const { data: availableKeys, isLoading: keysLoading } = useQuery({
@@ -65,8 +70,6 @@ export function BesuValidatorsTab({ nodeId, nodesLoading }: BesuValidatorsTabPro
 	// Filter keys to only show EC/secp256k1 keys
 	const validKeys = availableKeys?.items?.filter((key) => key.algorithm === 'EC' && key.curve === 'secp256k1') || []
 
-	console.log('qbftValidatorsByBlockNumber', qbftValidatorsByBlockNumber)
-	console.log('nodeId', nodeId)
 	const handleVote = async (validatorAddress: string, vote: boolean) => {
 		if (!nodeId) {
 			toast.error('Please select a node first')
@@ -388,19 +391,21 @@ export function BesuValidatorsTab({ nodeId, nodesLoading }: BesuValidatorsTabPro
 								</Dialog>
 							</div>
 						</CardHeader>
-						<CardContent>
-							{qbftValidatorsByBlockNumberLoading ? (
-								<div className="text-center py-8">
-									<div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto mb-3"></div>
-									<p className="text-sm text-muted-foreground">Loading validators...</p>
-								</div>
-							) : (
-								<div className="space-y-4">
-									{/* Current Validators */}
-									{qbftValidatorsByBlockNumber && qbftValidatorsByBlockNumber.length > 0 ? (
-										<div className="space-y-3">
-											<div className="text-sm font-medium text-muted-foreground mb-2">Active Validators</div>
-											{qbftValidatorsByBlockNumber.map((validator, index) => (
+					<CardContent>
+						{isLoadingValidators ? (
+							<div className="text-center py-8">
+								<div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto mb-3"></div>
+								<p className="text-sm text-muted-foreground">Loading validators...</p>
+							</div>
+						) : (
+							<div className="space-y-4">
+								{/* Current Validators */}
+								{currentValidators && currentValidators.length > 0 ? (
+									<div className="space-y-3">
+										<div className="text-sm font-medium text-muted-foreground mb-2">
+											Active Validators {networkValidators ? '(from Network)' : '(from Node RPC)'}
+										</div>
+										{currentValidators.map((validator, index) => (
 												<div key={index} className="flex items-center justify-between p-3 rounded-lg border bg-muted/30 hover:bg-muted/50 transition-colors">
 													<div className="flex items-center gap-3">
 														<div className="w-2 h-2 rounded-full bg-green-500"></div>

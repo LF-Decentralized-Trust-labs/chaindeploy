@@ -13,6 +13,10 @@ export function numberToHex(num: number): string {
 	return `0x${num.toString(16)}`
 }
 
+export function numberToNonceHex(num: number): string {
+	return `0x${num.toString(16).padStart(16, '0')}`
+}
+
 export function hexToNumber(hex: string): number {
 	return parseInt(hex.replace('0x', ''), 16)
 }

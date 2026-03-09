@@ -13,7 +13,7 @@ type ImportNetworkParams struct {
 }
 
 type ImportNetworkResult struct {
-	NetworkID string
+	NetworkID int64
 	Message   string
 }
 

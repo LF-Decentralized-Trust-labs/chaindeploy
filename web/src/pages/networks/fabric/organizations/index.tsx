@@ -225,13 +225,19 @@ export default function OrganizationsPage() {
 			<AlertDialog open={!!orgToDelete} onOpenChange={(open) => !open && setOrgToDelete(null)}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>Are you sure?</AlertDialogTitle>
-						<AlertDialogDescription>This action cannot be undone. This will permanently delete the organization and all associated keys.</AlertDialogDescription>
+						<AlertDialogTitle>Delete Organization</AlertDialogTitle>
+						<AlertDialogDescription>
+							Are you sure you want to delete the organization <span className="font-medium">{orgToDelete?.mspId}</span>? This action cannot be undone and will permanently delete the organization and all associated keys.
+						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>
-						<AlertDialogAction disabled={deleteOrganization.isPending} onClick={() => orgToDelete && deleteOrganization.mutate({ path: { id: orgToDelete.id! } })}>
-							Delete
+						<AlertDialogAction
+							disabled={deleteOrganization.isPending}
+							onClick={() => orgToDelete && deleteOrganization.mutate({ path: { id: orgToDelete.id! } })}
+							className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+						>
+							{deleteOrganization.isPending ? 'Deleting...' : 'Delete'}
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>

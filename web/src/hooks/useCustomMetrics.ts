@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { postMetricsNodeByIdQuery } from '@/api/client'
+import { customQuery } from '@/api/client'
 import { MetricsDataPoint } from '@/components/metrics/MetricsCard'
 
 interface CustomQueryRequest {
@@ -38,7 +38,7 @@ export function useCustomMetrics({ nodeId, query, start, end, step = '1m', time,
 				...(step && { step }),
 			}
 
-			const response = await postMetricsNodeByIdQuery({
+			const response = await customQuery({
 				path: { id: nodeId },
 				body: request,
 			})

@@ -131,7 +131,7 @@ func (h *NodeHandler) CreateNode(w http.ResponseWriter, r *http.Request) error {
 		return errors.NewValidationError("blockchain platform is required", nil)
 	}
 
-	if !isValidPlatform(types.BlockchainPlatform(req.BlockchainPlatform)) {
+	if !isValidPlatform(types.BlockchainPlatform(strings.ToUpper(string(req.BlockchainPlatform)))) {
 		return errors.NewValidationError("invalid blockchain platform", map[string]interface{}{
 			"valid_platforms": []string{string(types.PlatformFabric), string(types.PlatformBesu)},
 		})
@@ -139,7 +139,7 @@ func (h *NodeHandler) CreateNode(w http.ResponseWriter, r *http.Request) error {
 
 	serviceReq := service.CreateNodeRequest{
 		Name:               req.Name,
-		BlockchainPlatform: req.BlockchainPlatform,
+		BlockchainPlatform: types.BlockchainPlatform(strings.ToUpper(string(req.BlockchainPlatform))),
 		FabricPeer:         req.FabricPeer,
 		FabricOrderer:      req.FabricOrderer,
 		BesuNode:           req.BesuNode,
@@ -147,7 +147,11 @@ func (h *NodeHandler) CreateNode(w http.ResponseWriter, r *http.Request) error {
 
 	node, err := h.service.CreateNode(r.Context(), serviceReq)
 	if err != nil {
-		return errors.NewInternalError("failed to create node", err, nil)
+		// Check if this is a MultiValidationError (validation or initialization/startup failure)
+		if mve, ok := errors.GetMultiValidationError(err); ok {
+			return response.WriteMultiValidationError(w, mve)
+		}
+		return errors.NewValidationError(err.Error(), nil)
 	}
 
 	return response.WriteJSON(w, http.StatusCreated, toNodeResponse(node))
@@ -245,7 +249,7 @@ func (h *NodeHandler) ListNodes(w http.ResponseWriter, r *http.Request) error {
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /nodes/platform/{platform} [get]
 func (h *NodeHandler) ListNodesByPlatform(w http.ResponseWriter, r *http.Request) error {
-	platform := types.BlockchainPlatform(chi.URLParam(r, "platform"))
+	platform := types.BlockchainPlatform(strings.ToUpper(chi.URLParam(r, "platform")))
 
 	// Validate platform
 	if !isValidPlatform(platform) {
@@ -2222,4 +2226,3 @@ func (h *NodeHandler) CheckBesuReadiness(w http.ResponseWriter, r *http.Request)
 	response.JSON(w, http.StatusOK, readiness)
 	return nil
 }
-

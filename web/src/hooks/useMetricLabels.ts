@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { getMetricsNodeByIdLabelByLabelValues } from '@/api/client'
+import { getLabelValues } from '@/api/client'
 
 interface UseMetricLabelsOptions {
 	nodeId: string
@@ -14,7 +14,7 @@ export function useMetricLabels({ nodeId, metric, label, enabled = true }: UseMe
 		queryFn: async () => {
 			if (!nodeId || !metric || !label) return []
 
-			const response = await getMetricsNodeByIdLabelByLabelValues({
+			const response = await getLabelValues({
 				path: {
 					id: nodeId,
 					label: label,

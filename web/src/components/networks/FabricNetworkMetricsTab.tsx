@@ -4,7 +4,7 @@ import { MetricsCard, MetricsDataPoint } from '@/components/metrics/MetricsCard'
 import { MetricsGrid } from '@/components/metrics/MetricsGrid'
 import { Loader2 } from 'lucide-react'
 import { useMemo, useEffect, useState, useRef, useCallback } from 'react'
-import { getMetricsNodeByIdLabelByLabelValues, postMetricsNodeByIdQuery } from '@/api/client/sdk.gen'
+import { getLabelValues, customQuery } from '@/api/client/sdk.gen'
 
 // Utility to filter out NaN values from metric data
 function filterNaN(data: MetricsDataPoint[] | undefined): MetricsDataPoint[] {
@@ -67,7 +67,7 @@ const AggregatedMetricsCard = ({ metric, nodes }: AggregatedMetricsCardProps) =>
 					nodes.map(async ({ node, channel }) => {
 						const nodeId = node?.id?.toString() || ''
 						if (!channel) return
-						const response = await postMetricsNodeByIdQuery({
+						const response = await customQuery({
 							path: { id: nodeId },
 							body: {
 								query: metric.query(channel),
@@ -299,7 +299,7 @@ const FabricNodeChannelsLoader = ({ nodes, isLoading, networkName }: FabricNodeC
 						if (n.node?.fabricPeer) metric = 'ledger_blockchain_height'
 						else if (n.node?.fabricOrderer) metric = 'consensus_etcdraft_committed_block_number'
 						if (!metric) return [nodeId, 'mychannel']
-						const response = await getMetricsNodeByIdLabelByLabelValues({
+						const response = await getLabelValues({
 							path: { id: nodeId, label: 'channel' },
 							query: { match: [metric] },
 						})

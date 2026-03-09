@@ -144,6 +144,16 @@ func (h *OrganizationHandler) CreateOrganization(w http.ResponseWriter, r *http.
 		PostalCode:    req.PostalCode,
 	}
 
+	// Pass certificate validity durations if provided
+	if req.CaCertValidFor != nil {
+		d, _ := time.ParseDuration(*req.CaCertValidFor) // already validated above
+		params.CaCertValidFor = &d
+	}
+	if req.CertValidFor != nil {
+		d, _ := time.ParseDuration(*req.CertValidFor) // already validated above
+		params.CertValidFor = &d
+	}
+
 	org, err := h.service.CreateOrganization(r.Context(), params)
 	if err != nil {
 		if strings.Contains(err.Error(), "already exists") {

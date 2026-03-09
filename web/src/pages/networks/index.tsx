@@ -295,14 +295,16 @@ export default function NetworksPage() {
 				<AlertDialogContent>
 					<AlertDialogHeader>
 						<AlertDialogTitle>Delete Network</AlertDialogTitle>
-						<AlertDialogDescription>Are you sure you want to delete this network? This action cannot be undone and will remove all associated data.</AlertDialogDescription>
+						<AlertDialogDescription>
+							Are you sure you want to delete the network <span className="font-medium">{networkToDelete?.name}</span>? This action cannot be undone and will remove all associated data.
+						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>
 						<AlertDialogAction
 							onClick={() => networkToDelete && deleteNetwork(networkToDelete)}
 							disabled={deleteFabricNetwork.isPending || deleteBesuNetwork.isPending}
-							className="bg-destructive hover:bg-destructive/90"
+							className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 						>
 							{deleteFabricNetwork.isPending || deleteBesuNetwork.isPending ? 'Deleting...' : 'Delete'}
 						</AlertDialogAction>

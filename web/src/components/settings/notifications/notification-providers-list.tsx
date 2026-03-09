@@ -305,8 +305,10 @@ export function NotificationProvidersList() {
 			<AlertDialog open={deleteProviderId !== null} onOpenChange={(open) => !open && setDeleteProviderId(null)}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>Are you sure you want to delete this provider?</AlertDialogTitle>
-						<AlertDialogDescription>This action cannot be undone. This will permanently delete this notification provider and remove it from our servers.</AlertDialogDescription>
+						<AlertDialogTitle>Delete Notification Provider</AlertDialogTitle>
+						<AlertDialogDescription>
+							Are you sure you want to delete the notification provider <span className="font-medium">{providers?.find((p: any) => p.id === deleteProviderId)?.name || `#${deleteProviderId}`}</span>? This action cannot be undone and will permanently remove this provider and all associated configurations.
+						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>

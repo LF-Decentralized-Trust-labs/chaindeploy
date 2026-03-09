@@ -1,5 +1,17 @@
 package besu
 
+// JWTAlgorithm represents the supported JWT authentication algorithms
+type JWTAlgorithm string
+
+const (
+	JWTAlgorithmRS256 JWTAlgorithm = "RS256"
+	JWTAlgorithmRS384 JWTAlgorithm = "RS384"
+	JWTAlgorithmRS512 JWTAlgorithm = "RS512"
+	JWTAlgorithmES256 JWTAlgorithm = "ES256"
+	JWTAlgorithmES384 JWTAlgorithm = "ES384"
+	JWTAlgorithmES512 JWTAlgorithm = "ES512"
+)
+
 // StartBesuOpts represents the options for starting a Besu node
 type StartBesuOpts struct {
 	ID             string            `json:"id"`
@@ -21,6 +33,16 @@ type StartBesuOpts struct {
 	MetricsEnabled  bool   `json:"metricsEnabled"`
 	MetricsPort     int64  `json:"metricsPort"`
 	MetricsProtocol string `json:"metricsProtocol"`
+	// Gas and access control configuration
+	MinGasPrice   int64  `json:"minGasPrice"`
+	HostAllowList string `json:"hostAllowList"`
+	// Permissions configuration
+	AccountsAllowList []string `json:"accountsAllowList"`
+	NodesAllowList    []string `json:"nodesAllowList"`
+	// JWT Authentication configuration
+	JWTEnabled                 bool         `json:"jwtEnabled"`
+	JWTPublicKeyContent        string       `json:"jwtPublicKeyContent"`
+	JWTAuthenticationAlgorithm JWTAlgorithm `json:"jwtAuthenticationAlgorithm"`
 }
 
 // BesuConfig represents the configuration for a Besu node

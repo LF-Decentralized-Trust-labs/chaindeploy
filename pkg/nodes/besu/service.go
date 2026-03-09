@@ -104,8 +104,14 @@ ExecStart={{.Cmd}}
 Restart=on-failure
 RestartSec=10
 LimitNOFILE=65536
-StandardOutput=append:{{.LogPath}}
-StandardError=append:{{.LogPath}}
+
+# Use journald for logging with automatic log rotation
+# View logs: journalctl -u {{.ServiceName}} -f
+# journald handles log rotation via /etc/systemd/journald.conf
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier={{.ServiceName}}
+
 {{range .EnvVars}}{{.}}
 {{end}}
 
@@ -114,17 +120,17 @@ WantedBy=multi-user.target
 `))
 
 	data := struct {
-		ID      string
-		DirPath string
-		Cmd     string
-		LogPath string
-		EnvVars []string
+		ID          string
+		ServiceName string
+		DirPath     string
+		Cmd         string
+		EnvVars     []string
 	}{
-		ID:      b.opts.ID,
-		DirPath: dirPath,
-		Cmd:     cmd,
-		LogPath: b.GetStdOutPath(),
-		EnvVars: envStrings,
+		ID:          b.opts.ID,
+		ServiceName: b.getServiceName(),
+		DirPath:     dirPath,
+		Cmd:         cmd,
+		EnvVars:     envStrings,
 	}
 
 	var buf bytes.Buffer
@@ -137,6 +143,64 @@ WantedBy=multi-user.target
 	}
 
 	return nil
+}
+
+// getNewsyslogConfigPath returns the path to the newsyslog config file for macOS log rotation
+func (b *LocalBesu) getNewsyslogConfigPath() string {
+	return fmt.Sprintf("/etc/newsyslog.d/chainlaunch-%s.conf", b.getServiceName())
+}
+
+// createNewsyslogConfig creates a newsyslog configuration file for macOS log rotation
+func (b *LocalBesu) createNewsyslogConfig(logPath string) error {
+	const newsyslogTemplate = `# Log rotation for {{.ServiceName}}
+# logfilename                          mode count size   when  flags
+{{.LogPath}}                           644  7     102400 *     J
+`
+	tmpl := template.Must(template.New("newsyslog").Parse(newsyslogTemplate))
+
+	data := struct {
+		ServiceName string
+		LogPath     string
+	}{
+		ServiceName: b.getServiceName(),
+		LogPath:     logPath,
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return fmt.Errorf("failed to execute newsyslog template: %w", err)
+	}
+
+	configPath := b.getNewsyslogConfigPath()
+
+	// Try to write directly first, fall back to sudo if permission denied
+	if err := os.WriteFile(configPath, buf.Bytes(), 0644); err != nil {
+		cmd := exec.Command("sudo", "tee", configPath)
+		cmd.Stdin = bytes.NewReader(buf.Bytes())
+		if output, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("failed to write newsyslog config: %w (output: %s)", err, string(output))
+		}
+	}
+
+	return nil
+}
+
+// removeNewsyslogConfig removes the newsyslog configuration file for macOS
+func (b *LocalBesu) removeNewsyslogConfig() {
+	configPath := b.getNewsyslogConfigPath()
+
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		return
+	}
+
+	if err := os.Remove(configPath); err == nil {
+		return
+	}
+
+	cmd := exec.Command("sudo", "rm", "-f", configPath)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		b.logger.Warn("Failed to remove newsyslog config", "error", err, "output", string(output))
+	}
 }
 
 // createLaunchdService creates a launchd service file
@@ -195,6 +259,13 @@ func (b *LocalBesu) createLaunchdService(cmd string, env map[string]string, dirP
 		return fmt.Errorf("failed to write launchd service file: %w", err)
 	}
 
+	// Create newsyslog configuration for log rotation on macOS
+	logPath := filepath.Join(dirPath, b.getServiceName()+".log")
+	if err := b.createNewsyslogConfig(logPath); err != nil {
+		b.logger.Warn("Failed to create newsyslog config for log rotation", "error", err)
+		// Don't fail service creation if newsyslog config fails
+	}
+
 	return nil
 }
 
@@ -219,13 +290,15 @@ func (b *LocalBesu) GetStdOutPath() string {
 // startLaunchdService starts the launchd service
 func (b *LocalBesu) startLaunchdService() error {
 	cmd := exec.Command("launchctl", "load", b.getLaunchdPlistPath())
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to load launchd service: %w", err)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to load launchd service: %w (output: %s)", err, string(output))
 	}
 
 	cmd = exec.Command("launchctl", "start", b.getLaunchdServiceName())
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to start launchd service: %w", err)
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to start launchd service: %w (output: %s)", err, string(output))
 	}
 
 	return nil
@@ -274,6 +347,9 @@ func (b *LocalBesu) stopLaunchdService() error {
 		return fmt.Errorf("failed to unload launchd service: %w", err)
 	}
 
+	// Remove newsyslog config for log rotation
+	b.removeNewsyslogConfig()
+
 	return nil
 }
 
@@ -287,14 +363,16 @@ func (b *LocalBesu) execSystemctl(command string, args ...string) error {
 		// sudo is available, use it
 		cmdArgs = append([]string{"systemctl"}, cmdArgs...)
 		cmd := exec.Command(sudoPath, cmdArgs...)
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("systemctl %s failed: %w", command, err)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("systemctl %s failed: %w (output: %s)", command, err, string(output))
 		}
 	} else {
 		// sudo is not available, run directly
 		cmd := exec.Command("systemctl", cmdArgs...)
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("systemctl %s failed: %w", command, err)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("systemctl %s failed: %w (output: %s)", command, err, string(output))
 		}
 	}
 

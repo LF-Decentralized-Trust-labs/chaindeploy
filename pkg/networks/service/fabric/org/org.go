@@ -20,6 +20,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/chainlaunch/chainlaunch/internal/protoutil"
+	"github.com/chainlaunch/chainlaunch/pkg/certutils"
 	"github.com/chainlaunch/chainlaunch/pkg/db"
 	"github.com/chainlaunch/chainlaunch/pkg/fabric/service"
 	keymanagement "github.com/chainlaunch/chainlaunch/pkg/keymanagement/service"
@@ -62,8 +63,12 @@ func (s *FabricOrg) GetConfigBlockWithNetworkConfig(ctx context.Context, channel
 		"channel", channelID,
 		"ordererUrl", ordererURL,
 	)
+	// Strip the grpcs:// or grpc:// scheme from the URL since network.Node.Addr expects host:port only
+	ordererAddr := strings.TrimPrefix(ordererURL, "grpcs://")
+	ordererAddr = strings.TrimPrefix(ordererAddr, "grpc://")
+
 	ordererNode := network.Node{
-		Addr:          ordererURL,
+		Addr:          ordererAddr,
 		TLSCACertByte: []byte(ordererTLSCert),
 	}
 	ordererConn, err := network.DialConnection(ordererNode)
@@ -100,7 +105,7 @@ func (s *FabricOrg) GetConfigBlockWithNetworkConfig(ctx context.Context, channel
 		return nil, fmt.Errorf("failed to read certificate: %w", err)
 	}
 
-	priv, err := gwidentity.PrivateKeyFromPEM([]byte(privateKeyPEM))
+	priv, err := certutils.ParsePrivateKeyPEM([]byte(privateKeyPEM))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read private key: %w", err)
 	}
@@ -155,7 +160,7 @@ func (s *FabricOrg) getAdminIdentity(ctx context.Context) (identity.SigningIdent
 		return nil, fmt.Errorf("failed to read certificate: %w", err)
 	}
 
-	priv, err := gwidentity.PrivateKeyFromPEM([]byte(privateKeyPEM))
+	priv, err := certutils.ParsePrivateKeyPEM([]byte(privateKeyPEM))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read private key: %w", err)
 	}
@@ -200,7 +205,7 @@ func (s *FabricOrg) getOrdererMSP(ctx context.Context) (identity.SigningIdentity
 		return nil, fmt.Errorf("failed to read certificate: %w", err)
 	}
 
-	priv, err := gwidentity.PrivateKeyFromPEM([]byte(privateKeyPEM))
+	priv, err := certutils.ParsePrivateKeyPEM([]byte(privateKeyPEM))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read private key: %w", err)
 	}
@@ -218,7 +223,7 @@ func (s *FabricOrg) getOrdererConnection(ctx context.Context, ordererURL string,
 
 	// Create orderer connection
 	ordererConn, err := network.DialConnection(network.Node{
-		Addr:          strings.TrimPrefix(ordererURL, "grpcs://"),
+		Addr:          strings.TrimPrefix(strings.TrimPrefix(ordererURL, "grpcs://"), "grpc://"),
 		TLSCACertByte: []byte(ordererTLSCert),
 	})
 	if err != nil {
@@ -293,7 +298,7 @@ func (s *FabricOrg) GetGenesisBlock(ctx context.Context, channelID string, order
 }
 
 // CreateConfigSignature creates a signature for a config update using the organization's admin credentials
-func (s *FabricOrg) CreateConfigSignature(ctx context.Context, channelID string, configUpdateBytes *cb.Envelope) (*cb.Envelope, error) {
+func (s *FabricOrg) CreateConfigSignature(ctx context.Context, channelID string, configUpdateBytes *cb.Envelope) (*cb.ConfigSignature, error) {
 	s.logger.Info("Creating config signature",
 		"mspID", s.mspID,
 		"channel", channelID)
@@ -319,7 +324,7 @@ func (s *FabricOrg) CreateConfigSignature(ctx context.Context, channelID string,
 	}
 
 	// Create signing identity
-	signingIdentity, err := s.getAdminIdentity(ctx)
+	signingIdentity, err := s.GetAdminIdentity(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create signing identity: %w", err)
 	}
@@ -337,7 +342,7 @@ const (
 	epoch      = 0
 )
 
-func SignConfigTx(channelID string, envConfigUpdate *cb.Envelope, signer identity.SigningIdentity) (*cb.Envelope, error) {
+func SignConfigTx(channelID string, envConfigUpdate *cb.Envelope, signer identity.SigningIdentity) (*cb.ConfigSignature, error) {
 	payload, err := protoutil.UnmarshalPayload(envConfigUpdate.Payload)
 	if err != nil {
 		return nil, errors.New("bad payload")
@@ -379,9 +384,7 @@ func SignConfigTx(channelID string, envConfigUpdate *cb.Envelope, signer identit
 		return nil, err
 	}
 
-	configUpdateEnv.Signatures = append(configUpdateEnv.Signatures, configSig)
-
-	return protoutil.CreateSignedEnvelope(cb.HeaderType_CONFIG_UPDATE, channelID, signer, configUpdateEnv, msgVersion, epoch)
+	return configSig, nil
 }
 
 func Concatenate[T any](slices ...[]T) []T {
@@ -484,7 +487,7 @@ func (s *FabricOrg) GetCRL(ctx context.Context) ([]byte, error) {
 	}
 
 	// Parse the private key
-	priv, err := gwidentity.PrivateKeyFromPEM([]byte(privateKeyPEM))
+	priv, err := certutils.ParsePrivateKeyPEM([]byte(privateKeyPEM))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse private key: %w", err)
 	}
@@ -599,7 +602,7 @@ func (s *FabricOrg) GetAdminIdentity(ctx context.Context) (identity.SigningIdent
 		return nil, fmt.Errorf("failed to read certificate: %w", err)
 	}
 
-	priv, err := gwidentity.PrivateKeyFromPEM([]byte(privateKeyPEM))
+	priv, err := certutils.ParsePrivateKeyPEM([]byte(privateKeyPEM))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read private key: %w", err)
 	}

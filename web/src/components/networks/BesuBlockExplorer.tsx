@@ -1,4 +1,4 @@
-import { Activity, Copy, ExternalLink, Hash, Package, Search, TrendingUp, ChevronLeft, ChevronRight, Server, Check } from 'lucide-react'
+import { Activity, Copy, ExternalLink, Hash, Package, Search, TrendingUp, ChevronLeft, ChevronRight, Server } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Badge } from '../ui/badge'
@@ -18,6 +18,7 @@ import {
 interface BesuBlockExplorerProps {
 	nodesLoading: boolean
 	networkNodes?: Array<{ id?: number; name?: string; status?: string }>
+	networkId?: number
 }
 
 export function BesuBlockExplorer({ nodesLoading, networkNodes = [] }: BesuBlockExplorerProps) {
@@ -41,7 +42,7 @@ export function BesuBlockExplorer({ nodesLoading, networkNodes = [] }: BesuBlock
 	const endBlock = latestBlock ? Math.max(0, latestBlock - ((currentPage + 1) * blocksPerPage) + 1) : 0
 
 	// Get blocks for the current page
-	const { data: blocks, isLoading: blocksLoading } = useQuery({
+	const { isLoading: blocksLoading } = useQuery({
 		...getNodesByIdRpcBlockByNumberOptions({
 			path: { id: selectedNodeId || 0 },
 			query: { number: startBlock.toString(), tag: startBlock.toString() },
@@ -96,9 +97,13 @@ export function BesuBlockExplorer({ nodesLoading, networkNodes = [] }: BesuBlock
 		// The search is handled by the queries above
 	}
 
-	const copyToClipboard = (text: string) => {
-		navigator.clipboard.writeText(text)
-		toast.success('Copied to clipboard')
+	const copyToClipboard = async (text: string) => {
+		try {
+			await navigator.clipboard.writeText(text)
+			toast.success('Copied to clipboard')
+		} catch (error) {
+			toast.error('Failed to copy to clipboard')
+		}
 	}
 
 	// Format block hash for better readability

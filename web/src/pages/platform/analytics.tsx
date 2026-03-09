@@ -1,4 +1,4 @@
-import { getMetricsStatusOptions, getNodesOptions, postMetricsDeployMutation, getMetricsDefaultsOptions, postMetricsUndeployMutation, postMetricsReloadMutation } from '@/api/client/@tanstack/react-query.gen'
+import { getStatusOptions, getNodesOptions, deployPrometheusMutation, getDefaultsOptions, undeployPrometheusMutation, reloadConfigurationMutation } from '@/api/client/@tanstack/react-query.gen'
 import { HttpNodeResponse, TypesDeployPrometheusRequest } from '@/api/client/types.gen'
 import { BesuIcon } from '@/components/icons/besu-icon'
 import { FabricIcon } from '@/components/icons/fabric-icon'
@@ -40,7 +40,7 @@ export default function AnalyticsPage() {
 	const [customPort, setCustomPort] = useState<number>(9090)
 
 	const { data: prometheusDefaults, isLoading: isDefaultsLoading } = useQuery({
-		...getMetricsDefaultsOptions({}),
+		...getDefaultsOptions({}),
 	})
 
 	const form = useForm<PrometheusSetupForm>({
@@ -107,7 +107,7 @@ export default function AnalyticsPage() {
 	}
 
 	const { data: prometheusStatus, isLoading: isStatusLoading } = useQuery({
-		...getMetricsStatusOptions({}),
+		...getStatusOptions({}),
 	})
 
 	const { data: nodes } = useQuery({
@@ -125,7 +125,7 @@ export default function AnalyticsPage() {
 	}, [nodes])
 	
 	const deployPrometheus = useMutation({
-		...postMetricsDeployMutation(),
+		...deployPrometheusMutation(),
 		onSuccess: () => {
 			toast.success('Prometheus deployed successfully')
 			setIsSetupDialogOpen(false)
@@ -141,7 +141,7 @@ export default function AnalyticsPage() {
 	})
 
 	const stopPrometheus = useMutation({
-		...postMetricsUndeployMutation(),
+		...undeployPrometheusMutation(),
 		onSuccess: () => {
 			toast.success('Prometheus stopped successfully')
 			// Refresh the page to show the setup interface
@@ -155,7 +155,7 @@ export default function AnalyticsPage() {
 	})
 
 	const reloadPrometheus = useMutation({
-		...postMetricsReloadMutation(),
+		...reloadConfigurationMutation(),
 		onSuccess: () => {
 			toast.success('Prometheus reloaded successfully')
 		},
