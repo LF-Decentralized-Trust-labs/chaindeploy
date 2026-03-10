@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useMutation } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 interface CommitChaincodeDialogProps {
@@ -17,10 +17,12 @@ interface CommitChaincodeDialogProps {
 }
 
 function CommitChaincodeDialog({ commitDialogOpen, setCommitDialogOpen, availablePeers, definitionId, onSuccess, onError }: CommitChaincodeDialogProps) {
-	const [selectedPeerId, setSelectedPeerId] = useState<string | null>(() => {
-		// Select the first peer by default if available
-		return availablePeers.length > 0 ? availablePeers[0].nodeId!.toString() : null
-	})
+	const [selectedPeerId, setSelectedPeerId] = useState<string | null>(null)
+	useEffect(() => {
+		if (commitDialogOpen) {
+			setSelectedPeerId(availablePeers.length > 0 ? availablePeers[0].nodeId!.toString() : null)
+		}
+	}, [commitDialogOpen, availablePeers])
 	const commitMutation = useMutation({
 		...postScFabricDefinitionsByDefinitionIdCommitMutation(),
 		onSuccess: () => {

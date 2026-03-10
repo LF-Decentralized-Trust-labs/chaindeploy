@@ -9,6 +9,8 @@ export type FabricPeerParams = {
 	listenAddress: string
 	operationsAddress: string
 	externalEndpoint: string
+	chaincodeAddress?: string
+	eventsAddress?: string
 }
 
 export type FabricOrdererParams = {
@@ -76,6 +78,16 @@ export async function createNodeWithWizard(page: Page, baseURL: string, params: 
 		await page.getByPlaceholder('e.g., 0.0.0.0:7051').fill(params.listenAddress)
 		await page.getByPlaceholder('e.g., 0.0.0.0:9443').fill(params.operationsAddress)
 		await page.getByPlaceholder('e.g., peer0.org1.example.com:7051').fill(params.externalEndpoint)
+
+		// Peer-specific fields
+		if (params.nodeType === 'Peer node') {
+			if (params.chaincodeAddress) {
+				await page.getByPlaceholder('e.g., 0.0.0.0:7052').fill(params.chaincodeAddress)
+			}
+			if (params.eventsAddress) {
+				await page.getByPlaceholder('e.g., 0.0.0.0:7053').fill(params.eventsAddress)
+			}
+		}
 	} else if (params.protocol === 'Besu') {
 		await page.getByPlaceholder('e.g., 0.0.0.0:7051').fill(params.listenAddress)
 		if (params.operationsAddress) {

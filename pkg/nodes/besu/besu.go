@@ -618,19 +618,19 @@ func (b *LocalBesu) TailLogs(ctx context.Context, tail int, follow bool) (<-chan
 		var cmd *exec.Cmd
 		if runtime.GOOS == "windows" {
 			if follow {
-				cmd = exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command",
+				cmd = exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command",
 					"Get-Content", "-Encoding", "UTF8", "-Path", logPath, "-Tail", fmt.Sprintf("%d", tail), "-Wait")
 			} else {
-				cmd = exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command",
+				cmd = exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command",
 					"Get-Content", "-Encoding", "UTF8", "-Path", logPath, "-Tail", fmt.Sprintf("%d", tail))
 			}
 		} else {
 			env := os.Environ()
 			env = append(env, "LC_ALL=en_US.UTF-8")
 			if follow {
-				cmd = exec.Command("tail", "-n", fmt.Sprintf("%d", tail), "-f", logPath)
+				cmd = exec.CommandContext(ctx, "tail", "-n", fmt.Sprintf("%d", tail), "-f", logPath)
 			} else {
-				cmd = exec.Command("tail", "-n", fmt.Sprintf("%d", tail), logPath)
+				cmd = exec.CommandContext(ctx, "tail", "-n", fmt.Sprintf("%d", tail), logPath)
 			}
 			cmd.Env = env
 		}

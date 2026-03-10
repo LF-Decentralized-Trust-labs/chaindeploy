@@ -389,7 +389,6 @@ export function Playground({ projectId, networkId }: PlaygroundProps) {
 				})
 				toast.dismiss(toastId)
 				let nextResponses
-				console.log('res', res)
 				if (res.error) {
 					nextResponses = [
 						{ type: 'invoke', result: res.error.message, timestamp: Date.now(), fn: fnParam, args: argsParam, selectedKey: selectedKeyParam, paramValues: paramValuesObj },

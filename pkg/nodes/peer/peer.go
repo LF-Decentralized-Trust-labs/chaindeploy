@@ -932,7 +932,7 @@ func (p *LocalPeer) Init() (nodetypes.NodeDeploymentConfig, error) {
 	isCA := 0
 	description := "Sign key for " + p.opts.ID
 	curveP256 := kmodels.ECCurveP256
-	providerID := 1
+	providerID := int(org.ProviderID)
 
 	// Create Sign Key
 	signKeyDB, err := p.keyService.CreateKey(ctx, kmodels.CreateKeyRequest{
@@ -954,9 +954,9 @@ func (p *LocalPeer) Init() (nodetypes.NodeDeploymentConfig, error) {
 		Organization:       []string{org.MspID},
 		OrganizationalUnit: []string{"peer"},
 		DNSNames:           []string{p.opts.ID},
-		IsCA:               true,
+		IsCA:               false,
 		ValidFor:           validFor,
-		KeyUsage:           x509.KeyUsageCertSign,
+		KeyUsage:           x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 	})
 	if err != nil {
@@ -1019,9 +1019,9 @@ func (p *LocalPeer) Init() (nodetypes.NodeDeploymentConfig, error) {
 		OrganizationalUnit: []string{"peer"},
 		DNSNames:           domains,
 		IPAddresses:        ipAddresses,
-		IsCA:               true,
+		IsCA:               false,
 		ValidFor:           validFor,
-		KeyUsage:           x509.KeyUsageCertSign,
+		KeyUsage:           x509.KeyUsageDigitalSignature | x509.KeyUsageKeyAgreement,
 		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 	})
 	if err != nil {
@@ -1507,7 +1507,7 @@ func (p *LocalPeer) RenewCertificates(peerDeploymentConfig *nodetypes.FabricPeer
 		DNSNames:           []string{p.opts.ID},
 		IsCA:               false,
 		ValidFor:           validFor,
-		KeyUsage:           x509.KeyUsageCertSign,
+		KeyUsage:           x509.KeyUsageDigitalSignature,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to renew signing certificate: %w", err)
@@ -1974,16 +1974,16 @@ func (p *LocalPeer) TailLogs(ctx context.Context, tail int, follow bool) (<-chan
 		if runtime.GOOS == "windows" {
 			// For Windows, use PowerShell Get-Content
 			if follow {
-				cmd = exec.Command("powershell", "Get-Content", "-Path", logPath, "-Tail", fmt.Sprintf("%d", tail), "-Wait")
+				cmd = exec.CommandContext(ctx, "powershell", "Get-Content", "-Path", logPath, "-Tail", fmt.Sprintf("%d", tail), "-Wait")
 			} else {
-				cmd = exec.Command("powershell", "Get-Content", "-Path", logPath, "-Tail", fmt.Sprintf("%d", tail))
+				cmd = exec.CommandContext(ctx, "powershell", "Get-Content", "-Path", logPath, "-Tail", fmt.Sprintf("%d", tail))
 			}
 		} else {
 			// For Unix-like systems, use tail command
 			if follow {
-				cmd = exec.Command("tail", "-n", fmt.Sprintf("%d", tail), "-f", logPath)
+				cmd = exec.CommandContext(ctx, "tail", "-n", fmt.Sprintf("%d", tail), "-f", logPath)
 			} else {
-				cmd = exec.Command("tail", "-n", fmt.Sprintf("%d", tail), logPath)
+				cmd = exec.CommandContext(ctx, "tail", "-n", fmt.Sprintf("%d", tail), logPath)
 			}
 		}
 		stdout, err := cmd.StdoutPipe()

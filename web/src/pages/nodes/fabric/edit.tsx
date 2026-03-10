@@ -45,13 +45,7 @@ export default function EditFabricNodePage() {
 			navigate(`/nodes/${id}`)
 		},
 		onError: (error: any) => {
-			if (error instanceof Error) {
-				toast.error(`Failed to update node: ${error.message}`)
-			} else if (error.message) {
-				toast.error(`Failed to update node: ${error.message}`)
-			} else {
-				toast.error('An unknown error occurred')
-			}
+			toast.error(`Failed to update node: ${error?.error?.message || error?.message || 'An unknown error occurred'}`)
 		},
 	})
 

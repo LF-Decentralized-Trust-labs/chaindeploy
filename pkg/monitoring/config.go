@@ -20,7 +20,7 @@ type Config struct {
 func DefaultConfig() *Config {
 	return &Config{
 		DefaultCheckInterval:    1 * time.Minute,
-		DefaultTimeout:          10 * time.Second,
+		DefaultTimeout:          2 * time.Second,
 		DefaultFailureThreshold: 3,
 		Workers:                 5,
 	}

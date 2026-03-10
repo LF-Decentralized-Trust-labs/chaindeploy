@@ -24,11 +24,16 @@ import (
 
 // GetFabricPeerDefaults returns default values for a Fabric peer node
 func (s *NodeService) GetFabricPeerDefaults() *NodeDefaults {
-	// Fetch default IP from settings
+	// Fetch default IP from settings, fall back to auto-detected external IP
 	defaultIP := "127.0.0.1"
 	if setting, err := s.settingsService.GetSetting(context.Background()); err == nil {
 		if setting.Config.DefaultNodeExposeIP != "" {
 			defaultIP = setting.Config.DefaultNodeExposeIP
+		}
+	}
+	if defaultIP == "127.0.0.1" {
+		if externalIP, err := s.GetExternalIP(); err == nil {
+			defaultIP = externalIP
 		}
 	}
 	loopbackAddress := "0.0.0.0"
@@ -69,11 +74,16 @@ func (s *NodeService) GetFabricPeerDefaults() *NodeDefaults {
 
 // GetFabricOrdererDefaults returns default values for a Fabric orderer node
 func (s *NodeService) GetFabricOrdererDefaults() *NodeDefaults {
-	// Fetch default IP from settings
+	// Fetch default IP from settings, fall back to auto-detected external IP
 	defaultIP := "127.0.0.1"
 	if setting, err := s.settingsService.GetSetting(context.Background()); err == nil {
 		if setting.Config.DefaultNodeExposeIP != "" {
 			defaultIP = setting.Config.DefaultNodeExposeIP
+		}
+	}
+	if defaultIP == "127.0.0.1" {
+		if externalIP, err := s.GetExternalIP(); err == nil {
+			defaultIP = externalIP
 		}
 	}
 	loopbackAddress := "0.0.0.0"

@@ -55,8 +55,8 @@ func TestNewDiskSpaceMonitor(t *testing.T) {
 	if monitor.checkInterval != 5*time.Minute {
 		t.Errorf("expected checkInterval to be 5 minutes, got %v", monitor.checkInterval)
 	}
-	if monitor.alertCooldown != 1*time.Hour {
-		t.Errorf("expected alertCooldown to be 1 hour, got %v", monitor.alertCooldown)
+	if monitor.alertCooldown != 3*time.Hour {
+		t.Errorf("expected alertCooldown to be 3 hours, got %v", monitor.alertCooldown)
 	}
 }
 

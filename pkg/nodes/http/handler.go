@@ -1939,11 +1939,30 @@ func SignaturePolicyToString(policy *cb.SignaturePolicyEnvelope) (string, error)
 		if identity == nil {
 			return "", fmt.Errorf("identity at index %d is nil", idx)
 		}
-		// Get the MSP ID and role
-		mspID := strings.TrimSpace(string(identity.Principal))
+		// Get the MSP ID and role from the serialized MSPRole
 		role := "member" // Default role
+		mspID := ""
 		if identity.PrincipalClassification == msp.MSPPrincipal_ROLE {
-			role = "admin"
+			mspRole := &msp.MSPRole{}
+			if err := proto.Unmarshal(identity.Principal, mspRole); err == nil {
+				mspID = mspRole.MspIdentifier
+				switch mspRole.Role {
+				case msp.MSPRole_MEMBER:
+					role = "member"
+				case msp.MSPRole_ADMIN:
+					role = "admin"
+				case msp.MSPRole_CLIENT:
+					role = "client"
+				case msp.MSPRole_PEER:
+					role = "peer"
+				case msp.MSPRole_ORDERER:
+					role = "orderer"
+				}
+			} else {
+				mspID = strings.TrimSpace(string(identity.Principal))
+			}
+		} else {
+			mspID = strings.TrimSpace(string(identity.Principal))
 		}
 		return fmt.Sprintf("'%s.%s'", mspID, role), nil
 

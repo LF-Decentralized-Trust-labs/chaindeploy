@@ -19,7 +19,6 @@ interface ConsenterConfigProps {
 }
 
 function ConsenterDetailsModal({ consenter }: { consenter: ConsenterConfigProps['consenters'][0] }) {
-  console.log(consenter)
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -35,7 +34,7 @@ function ConsenterDetailsModal({ consenter }: { consenter: ConsenterConfigProps[
             Certificate information for {consenter.host}:{consenter.port}
           </DialogDescription>
         </DialogHeader>
-        
+
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -66,7 +65,7 @@ function ConsenterDetailsModal({ consenter }: { consenter: ConsenterConfigProps[
               <TabsTrigger value="client-tls">Client TLS</TabsTrigger>
               <TabsTrigger value="server-tls">Server TLS</TabsTrigger>
             </TabsList>
-            
+
             <TabsContent value="identity" className="space-y-4">
               {consenter.identity ? (
                 <CertificateViewer certificate={consenter.identity} label="Identity Certificate" />
@@ -74,11 +73,11 @@ function ConsenterDetailsModal({ consenter }: { consenter: ConsenterConfigProps[
                 <p className="text-sm text-muted-foreground">No identity certificate available</p>
               )}
             </TabsContent>
-            
+
             <TabsContent value="client-tls" className="space-y-4">
               <CertificateViewer certificate={consenter.client_tls_cert} label="Client TLS Certificate" />
             </TabsContent>
-            
+
             <TabsContent value="server-tls" className="space-y-4">
               <CertificateViewer certificate={consenter.server_tls_cert} label="Server TLS Certificate" />
             </TabsContent>
