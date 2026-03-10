@@ -2,7 +2,6 @@ package serve
 
 import (
 	"context"
-	"database/sql"
 	"embed"
 	"encoding/hex"
 	"fmt"
@@ -21,6 +20,7 @@ import (
 	backuphttp "github.com/chainlaunch/chainlaunch/pkg/backups/http"
 	backupservice "github.com/chainlaunch/chainlaunch/pkg/backups/service"
 	configservice "github.com/chainlaunch/chainlaunch/pkg/config"
+	"github.com/chainlaunch/chainlaunch/pkg/crypto"
 	"github.com/chainlaunch/chainlaunch/pkg/db"
 	fabrichandler "github.com/chainlaunch/chainlaunch/pkg/fabric/handler"
 	fabricservice "github.com/chainlaunch/chainlaunch/pkg/fabric/service"
@@ -289,7 +289,7 @@ func ensureKeyExists(filename string, dataPath string) (string, error) {
 }
 
 // setupServer configures and returns the HTTP server
-func (c *serveCmd) setupServer(queries *db.Queries, authService *auth.AuthService, views embed.FS, dev bool, dbPath string, dataPath string, projectsDir string) *chi.Mux {
+func (c *serveCmd) setupServer(queries *db.Queries, authService *auth.AuthService, views embed.FS, dev bool, dbPath string, dataPath string, projectsDir string, encryptor *crypto.Encryptor) *chi.Mux {
 	// Initialize services
 	keyManagementService, err := service.NewKeyManagementService(queries)
 	if err != nil {
@@ -324,7 +324,8 @@ func (c *serveCmd) setupServer(queries *db.Queries, authService *auth.AuthServic
 
 	networksService := networksservice.NewNetworkService(queries, nodesService, keyManagementService, logger, organizationService)
 	notificationService := notificationservice.NewNotificationService(queries, logger)
-	backupService := backupservice.NewBackupService(queries, logger, notificationService, dbPath, configService)
+
+	backupService := backupservice.NewBackupService(queries, logger, notificationService, dbPath, configService, encryptor)
 
 	// Initialize and start monitoring service
 	monitoringConfig := &monitoring.Config{
@@ -773,8 +774,8 @@ func (c *serveCmd) preRun() error {
 		c.dataPath = absPath
 	}
 
-	// Initialize database connection
-	database, err := sql.Open("sqlite3", c.dbPath)
+	// Initialize database connection with security and reliability PRAGMAs
+	database, err := db.OpenSQLite(c.dbPath)
 	if err != nil {
 		log.Fatalf("Failed to open database: %v", err)
 	}
@@ -862,8 +863,14 @@ func (c *serveCmd) run() error {
 		log.Printf("Updated password and role for user: %s", user.Username)
 	}
 
+	// Create encryptor for encrypting sensitive data at rest
+	encryptor, err := crypto.NewEncryptor(encryptionKey)
+	if err != nil {
+		log.Fatalf("Failed to create encryptor: %v", err)
+	}
+
 	// Setup and start HTTP server
-	router := c.setupServer(c.queries, authService, c.configCMD.Views, c.dev, c.dbPath, c.dataPath, c.projectsDir)
+	router := c.setupServer(c.queries, authService, c.configCMD.Views, c.dev, c.dbPath, c.dataPath, c.projectsDir, encryptor)
 
 	// Start HTTP server in a goroutine
 	httpServer := &http.Server{

@@ -1,0 +1,12 @@
+DROP INDEX IF EXISTS idx_nodes_platform;
+DROP INDEX IF EXISTS idx_nodes_network_id;
+DROP INDEX IF EXISTS idx_nodes_status;
+DROP INDEX IF EXISTS idx_nodes_node_type;
+DROP INDEX IF EXISTS idx_keys_provider_id;
+DROP INDEX IF EXISTS idx_keys_status;
+DROP INDEX IF EXISTS idx_keys_ethereum_address;
+DROP INDEX IF EXISTS idx_fabric_organizations_msp_id;
+DROP INDEX IF EXISTS idx_node_keys_node_id;
+DROP INDEX IF EXISTS idx_node_keys_key_id;
+DROP INDEX IF EXISTS idx_backups_created_at;
+DROP INDEX IF EXISTS idx_fabric_chaincodes_network_id;

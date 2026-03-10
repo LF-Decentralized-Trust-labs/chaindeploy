@@ -19,6 +19,7 @@ import (
 	"encoding/base64"
 
 	"github.com/chainlaunch/chainlaunch/pkg/config"
+	"github.com/chainlaunch/chainlaunch/pkg/crypto"
 	"github.com/chainlaunch/chainlaunch/pkg/db"
 	"github.com/chainlaunch/chainlaunch/pkg/logger"
 	"github.com/chainlaunch/chainlaunch/pkg/notifications"
@@ -40,15 +41,20 @@ type BackupService struct {
 	stopCh              chan struct{}
 	databasePath        string
 	configService       *config.ConfigService
+	encryptor           *crypto.Encryptor
 }
 
-// NewBackupService creates a new backup service
+// NewBackupService creates a new backup service.
+// The encryptor parameter is used to encrypt/decrypt sensitive backup target
+// credentials (secret keys, restic passwords). Pass nil to disable encryption
+// (not recommended for production).
 func NewBackupService(
 	queries *db.Queries,
 	logger *logger.Logger,
 	notificationSvc *notificationService.NotificationService,
 	databasePath string,
 	configService *config.ConfigService,
+	encryptor *crypto.Encryptor,
 ) *BackupService {
 	c := cron.New(cron.WithSeconds())
 	c.Start()
@@ -62,6 +68,7 @@ func NewBackupService(
 		stopCh:              make(chan struct{}),
 		databasePath:        databasePath,
 		configService:       configService,
+		encryptor:           encryptor,
 	}
 
 	// Load and schedule existing backup schedules
@@ -109,20 +116,39 @@ func (s *BackupService) CreateBackupTarget(ctx context.Context, params CreateBac
 		return nil, fmt.Errorf("failed to generate restic password: %w", err)
 	}
 
+	// Encrypt sensitive credentials before storing
+	encAccessKeyID, err := s.encryptSecret(params.AccessKeyID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt access key ID: %w", err)
+	}
+	encSecretKey, err := s.encryptSecret(params.SecretKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt secret key: %w", err)
+	}
+	encResticPassword, err := s.encryptSecret(resticPassword)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt restic password: %w", err)
+	}
+
 	target, err := s.queries.CreateBackupTarget(ctx, &db.CreateBackupTargetParams{
 		Name:           params.Name,
 		Type:           string(params.Type),
 		BucketName:     sql.NullString{String: params.BucketName, Valid: params.BucketName != ""},
 		Region:         sql.NullString{String: params.Region, Valid: params.Region != ""},
 		BucketPath:     sql.NullString{String: params.BucketPath, Valid: params.BucketPath != ""},
-		AccessKeyID:    sql.NullString{String: params.AccessKeyID, Valid: params.AccessKeyID != ""},
-		SecretKey:      sql.NullString{String: params.SecretKey, Valid: params.SecretKey != ""},
+		AccessKeyID:    sql.NullString{String: encAccessKeyID, Valid: encAccessKeyID != ""},
+		SecretKey:      sql.NullString{String: encSecretKey, Valid: encSecretKey != ""},
 		S3PathStyle:    sql.NullBool{Bool: params.ForcePathStyle, Valid: true},
 		Endpoint:       sql.NullString{String: params.Endpoint, Valid: params.Endpoint != ""},
-		ResticPassword: sql.NullString{String: resticPassword, Valid: true},
+		ResticPassword: sql.NullString{String: encResticPassword, Valid: true},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create backup target: %w", err)
+	}
+
+	decAccessKeyID, err := s.decryptSecret(target.AccessKeyID.String)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt access key ID: %w", err)
 	}
 
 	return &BackupTargetDTO{
@@ -133,7 +159,7 @@ func (s *BackupService) CreateBackupTarget(ctx context.Context, params CreateBac
 		Region:         target.Region.String,
 		Endpoint:       target.Endpoint.String,
 		BucketPath:     target.BucketPath.String,
-		AccessKeyID:    target.AccessKeyID.String,
+		AccessKeyID:    decAccessKeyID,
 		ForcePathStyle: target.S3PathStyle.Bool,
 		CreatedAt:      target.CreatedAt,
 		UpdatedAt:      &target.UpdatedAt.Time,
@@ -329,11 +355,25 @@ func (s *BackupService) performS3Backup(ctx context.Context, backup *db.Backup, 
 		return fmt.Errorf("backup configuration error: invalid endpoint URL: %w", err)
 	}
 
+	// Decrypt credentials for use
+	accessKeyID, err := s.decryptSecret(target.AccessKeyID.String)
+	if err != nil {
+		return fmt.Errorf("failed to decrypt access key ID: %w", err)
+	}
+	secretKey, err := s.decryptSecret(target.SecretKey.String)
+	if err != nil {
+		return fmt.Errorf("failed to decrypt secret key: %w", err)
+	}
+	resticPassword, err := s.decryptSecret(target.ResticPassword.String)
+	if err != nil {
+		return fmt.Errorf("failed to decrypt restic password: %w", err)
+	}
+
 	// Set up restic environment variables for S3
 	env := []string{
-		fmt.Sprintf("AWS_ACCESS_KEY_ID=%s", target.AccessKeyID.String),
-		fmt.Sprintf("AWS_SECRET_ACCESS_KEY=%s", target.SecretKey.String),
-		fmt.Sprintf("RESTIC_PASSWORD=%s", target.ResticPassword.String),
+		fmt.Sprintf("AWS_ACCESS_KEY_ID=%s", accessKeyID),
+		fmt.Sprintf("AWS_SECRET_ACCESS_KEY=%s", secretKey),
+		fmt.Sprintf("RESTIC_PASSWORD=%s", resticPassword),
 		fmt.Sprintf("AWS_ENDPOINT=%s", customURL.Host),
 	}
 
@@ -658,6 +698,10 @@ func (s *BackupService) ListBackupTargets(ctx context.Context) ([]*BackupTargetD
 
 	dtos := make([]*BackupTargetDTO, len(targets))
 	for i, target := range targets {
+		decAccessKeyID, err := s.decryptSecret(target.AccessKeyID.String)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decrypt access key ID: %w", err)
+		}
 		dtos[i] = &BackupTargetDTO{
 			ID:             target.ID,
 			Name:           target.Name,
@@ -666,7 +710,7 @@ func (s *BackupService) ListBackupTargets(ctx context.Context) ([]*BackupTargetD
 			Region:         target.Region.String,
 			Endpoint:       target.Endpoint.String,
 			BucketPath:     target.BucketPath.String,
-			AccessKeyID:    target.AccessKeyID.String,
+			AccessKeyID:    decAccessKeyID,
 			ForcePathStyle: target.S3PathStyle.Bool,
 			CreatedAt:      target.CreatedAt,
 			UpdatedAt:      &target.UpdatedAt.Time,
@@ -683,6 +727,11 @@ func (s *BackupService) GetBackupTarget(ctx context.Context, id int64) (*BackupT
 		return nil, fmt.Errorf("failed to get backup target: %w", err)
 	}
 
+	decAccessKeyID, err := s.decryptSecret(target.AccessKeyID.String)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt access key ID: %w", err)
+	}
+
 	return &BackupTargetDTO{
 		ID:             target.ID,
 		Name:           target.Name,
@@ -691,7 +740,7 @@ func (s *BackupService) GetBackupTarget(ctx context.Context, id int64) (*BackupT
 		Region:         target.Region.String,
 		Endpoint:       target.Endpoint.String,
 		BucketPath:     target.BucketPath.String,
-		AccessKeyID:    target.AccessKeyID.String,
+		AccessKeyID:    decAccessKeyID,
 		ForcePathStyle: target.S3PathStyle.Bool,
 		CreatedAt:      target.CreatedAt,
 		UpdatedAt:      &target.UpdatedAt.Time,
@@ -905,11 +954,25 @@ func (s *BackupService) deleteBackupFile(ctx context.Context, backup *db.Backup,
 
 // deleteS3BackupFile deletes a backup file from S3 using restic
 func (s *BackupService) deleteS3BackupFile(ctx context.Context, backup *db.Backup, target *db.BackupTarget) error {
+	// Decrypt credentials for use
+	accessKeyID, err := s.decryptSecret(target.AccessKeyID.String)
+	if err != nil {
+		return fmt.Errorf("failed to decrypt access key ID: %w", err)
+	}
+	secretKey, err := s.decryptSecret(target.SecretKey.String)
+	if err != nil {
+		return fmt.Errorf("failed to decrypt secret key: %w", err)
+	}
+	resticPassword, err := s.decryptSecret(target.ResticPassword.String)
+	if err != nil {
+		return fmt.Errorf("failed to decrypt restic password: %w", err)
+	}
+
 	// Set up restic environment variables
 	env := []string{
-		fmt.Sprintf("AWS_ACCESS_KEY_ID=%s", target.AccessKeyID.String),
-		fmt.Sprintf("AWS_SECRET_ACCESS_KEY=%s", target.SecretKey.String),
-		fmt.Sprintf("RESTIC_PASSWORD=%s", target.ResticPassword.String),
+		fmt.Sprintf("AWS_ACCESS_KEY_ID=%s", accessKeyID),
+		fmt.Sprintf("AWS_SECRET_ACCESS_KEY=%s", secretKey),
+		fmt.Sprintf("RESTIC_PASSWORD=%s", resticPassword),
 		fmt.Sprintf("AWS_ENDPOINT=%s", target.Endpoint.String),
 	}
 
@@ -981,6 +1044,27 @@ func (s *BackupService) findLatestSnapshot(env []string) (string, error) {
 	return snapshots[0].ID, nil
 }
 
+// encryptSecret encrypts a secret string if an encryptor is configured.
+// Returns the original string if no encryptor is set (backwards compatible).
+func (s *BackupService) encryptSecret(secret string) (string, error) {
+	if s.encryptor == nil || secret == "" {
+		return secret, nil
+	}
+	return s.encryptor.Encrypt(secret)
+}
+
+// decryptSecret decrypts a secret string if an encryptor is configured.
+// Handles both encrypted and plaintext values for backwards compatibility.
+func (s *BackupService) decryptSecret(secret string) (string, error) {
+	if s.encryptor == nil || secret == "" {
+		return secret, nil
+	}
+	if !crypto.IsEncrypted(secret) {
+		return secret, nil
+	}
+	return s.encryptor.Decrypt(secret)
+}
+
 // Add helper function to generate secure password
 func generateSecurePassword() (string, error) {
 	bytes := make([]byte, 32) // 256 bits
@@ -1008,6 +1092,16 @@ func (s *BackupService) UpdateBackupTarget(ctx context.Context, params UpdateBac
 		}
 	}
 
+	// Encrypt sensitive credentials before storing
+	encAccessKeyID, err := s.encryptSecret(params.AccessKeyID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt access key ID: %w", err)
+	}
+	encSecretKey, err := s.encryptSecret(params.SecretKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt secret key: %w", err)
+	}
+
 	// Update the target
 	target, err := s.queries.UpdateBackupTarget(ctx, &db.UpdateBackupTargetParams{
 		ID:          params.ID,
@@ -1016,8 +1110,8 @@ func (s *BackupService) UpdateBackupTarget(ctx context.Context, params UpdateBac
 		BucketName:  sql.NullString{String: params.BucketName, Valid: params.BucketName != ""},
 		Region:      sql.NullString{String: params.Region, Valid: params.Region != ""},
 		BucketPath:  sql.NullString{String: params.BucketPath, Valid: params.BucketPath != ""},
-		AccessKeyID: sql.NullString{String: params.AccessKeyID, Valid: params.AccessKeyID != ""},
-		SecretKey:   sql.NullString{String: params.SecretKey, Valid: params.SecretKey != ""},
+		AccessKeyID: sql.NullString{String: encAccessKeyID, Valid: encAccessKeyID != ""},
+		SecretKey:   sql.NullString{String: encSecretKey, Valid: encSecretKey != ""},
 		S3PathStyle: sql.NullBool{Bool: params.ForcePathStyle, Valid: true},
 		Endpoint:    sql.NullString{String: params.Endpoint, Valid: params.Endpoint != ""},
 	})
@@ -1028,6 +1122,11 @@ func (s *BackupService) UpdateBackupTarget(ctx context.Context, params UpdateBac
 		return nil, fmt.Errorf("failed to update backup target: %w", err)
 	}
 
+	decAccessKeyID, err := s.decryptSecret(target.AccessKeyID.String)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt access key ID: %w", err)
+	}
+
 	return &BackupTargetDTO{
 		ID:             target.ID,
 		Name:           target.Name,
@@ -1036,7 +1135,7 @@ func (s *BackupService) UpdateBackupTarget(ctx context.Context, params UpdateBac
 		Region:         target.Region.String,
 		Endpoint:       target.Endpoint.String,
 		BucketPath:     target.BucketPath.String,
-		AccessKeyID:    target.AccessKeyID.String,
+		AccessKeyID:    decAccessKeyID,
 		ForcePathStyle: target.S3PathStyle.Bool,
 		CreatedAt:      target.CreatedAt,
 		UpdatedAt:      &target.UpdatedAt.Time,
