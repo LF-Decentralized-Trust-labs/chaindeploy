@@ -184,7 +184,6 @@ export function ChaincodeManagement({ networkNodes, network, channelConfig }: Ch
 			}
 		}
 	}, [fabricOrgs])
-	console.log(selectedOrg)
 	return (
 		<div className="space-y-4">
 			<div className="flex items-center gap-4 mb-6">

@@ -212,8 +212,6 @@ function FabricNetworkMetricsTab({ nodes, nodeChannels, isLoading, networkName }
 	)
 
 	const allMetrics = useMemo(() => [...peerMetrics, ...ordererMetrics.filter((om) => !peerMetrics.some((pm) => pm.key === om.key))], [peerMetrics, ordererMetrics])
-	console.log('allMetrics', allMetrics)
-
 	if (isLoading) {
 		return (
 			<div className="flex items-center justify-center h-[400px]">
@@ -253,7 +251,6 @@ function FabricNetworkMetricsTab({ nodes, nodeChannels, isLoading, networkName }
 							return { node: n.node, channel: networkName, color: nodeColors[idx % nodeColors.length] }
 						})
 						.filter(Boolean)
-					console.log('metricNodes', metricNodes)
 					if (!metricNodes.length) return null
 					return <AggregatedMetricsCard key={metric.key} metric={metric} nodes={metricNodes} />
 				})}

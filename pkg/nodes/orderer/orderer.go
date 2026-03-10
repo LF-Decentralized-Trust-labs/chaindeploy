@@ -417,7 +417,7 @@ func (o *LocalOrderer) Init() (interface{}, error) {
 	isCA := 0
 	description := "Sign key for " + o.opts.ID
 	curveP256 := kmodels.ECCurveP256
-	providerID := 1
+	providerID := int(org.ProviderID)
 
 	// Create Sign Key
 	signKeyDB, err := o.keyService.CreateKey(ctx, kmodels.CreateKeyRequest{
@@ -439,9 +439,9 @@ func (o *LocalOrderer) Init() (interface{}, error) {
 		Organization:       []string{org.MspID},
 		OrganizationalUnit: []string{"orderer"},
 		DNSNames:           []string{o.opts.ID},
-		IsCA:               true,
+		IsCA:               false,
 		ValidFor:           validFor,
-		KeyUsage:           x509.KeyUsageCertSign,
+		KeyUsage:           x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 	})
 	if err != nil {
@@ -504,9 +504,9 @@ func (o *LocalOrderer) Init() (interface{}, error) {
 		OrganizationalUnit: []string{"orderer"},
 		DNSNames:           domains,
 		IPAddresses:        ipAddresses,
-		IsCA:               true,
+		IsCA:               false,
 		ValidFor:           validFor,
-		KeyUsage:           x509.KeyUsageCertSign,
+		KeyUsage:           x509.KeyUsageDigitalSignature | x509.KeyUsageKeyAgreement,
 		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 	})
 	if err != nil {
@@ -1315,7 +1315,7 @@ func (o *LocalOrderer) RenewCertificates(ordererDeploymentConfig *types.FabricOr
 		DNSNames:           []string{o.opts.ID},
 		IsCA:               false,
 		ValidFor:           validFor,
-		KeyUsage:           x509.KeyUsageCertSign,
+		KeyUsage:           x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:        []x509.ExtKeyUsage{},
 	})
 	if err != nil {

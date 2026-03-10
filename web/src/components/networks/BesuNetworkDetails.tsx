@@ -223,7 +223,7 @@ export function BesuNetworkDetails({ network }: BesuNetworkDetailsProps) {
 
 			// Here you would typically make an API call to update the genesis
 			// For now, we'll just show a success message
-			console.log('Updated genesis config:', parsedGenesis)
+			void parsedGenesis // Genesis config parsed successfully
 
 			toast.success('Genesis configuration updated successfully')
 			setIsEditingGenesis(false)

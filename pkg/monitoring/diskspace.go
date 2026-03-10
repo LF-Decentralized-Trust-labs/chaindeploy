@@ -3,6 +3,7 @@ package monitoring
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/chainlaunch/chainlaunch/pkg/logger"
@@ -30,7 +31,7 @@ func NewDiskSpaceMonitor(dataPath string, notificationSvc notifications.Service,
 		logger:          logger,
 		threshold:       threshold,
 		checkInterval:   5 * time.Minute, // Check every 5 minutes
-		alertCooldown:   1 * time.Hour,   // Alert at most once per hour
+		alertCooldown:   3 * time.Hour,   // Alert at most once per 3 hours
 		stopChan:        make(chan struct{}),
 	}
 }
@@ -115,11 +116,18 @@ func (m *DiskSpaceMonitor) getDiskStats() (*notifications.DiskSpaceWarningData, 
 	availableBytes := stat.Bavail * uint64(stat.Bsize)
 	usedBytes := totalBytes - availableBytes
 
+	safeInt64 := func(v uint64) int64 {
+		if v > uint64(math.MaxInt64) {
+			return math.MaxInt64
+		}
+		return int64(v)
+	}
+
 	return &notifications.DiskSpaceWarningData{
 		DataPath:       m.dataPath,
-		UsedBytes:      int64(usedBytes),
-		AvailableBytes: int64(availableBytes),
-		TotalBytes:     int64(totalBytes),
+		UsedBytes:      safeInt64(usedBytes),
+		AvailableBytes: safeInt64(availableBytes),
+		TotalBytes:     safeInt64(totalBytes),
 		DetectedTime:   time.Now(),
 		MountPoint:     m.dataPath, // This could be enhanced to get the actual mount point
 	}, nil

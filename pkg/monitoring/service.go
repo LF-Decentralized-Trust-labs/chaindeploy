@@ -170,7 +170,7 @@ func (s *service) GetAllNodeStatuses() []*NodeCheck {
 func (s *service) worker(ctx context.Context, workerID int) {
 	defer s.workerWaitGroup.Done()
 
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(s.config.DefaultCheckInterval)
 	defer ticker.Stop()
 
 	for {

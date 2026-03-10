@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"math"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -523,11 +524,20 @@ func (op *UpdateBatchSizeOperation) Validate() error {
 	if op.AbsoluteMaxBytes <= 0 {
 		return fmt.Errorf("absolute max bytes must be greater than 0")
 	}
+	if op.AbsoluteMaxBytes > math.MaxUint32 {
+		return fmt.Errorf("absolute max bytes must not exceed %d", math.MaxUint32)
+	}
 	if op.MaxMessageCount <= 0 {
 		return fmt.Errorf("max message count must be greater than 0")
 	}
+	if op.MaxMessageCount > math.MaxUint32 {
+		return fmt.Errorf("max message count must not exceed %d", math.MaxUint32)
+	}
 	if op.PreferredMaxBytes <= 0 {
 		return fmt.Errorf("preferred max bytes must be greater than 0")
+	}
+	if op.PreferredMaxBytes > math.MaxUint32 {
+		return fmt.Errorf("preferred max bytes must not exceed %d", math.MaxUint32)
 	}
 	return nil
 }

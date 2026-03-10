@@ -53,7 +53,6 @@ export function AnimatedSVGEdge({ id, sourceX, sourceY, targetX, targetY, source
 			duration = Math.max(2, Math.min(8, 2 + adjustedLatency / 100))
 		}
 	}
-	console.log('duration', duration)
 	return (
 		<>
 			<BaseEdge id={id} path={edgePath} />

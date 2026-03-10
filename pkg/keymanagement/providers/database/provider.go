@@ -536,7 +536,7 @@ func (s *DatabaseProvider) generateECKeyPair(req models.CreateKeyRequest) (*KeyP
 	})
 
 	// Encode public key
-	publicKeyBytes, err := x509.MarshalPKIXPublicKey(&ecdsa.PublicKey{Curve: elliptic.P256(), X: privateKey.X, Y: privateKey.Y})
+	publicKeyBytes, err := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal public key: %w", err)
 	}

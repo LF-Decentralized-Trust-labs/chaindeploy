@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/hex"
+	"math"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
@@ -78,6 +79,13 @@ func UnmarshalChannelHeader(bytes []byte) (*common.ChannelHeader, error) {
 	return chdr, errors.Wrap(err, "error unmarshaling ChannelHeader")
 }
 
+func safeUint64ToInt(v uint64) int {
+	if v > uint64(math.MaxInt) {
+		return math.MaxInt
+	}
+	return int(v)
+}
+
 func MapBlock(block *common.Block) (*Block, error) {
 	var buf bytes.Buffer
 	err := protolator.DeepMarshalJSON(&buf, block)
@@ -85,7 +93,7 @@ func MapBlock(block *common.Block) (*Block, error) {
 		return nil, err
 	}
 	blk := &Block{
-		Number:     int(block.Header.Number),
+		Number:     safeUint64ToInt(block.Header.Number),
 		DataHash:   hex.EncodeToString(block.Header.DataHash),
 		Base64Data: base64.StdEncoding.EncodeToString(buf.Bytes()),
 	}
@@ -189,8 +197,8 @@ func MapBlock(block *common.Block) (*Block, error) {
 							Key:         rw.Key,
 						}
 						if rw.Version != nil {
-							read.BlockNumVersion = int(rw.Version.BlockNum)
-							read.TxNumVersion = int(rw.Version.TxNum)
+							read.BlockNumVersion = safeUint64ToInt(rw.Version.BlockNum)
+							read.TxNumVersion = safeUint64ToInt(rw.Version.TxNum)
 						}
 						reads = append(reads, read)
 					}
