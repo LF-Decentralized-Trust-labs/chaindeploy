@@ -73,6 +73,14 @@ test('can create a Fabric peer node using the NodeCreationWizard', async ({ page
 	// External Endpoint
 	await page.getByPlaceholder('e.g., peer0.org1.example.com:7051').fill(`127.0.0.1:${listenPort}`)
 
+	// Chaincode Address - use unique port to avoid conflicts
+	const chaincodePort = 7000 + (new DataView(crypto.getRandomValues(new Uint8Array(4)).buffer).getUint32(0) % 1000)
+	await page.getByPlaceholder('e.g., 0.0.0.0:7052').fill(`0.0.0.0:${chaincodePort}`)
+
+	// Events Address - use unique port to avoid conflicts
+	const eventsPort = 7000 + (new DataView(crypto.getRandomValues(new Uint8Array(4)).buffer).getUint32(0) % 1000)
+	await page.getByPlaceholder('e.g., 0.0.0.0:7053').fill(`0.0.0.0:${eventsPort}`)
+
 	// Go to Review step
 	await page.getByRole('button', { name: /next/i }).click()
 
