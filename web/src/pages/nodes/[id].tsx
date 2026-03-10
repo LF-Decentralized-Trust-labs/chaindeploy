@@ -191,7 +191,7 @@ export default function NodeDetailPage() {
 			navigate('/nodes')
 		},
 		onError: (error: any) => {
-			toast.error(`Failed to delete node: ${(error as any).error.message}`)
+			toast.error(`Failed to delete node: ${error?.error?.message || error?.message || 'Unknown error'}`)
 		},
 	})
 

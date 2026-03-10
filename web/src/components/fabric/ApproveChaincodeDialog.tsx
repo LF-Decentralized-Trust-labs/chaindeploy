@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useMutation } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 interface ApproveChaincodeDialogProps {
 	approveDialogOpen: boolean
@@ -15,10 +15,12 @@ interface ApproveChaincodeDialogProps {
 	onError?: (error: any) => void
 }
 function ApproveChaincodeDialog({ approveDialogOpen, setApproveDialogOpen, availablePeers, definitionId, onSuccess, onError }: ApproveChaincodeDialogProps) {
-	const [selectedPeerId, setSelectedPeerId] = useState<string | null>(() => {
-		// Select the first peer by default if available
-		return availablePeers.length > 0 ? availablePeers[0].nodeId!.toString() : null
-	})
+	const [selectedPeerId, setSelectedPeerId] = useState<string | null>(null)
+	useEffect(() => {
+		if (approveDialogOpen) {
+			setSelectedPeerId(availablePeers.length > 0 ? availablePeers[0].nodeId!.toString() : null)
+		}
+	}, [approveDialogOpen, availablePeers])
 	const approveMutation = useMutation({
 		...postScFabricDefinitionsByDefinitionIdApproveMutation(),
 		onSuccess: () => {

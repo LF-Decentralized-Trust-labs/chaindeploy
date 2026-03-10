@@ -1974,16 +1974,16 @@ func (p *LocalPeer) TailLogs(ctx context.Context, tail int, follow bool) (<-chan
 		if runtime.GOOS == "windows" {
 			// For Windows, use PowerShell Get-Content
 			if follow {
-				cmd = exec.Command("powershell", "Get-Content", "-Path", logPath, "-Tail", fmt.Sprintf("%d", tail), "-Wait")
+				cmd = exec.CommandContext(ctx, "powershell", "Get-Content", "-Path", logPath, "-Tail", fmt.Sprintf("%d", tail), "-Wait")
 			} else {
-				cmd = exec.Command("powershell", "Get-Content", "-Path", logPath, "-Tail", fmt.Sprintf("%d", tail))
+				cmd = exec.CommandContext(ctx, "powershell", "Get-Content", "-Path", logPath, "-Tail", fmt.Sprintf("%d", tail))
 			}
 		} else {
 			// For Unix-like systems, use tail command
 			if follow {
-				cmd = exec.Command("tail", "-n", fmt.Sprintf("%d", tail), "-f", logPath)
+				cmd = exec.CommandContext(ctx, "tail", "-n", fmt.Sprintf("%d", tail), "-f", logPath)
 			} else {
-				cmd = exec.Command("tail", "-n", fmt.Sprintf("%d", tail), logPath)
+				cmd = exec.CommandContext(ctx, "tail", "-n", fmt.Sprintf("%d", tail), logPath)
 			}
 		}
 		stdout, err := cmd.StdoutPipe()

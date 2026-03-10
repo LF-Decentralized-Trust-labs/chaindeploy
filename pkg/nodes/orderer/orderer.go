@@ -343,15 +343,15 @@ func (o *LocalOrderer) TailLogs(ctx context.Context, tail int, follow bool) (<-c
 		var cmd *exec.Cmd
 		if runtime.GOOS == "windows" {
 			if follow {
-				cmd = exec.Command("powershell", "Get-Content", "-Path", logPath, "-Tail", fmt.Sprintf("%d", tail), "-Wait")
+				cmd = exec.CommandContext(ctx, "powershell", "Get-Content", "-Path", logPath, "-Tail", fmt.Sprintf("%d", tail), "-Wait")
 			} else {
-				cmd = exec.Command("powershell", "Get-Content", "-Path", logPath, "-Tail", fmt.Sprintf("%d", tail))
+				cmd = exec.CommandContext(ctx, "powershell", "Get-Content", "-Path", logPath, "-Tail", fmt.Sprintf("%d", tail))
 			}
 		} else {
 			if follow {
-				cmd = exec.Command("tail", "-n", fmt.Sprintf("%d", tail), "-f", logPath)
+				cmd = exec.CommandContext(ctx, "tail", "-n", fmt.Sprintf("%d", tail), "-f", logPath)
 			} else {
-				cmd = exec.Command("tail", "-n", fmt.Sprintf("%d", tail), logPath)
+				cmd = exec.CommandContext(ctx, "tail", "-n", fmt.Sprintf("%d", tail), logPath)
 			}
 		}
 		stdout, err := cmd.StdoutPipe()

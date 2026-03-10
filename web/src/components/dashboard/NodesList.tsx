@@ -64,7 +64,7 @@ export default function NodesList({ nodes = [], limit }: NodesListProps) {
 					<Card className="p-4 hover:shadow-md transition-shadow cursor-pointer group">
 						<div className="flex items-start justify-between mb-2">
 							<div className="flex items-center gap-2 flex-1 min-w-0">
-								{node.platform === 'fabric' ? (
+								{node.platform?.toUpperCase() === 'FABRIC' ? (
 									<FabricIcon className="h-5 w-5 shrink-0" />
 								) : (
 									<BesuIcon className="h-5 w-5 shrink-0" />

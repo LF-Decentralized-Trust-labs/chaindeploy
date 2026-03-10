@@ -51,6 +51,8 @@ type service struct {
 	lastCheckResults map[int64]*NodeCheck
 	resultsMutex     sync.RWMutex
 	nodeService      *nodes.NodeService
+	checkingNodes    map[int64]bool // guards against concurrent checks for the same node
+	checkingMutex    sync.Mutex
 }
 
 // NewService creates a new monitoring service
@@ -66,6 +68,7 @@ func NewService(logger *logger.Logger, config *Config, notificationSvc notificat
 		notificationSvc:  notificationSvc,
 		stopChan:         make(chan struct{}),
 		lastCheckResults: make(map[int64]*NodeCheck),
+		checkingNodes:    make(map[int64]bool),
 		httpClient: &http.Client{
 			Timeout: config.DefaultTimeout,
 		},
@@ -208,6 +211,20 @@ func (s *service) checkNodes(ctx context.Context) {
 
 // checkNode checks a single node and updates its status
 func (s *service) checkNode(ctx context.Context, node *Node) {
+	// Guard against concurrent checks for the same node
+	s.checkingMutex.Lock()
+	if s.checkingNodes[node.ID] {
+		s.checkingMutex.Unlock()
+		return
+	}
+	s.checkingNodes[node.ID] = true
+	s.checkingMutex.Unlock()
+	defer func() {
+		s.checkingMutex.Lock()
+		delete(s.checkingNodes, node.ID)
+		s.checkingMutex.Unlock()
+	}()
+
 	nodeResponse, err := s.nodeService.GetNode(ctx, node.ID)
 	if err != nil {
 		s.handleNodeCheckResult(node, NodeStatusDown, 0, err)
