@@ -194,7 +194,9 @@ chainlaunch version
 
 ## Fabric Network Lifecycle Workflow
 
-After creating a Fabric network (via `testnet fabric` or manually), several post-creation steps are needed:
+After creating a Fabric network (via `testnet fabric` or manually), you MUST complete ALL steps below. The network is NOT ready until anchor peers are set and chaincode is deployed. Always ask the user what type of smart contract they want to deploy.
+
+**IMPORTANT**: When asked to "create a network", always go end-to-end through ALL these steps:
 
 ### 1. Create network
 ```bash
