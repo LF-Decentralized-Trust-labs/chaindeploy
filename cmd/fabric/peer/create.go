@@ -26,6 +26,7 @@ type createCmd struct {
 	envVars                 []string
 	addressOverrides        []string
 	ordererAddressOverrides []string
+	mode                    string
 	logger                  *logger.Logger
 }
 
@@ -113,6 +114,9 @@ func (c *createCmd) run(out io.Writer) error {
 		Name:                    c.name,
 		MSPID:                   c.mspID,
 		OrganizationID:          c.orgID,
+		BaseNodeConfig: types.BaseNodeConfig{
+			Mode: c.mode,
+		},
 		ListenAddress:           c.listenAddr,
 		ChaincodeAddress:        c.chaincodeAddr,
 		EventsAddress:           c.eventsAddr,
@@ -167,6 +171,7 @@ func NewCreateCmd(logger *logger.Logger) *cobra.Command {
 	flags.StringArrayVar(&c.envVars, "env", []string{}, "Environment variables in KEY=VALUE format")
 	flags.StringArrayVar(&c.addressOverrides, "address-override", []string{}, "Address overrides in FROM=TO format")
 	flags.StringArrayVar(&c.ordererAddressOverrides, "orderer-address-override", []string{}, "Orderer address overrides in FROM=TO format")
+	flags.StringVar(&c.mode, "mode", "service", "Node mode: service or docker")
 
 	cmd.MarkFlagRequired("name")
 	cmd.MarkFlagRequired("msp-id")

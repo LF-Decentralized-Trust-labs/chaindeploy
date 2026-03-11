@@ -66,6 +66,7 @@ type FabricTestnetConfig struct {
 	OrdererCounts map[string]int
 	Mode          string
 	ExternalIP    string
+	ProviderID    int64
 }
 
 // FabricTestnetRunner encapsulates the config and logic for running and validating the Fabric testnet command
@@ -110,7 +111,7 @@ func (r *FabricTestnetRunner) Run() error {
 	orgIDs := map[string]int64{}
 	orgNamesWithUUID := map[string]string{}
 	for _, org := range r.Config.PeerOrgs {
-		orgReq := fabrictypes.CreateOrganizationRequest{Name: org, MspID: org, ProviderID: 1}
+		orgReq := fabrictypes.CreateOrganizationRequest{Name: org, MspID: org, ProviderID: r.Config.ProviderID}
 		resp, err := client.CreateOrganization(orgReq)
 		if err != nil {
 			return fmt.Errorf("failed to create peer org %s: %w", org, err)
@@ -119,7 +120,7 @@ func (r *FabricTestnetRunner) Run() error {
 		orgNamesWithUUID[org] = org
 	}
 	for _, org := range r.Config.OrdererOrgs {
-		orgReq := fabrictypes.CreateOrganizationRequest{Name: org, MspID: org, ProviderID: 1}
+		orgReq := fabrictypes.CreateOrganizationRequest{Name: org, MspID: org, ProviderID: r.Config.ProviderID}
 		resp, err := client.CreateOrganization(orgReq)
 		if err != nil {
 			return fmt.Errorf("failed to create orderer org %s: %w", org, err)
@@ -348,6 +349,7 @@ func NewFabricTestnetCmd() *cobra.Command {
 	cmd.Flags().StringToIntVar(&runner.Config.OrdererCounts, "ordererCounts", nil, "Number of orderers per org (e.g., Orderer1=1,Orderer2=2)")
 	cmd.Flags().StringVar(&runner.Config.Mode, "mode", "service", "Node mode (default 'service')")
 	cmd.Flags().StringVar(&runner.Config.ExternalIP, "external-ip", "", "External IP address to use for node endpoints (defaults to auto-detection in docker mode)")
+	cmd.Flags().Int64Var(&runner.Config.ProviderID, "provider-id", 1, "Key provider ID to use for organizations")
 
 	return cmd
 }

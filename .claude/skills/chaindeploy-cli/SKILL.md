@@ -58,12 +58,14 @@ Manage Fabric peer nodes.
 ```bash
 chainlaunch fabric peer [create|list|update|delete]
 ```
+**create flags:** `--name`, `--msp-id`, `--org-id`, `--listen-addr`, `--chaincode-addr`, `--events-addr`, `--operations-addr`, `--external-addr`, `--version`, `--domain`, `--env`, `--address-override`, `--orderer-address-override`, `--mode` (`service`|`docker`, default: `service`)
 
 #### fabric orderer
 Manage Fabric orderer nodes.
 ```bash
 chainlaunch fabric orderer [create|list|update|delete]
 ```
+**create flags:** `--name`, `--msp-id`, `--org-id`, `--listen-addr`, `--admin-addr`, `--operations-addr`, `--external-addr`, `--version`, `--domain`, `--env`, `--mode` (`service`|`docker`, default: `service`)
 
 #### fabric org
 Manage Fabric organizations.
@@ -162,7 +164,7 @@ Create testnets for development/testing.
 ```bash
 chainlaunch testnet fabric [flags]
 ```
-**Flags:** `--name` (required), `--nodes`, `--org` (required), `--peerOrgs`, `--ordererOrgs`, `--channels`, `--peerCounts` (e.g. `Org1=2`), `--ordererCounts`, `--mode` (`service`|`docker`), `--external-ip`
+**Flags:** `--name` (required), `--nodes`, `--org` (required), `--peerOrgs`, `--ordererOrgs`, `--channels`, `--peerCounts` (e.g. `Org1=2`), `--ordererCounts`, `--mode` (`service`|`docker`), `--external-ip`, `--provider-id` (key provider ID, default: `1`)
 
 #### testnet besu
 ```bash
@@ -187,6 +189,103 @@ Print version, git commit, and build time.
 ```bash
 chainlaunch version
 ```
+
+---
+
+## Fabric Network Lifecycle Workflow
+
+After creating a Fabric network (via `testnet fabric` or manually), several post-creation steps are needed:
+
+### 1. Create network
+```bash
+chainlaunch testnet fabric --name mynet --org Org1 --peerOrgs Org1 \
+  --ordererOrgs Orderer1 --peerCounts Org1=2 --ordererCounts Orderer1=3 \
+  --provider-id <KEY_PROVIDER_ID>
+```
+The `testnet` command automatically creates orgs, nodes, network, and joins all peers/orderers.
+
+### 2. Verify nodes are running
+```bash
+# Check node status
+curl -u $USER:$PASS $API_URL/nodes | jq '.items[] | {id, name, status, nodeType}'
+
+# Check block height for a peer on a channel
+curl -u $USER:$PASS $API_URL/nodes/<PEER_ID>/channels/<CHANNEL>/height
+```
+All orderers and peers should show `status: "RUNNING"`. Peers should have block height >= 1 after joining.
+
+### 3. Set anchor peers (API only, no CLI command)
+Anchor peers are required for cross-org gossip and service discovery. Without them, chaincodes cannot discover peers from other organizations.
+
+```bash
+curl -X POST -u $USER:$PASS $API_URL/networks/fabric/<NETWORK_ID>/anchor-peers \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "organizationId": <ORG_ID>,
+    "anchorPeers": [{"host": "127.0.0.1", "port": 7051}]
+  }'
+```
+Repeat for each peer organization. Use the peer's external endpoint host and port.
+
+### 4. Pull connection profile
+```bash
+chainlaunch fabric network-config pull \
+  --network <NETWORK_NAME> --msp-id <MSP_ID> \
+  --output connection-profile.yaml \
+  --url http://localhost:8100/api/v1 --username admin --password admin123
+```
+
+### 5. Install chaincode (full lifecycle: install + approve + commit)
+The `fabric install` command handles the complete Fabric chaincode lifecycle in one step.
+The chaincode runs as a service (ccaas) — you provide the address where it will listen.
+
+```bash
+chainlaunch fabric install \
+  --chaincode tokenizer \
+  --channel mychannel \
+  --policy "OR('Org1MSP.member')" \
+  --chaincodeAddress "127.0.0.1:9999" \
+  --config connection-profile.yaml \
+  -u admin \
+  -o Org1MSP \
+  --local
+```
+
+**Flags:** `--chaincode` (name), `--channel`, `--policy` (endorsement policy), `--chaincodeAddress` (where chaincode server listens), `--config` (connection profile, one per org), `-u/--users`, `-o/--organizations`, `--local` (skip tunnel, use direct address), `--envFile` (write env vars), `--pdc` (private data collection JSON), `--metaInf`, `--rootCert`, `--clientCert`, `--clientKey`
+
+After install, start your chaincode binary with:
+- `CHAINCODE_SERVER_ADDRESS=0.0.0.0:9999` — address to listen on
+- `CORE_CHAINCODE_ID_NAME=<name>:<packageID>` — from install output
+- `CORE_PEER_TLS_ENABLED=false` — for local development
+
+### 6. Invoke and query chaincode
+```bash
+# Invoke (writes to ledger)
+chainlaunch fabric invoke --mspID Org1MSP --user admin --config connection-profile.yaml \
+  --channel mychannel --chaincode tokenizer --fcn Transfer -a token1 -a token2 -a 200
+
+# Query (reads from ledger)
+chainlaunch fabric query --mspID Org1MSP --user admin --config connection-profile.yaml \
+  --channel mychannel --chaincode tokenizer --fcn GetAsset -a token1
+```
+
+### API-Only Operations (no CLI equivalent)
+
+These operations are available via REST API but have no CLI commands:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/networks/fabric/{id}/anchor-peers` | Set anchor peers for an org |
+| `GET` | `/networks/fabric/{id}/blocks` | List blocks |
+| `GET` | `/networks/fabric/{id}/blocks/{blockNum}` | Get block transactions |
+| `GET` | `/networks/fabric/{id}/channel-config` | Get channel configuration |
+| `GET` | `/networks/fabric/{id}/info` | Get chain info (height, etc.) |
+| `GET` | `/networks/fabric/{id}/map` | Get network topology map |
+| `GET` | `/nodes/{id}/channels` | List channels a node has joined |
+| `GET` | `/nodes/{id}/channels/{channel}/height` | Get block height for a channel |
+| `GET` | `/nodes/{id}/channels/{channel}/chaincodes` | List installed chaincodes |
+| `POST` | `/networks/fabric/{id}/update-config` | Prepare config update |
+| `POST` | `/networks/fabric/{id}/reload-block` | Reload config block |
 
 ---
 

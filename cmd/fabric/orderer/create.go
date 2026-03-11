@@ -23,6 +23,7 @@ type createCmd struct {
 	version        string
 	domainNames    []string
 	envVars        []string
+	mode           string
 	logger         *logger.Logger
 }
 
@@ -65,6 +66,9 @@ func (c *createCmd) run(out io.Writer) error {
 
 	// Prepare request
 	req := &types.FabricOrdererConfig{
+		BaseNodeConfig: types.BaseNodeConfig{
+			Mode: c.mode,
+		},
 		Name:                    c.name,
 		MSPID:                   c.mspID,
 		OrganizationID:          c.orgID,
@@ -116,6 +120,7 @@ func NewCreateCmd(logger *logger.Logger) *cobra.Command {
 	flags.StringVar(&c.version, "version", "2.5.0", "Fabric version to use")
 	flags.StringArrayVar(&c.domainNames, "domain", []string{}, "Domain names for the orderer")
 	flags.StringArrayVar(&c.envVars, "env", []string{}, "Environment variables in KEY=VALUE format")
+	flags.StringVar(&c.mode, "mode", "service", "Node mode: service or docker")
 
 	cmd.MarkFlagRequired("name")
 	cmd.MarkFlagRequired("msp-id")
