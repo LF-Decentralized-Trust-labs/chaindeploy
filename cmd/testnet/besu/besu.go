@@ -21,11 +21,12 @@ func generateShortUUID() string {
 
 // BesuTestnetConfig holds the parameters for creating a Besu testnet
 type BesuTestnetConfig struct {
-	Name    string
-	Nodes   int
-	Prefix  string
-	Mode    string
-	Version string
+	Name       string
+	Nodes      int
+	Prefix     string
+	Mode       string
+	Version    string
+	ProviderID int
 	// Initial account balances in wei (hex format)
 	InitialBalances map[string]string
 }
@@ -77,7 +78,7 @@ func (r *BesuTestnetRunner) Run() error {
 		nodeName := fmt.Sprintf("%s-%s-%d", r.Config.Prefix, r.Config.Name, i+1)
 		nodeNames = append(nodeNames, nodeName)
 		fmt.Printf("  Creating key for node %s...\n", nodeName)
-		providerID := 1
+		providerID := r.Config.ProviderID
 		isCA := 0
 		keyReq := &models.CreateKeyRequest{
 			Name:       nodeName + "-key",
@@ -111,7 +112,7 @@ func (r *BesuTestnetRunner) Run() error {
 	netReq.Config.MixHash = "0x63746963616c2062797a616e74696e65206661756c7420746f6c6572616e6365"
 	netReq.Config.Coinbase = "0x0000000000000000000000000000000000000000"
 	netReq.Config.Timestamp = fmt.Sprintf("0x%x", time.Now().Unix()) // Current Unix timestamp in hex (seconds)
-	netReq.Config.Nonce = "0x0"                                      // numberToHex(0)
+	netReq.Config.Nonce = "0x0000000000000000"                        // 8-byte padded nonce
 
 	// Set initial account balances if provided
 	if r.Config.InitialBalances != nil {
@@ -221,6 +222,7 @@ func NewBesuTestnetCmd() *cobra.Command {
 	cmd.Flags().StringVar(&runner.Config.Mode, "mode", "service", "Node mode (service or docker)")
 	cmd.Flags().StringVar(&runner.Config.Version, "version", "25.5.0", "Besu version (default 25.5.0)")
 	cmd.Flags().StringToStringVar(&runner.Config.InitialBalances, "initial-balance", map[string]string{}, "Initial account balances in wei (hex format), e.g. '0x1234...=0x1000000000000000000'")
+	cmd.Flags().IntVar(&runner.Config.ProviderID, "provider-id", 1, "Key provider ID to use for key creation")
 
 	return cmd
 }
