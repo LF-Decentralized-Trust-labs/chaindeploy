@@ -135,38 +135,50 @@ func (c *invokeChaincodeCmd) run(out io.Writer) error {
 	}
 	endorseResponse, err := response.Endorse()
 	if err != nil {
-		return errors.Wrapf(err, "failed to endorse proposal")
+		return fmt.Errorf("failed to endorse proposal: %s", gatewayErrorDetail(err))
 	}
-	submitResponse, err := endorseResponse.Submit()
-	if err != nil {
-		endorseError, ok := err.(*client.EndorseError)
-		if ok {
-			detailsStr := []string{}
-			for _, detail := range status.Convert(err).Details() {
-				switch detail := detail.(type) {
-				case *gateway.ErrorDetail:
-					detailsStr = append(detailsStr, fmt.Sprintf("- address: %s; mspId: %s; message: %s\n", detail.GetAddress(), detail.GetMspId(), detail.GetMessage()))
+	// Get the chaincode response payload before submitting
+	result := endorseResponse.Result()
 
-				}
-			}
-			return fmt.Errorf("failed to submit transaction: %s (gRPC status: %s)",
-				endorseError.TransactionError.Error(),
-				strings.Join(detailsStr, "\n"))
+	commit, err := endorseResponse.Submit()
+	if err != nil {
+		return fmt.Errorf("failed to submit transaction: %s", gatewayErrorDetail(err))
+	}
+
+	// Wait for the transaction to be committed in a block
+	commitStatus, err := commit.Status()
+	if err != nil {
+		return fmt.Errorf("failed to get commit status: %w", err)
+	}
+	if !commitStatus.Successful {
+		return fmt.Errorf("transaction %s failed to commit with status: %s", commitStatus.TransactionID, commitStatus.Code)
+	}
+
+	c.logger.Infof("Transaction %s committed in block %d", commitStatus.TransactionID, commitStatus.BlockNumber)
+
+	if len(result) > 0 {
+		_, err = fmt.Fprintln(out, string(result))
+		if err != nil {
+			return err
 		}
-		return fmt.Errorf("failed to submit transaction: %w", err)
 	}
-	responseBytes, err := submitResponse.Bytes()
-	if err != nil {
-		return errors.Wrapf(err, "failed to get response bytes")
-	}
-
-	_, err = fmt.Fprint(out, string(responseBytes))
-	if err != nil {
-		return err
-	}
-	c.logger.Infof("txid=%s", submitResponse.TransactionID())
 	return nil
 
+}
+
+// gatewayErrorDetail extracts detailed error information from Fabric Gateway errors,
+// including per-peer error details (address, mspId, message).
+func gatewayErrorDetail(err error) string {
+	var details []string
+	for _, detail := range status.Convert(err).Details() {
+		if errDetail, ok := detail.(*gateway.ErrorDetail); ok {
+			details = append(details, fmt.Sprintf("- address: %s; mspId: %s; message: %s", errDetail.GetAddress(), errDetail.GetMspId(), errDetail.GetMessage()))
+		}
+	}
+	if len(details) > 0 {
+		return fmt.Sprintf("%s\n%s", err.Error(), strings.Join(details, "\n"))
+	}
+	return err.Error()
 }
 
 func NewInvokeChaincodeCMD(out io.Writer, errOut io.Writer, logger *logger.Logger) *cobra.Command {
