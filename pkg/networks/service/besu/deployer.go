@@ -155,19 +155,6 @@ func (d *BesuDeployer) CreateGenesisBlock(networkID int64, config interface{}) (
 		return nil, fmt.Errorf("failed to update network genesis block: %w", err)
 	}
 
-	// Create network nodes
-	for _, validator := range validators {
-		_, err = d.db.CreateNetworkNode(ctx, &db.CreateNetworkNodeParams{
-			NetworkID: networkID,
-			NodeID:    validator.ID,
-			Status:    "pending",
-			Role:      "validator",
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to create network node: %w", err)
-		}
-	}
-
 	return genesisJSON, nil
 }
 
