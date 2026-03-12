@@ -14,6 +14,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
+import { NetworkCreatedDialog } from '@/components/dashboard/NetworkCreatedDialog'
 import { toast } from 'sonner'
 import * as z from 'zod'
 
@@ -99,11 +100,12 @@ export default function CreateBesuNetworkPage() {
 		...postKeysMutation(),
 	})
 
+	const [createdNetwork, setCreatedNetwork] = useState<{ id?: number; name: string } | null>(null)
+
 	const createNetwork = useMutation({
 		...postNetworksBesuMutation(),
-		onSuccess: () => {
-			toast.success('Network created successfully')
-			navigate('/networks')
+		onSuccess: (data) => {
+			setCreatedNetwork({ id: data.id, name: data.name || 'Besu Network' })
 		},
 		onError: (error: any) => {
 			toast.error('Failed to create network', {
@@ -592,6 +594,19 @@ export default function CreateBesuNetworkPage() {
 					</form>
 				</Form>
 			</div>
+
+			<NetworkCreatedDialog
+				open={!!createdNetwork}
+				onOpenChange={(open) => {
+					if (!open) {
+						setCreatedNetwork(null)
+						navigate('/')
+					}
+				}}
+				networkName={createdNetwork?.name || ''}
+				networkId={createdNetwork?.id}
+				platform="besu"
+			/>
 		</div>
 	)
 }
