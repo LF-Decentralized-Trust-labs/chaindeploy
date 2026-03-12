@@ -1,5 +1,5 @@
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from '@/components/ui/sidebar'
-import { BadgeCheck, Bell, Building, ChevronsUpDown, DatabaseBackup, FileText, Globe, Key, LayoutDashboard, LogOut, Network, Puzzle, Server, Settings, Share2, User, BarChart3, FileCode } from 'lucide-react'
+import { BadgeCheck, Bell, Building, ChevronsUpDown, DatabaseBackup, FileText, Globe, Key, LayoutDashboard, LogOut, Network, Puzzle, Rocket, Server, Settings, Share2, User, BarChart3, FileCode } from 'lucide-react'
 ;('use client')
 
 // import { Project } from '@/api/client'
@@ -31,6 +31,11 @@ const data = {
 					title: 'Dashboard',
 					url: '/dashboard',
 					icon: LayoutDashboard,
+				},
+				{
+					title: 'Quick Start',
+					url: '/quick-start',
+					icon: Rocket,
 				},
 				{
 					title: 'Nodes',

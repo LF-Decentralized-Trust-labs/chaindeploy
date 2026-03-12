@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { usePageTitle } from '@/hooks/use-page-title'
 import { useQuery } from '@tanstack/react-query'
-import { Activity, ArrowRight, Network, Package, Plus, Server } from 'lucide-react'
+import { Activity, ArrowRight, Network, Package, Plus, Rocket, Server } from 'lucide-react'
 import { useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import NetworksList from '@/components/dashboard/NetworksList'
@@ -66,6 +66,32 @@ export default function DashboardPage() {
 					</div>
 
 					<div className="space-y-6 md:space-y-8">
+						<div className="max-w-lg mx-auto">
+							<Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+								<CardContent className="pt-6 text-center space-y-4">
+									<div className="flex items-center justify-center gap-2">
+										<Rocket className="h-5 w-5 text-primary" />
+										<h2 className="text-lg font-semibold">New here? Try Quick Start</h2>
+									</div>
+									<p className="text-sm text-muted-foreground">
+										Create a fully working blockchain network in under a minute. We'll set up organizations, keys, nodes, and network configuration automatically.
+									</p>
+									<Button asChild size="lg" className="w-full sm:w-auto">
+										<Link to="/quick-start">
+											<Rocket className="mr-2 h-4 w-4" />
+											Quick Start
+										</Link>
+									</Button>
+								</CardContent>
+							</Card>
+						</div>
+
+						<div className="relative flex items-center max-w-lg mx-auto">
+							<div className="flex-grow border-t border-muted-foreground/20" />
+							<span className="mx-4 text-xs text-muted-foreground">or create manually</span>
+							<div className="flex-grow border-t border-muted-foreground/20" />
+						</div>
+
 						<div>
 							<h2 className="text-lg md:text-xl font-semibold mb-4 text-center">Create New Network</h2>
 							<div className="grid gap-6 md:grid-cols-2 max-w-4xl mx-auto">

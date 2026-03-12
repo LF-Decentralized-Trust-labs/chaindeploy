@@ -59,6 +59,7 @@ const AccountPage = lazy(() => import('./pages/account'))
 const AuditLogsPage = lazy(() => import('@/pages/settings/audit-logs'))
 const AuditLogDetailPage = lazy(() => import('@/pages/settings/audit-logs/[id]'))
 const DashboardPage = lazy(() => import('./pages/dashboard'))
+const QuickStartPage = lazy(() => import('./pages/quick-start'))
 const AnalyticsPage = lazy(() => import('./pages/platform/analytics'))
 const FabricChaincodesPage = lazy(() => import('./pages/smart-contracts/fabric'))
 const BesuContractsPage = lazy(() => import('./pages/smart-contracts/besu'))
@@ -204,6 +205,7 @@ const App = () => {
 													<Route path="/">
 														<Route path="/" element={<Navigate to="/dashboard" replace />} />
 														<Route path="dashboard" element={<DashboardPage />} />
+														<Route path="quick-start" element={<QuickStartPage />} />
 														<Route path="account" element={<AccountPage />} />
 														<Route path="nodes" element={<NodesPage />} />
 														<Route path="smart-contracts" element={<SmartContractsPage />} />
