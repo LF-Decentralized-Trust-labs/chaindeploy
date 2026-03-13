@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useMutation } from '@tanstack/react-query'
-import { Activity, EllipsisVertical, Network } from 'lucide-react'
+import { Activity, Blocks, EllipsisVertical, Network } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { FabricIcon } from '../icons/fabric-icon'
@@ -20,6 +20,7 @@ interface NodeCardProps {
 	networkId: number
 	onJoined: () => void
 	onUnjoined: () => void
+	blockHeight?: number
 }
 
 function getStatusColor(status: string) {
@@ -37,7 +38,7 @@ function getStatusColor(status: string) {
 	}
 }
 
-export function NodeCard({ networkNode, networkId, onJoined, onUnjoined }: NodeCardProps) {
+export function NodeCard({ networkNode, networkId, onJoined, onUnjoined, blockHeight }: NodeCardProps) {
 	const { node } = networkNode
 	// const {
 	// 	data: node,
@@ -139,6 +140,12 @@ export function NodeCard({ networkNode, networkId, onJoined, onUnjoined }: NodeC
 								<Network className="h-3 w-3" />
 								{node.nodeType}
 							</span>
+							{blockHeight !== undefined && (
+								<span className="flex items-center gap-1">
+									<Blocks className="h-3 w-3" />
+									Block #{blockHeight}
+								</span>
+							)}
 						</div>
 					</div>
 				</div>

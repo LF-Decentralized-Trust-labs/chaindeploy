@@ -1,12 +1,12 @@
-import { HttpBesuNetworkResponse } from '@/api/client'
-import { getNodesPlatformByPlatformOptions } from '@/api/client/@tanstack/react-query.gen'
+import { HttpBesuNetworkResponse, HttpNodeResponse } from '@/api/client'
+import { getNodesByIdRpcBlockNumberOptions, getNodesPlatformByPlatformOptions } from '@/api/client/@tanstack/react-query.gen'
 import { BesuSmartContractTutorial } from '@/components/networks/BesuSmartContractTutorial'
 import { BesuValidatorsTab } from '@/components/networks/BesuValidatorsTab'
 import { BesuBlockExplorer } from '@/components/networks/BesuBlockExplorer'
 import { ValidatorList } from '@/components/networks/validator-list'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQuery } from '@tanstack/react-query'
-import { Activity, ArrowLeft, Code, Copy, Edit, Network, Save, X } from 'lucide-react'
+import { Activity, ArrowLeft, Blocks, Code, Copy, Edit, Network, Save, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -169,6 +169,49 @@ const parseValidatorsFromBesuQbftExtraData = (extraData: string): { vanity: stri
 
 		return { vanity: '', proposer: '', validators: [], seals: [] }
 	}
+}
+
+function BesuNodeCard({ node }: { node: HttpNodeResponse }) {
+	const { data: blockNumberHex } = useQuery({
+		...getNodesByIdRpcBlockNumberOptions({
+			path: { id: node.id! },
+		}),
+		refetchInterval: 5000,
+	})
+	const blockHeight = blockNumberHex ? parseInt(blockNumberHex, 16) : undefined
+
+	return (
+		<Card className="p-3">
+			<div className="flex items-center gap-3">
+				<div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+					<BesuIcon className="h-4 w-4 text-primary" />
+				</div>
+				<div>
+					<div className="flex items-center gap-2">
+						<Link to={`/nodes/${node.id}`} className="font-medium hover:underline">
+							{node.name}
+						</Link>
+						<Badge variant={node.status?.toLowerCase() === 'running' ? 'default' : node.status?.toLowerCase() === 'stopped' || node.status?.toLowerCase() === 'error' ? 'destructive' : 'secondary'}>
+							<Activity className="mr-1 h-3 w-3" />
+							{node.status}
+						</Badge>
+					</div>
+					<div className="flex items-center gap-2 text-sm text-muted-foreground">
+						<span className="flex items-center gap-1">
+							<Network className="h-3 w-3" />
+							{node.nodeType}
+						</span>
+						{blockHeight !== undefined && (
+							<span className="flex items-center gap-1">
+								<Blocks className="h-3 w-3" />
+								Block #{blockHeight}
+							</span>
+						)}
+					</div>
+				</div>
+			</div>
+		</Card>
+	)
 }
 
 export function BesuNetworkDetails({ network }: BesuNetworkDetailsProps) {
@@ -392,6 +435,15 @@ export function BesuNetworkDetails({ network }: BesuNetworkDetailsProps) {
 									</div>
 								) : null
 							})()}
+
+								<div>
+									<h3 className="text-sm font-medium mb-3">Nodes</h3>
+									<div className="space-y-4">
+										{networkNodes.map((node) => (
+											<BesuNodeCard key={node.id} node={node} />
+										))}
+									</div>
+								</div>
 							</div>
 						}
 						genesis={

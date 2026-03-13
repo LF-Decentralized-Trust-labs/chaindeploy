@@ -1,4 +1,5 @@
 data
+chainlaunch-data
 chaindeploy-ui-dist
 __debug*
 chaindeploy-api-go

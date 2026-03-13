@@ -3,6 +3,7 @@ import {
 	deleteOrganizationsByIdCrlRevokeSerialMutation,
 	getNetworksFabricByIdChannelConfigOptions,
 	getNetworksFabricByIdCurrentChannelConfigOptions,
+	getNetworksFabricByIdInfoOptions,
 	getNetworksFabricByIdMapOptions,
 	getNetworksFabricByIdNodesOptions,
 	getNodesByIdChannelsByChannelIdChaincodesOptions,
@@ -499,6 +500,13 @@ export default function FabricNetworkDetails({ network }: FabricNetworkDetailsPr
 		}),
 	})
 
+	const { data: chainInfo } = useQuery({
+		...getNetworksFabricByIdInfoOptions({
+			path: { id: Number(id) },
+		}),
+		refetchInterval: 5000,
+	})
+
 	const joinPeerNode = useMutation({
 		...postNetworksFabricByIdPeersByPeerIdJoinMutation(),
 		onSuccess: () => {
@@ -745,7 +753,7 @@ export default function FabricNetworkDetails({ network }: FabricNetworkDetailsPr
 											<h3 className="text-sm font-medium mb-3">Nodes</h3>
 											<div className="space-y-4">
 												{networkNodes?.nodes?.map((node) => (
-													<NodeCard key={node.id} networkNode={node} networkId={network.id!} onJoined={refetchNetworkNodes} onUnjoined={refetchNetworkNodes} />
+													<NodeCard key={node.id} networkNode={node} networkId={network.id!} onJoined={refetchNetworkNodes} onUnjoined={refetchNetworkNodes} blockHeight={chainInfo?.height} />
 												))}
 											</div>
 										</div>
