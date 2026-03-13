@@ -31,6 +31,7 @@ const CreateBesuNetworkPage = lazy(() => import('./pages/networks/besu/create'))
 const FabricPage = lazy(() => import('./pages/networks/fabric'))
 const FabricNetworkDetailPage = lazy(() => import('./pages/networks/fabric-page'))
 const FabricCreateChannel = lazy(() => import('./pages/networks/fabric/create'))
+const FabricNetworkWizard = lazy(() => import('./pages/networks/fabric/wizard'))
 const OrganizationsPage = lazy(() => import('./pages/networks/fabric/organizations'))
 const NodesPage = lazy(() => import('./pages/nodes'))
 const NodeDetailPage = lazy(() => import('./pages/nodes/[id]'))
@@ -59,6 +60,7 @@ const AccountPage = lazy(() => import('./pages/account'))
 const AuditLogsPage = lazy(() => import('@/pages/settings/audit-logs'))
 const AuditLogDetailPage = lazy(() => import('@/pages/settings/audit-logs/[id]'))
 const DashboardPage = lazy(() => import('./pages/dashboard'))
+const QuickStartPage = lazy(() => import('./pages/quick-start'))
 const AnalyticsPage = lazy(() => import('./pages/platform/analytics'))
 const FabricChaincodesPage = lazy(() => import('./pages/smart-contracts/fabric'))
 const BesuContractsPage = lazy(() => import('./pages/smart-contracts/besu'))
@@ -132,6 +134,7 @@ const App2 = () => {
 													<Route path="nodes/besu/edit/:id" element={<EditBesuNodePage />} />
 													<Route path="nodes/:id" element={<NodeDetailPage />} />
 													<Route path="networks/fabric/create" element={<FabricCreateChannel />} />
+													<Route path="networks/fabric/wizard" element={<FabricNetworkWizard />} />
 													<Route path="networks/besu/create" element={<CreateBesuNetworkPage />} />
 													<Route path="networks/:id/besu" element={<BesuNetworkDetailPage />} />
 													<Route path="networks/:id/fabric" element={<FabricNetworkDetailPage />} />
@@ -204,6 +207,7 @@ const App = () => {
 													<Route path="/">
 														<Route path="/" element={<Navigate to="/dashboard" replace />} />
 														<Route path="dashboard" element={<DashboardPage />} />
+														<Route path="quick-start" element={<QuickStartPage />} />
 														<Route path="account" element={<AccountPage />} />
 														<Route path="nodes" element={<NodesPage />} />
 														<Route path="smart-contracts" element={<SmartContractsPage />} />
@@ -229,6 +233,7 @@ const App = () => {
 														<Route path="nodes/besu/edit/:id" element={<EditBesuNodePage />} />
 														<Route path="nodes/:id" element={<NodeDetailPage />} />
 														<Route path="networks/fabric/create" element={<FabricCreateChannel />} />
+														<Route path="networks/fabric/wizard" element={<FabricNetworkWizard />} />
 														<Route path="networks/besu/create" element={<CreateBesuNetworkPage />} />
 														<Route path="networks/:id/besu" element={<BesuNetworkDetailPage />} />
 														<Route path="networks/:id/fabric" element={<FabricNetworkDetailPage />} />

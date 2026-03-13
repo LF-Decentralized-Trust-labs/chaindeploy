@@ -107,12 +107,31 @@ WantedBy=multi-user.target
 	return nil
 }
 
+// splitCommand splits a command string into the binary path and its arguments.
+// It handles paths with spaces by finding the longest existing file path prefix.
+func splitCommand(cmd string) []string {
+	parts := strings.Split(cmd, " ")
+	for i := len(parts); i > 0; i-- {
+		candidate := strings.Join(parts[:i], " ")
+		if _, err := os.Stat(candidate); err == nil {
+			result := []string{candidate}
+			if i < len(parts) {
+				result = append(result, parts[i:]...)
+			}
+			return result
+		}
+	}
+	return parts
+}
+
 // createLaunchdService creates a launchd service file
 func (o *LocalOrderer) createLaunchdService(cmd string, env map[string]string, dirPath string) error {
 	var envStrings []string
 	for k, v := range env {
 		envStrings = append(envStrings, fmt.Sprintf("<key>%s</key>\n    <string>%s</string>", k, v))
 	}
+
+	cmdParts := splitCommand(cmd)
 
 	tmpl := template.Must(template.New("launchd").Parse(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -122,9 +141,8 @@ func (o *LocalOrderer) createLaunchdService(cmd string, env map[string]string, d
   <string>{{.ServiceName}}</string>
   <key>ProgramArguments</key>
   <array>
-      <string>/bin/bash</string>
-      <string>-c</string>
-      <string>{{.Cmd}}</string>
+      {{range .CmdParts}}<string>{{.}}</string>
+      {{end}}
   </array>
   <key>RunAtLoad</key>
   <true/>
@@ -142,12 +160,12 @@ func (o *LocalOrderer) createLaunchdService(cmd string, env map[string]string, d
 
 	data := struct {
 		ServiceName string
-		Cmd         string
+		CmdParts    []string
 		LogPath     string
 		EnvVars     []string
 	}{
 		ServiceName: o.getLaunchdServiceName(),
-		Cmd:         cmd,
+		CmdParts:    cmdParts,
 		LogPath:     filepath.Join(dirPath, o.getServiceName()+".log"),
 		EnvVars:     envStrings,
 	}

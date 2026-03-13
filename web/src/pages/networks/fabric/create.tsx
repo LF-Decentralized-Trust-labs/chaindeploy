@@ -21,6 +21,7 @@ import { useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import * as z from 'zod'
+import { NetworkCreatedDialog } from '@/components/dashboard/NetworkCreatedDialog'
 
 interface OrganizationWithNodes extends HandlerOrganizationResponse {
 	orderers: HttpNodeResponse[]
@@ -163,11 +164,12 @@ export default function FabricCreateChannel() {
 	})
 
 	const navigate = useNavigate()
+	const [createdNetwork, setCreatedNetwork] = useState<{ id?: number; name: string } | null>(null)
+
 	const createNetwork = useMutation({
 		...postNetworksFabricMutation(),
 		onSuccess: (network) => {
-			toast.success('Network created successfully')
-			navigate(`/networks/${network.id}/fabric`)
+			setCreatedNetwork({ id: network.id, name: network.name || 'Fabric Network' })
 		},
 		onError: (error: any) => {
 			toast.error(`Failed to create network: ${error.message}`)
@@ -1399,6 +1401,19 @@ export default function FabricCreateChannel() {
 					</form>
 				</Form>
 			</div>
+
+			<NetworkCreatedDialog
+				open={!!createdNetwork}
+				onOpenChange={(open) => {
+					if (!open) {
+						setCreatedNetwork(null)
+						navigate('/')
+					}
+				}}
+				networkName={createdNetwork?.name || ''}
+				networkId={createdNetwork?.id}
+				platform="fabric"
+			/>
 		</div>
 	)
 }

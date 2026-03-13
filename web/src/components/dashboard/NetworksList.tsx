@@ -1,6 +1,7 @@
 import { HttpNetworkResponse } from '@/api/client'
 import { BesuIcon } from '@/components/icons/besu-icon'
 import { FabricIcon } from '@/components/icons/fabric-icon'
+import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { Badge } from '@/components/ui/badge'
@@ -22,7 +23,15 @@ export default function NetworksList({ fabricNetworks = [], besuNetworks = [], l
 		return (
 			<div className="text-center py-8 border-2 border-dashed rounded-lg">
 				<Network className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-				<p className="text-sm text-muted-foreground">No networks created yet</p>
+				<p className="text-sm text-muted-foreground mb-3">No networks created yet</p>
+				<div className="flex gap-2 justify-center">
+					<Button variant="outline" size="sm" asChild>
+						<Link to="/networks/fabric/create">Create Fabric Network</Link>
+					</Button>
+					<Button variant="outline" size="sm" asChild>
+						<Link to="/networks/besu/create">Create Besu Network</Link>
+					</Button>
+				</div>
 			</div>
 		)
 	}

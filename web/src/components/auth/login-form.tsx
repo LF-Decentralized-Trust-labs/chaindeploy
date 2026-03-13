@@ -2,10 +2,12 @@ import { Button } from '@/components/ui/button'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Loader2 } from 'lucide-react'
+import { Loader2, ExternalLink } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import logo from '../../../public/logo.svg'
+
+const DOCS_URL = 'https://docs.chainlaunch.dev'
 
 const formSchema = z.object({
 	username: z.string().min(1, 'Username is required'),
@@ -74,6 +76,24 @@ export function LoginForm({ onSubmit, isLoading }: LoginFormProps) {
 					</Button>
 				</form>
 			</Form>
+
+			<div className="space-y-3 pt-2">
+				<p className="text-xs text-center text-muted-foreground">
+					First time? Your credentials are in{' '}
+					<code className="bg-muted px-1 py-0.5 rounded text-[11px]">~/.chainlaunch/credentials.txt</code>
+				</p>
+				<div className="flex justify-center">
+					<a
+						href={DOCS_URL}
+						target="_blank"
+						rel="noopener noreferrer"
+						className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1 transition-colors"
+					>
+						Documentation
+						<ExternalLink className="h-3 w-3" />
+					</a>
+				</div>
+			</div>
 		</div>
 	)
 }

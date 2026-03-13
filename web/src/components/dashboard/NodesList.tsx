@@ -1,6 +1,7 @@
 import { HttpNodeResponse } from '@/api/client'
 import { BesuIcon } from '@/components/icons/besu-icon'
 import { FabricIcon } from '@/components/icons/fabric-icon'
+import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Link } from 'react-router-dom'
@@ -48,7 +49,10 @@ export default function NodesList({ nodes = [], limit }: NodesListProps) {
 		return (
 			<div className="text-center py-8 border-2 border-dashed rounded-lg">
 				<Server className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-				<p className="text-sm text-muted-foreground">No nodes created yet</p>
+				<p className="text-sm text-muted-foreground mb-3">No nodes created yet</p>
+				<Button variant="outline" size="sm" asChild>
+					<Link to="/nodes/create">Create your first node</Link>
+				</Button>
 			</div>
 		)
 	}
