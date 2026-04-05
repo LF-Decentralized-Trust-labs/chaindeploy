@@ -57,7 +57,7 @@ test('can create a user, logout, login as that user, and see nodes list', async 
   await page.getByPlaceholder('Enter your password').fill(password)
   await page.getByRole('button', { name: /sign in/i }).click()
 
-  // Step 7: Verify nodes list is visible
+  // Step 7: Verify nodes page is visible (empty state shows "Create your first node")
   await expect(page).toHaveURL(/.*\/nodes$/, { timeout: 10000 })
-  await expect(page.getByRole('heading', { name: /nodes/i })).toBeVisible({ timeout: 10000 })
+  await expect(page.getByRole('heading', { name: /^(Nodes|Create your first node)$/ })).toBeVisible({ timeout: 10000 })
 }) 
