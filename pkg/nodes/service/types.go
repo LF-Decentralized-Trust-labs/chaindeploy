@@ -31,3 +31,18 @@ type UpdateFabricOrdererOpts struct {
 	Env                     map[string]string
 	Version                 string
 }
+
+// UpdateFabricXOrdererGroupOpts represents the options for updating a
+// Fabric-X orderer group node. Today only the image-tag (Version) is
+// mutable — see service.UpdateFabricXOrdererGroup.
+type UpdateFabricXOrdererGroupOpts struct {
+	NodeID  int64
+	Version string
+}
+
+// UpdateFabricXCommitterOpts represents the options for updating a
+// Fabric-X committer node. Same scope as the orderer-group update.
+type UpdateFabricXCommitterOpts struct {
+	NodeID  int64
+	Version string
+}

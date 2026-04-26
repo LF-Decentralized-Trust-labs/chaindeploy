@@ -1,13 +1,17 @@
 import { HttpNodeResponse, ServiceFabricXChildProperties, ServiceFabricXCommitterProperties, ServiceFabricXOrdererGroupProperties } from '@/api/client'
+import { putNodesByIdMutation } from '@/api/client/@tanstack/react-query.gen'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { CertificateViewer } from '@/components/ui/certificate-viewer'
+import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { LogViewer } from '@/components/nodes/LogViewer'
-import { Activity, Copy, ExternalLink, Globe, Key, Layers, Network, Server, Shield } from 'lucide-react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Activity, Copy, ExternalLink, Globe, Image as ImageIcon, Key, Layers, Network, Save, Server, Shield } from 'lucide-react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 
 interface FabricXNodeDetailsProps {
@@ -360,6 +364,112 @@ function EndpointCard({ externalIp }: { externalIp?: string }) {
 	)
 }
 
+// Known image tags that ChainLaunch's templates target. Picked from the
+// fabric-x-orderer / fabric-x-committer release tags. The list is editable
+// (the dropdown has a "Custom" option that swaps in a free-text input) so
+// users can pin to a tag we don't ship by default.
+const ORDERER_IMAGE_VERSIONS = ['v1.0.0-alpha', 'v0.0.24'] as const
+const COMMITTER_IMAGE_VERSIONS = ['v1.0.0-alpha', 'v0.1.9'] as const
+
+interface ImageVersionCardProps {
+	nodeId: number
+	nodeKind: 'ordererGroup' | 'committer'
+	currentVersion?: string
+}
+
+// ImageVersionCard lets the user change the docker image tag of a Fabric-X
+// node. Persisted change — does NOT auto-restart, matching the Fabric peer/
+// orderer pattern: operator clicks Restart manually to apply, so the user
+// owns the moment of downtime.
+function ImageVersionCard({ nodeId, nodeKind, currentVersion }: ImageVersionCardProps) {
+	const knownVersions = nodeKind === 'ordererGroup' ? ORDERER_IMAGE_VERSIONS : COMMITTER_IMAGE_VERSIONS
+	const initial = currentVersion ?? ''
+	const initialIsKnown = (knownVersions as readonly string[]).includes(initial)
+
+	const [selected, setSelected] = useState<string>(initialIsKnown || initial === '' ? initial : 'custom')
+	const [custom, setCustom] = useState<string>(initialIsKnown ? '' : initial)
+
+	const queryClient = useQueryClient()
+	const update = useMutation({
+		...putNodesByIdMutation(),
+		onSuccess: () => {
+			toast.success('Image tag updated. Click Restart to apply.')
+			queryClient.invalidateQueries({ queryKey: ['getNodesById'] })
+		},
+		onError: (error: any) => {
+			toast.error(`Failed to update version: ${error?.error?.message || error?.message || 'Unknown error'}`)
+		},
+	})
+
+	const targetVersion = selected === 'custom' ? custom.trim() : selected
+	const dirty = targetVersion !== '' && targetVersion !== initial
+	const canSave = dirty && !update.isPending
+
+	const onSave = () => {
+		if (!canSave) return
+		const body =
+			nodeKind === 'ordererGroup'
+				? { fabricXOrdererGroup: { version: targetVersion } }
+				: { fabricXCommitter: { version: targetVersion } }
+		update.mutate({ path: { id: nodeId }, body })
+	}
+
+	return (
+		<Card>
+			<CardHeader>
+				<div className="flex items-center gap-2">
+					<ImageIcon className="h-4 w-4 text-muted-foreground" />
+					<CardTitle>Image Version</CardTitle>
+				</div>
+				<CardDescription>
+					Change the docker image tag for this {nodeKind === 'ordererGroup' ? 'orderer group' : 'committer'}.
+					The change is saved immediately but takes effect on the next Restart.
+				</CardDescription>
+			</CardHeader>
+			<CardContent className="space-y-3">
+				<div className="grid gap-2">
+					<p className="text-xs font-medium text-muted-foreground">Tag</p>
+					<Select value={selected} onValueChange={setSelected}>
+						<SelectTrigger>
+							<SelectValue placeholder="Select a version" />
+						</SelectTrigger>
+						<SelectContent>
+							{knownVersions.map((v) => (
+								<SelectItem key={v} value={v}>
+									{v}
+								</SelectItem>
+							))}
+							<SelectItem value="custom">Custom…</SelectItem>
+						</SelectContent>
+					</Select>
+				</div>
+
+				{selected === 'custom' && (
+					<div className="grid gap-2">
+						<p className="text-xs font-medium text-muted-foreground">Custom tag</p>
+						<Input
+							value={custom}
+							onChange={(e) => setCustom(e.target.value)}
+							placeholder="e.g. v1.0.0-rc1"
+							className="font-mono"
+						/>
+					</div>
+				)}
+
+				<div className="flex items-center justify-between gap-2 pt-1">
+					<p className="text-xs text-muted-foreground">
+						Current: <span className="font-mono">{initial || 'N/A'}</span>
+					</p>
+					<Button size="sm" onClick={onSave} disabled={!canSave}>
+						<Save className="mr-1.5 h-3.5 w-3.5" />
+						{update.isPending ? 'Saving…' : 'Save'}
+					</Button>
+				</div>
+			</CardContent>
+		</Card>
+	)
+}
+
 export function FabricXNodeDetails({ node, logs, events, activeTab, onTabChange, committerLogRole, onCommitterLogRoleChange }: FabricXNodeDetailsProps) {
 	const isOrdererGroup = node.fabricXOrdererGroup !== undefined
 	const isCommitter = node.fabricXCommitter !== undefined
@@ -388,6 +498,15 @@ export function FabricXNodeDetails({ node, logs, events, activeTab, onTabChange,
 				{child && <ChildMetricsCard config={child} />}
 				{!child && isOrdererGroup && ordererGroup && <OrdererMetricsCard config={ordererGroup} />}
 				{!child && isCommitter && committer && <CommitterMetricsCard config={committer} />}
+				{/* Image-tag editor on parent group rows only — per-role
+				    children inherit their tag from the parent and the API
+				    rejects per-child version updates. */}
+				{!child && isOrdererGroup && ordererGroup && typeof node.id === 'number' && (
+					<ImageVersionCard nodeId={node.id} nodeKind="ordererGroup" currentVersion={ordererGroup.version} />
+				)}
+				{!child && isCommitter && committer && typeof node.id === 'number' && (
+					<ImageVersionCard nodeId={node.id} nodeKind="committer" currentVersion={committer.version} />
+				)}
 			</div>
 
 			<Tabs value={activeTab} onValueChange={onTabChange} className="space-y-4">

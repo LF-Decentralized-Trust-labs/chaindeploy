@@ -1915,6 +1915,14 @@ export type HttpUpdateGenesisBlockResponse = {
     networkId?: number;
 };
 
+export type HttpUpdateFabricXOrdererGroupRequest = {
+    version?: string;
+};
+
+export type HttpUpdateFabricXCommitterRequest = {
+    version?: string;
+};
+
 export type HttpUpdateNodeRequest = {
     besuNode?: HttpUpdateBesuNodeRequest;
     blockchainPlatform?: TypesBlockchainPlatform;
@@ -1923,6 +1931,8 @@ export type HttpUpdateNodeRequest = {
      * Platform-specific configurations
      */
     fabricPeer?: HttpUpdateFabricPeerRequest;
+    fabricXOrdererGroup?: HttpUpdateFabricXOrdererGroupRequest;
+    fabricXCommitter?: HttpUpdateFabricXCommitterRequest;
     /**
      * Common fields
      */

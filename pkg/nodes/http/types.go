@@ -190,9 +190,11 @@ type UpdateNodeRequest struct {
 	BlockchainPlatform *types.BlockchainPlatform `json:"blockchainPlatform,omitempty"`
 
 	// Platform-specific configurations
-	FabricPeer    *UpdateFabricPeerRequest    `json:"fabricPeer,omitempty"`
-	FabricOrderer *UpdateFabricOrdererRequest `json:"fabricOrderer,omitempty"`
-	BesuNode      *UpdateBesuNodeRequest      `json:"besuNode,omitempty"`
+	FabricPeer          *UpdateFabricPeerRequest          `json:"fabricPeer,omitempty"`
+	FabricOrderer       *UpdateFabricOrdererRequest       `json:"fabricOrderer,omitempty"`
+	BesuNode            *UpdateBesuNodeRequest            `json:"besuNode,omitempty"`
+	FabricXOrdererGroup *UpdateFabricXOrdererGroupRequest `json:"fabricXOrdererGroup,omitempty"`
+	FabricXCommitter    *UpdateFabricXCommitterRequest    `json:"fabricXCommitter,omitempty"`
 }
 
 // UpdateFabricPeerRequest represents the configuration for updating a Fabric peer node
@@ -219,6 +221,21 @@ type UpdateFabricOrdererRequest struct {
 	Env                     map[string]string `json:"env,omitempty"`
 	Version                 *string           `json:"version,omitempty"`
 	Mode                    string            `json:"mode,omitempty"`
+}
+
+// UpdateFabricXOrdererGroupRequest represents the configuration for updating
+// a Fabric-X orderer group node. Today only Version is mutable — image-tag
+// changes take effect on the next StartNode (no auto-restart, matching the
+// Fabric peer/orderer pattern), and the user is expected to click Restart
+// to apply. Other fields (ports, MSPID, partyId) are immutable for now.
+type UpdateFabricXOrdererGroupRequest struct {
+	Version *string `json:"version,omitempty"`
+}
+
+// UpdateFabricXCommitterRequest represents the configuration for updating a
+// Fabric-X committer node. Same scope as orderer-group: Version only.
+type UpdateFabricXCommitterRequest struct {
+	Version *string `json:"version,omitempty"`
 }
 
 // UpdateBesuNodeRequest represents the configuration for updating a Besu node

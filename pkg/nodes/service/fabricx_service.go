@@ -674,3 +674,199 @@ func (s *NodeService) persistNodeGroupDeployment(ctx context.Context, grp *db.No
 	})
 	return err
 }
+
+// UpdateFabricXOrdererGroup updates the mutable fields of a Fabric-X
+// orderer group node. Today only the image-tag (Version) is mutable.
+//
+// Semantics match Fabric peer/orderer: the new version is persisted to
+// the node's NodeConfig and DeploymentConfig — and to the parent
+// node_groups row so per-role child rows pick it up — but NO containers
+// are stopped or restarted. The user clicks Restart manually to apply.
+//
+// Why also touch the parent node_groups row: per-role child rows
+// (FABRICX_ORDERER_ROUTER, etc.) don't carry their own version. They
+// inherit it from the group's deployment_config when StartCommitterRole
+// / StartOrdererRole reads it. Without this update, the child would
+// keep starting against the old image even after the parent node row
+// said the version had changed.
+func (s *NodeService) UpdateFabricXOrdererGroup(ctx context.Context, opts UpdateFabricXOrdererGroupOpts) (*NodeResponse, error) {
+	dbNode, err := s.db.GetNode(ctx, opts.NodeID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("fabric-x orderer group node %d not found", opts.NodeID)
+		}
+		return nil, fmt.Errorf("get fabric-x orderer group node: %w", err)
+	}
+	if types.NodeType(dbNode.NodeType.String) != types.NodeTypeFabricXOrdererGroup {
+		return nil, fmt.Errorf("node %d is not a fabric-x orderer group", opts.NodeID)
+	}
+
+	if opts.Version == "" {
+		// No-op: nothing to change. Return the current node state instead
+		// of pushing an empty write through every persistence layer.
+		_, resp := s.mapDBNodeToServiceNode(dbNode)
+		return resp, nil
+	}
+
+	// 1. Update the node-level NodeConfig (the user-input opts blob).
+	var nodeCfg types.FabricXOrdererGroupConfig
+	if dbNode.NodeConfig.Valid {
+		if err := unmarshalStoredNodeConfig([]byte(dbNode.NodeConfig.String), &nodeCfg); err != nil {
+			return nil, fmt.Errorf("unmarshal node config: %w", err)
+		}
+	}
+	if nodeCfg.Type == "" {
+		nodeCfg.Type = "fabricx-orderer-group"
+	}
+	nodeCfg.Version = opts.Version
+
+	nodeCfgJSON, err := json.Marshal(nodeCfg)
+	if err != nil {
+		return nil, fmt.Errorf("marshal node config: %w", err)
+	}
+	storedJSON, err := json.Marshal(types.StoredConfig{
+		Type:   "fabricx-orderer-group",
+		Config: nodeCfgJSON,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal stored node config: %w", err)
+	}
+	if _, err := s.db.UpdateNodeConfig(ctx, &db.UpdateNodeConfigParams{
+		ID:         opts.NodeID,
+		NodeConfig: sql.NullString{String: string(storedJSON), Valid: true},
+	}); err != nil {
+		return nil, fmt.Errorf("persist node config: %w", err)
+	}
+
+	// 2. Update the node-level DeploymentConfig (the resolved/realized
+	//    config the lifecycle reads from).
+	if dbNode.DeploymentConfig.Valid {
+		var depCfg types.FabricXOrdererGroupDeploymentConfig
+		if err := json.Unmarshal([]byte(dbNode.DeploymentConfig.String), &depCfg); err != nil {
+			return nil, fmt.Errorf("unmarshal deployment config: %w", err)
+		}
+		depCfg.Version = opts.Version
+		if err := s.persistFabricXOrdererGroupDeployment(ctx, dbNode, &depCfg); err != nil {
+			return nil, fmt.Errorf("persist deployment config: %w", err)
+		}
+	}
+
+	// 3. If this node belongs to a node_group, update the group's Version
+	//    column + deployment_config.Version so per-role child rows pick up
+	//    the new image at next start.
+	if dbNode.NodeGroupID.Valid {
+		grp, err := s.db.GetNodeGroup(ctx, dbNode.NodeGroupID.Int64)
+		if err == nil {
+			var grpDep types.FabricXOrdererGroupDeploymentConfig
+			if grp.DeploymentConfig.Valid {
+				if err := json.Unmarshal([]byte(grp.DeploymentConfig.String), &grpDep); err != nil {
+					return nil, fmt.Errorf("unmarshal group deployment config: %w", err)
+				}
+			}
+			grpDep.Version = opts.Version
+			grp.Version = nullStringValid(opts.Version)
+			if err := s.persistNodeGroupDeployment(ctx, grp, grpDep.SignCert, grpDep.TLSCert, &grpDep); err != nil {
+				return nil, fmt.Errorf("persist node_group deployment: %w", err)
+			}
+		} else {
+			s.logger.Warn("update fabric-x orderer group: failed to load parent node_group; skipping group-level version update",
+				"nodeID", opts.NodeID, "nodeGroupID", dbNode.NodeGroupID.Int64, "err", err)
+		}
+	}
+
+	// Re-read so the response reflects the persisted state.
+	updated, err := s.db.GetNode(ctx, opts.NodeID)
+	if err != nil {
+		return nil, fmt.Errorf("re-load updated node: %w", err)
+	}
+	_, resp := s.mapDBNodeToServiceNode(updated)
+	return resp, nil
+}
+
+// UpdateFabricXCommitter is the committer counterpart of
+// UpdateFabricXOrdererGroup. Same scope (Version-only), same
+// no-auto-restart semantics.
+func (s *NodeService) UpdateFabricXCommitter(ctx context.Context, opts UpdateFabricXCommitterOpts) (*NodeResponse, error) {
+	dbNode, err := s.db.GetNode(ctx, opts.NodeID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("fabric-x committer node %d not found", opts.NodeID)
+		}
+		return nil, fmt.Errorf("get fabric-x committer node: %w", err)
+	}
+	if types.NodeType(dbNode.NodeType.String) != types.NodeTypeFabricXCommitter {
+		return nil, fmt.Errorf("node %d is not a fabric-x committer", opts.NodeID)
+	}
+
+	if opts.Version == "" {
+		_, resp := s.mapDBNodeToServiceNode(dbNode)
+		return resp, nil
+	}
+
+	var nodeCfg types.FabricXCommitterConfig
+	if dbNode.NodeConfig.Valid {
+		if err := unmarshalStoredNodeConfig([]byte(dbNode.NodeConfig.String), &nodeCfg); err != nil {
+			return nil, fmt.Errorf("unmarshal node config: %w", err)
+		}
+	}
+	if nodeCfg.Type == "" {
+		nodeCfg.Type = "fabricx-committer"
+	}
+	nodeCfg.Version = opts.Version
+
+	nodeCfgJSON, err := json.Marshal(nodeCfg)
+	if err != nil {
+		return nil, fmt.Errorf("marshal node config: %w", err)
+	}
+	storedJSON, err := json.Marshal(types.StoredConfig{
+		Type:   "fabricx-committer",
+		Config: nodeCfgJSON,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal stored node config: %w", err)
+	}
+	if _, err := s.db.UpdateNodeConfig(ctx, &db.UpdateNodeConfigParams{
+		ID:         opts.NodeID,
+		NodeConfig: sql.NullString{String: string(storedJSON), Valid: true},
+	}); err != nil {
+		return nil, fmt.Errorf("persist node config: %w", err)
+	}
+
+	if dbNode.DeploymentConfig.Valid {
+		var depCfg types.FabricXCommitterDeploymentConfig
+		if err := json.Unmarshal([]byte(dbNode.DeploymentConfig.String), &depCfg); err != nil {
+			return nil, fmt.Errorf("unmarshal deployment config: %w", err)
+		}
+		depCfg.Version = opts.Version
+		if err := s.persistFabricXCommitterDeployment(ctx, dbNode, &depCfg); err != nil {
+			return nil, fmt.Errorf("persist deployment config: %w", err)
+		}
+	}
+
+	if dbNode.NodeGroupID.Valid {
+		grp, err := s.db.GetNodeGroup(ctx, dbNode.NodeGroupID.Int64)
+		if err == nil {
+			var grpDep types.FabricXCommitterDeploymentConfig
+			if grp.DeploymentConfig.Valid {
+				if err := json.Unmarshal([]byte(grp.DeploymentConfig.String), &grpDep); err != nil {
+					return nil, fmt.Errorf("unmarshal group deployment config: %w", err)
+				}
+			}
+			grpDep.Version = opts.Version
+			grp.Version = nullStringValid(opts.Version)
+			if err := s.persistNodeGroupDeployment(ctx, grp, grpDep.SignCert, grpDep.TLSCert, &grpDep); err != nil {
+				return nil, fmt.Errorf("persist node_group deployment: %w", err)
+			}
+		} else {
+			s.logger.Warn("update fabric-x committer: failed to load parent node_group; skipping group-level version update",
+				"nodeID", opts.NodeID, "nodeGroupID", dbNode.NodeGroupID.Int64, "err", err)
+		}
+	}
+
+	updated, err := s.db.GetNode(ctx, opts.NodeID)
+	if err != nil {
+		return nil, fmt.Errorf("re-load updated node: %w", err)
+	}
+	_, resp := s.mapDBNodeToServiceNode(updated)
+	return resp, nil
+}
