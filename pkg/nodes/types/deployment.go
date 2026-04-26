@@ -401,6 +401,18 @@ func DeserializeNodeConfig(stored *StoredNodeConfig) (NodeConfig, error) {
 			return nil, fmt.Errorf("failed to unmarshal besu config: %w", err)
 		}
 		config = &c
+	case "fabricx-orderer-group":
+		var c FabricXOrdererGroupConfig
+		if err := json.Unmarshal(stored.Config, &c); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal fabricx orderer group config: %w", err)
+		}
+		config = &c
+	case "fabricx-committer":
+		var c FabricXCommitterConfig
+		if err := json.Unmarshal(stored.Config, &c); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal fabricx committer config: %w", err)
+		}
+		config = &c
 	default:
 		return nil, fmt.Errorf("unknown node type: %s", stored.Type)
 	}

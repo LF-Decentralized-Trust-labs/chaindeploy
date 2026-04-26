@@ -123,3 +123,49 @@ func GetOrdererPorts(basePort int) (listen, admin, operations int, err error) {
 
 	return 0, 0, 0, fmt.Errorf("no available port block found after %d attempts starting from %d", maxAttempts, basePort)
 }
+
+// FabricXOrdererGroupPorts holds the allocated ports for a Fabric X orderer group
+type FabricXOrdererGroupPorts struct {
+	Router    int
+	Batcher   int
+	Consenter int
+	Assembler int
+}
+
+// GetFabricXOrdererGroupPorts allocates 4 consecutive ports for an orderer group
+func GetFabricXOrdererGroupPorts(basePort int) (*FabricXOrdererGroupPorts, error) {
+	ports, err := findConsecutivePorts(basePort, 4, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to allocate fabricx orderer group ports: %w", err)
+	}
+	return &FabricXOrdererGroupPorts{
+		Router:    ports[0],
+		Batcher:   ports[1],
+		Consenter: ports[2],
+		Assembler: ports[3],
+	}, nil
+}
+
+// FabricXCommitterPorts holds the allocated ports for a Fabric X committer
+type FabricXCommitterPorts struct {
+	Sidecar      int
+	Coordinator  int
+	Validator    int
+	Verifier     int
+	QueryService int
+}
+
+// GetFabricXCommitterPorts allocates 5 consecutive ports for a committer
+func GetFabricXCommitterPorts(basePort int) (*FabricXCommitterPorts, error) {
+	ports, err := findConsecutivePorts(basePort, 5, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to allocate fabricx committer ports: %w", err)
+	}
+	return &FabricXCommitterPorts{
+		Sidecar:      ports[0],
+		Coordinator:  ports[1],
+		Validator:    ports[2],
+		Verifier:     ports[3],
+		QueryService: ports[4],
+	}, nil
+}

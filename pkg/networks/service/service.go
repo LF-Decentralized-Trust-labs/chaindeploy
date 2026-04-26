@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chainlaunch/chainlaunch/pkg/config"
 	"github.com/chainlaunch/chainlaunch/pkg/db"
 	orgservicefabric "github.com/chainlaunch/chainlaunch/pkg/fabric/service"
 	keymanagement "github.com/chainlaunch/chainlaunch/pkg/keymanagement/service"
@@ -27,8 +28,9 @@ import (
 type BlockchainType string
 
 const (
-	BlockchainTypeFabric BlockchainType = "fabric"
-	BlockchainTypeBesu   BlockchainType = "besu"
+	BlockchainTypeFabric  BlockchainType = "fabric"
+	BlockchainTypeBesu    BlockchainType = "besu"
+	BlockchainTypeFabricX BlockchainType = "fabricx"
 	// Add other blockchain types as needed
 )
 
@@ -135,17 +137,19 @@ type NetworkService struct {
 	keyMgmt         *keymanagement.KeyManagementService
 	logger          *logger.Logger
 	orgService      *orgservicefabric.OrganizationService
+	configService   *config.ConfigService
 }
 
 // NewNetworkService creates a new NetworkService
-func NewNetworkService(db *db.Queries, nodes *nodeservice.NodeService, keyMgmt *keymanagement.KeyManagementService, logger *logger.Logger, orgService *orgservicefabric.OrganizationService) *NetworkService {
+func NewNetworkService(db *db.Queries, nodes *nodeservice.NodeService, keyMgmt *keymanagement.KeyManagementService, logger *logger.Logger, orgService *orgservicefabric.OrganizationService, configService *config.ConfigService) *NetworkService {
 	return &NetworkService{
 		db:              db,
-		deployerFactory: NewDeployerFactory(db, nodes, keyMgmt, orgService),
+		deployerFactory: NewDeployerFactory(db, nodes, keyMgmt, orgService, configService),
 		nodeService:     nodes,
 		keyMgmt:         keyMgmt,
 		logger:          logger,
 		orgService:      orgService,
+		configService:   configService,
 	}
 }
 
@@ -185,6 +189,13 @@ func (s *NetworkService) CreateNetwork(ctx context.Context, name, description st
 			return nil, fmt.Errorf("failed to unmarshal Besu config: %w", err)
 		}
 		config = &besuConfig
+
+	case types.NetworkTypeFabricX:
+		var fabricxConfig types.FabricXNetworkConfig
+		if err := json.Unmarshal(configData, &fabricxConfig); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal FabricX config: %w", err)
+		}
+		config = &fabricxConfig
 
 	default:
 		return nil, fmt.Errorf("unsupported network type: %s", baseConfig.Type)
@@ -237,6 +248,20 @@ func (s *NetworkService) CreateNetwork(ctx context.Context, name, description st
 	}
 	genesisBlockB64 := base64.StdEncoding.EncodeToString(genesisBlock)
 	network.GenesisBlockB64 = sql.NullString{String: genesisBlockB64, Valid: true}
+
+	// Persist the genesis block to the database. Without this, downstream stages
+	// (e.g. FabricX node-join) can't find the genesis block and will fail with
+	// "genesis block is not set for network N".
+	if _, err := s.db.UpdateNetworkGenesisBlock(ctx, &db.UpdateNetworkGenesisBlockParams{
+		ID:              network.ID,
+		GenesisBlockB64: sql.NullString{String: genesisBlockB64, Valid: true},
+	}); err != nil {
+		s.logger.Error("Failed to persist genesis block, rolling back network", "network_id", network.ID, "error", err)
+		if deleteErr := s.db.DeleteNetwork(ctx, network.ID); deleteErr != nil {
+			s.logger.Error("Failed to delete network after genesis persist error", "network_id", network.ID, "error", deleteErr)
+		}
+		return nil, fmt.Errorf("failed to persist genesis block: %w", err)
+	}
 
 	// Update network status to running after successful genesis block creation
 	if err := s.UpdateNetworkStatus(ctx, network.ID, NetworkStatusGenesisBlockCreated); err != nil {

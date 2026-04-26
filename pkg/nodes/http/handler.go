@@ -133,16 +133,18 @@ func (h *NodeHandler) CreateNode(w http.ResponseWriter, r *http.Request) error {
 
 	if !isValidPlatform(types.BlockchainPlatform(strings.ToUpper(string(req.BlockchainPlatform)))) {
 		return errors.NewValidationError("invalid blockchain platform", map[string]interface{}{
-			"valid_platforms": []string{string(types.PlatformFabric), string(types.PlatformBesu)},
+			"valid_platforms": []string{string(types.PlatformFabric), string(types.PlatformBesu), string(types.PlatformFabricX)},
 		})
 	}
 
 	serviceReq := service.CreateNodeRequest{
-		Name:               req.Name,
-		BlockchainPlatform: types.BlockchainPlatform(strings.ToUpper(string(req.BlockchainPlatform))),
-		FabricPeer:         req.FabricPeer,
-		FabricOrderer:      req.FabricOrderer,
-		BesuNode:           req.BesuNode,
+		Name:                req.Name,
+		BlockchainPlatform:  types.BlockchainPlatform(strings.ToUpper(string(req.BlockchainPlatform))),
+		FabricPeer:          req.FabricPeer,
+		FabricOrderer:       req.FabricOrderer,
+		BesuNode:            req.BesuNode,
+		FabricXOrdererGroup: req.FabricXOrdererGroup,
+		FabricXCommitter:    req.FabricXCommitter,
 	}
 
 	node, err := h.service.CreateNode(r.Context(), serviceReq)
@@ -553,6 +555,11 @@ func (h *NodeHandler) TailLogs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Optional ?role= selects which of a multi-container node's internal
+	// processes to tail. Only FABRICX_COMMITTER nodes observe it; other
+	// node types reject non-empty role with 400.
+	role := r.URL.Query().Get("role")
+
 	// Set headers for streaming response
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -562,7 +569,7 @@ func (h *NodeHandler) TailLogs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// Create channel for logs
-	logChan, err := h.service.TailLogs(ctx, id, tail, follow)
+	logChan, err := h.service.TailLogs(ctx, id, tail, follow, role)
 	if err != nil {
 		if err == service.ErrNotFound {
 			http.Error(w, "Node not found", http.StatusNotFound)
@@ -728,16 +735,18 @@ func toNodeResponse(node *service.NodeResponse) NodeResponse {
 		Endpoint:           node.Endpoint,
 		CreatedAt:          node.CreatedAt,
 		UpdatedAt:          node.UpdatedAt,
-		FabricPeer:         node.FabricPeer,
-		FabricOrderer:      node.FabricOrderer,
-		BesuNode:           node.BesuNode,
+		FabricPeer:          node.FabricPeer,
+		FabricOrderer:       node.FabricOrderer,
+		BesuNode:            node.BesuNode,
+		FabricXOrdererGroup: node.FabricXOrdererGroup,
+		FabricXCommitter:    node.FabricXCommitter,
 	}
 }
 
 // Helper function to validate platform
 func isValidPlatform(platform types.BlockchainPlatform) bool {
 	switch platform {
-	case types.PlatformFabric, types.PlatformBesu:
+	case types.PlatformFabric, types.PlatformBesu, types.PlatformFabricX:
 		return true
 	}
 	return false

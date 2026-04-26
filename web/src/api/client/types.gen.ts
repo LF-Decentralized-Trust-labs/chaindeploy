@@ -735,6 +735,17 @@ export type GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse = {
     message?: string;
 };
 
+export type GithubComChainlaunchChainlaunchPkgNodegroupsHttpCreatePostgresRequest = {
+    db: string;
+    hostPort?: number;
+    name: string;
+    password: string;
+    user: string;
+    version?: string;
+};
+
+export type GithubComChainlaunchChainlaunchPkgNodegroupsTypesServiceType = 'POSTGRES';
+
 export type GithubComChainlaunchChainlaunchPkgNotificationsHttpErrorResponse = {
     error?: string;
 };
@@ -761,6 +772,41 @@ export type GithubComChainlaunchChainlaunchPkgPluginTypesPort = {
     hostPort?: string;
     protocol?: string;
 };
+
+export type GithubComChainlaunchChainlaunchPkgPluginTypesService = {
+    createdAt?: string;
+    image?: string;
+    name?: string;
+    ports?: Array<GithubComChainlaunchChainlaunchPkgPluginTypesPort>;
+    status?: string;
+};
+
+export type GithubComChainlaunchChainlaunchPkgServicesHttpCreatePostgresRequest = {
+    db: string;
+    hostPort?: number;
+    name: string;
+    password: string;
+    user: string;
+    version?: string;
+};
+
+export type GithubComChainlaunchChainlaunchPkgServicesTypesService = {
+    backupConfig?: TypesBackupConfig;
+    backupTargetId?: number;
+    config?: Array<number>;
+    createdAt?: string;
+    deploymentConfig?: Array<number>;
+    errorMessage?: string;
+    id?: number;
+    name?: string;
+    nodeGroupId?: number;
+    serviceType?: GithubComChainlaunchChainlaunchPkgServicesTypesServiceType;
+    status?: TypesServiceStatus;
+    updatedAt?: string;
+    version?: string;
+};
+
+export type GithubComChainlaunchChainlaunchPkgServicesTypesServiceType = 'POSTGRES';
 
 export type HandlerCreateKeyRequest = {
     description?: string;
@@ -917,6 +963,10 @@ export type HttpAddOrgPayload = {
 export type HttpAnchorPeer = {
     host: string;
     port: number;
+};
+
+export type HttpAttachPostgresServiceRequest = {
+    serviceId: number;
 };
 
 export type HttpBackupResponse = {
@@ -1277,6 +1327,23 @@ export type HttpCreateFabricNetworkRequest = {
     name: string;
 };
 
+export type HttpCreateFabricXNamespaceRequest = {
+    finalityTimeoutSeconds?: number;
+    name: string;
+    submitterOrgId: number;
+    /**
+     * -1 (default) creates a new ns; >=0 updates an existing one
+     */
+    version?: number;
+    waitForFinality?: boolean;
+};
+
+export type HttpCreateFabricXNetworkRequest = {
+    config: HttpFabricXNetworkConfig;
+    description?: string;
+    name: string;
+};
+
 /**
  * Request payload for creating a new node
  */
@@ -1298,9 +1365,21 @@ export type HttpCreateNodeRequest = {
      */
     fabricPeer?: TypesFabricPeerConfig;
     /**
+     * @Description Fabric X committer configuration, required when creating a FabricX committer node
+     */
+    fabricXCommitter?: TypesFabricXCommitterConfig;
+    /**
+     * @Description Fabric X orderer group configuration, required when creating a FabricX orderer group node
+     */
+    fabricXOrdererGroup?: TypesFabricXOrdererGroupConfig;
+    /**
      * @Description Name of the node
      */
     name: string;
+};
+
+export type HttpCreatePostgresDatabasesRequest = {
+    databases: Array<HttpDatabaseSpec>;
 };
 
 export type HttpCreateProviderRequest = {
@@ -1313,6 +1392,25 @@ export type HttpCreateProviderRequest = {
     notifyNodeDowntime?: boolean;
     notifyS3ConnIssue?: boolean;
     type: 'SMTP';
+};
+
+export type HttpCreateRequest = {
+    config?: Array<number>;
+    domainNames?: Array<string>;
+    externalIp?: string;
+    groupType: TypesGroupType;
+    mspId?: string;
+    name: string;
+    organizationId?: number;
+    partyId?: number;
+    platform: string;
+    version?: string;
+};
+
+export type HttpDatabaseSpec = {
+    db: string;
+    password: string;
+    user: string;
 };
 
 export type HttpEtcdRaftOptions = {
@@ -1366,6 +1464,92 @@ export type HttpFabricPolicy = {
     type?: string;
 };
 
+export type HttpFabricXBlockListResponse = {
+    blocks?: Array<HttpFabricXBlockSummary>;
+    total?: number;
+};
+
+export type HttpFabricXBlockSummary = {
+    dataHash?: string;
+    number?: number;
+    previousHash?: string;
+    txCount?: number;
+};
+
+export type HttpFabricXChainInfoResponse = {
+    height?: number;
+};
+
+export type HttpFabricXJoinNodeResponse = {
+    networkId?: number;
+    nodeId?: number;
+    status?: string;
+};
+
+export type HttpFabricXNamespaceListResponse = {
+    chainError?: string;
+    namespaces?: Array<HttpFabricXNamespaceResponse>;
+};
+
+export type HttpFabricXNamespacePolicyResponse = {
+    namespace?: string;
+    version?: number;
+};
+
+export type HttpFabricXNamespaceResponse = {
+    createdAt?: string;
+    error?: string;
+    id?: number;
+    name?: string;
+    networkId?: number;
+    onChain?: boolean;
+    source?: string;
+    status?: string;
+    submitterMspId?: string;
+    submitterOrgId?: number;
+    txId?: string;
+    updatedAt?: string;
+    version?: number;
+};
+
+export type HttpFabricXNetworkConfig = {
+    channelName?: string;
+    /**
+     * LocalDev enables Docker Desktop (macOS/Windows) compatibility mode for
+     * this network. Set to true when ChainLaunch itself runs on macOS/Windows
+     * with Docker Desktop so containers can reach each other via
+     * host.docker.internal and the host can dial published ports on 127.0.0.1.
+     */
+    localDev?: boolean;
+    organizations: Array<HttpFabricXOrganization>;
+};
+
+export type HttpFabricXNetworkResponse = {
+    channelName?: string;
+    config?: Array<number>;
+    createdAt?: string;
+    description?: string;
+    genesisBlock?: string;
+    id?: number;
+    name?: string;
+    platform?: string;
+    status?: string;
+    updatedAt?: string;
+};
+
+export type HttpFabricXOrganization = {
+    committerNodeId?: number;
+    id: number;
+    ordererNodeGroupId?: number;
+    ordererNodeId?: number;
+};
+
+export type HttpFabricXStateRowResponse = {
+    key?: string;
+    value?: string;
+    version?: number;
+};
+
 export type HttpGetNetworkNodesResponse = {
     nodes?: Array<ServiceNetworkNode>;
 };
@@ -1400,6 +1584,14 @@ export type HttpImportNetworkResponse = {
     networkId?: number;
 };
 
+export type HttpInitOrdererRequest = {
+    assemblerPort: number;
+    batcherPort: number;
+    consenterPort: number;
+    consenterType?: string;
+    routerPort: number;
+};
+
 export type HttpListBesuNetworksResponse = {
     networks?: Array<HttpBesuNetworkResponse>;
     total?: number;
@@ -1408,6 +1600,11 @@ export type HttpListBesuNetworksResponse = {
 export type HttpListNetworksResponse = {
     networks?: Array<HttpNetworkResponse>;
     total?: number;
+};
+
+export type HttpLogsResponse = {
+    logs?: string;
+    tail?: number;
 };
 
 export type HttpNetworkResponse = {
@@ -1450,6 +1647,8 @@ export type HttpNodeResponse = {
     errorMessage?: string;
     fabricOrderer?: ServiceFabricOrdererProperties;
     fabricPeer?: ServiceFabricPeerProperties;
+    fabricXCommitter?: ServiceFabricXCommitterProperties;
+    fabricXOrdererGroup?: ServiceFabricXOrdererGroupProperties;
     id?: number;
     name?: string;
     nodeType?: string;
@@ -1562,6 +1761,10 @@ export type HttpSmartBftOptions = {
     syncOnStart?: boolean;
     viewChangeResendInterval?: string;
     viewChangeTimeout?: string;
+};
+
+export type HttpStartServiceRequest = {
+    networkName: string;
 };
 
 export type HttpTestProviderRequest = {
@@ -1764,6 +1967,13 @@ export type HttpUpdateProviderRequest = {
     notifyNodeDowntime?: boolean;
     notifyS3ConnIssue?: boolean;
     type: 'SMTP';
+};
+
+export type HttpUpdateServiceRequest = {
+    hostPort?: number;
+    name?: string;
+    password?: string;
+    version?: string;
 };
 
 export type ModelsCertificateRequest = {
@@ -2171,6 +2381,24 @@ export type ServiceBesuReadinessResponse = {
     warnings?: Array<string>;
 };
 
+export type ServiceChild = {
+    createdAt?: string;
+    endpoint?: string;
+    errorMessage?: string;
+    id?: number;
+    name?: string;
+    nodeType?: string;
+    status?: string;
+    updatedAt?: string;
+};
+
+export type ServiceConsumer = {
+    groupType?: string;
+    id?: number;
+    name?: string;
+    status?: string;
+};
+
 export type ServiceCreateSettingParams = {
     config?: ServiceSettingConfig;
 };
@@ -2222,6 +2450,35 @@ export type ServiceFabricPeerProperties = {
     tlsCaCert?: string;
     tlsCert?: string;
     tlsKeyId?: number;
+    version?: string;
+};
+
+export type ServiceFabricXCommitterProperties = {
+    coordinatorPort?: number;
+    externalIp?: string;
+    mspId?: string;
+    organizationId?: number;
+    partyId?: number;
+    queryServicePort?: number;
+    sidecarPort?: number;
+    validatorPort?: number;
+    verifierPort?: number;
+    version?: string;
+};
+
+export type ServiceFabricXOrdererGroupProperties = {
+    assemblerPort?: number;
+    batcherPort?: number;
+    caCert?: string;
+    consenterPort?: number;
+    externalIp?: string;
+    mspId?: string;
+    organizationId?: number;
+    partyId?: number;
+    routerPort?: number;
+    signCert?: string;
+    tlsCaCert?: string;
+    tlsCert?: string;
     version?: string;
 };
 
@@ -2307,6 +2564,8 @@ export type ServiceNodeResponse = {
      * Type-specific fields
      */
     fabricPeer?: ServiceFabricPeerProperties;
+    fabricXCommitter?: ServiceFabricXCommitterProperties;
+    fabricXOrdererGroup?: ServiceFabricXOrdererGroupProperties;
     id?: number;
     name?: string;
     nodeType?: TypesNodeType;
@@ -2345,12 +2604,371 @@ export type ServiceSettingConfig = {
     peerTemplateCMD?: string;
 };
 
+export type TemplateAllocTemplate = {
+    balance?: string;
+};
+
+export type TemplateBatchSizeTemplate = {
+    absoluteMaxBytes?: number;
+    maxMessageCount?: number;
+    preferredMaxBytes?: number;
+};
+
+export type TemplateBesuContractTemplate = {
+    /**
+     * Contract ABI JSON
+     */
+    abi?: string;
+    /**
+     * Compiled bytecode (hex)
+     */
+    bytecode?: string;
+};
+
+export type TemplateBesuNetworkTemplate = {
+    alloc?: {
+        [key: string]: TemplateAllocTemplate;
+    };
+    blockPeriod?: number;
+    chainId?: number;
+    /**
+     * "qbft"
+     */
+    consensus?: string;
+    difficulty?: string;
+    epochLength?: number;
+    gasLimit?: string;
+    requestTimeout?: number;
+    validatorRefs?: Array<TemplateValidatorRef>;
+};
+
+export type TemplateChaincodePreview = {
+    name?: string;
+    platform?: string;
+    version?: string;
+};
+
+export type TemplateChaincodeTemplate = {
+    besu?: TemplateBesuContractTemplate;
+    fabric?: TemplateFabricChaincodeTemplate;
+    name?: string;
+    /**
+     * "fabric" or "besu"
+     */
+    platform?: string;
+};
+
+export type TemplateCreatedChaincode = {
+    chaincodeId?: number;
+    name?: string;
+    platform?: string;
+};
+
+export type TemplateCreatedNode = {
+    name?: string;
+    nodeId?: number;
+    templateId?: string;
+    type?: string;
+};
+
+export type TemplateCreatedOrg = {
+    mspId?: string;
+    orgId?: number;
+    templateId?: string;
+};
+
+export type TemplateEtcdRaftOptionsTemplate = {
+    electionTick?: number;
+    heartbeatTick?: number;
+    maxInflightBlocks?: number;
+    snapshotIntervalSize?: number;
+    tickInterval?: string;
+};
+
+export type TemplateExistingNodePreview = {
+    name?: string;
+    nodeId?: number;
+    templateId?: string;
+    type?: string;
+};
+
+export type TemplateExistingOrgPreview = {
+    mspId?: string;
+    orgId?: number;
+    templateId?: string;
+};
+
+export type TemplateExportTemplateResponse = {
+    template?: TemplateNetworkTemplate;
+};
+
+export type TemplateFabricChaincodeTemplate = {
+    chaincodeAddress?: string;
+    dockerImage?: string;
+    endorsementPolicy?: string;
+    sequence?: number;
+    version?: string;
+};
+
+export type TemplateFabricNetworkTemplate = {
+    applicationCapabilities?: Array<string>;
+    applicationPolicies?: {
+        [key: string]: TemplatePolicyTemplate;
+    };
+    batchSize?: TemplateBatchSizeTemplate;
+    batchTimeout?: string;
+    channelCapabilities?: Array<string>;
+    channelName?: string;
+    channelPolicies?: {
+        [key: string]: TemplatePolicyTemplate;
+    };
+    /**
+     * "etcdraft" | "smartbft"
+     */
+    consensusType?: string;
+    etcdRaftOptions?: TemplateEtcdRaftOptionsTemplate;
+    ordererCapabilities?: Array<string>;
+    ordererOrgRefs?: Array<TemplateOrganizationRef>;
+    ordererPolicies?: {
+        [key: string]: TemplatePolicyTemplate;
+    };
+    peerOrgRefs?: Array<TemplateOrganizationRef>;
+    smartBFTOptions?: TemplateSmartBftOptionsTemplate;
+};
+
+export type TemplateImportOverrides = {
+    channelName?: string;
+    description?: string;
+    networkName?: string;
+};
+
+export type TemplateImportPreview = {
+    chaincodes?: Array<TemplateChaincodePreview>;
+    existingNodesUsed?: Array<TemplateExistingNodePreview>;
+    existingOrgsUsed?: Array<TemplateExistingOrgPreview>;
+    network?: TemplateNetworkPreview;
+    nodesToCreate?: Array<TemplateNodePreview>;
+    organizationsToCreate?: Array<TemplateOrgPreview>;
+};
+
+export type TemplateImportTemplateRequest = {
+    overrides?: TemplateImportOverrides;
+    template?: TemplateNetworkTemplate;
+    variableBindings?: Array<TemplateVariableBinding>;
+};
+
+export type TemplateImportTemplateResponse = {
+    createdChaincodes?: Array<TemplateCreatedChaincode>;
+    createdNodes?: Array<TemplateCreatedNode>;
+    createdOrganizations?: Array<TemplateCreatedOrg>;
+    message?: string;
+    networkId?: number;
+    networkName?: string;
+};
+
+export type TemplateNetworkDefinition = {
+    besu?: TemplateBesuNetworkTemplate;
+    description?: string;
+    fabric?: TemplateFabricNetworkTemplate;
+    name?: string;
+    /**
+     * "fabric" or "besu"
+     */
+    platform?: string;
+};
+
+export type TemplateNetworkPreview = {
+    channelName?: string;
+    description?: string;
+    name?: string;
+    platform?: string;
+};
+
+export type TemplateNetworkTemplate = {
+    /**
+     * Chaincode/smart contract definitions
+     */
+    chaincodes?: Array<TemplateChaincodeTemplate>;
+    /**
+     * ISO timestamp
+     */
+    exportedAt?: string;
+    /**
+     * Source instance identifier
+     */
+    exportedFrom?: string;
+    network?: TemplateNetworkDefinition;
+    /**
+     * Variable declarations
+     */
+    variables?: Array<TemplateTemplateVariable>;
+    /**
+     * Schema version
+     */
+    version?: string;
+};
+
+export type TemplateNodePreview = {
+    name?: string;
+    orgMspId?: string;
+    templateId?: string;
+    type?: string;
+};
+
+export type TemplateNodeRef = {
+    variableRef?: string;
+};
+
+export type TemplateOrgPreview = {
+    mspId?: string;
+    name?: string;
+    providerId?: number;
+    providerName?: string;
+    templateId?: string;
+};
+
+export type TemplateOrganizationRef = {
+    nodeRefs?: Array<TemplateNodeRef>;
+    variableRef?: string;
+};
+
+export type TemplatePolicyTemplate = {
+    rule?: string;
+    /**
+     * "ImplicitMeta" | "Signature"
+     */
+    type?: string;
+};
+
+export type TemplateSmartBftOptionsTemplate = {
+    collectTimeout?: string;
+    decisionsPerLeader?: number;
+    incomingMessageBufferSize?: number;
+    leaderHeartbeatCount?: number;
+    leaderHeartbeatTimeout?: string;
+    leaderRotation?: string;
+    requestAutoRemoveTimeout?: string;
+    requestBatchMaxBytes?: number;
+    requestBatchMaxCount?: number;
+    requestBatchMaxInterval?: string;
+    requestComplainTimeout?: string;
+    requestForwardTimeout?: string;
+    requestMaxBytes?: number;
+    requestPoolSize?: number;
+    speedUpViewChange?: boolean;
+    syncOnStart?: boolean;
+    viewChangeResendInterval?: string;
+    viewChangeTimeout?: string;
+};
+
+export type TemplateTemplateVariable = {
+    default?: unknown;
+    description?: string;
+    name?: string;
+    platform?: Array<string>;
+    properties?: Array<TemplateTemplateVariable>;
+    required?: boolean;
+    scope?: TemplateVariableScope;
+    type?: TemplateVariableType;
+    validation?: TemplateVariableValidation;
+};
+
+export type TemplateValidateTemplateRequest = {
+    overrides?: TemplateImportOverrides;
+    template?: TemplateNetworkTemplate;
+    variableBindings?: Array<TemplateVariableBinding>;
+};
+
+export type TemplateValidateTemplateResponse = {
+    errors?: Array<TemplateValidationError>;
+    preview?: TemplateImportPreview;
+    valid?: boolean;
+    warnings?: Array<TemplateValidationWarning>;
+};
+
+export type TemplateValidationError = {
+    code?: string;
+    field?: string;
+    message?: string;
+};
+
+export type TemplateValidationWarning = {
+    code?: string;
+    message?: string;
+    suggestion?: string;
+};
+
+export type TemplateValidatorRef = {
+    variableRef?: string;
+};
+
+export type TemplateVariableBinding = {
+    existingKeyId?: number;
+    existingNodeId?: number;
+    /**
+     * Reference to existing resources
+     */
+    existingOrgId?: number;
+    /**
+     * Property bindings (for composite types like organization)
+     */
+    properties?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Direct value binding (for simple types)
+     */
+    value?: unknown;
+    variableName?: string;
+};
+
+export type TemplateVariableScope = 'network' | 'organization' | 'node' | 'validator';
+
+export type TemplateVariableType = 'string' | 'integer' | 'mspId' | 'ethereumAddress' | 'publicKey' | 'hostPort' | 'organization' | 'key' | 'node';
+
+export type TemplateVariableValidation = {
+    maxLength?: number;
+    maxValue?: number;
+    minLength?: number;
+    minValue?: number;
+    pattern?: string;
+};
+
 export type TimeDuration = -9223372036854776000 | 9223372036854776000 | 1 | 1000 | 1000000 | 1000000000 | 60000000000 | 3600000000000;
 
 export type TypesAddressOverride = {
     from?: string;
     tlsCACert?: string;
     to?: string;
+};
+
+export type TypesBackupConfig = {
+    /**
+     * BaseBackupCron is a cron expression used by the scheduler to
+     * trigger `wal-g backup-push`. Empty disables base backups (WAL
+     * archiving remains active if Enabled).
+     */
+    baseBackupCron?: string;
+    /**
+     * Enabled gates WAL archiving and base backups. When false the
+     * service still runs but no backups are produced.
+     */
+    enabled?: boolean;
+    /**
+     * RetentionBaseBackups is the number of base backups to keep;
+     * WAL-G's `delete retain FIND_FULL N` semantics.
+     */
+    retentionBaseBackups?: number;
+    /**
+     * RetentionWALDays retains WAL segments for this many days past
+     * the oldest kept base backup.
+     */
+    retentionWalDays?: number;
+    /**
+     * S3Prefix is the per-service key prefix inside the backup target's
+     * bucket (WALG_S3_PREFIX = s3://<bucket>/<prefix>).
+     */
+    s3Prefix?: string;
 };
 
 export type TypesBesuNodeConfig = {
@@ -2396,7 +3014,7 @@ export type TypesBesuNodeConfig = {
     version?: string;
 };
 
-export type TypesBlockchainPlatform = 'FABRIC' | 'BESU';
+export type TypesBlockchainPlatform = 'FABRIC' | 'BESU' | 'FABRICX';
 
 export type TypesCustomQueryRequest = {
     end?: string;
@@ -2419,7 +3037,7 @@ export type TypesDeploymentStatus = {
         [key: string]: unknown;
     };
     projectName?: string;
-    services?: Array<TypesService>;
+    services?: Array<GithubComChainlaunchChainlaunchPkgPluginTypesService>;
     startedAt?: string;
     status?: string;
     stoppedAt?: string;
@@ -2554,6 +3172,92 @@ export type TypesFabricPeerConfig = {
     version?: string;
 };
 
+export type TypesFabricXCommitterConfig = {
+    /**
+     * Channel ID for the sidecar
+     */
+    channelId?: string;
+    coordinatorPort?: number;
+    domainNames?: Array<string>;
+    env?: {
+        [key: string]: string;
+    };
+    externalIp?: string;
+    /**
+     * @Description The deployment mode (service or docker)
+     */
+    mode?: string;
+    mspId: string;
+    name: string;
+    /**
+     * Orderer endpoints (assembler addresses) for the sidecar to connect to
+     */
+    ordererEndpoints: Array<string>;
+    organizationId: number;
+    postgresDb?: string;
+    /**
+     * PostgreSQL config for validator and query-service
+     */
+    postgresHost: string;
+    postgresPassword?: string;
+    postgresPort?: number;
+    postgresUser?: string;
+    queryServicePort?: number;
+    /**
+     * Ports (auto-allocated if zero)
+     */
+    sidecarPort?: number;
+    /**
+     * @Description The type of node (fabric-peer, fabric-orderer, besu)
+     */
+    type?: string;
+    validatorPort?: number;
+    verifierPort?: number;
+    /**
+     * fabric-x-committer image tag
+     */
+    version?: string;
+};
+
+export type TypesFabricXOrdererGroupConfig = {
+    assemblerPort?: number;
+    batcherPort?: number;
+    consenterPort?: number;
+    /**
+     * Tuning
+     */
+    consenterType?: string;
+    domainNames?: Array<string>;
+    env?: {
+        [key: string]: string;
+    };
+    externalIp?: string;
+    /**
+     * @Description The deployment mode (service or docker)
+     */
+    mode?: string;
+    mspId: string;
+    name: string;
+    organizationId: number;
+    partyId: number;
+    /**
+     * Ports (auto-allocated if zero)
+     */
+    routerPort?: number;
+    /**
+     * @Description The type of node (fabric-peer, fabric-orderer, besu)
+     */
+    type?: string;
+    /**
+     * fabric-x-orderer image tag
+     */
+    version?: string;
+};
+
+export type TypesGroupStatus = 'PENDING' | 'RUNNING' | 'STOPPED' | 'STOPPING' | 'STARTING' | 'UPDATING' | 'ERROR' | 'DEGRADED' | 'CREATED';
+
+export type TypesGroupType = 'FABRICX_ORDERER_GROUP' | 'FABRICX_COMMITTER';
+
 export type TypesLabelValuesResponse = {
     data?: Array<string>;
     status?: string;
@@ -2578,7 +3282,66 @@ export type TypesMetricsDataResponse = {
     status?: string;
 };
 
-export type TypesNodeType = 'FABRIC_PEER' | 'FABRIC_ORDERER' | 'BESU_FULLNODE';
+export type TypesNodeGroup = {
+    caCert?: string;
+    /**
+     * Config is group-shared logical configuration (JSON payload whose
+     * concrete shape depends on GroupType).
+     */
+    config?: Array<number>;
+    createdAt?: string;
+    /**
+     * DeploymentConfig is group-shared deployment configuration (network
+     * name, shared mounts, etc.).
+     */
+    deploymentConfig?: Array<number>;
+    /**
+     * DomainNames is a parsed JSON array of SANs/SNI hostnames shared by
+     * all children. Stored as a JSON string column.
+     */
+    domainNames?: Array<string>;
+    errorMessage?: string;
+    externalIp?: string;
+    groupType?: TypesGroupType;
+    id?: number;
+    mspId?: string;
+    name?: string;
+    organizationId?: number;
+    partyId?: number;
+    platform?: string;
+    signCert?: string;
+    signKeyId?: number;
+    status?: TypesGroupStatus;
+    tlsCaCert?: string;
+    tlsCert?: string;
+    tlsKeyId?: number;
+    updatedAt?: string;
+    version?: string;
+};
+
+export type TypesNodeGroupService = {
+    /**
+     * Config is service-type-specific logical configuration supplied at
+     * creation time. For POSTGRES this carries db/user/password/hostPort.
+     */
+    config?: Array<number>;
+    createdAt?: string;
+    /**
+     * DeploymentConfig is resolved at runtime (host/port the coordinator
+     * dials). Empty until the service has been started at least once.
+     */
+    deploymentConfig?: Array<number>;
+    errorMessage?: string;
+    id?: number;
+    name?: string;
+    nodeGroupId?: number;
+    serviceType?: GithubComChainlaunchChainlaunchPkgNodegroupsTypesServiceType;
+    status?: TypesGroupStatus;
+    updatedAt?: string;
+    version?: string;
+};
+
+export type TypesNodeType = 'FABRIC_PEER' | 'FABRIC_ORDERER' | 'BESU_FULLNODE' | 'FABRICX_ORDERER_GROUP' | 'FABRICX_COMMITTER' | 'FABRICX_ORDERER_ROUTER' | 'FABRICX_ORDERER_BATCHER' | 'FABRICX_ORDERER_CONSENTER' | 'FABRICX_ORDERER_ASSEMBLER' | 'FABRICX_COMMITTER_SIDECAR' | 'FABRICX_COMMITTER_COORDINATOR' | 'FABRICX_COMMITTER_VALIDATOR' | 'FABRICX_COMMITTER_VERIFIER' | 'FABRICX_COMMITTER_QUERY_SERVICE';
 
 export type TypesOrdererAddressOverride = {
     /**
@@ -2620,13 +3383,7 @@ export type TypesRefreshPrometheusRequest = {
     scrape_interval?: number;
 };
 
-export type TypesService = {
-    createdAt?: string;
-    image?: string;
-    name?: string;
-    ports?: Array<GithubComChainlaunchChainlaunchPkgPluginTypesPort>;
-    status?: string;
-};
+export type TypesServiceStatus = 'PENDING' | 'RUNNING' | 'STOPPED' | 'STOPPING' | 'STARTING' | 'UPDATING' | 'ERROR' | 'DEGRADED' | 'CREATED';
 
 export type TypesSpec = {
     dockerCompose?: TypesDockerCompose;
@@ -6841,6 +7598,578 @@ export type PostNetworksFabricByIdUpdateConfigResponses = {
 
 export type PostNetworksFabricByIdUpdateConfigResponse = PostNetworksFabricByIdUpdateConfigResponses[keyof PostNetworksFabricByIdUpdateConfigResponses];
 
+export type GetNetworksFabricxData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/networks/fabricx';
+};
+
+export type GetNetworksFabricxResponses = {
+    /**
+     * OK
+     */
+    200: HttpListNetworksResponse;
+};
+
+export type GetNetworksFabricxResponse = GetNetworksFabricxResponses[keyof GetNetworksFabricxResponses];
+
+export type PostNetworksFabricxData = {
+    /**
+     * Network creation request
+     */
+    body: HttpCreateFabricXNetworkRequest;
+    path?: never;
+    query?: never;
+    url: '/networks/fabricx';
+};
+
+export type PostNetworksFabricxErrors = {
+    /**
+     * Bad Request
+     */
+    400: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+};
+
+export type PostNetworksFabricxError = PostNetworksFabricxErrors[keyof PostNetworksFabricxErrors];
+
+export type PostNetworksFabricxResponses = {
+    /**
+     * Created
+     */
+    201: HttpFabricXNetworkResponse;
+};
+
+export type PostNetworksFabricxResponse = PostNetworksFabricxResponses[keyof PostNetworksFabricxResponses];
+
+export type DeleteNetworksFabricxByIdData = {
+    body?: never;
+    path: {
+        /**
+         * Network ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/networks/fabricx/{id}';
+};
+
+export type DeleteNetworksFabricxByIdResponses = {
+    /**
+     * No Content
+     */
+    204: unknown;
+};
+
+export type GetNetworksFabricxByIdData = {
+    body?: never;
+    path: {
+        /**
+         * Network ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/networks/fabricx/{id}';
+};
+
+export type GetNetworksFabricxByIdResponses = {
+    /**
+     * OK
+     */
+    200: HttpFabricXNetworkResponse;
+};
+
+export type GetNetworksFabricxByIdResponse = GetNetworksFabricxByIdResponses[keyof GetNetworksFabricxByIdResponses];
+
+export type GetNetworksFabricxByIdBlocksData = {
+    body?: never;
+    path: {
+        /**
+         * Network ID
+         */
+        id: number;
+    };
+    query?: {
+        /**
+         * Number of blocks to return (default: 10)
+         */
+        limit?: number;
+        /**
+         * Number of blocks to skip from the chain tip (default: 0)
+         */
+        offset?: number;
+        /**
+         * Return newest first when true (default: true)
+         */
+        reverse?: boolean;
+    };
+    url: '/networks/fabricx/{id}/blocks';
+};
+
+export type GetNetworksFabricxByIdBlocksErrors = {
+    /**
+     * Bad Request
+     */
+    400: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+};
+
+export type GetNetworksFabricxByIdBlocksError = GetNetworksFabricxByIdBlocksErrors[keyof GetNetworksFabricxByIdBlocksErrors];
+
+export type GetNetworksFabricxByIdBlocksResponses = {
+    /**
+     * OK
+     */
+    200: HttpFabricXBlockListResponse;
+};
+
+export type GetNetworksFabricxByIdBlocksResponse = GetNetworksFabricxByIdBlocksResponses[keyof GetNetworksFabricxByIdBlocksResponses];
+
+export type GetNetworksFabricxByIdBlocksByBlockNumData = {
+    body?: never;
+    path: {
+        /**
+         * Network ID
+         */
+        id: number;
+        /**
+         * Block number
+         */
+        blockNum: number;
+    };
+    query?: never;
+    url: '/networks/fabricx/{id}/blocks/{blockNum}';
+};
+
+export type GetNetworksFabricxByIdBlocksByBlockNumErrors = {
+    /**
+     * Bad Request
+     */
+    400: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Not Found
+     */
+    404: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+};
+
+export type GetNetworksFabricxByIdBlocksByBlockNumError = GetNetworksFabricxByIdBlocksByBlockNumErrors[keyof GetNetworksFabricxByIdBlocksByBlockNumErrors];
+
+export type GetNetworksFabricxByIdBlocksByBlockNumResponses = {
+    /**
+     * OK
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type GetNetworksFabricxByIdBlocksByBlockNumResponse = GetNetworksFabricxByIdBlocksByBlockNumResponses[keyof GetNetworksFabricxByIdBlocksByBlockNumResponses];
+
+export type GetNetworksFabricxByIdChainInfoData = {
+    body?: never;
+    path: {
+        /**
+         * Network ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/networks/fabricx/{id}/chain-info';
+};
+
+export type GetNetworksFabricxByIdChainInfoErrors = {
+    /**
+     * Bad Request
+     */
+    400: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+};
+
+export type GetNetworksFabricxByIdChainInfoError = GetNetworksFabricxByIdChainInfoErrors[keyof GetNetworksFabricxByIdChainInfoErrors];
+
+export type GetNetworksFabricxByIdChainInfoResponses = {
+    /**
+     * OK
+     */
+    200: HttpFabricXChainInfoResponse;
+};
+
+export type GetNetworksFabricxByIdChainInfoResponse = GetNetworksFabricxByIdChainInfoResponses[keyof GetNetworksFabricxByIdChainInfoResponses];
+
+export type GetNetworksFabricxByIdNamespacePoliciesData = {
+    body?: never;
+    path: {
+        /**
+         * Network ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/networks/fabricx/{id}/namespace-policies';
+};
+
+export type GetNetworksFabricxByIdNamespacePoliciesErrors = {
+    /**
+     * Bad Request
+     */
+    400: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+};
+
+export type GetNetworksFabricxByIdNamespacePoliciesError = GetNetworksFabricxByIdNamespacePoliciesErrors[keyof GetNetworksFabricxByIdNamespacePoliciesErrors];
+
+export type GetNetworksFabricxByIdNamespacePoliciesResponses = {
+    /**
+     * OK
+     */
+    200: Array<HttpFabricXNamespacePolicyResponse>;
+};
+
+export type GetNetworksFabricxByIdNamespacePoliciesResponse = GetNetworksFabricxByIdNamespacePoliciesResponses[keyof GetNetworksFabricxByIdNamespacePoliciesResponses];
+
+export type GetNetworksFabricxByIdNamespacesData = {
+    body?: never;
+    path: {
+        /**
+         * Network ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/networks/fabricx/{id}/namespaces';
+};
+
+export type GetNetworksFabricxByIdNamespacesResponses = {
+    /**
+     * OK
+     */
+    200: HttpFabricXNamespaceListResponse;
+};
+
+export type GetNetworksFabricxByIdNamespacesResponse = GetNetworksFabricxByIdNamespacesResponses[keyof GetNetworksFabricxByIdNamespacesResponses];
+
+export type PostNetworksFabricxByIdNamespacesData = {
+    /**
+     * Namespace creation request
+     */
+    body: HttpCreateFabricXNamespaceRequest;
+    path: {
+        /**
+         * Network ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/networks/fabricx/{id}/namespaces';
+};
+
+export type PostNetworksFabricxByIdNamespacesErrors = {
+    /**
+     * Bad Request
+     */
+    400: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+};
+
+export type PostNetworksFabricxByIdNamespacesError = PostNetworksFabricxByIdNamespacesErrors[keyof PostNetworksFabricxByIdNamespacesErrors];
+
+export type PostNetworksFabricxByIdNamespacesResponses = {
+    /**
+     * Created
+     */
+    201: HttpFabricXNamespaceResponse;
+};
+
+export type PostNetworksFabricxByIdNamespacesResponse = PostNetworksFabricxByIdNamespacesResponses[keyof PostNetworksFabricxByIdNamespacesResponses];
+
+export type DeleteNetworksFabricxByIdNamespacesByNamespaceIdData = {
+    body?: never;
+    path: {
+        /**
+         * Network ID
+         */
+        id: number;
+        /**
+         * Namespace record ID
+         */
+        namespaceId: number;
+    };
+    query?: never;
+    url: '/networks/fabricx/{id}/namespaces/{namespaceId}';
+};
+
+export type DeleteNetworksFabricxByIdNamespacesByNamespaceIdErrors = {
+    /**
+     * Internal Server Error
+     */
+    500: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+};
+
+export type DeleteNetworksFabricxByIdNamespacesByNamespaceIdError = DeleteNetworksFabricxByIdNamespacesByNamespaceIdErrors[keyof DeleteNetworksFabricxByIdNamespacesByNamespaceIdErrors];
+
+export type DeleteNetworksFabricxByIdNamespacesByNamespaceIdResponses = {
+    /**
+     * Deleted
+     */
+    204: unknown;
+};
+
+export type GetNetworksFabricxByIdNodesData = {
+    body?: never;
+    path: {
+        /**
+         * Network ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/networks/fabricx/{id}/nodes';
+};
+
+export type GetNetworksFabricxByIdNodesResponses = {
+    /**
+     * OK
+     */
+    200: HttpGetNetworkNodesResponse;
+};
+
+export type GetNetworksFabricxByIdNodesResponse = GetNetworksFabricxByIdNodesResponses[keyof GetNetworksFabricxByIdNodesResponses];
+
+export type PostNetworksFabricxByIdNodesByNodeIdJoinData = {
+    body?: never;
+    path: {
+        /**
+         * Network ID
+         */
+        id: number;
+        /**
+         * Node ID (orderer group or committer)
+         */
+        nodeId: number;
+    };
+    query?: never;
+    url: '/networks/fabricx/{id}/nodes/{nodeId}/join';
+};
+
+export type PostNetworksFabricxByIdNodesByNodeIdJoinResponses = {
+    /**
+     * OK
+     */
+    200: HttpFabricXJoinNodeResponse;
+};
+
+export type PostNetworksFabricxByIdNodesByNodeIdJoinResponse = PostNetworksFabricxByIdNodesByNodeIdJoinResponses[keyof PostNetworksFabricxByIdNodesByNodeIdJoinResponses];
+
+export type GetNetworksFabricxByIdStateByNamespaceData = {
+    body?: never;
+    path: {
+        /**
+         * Network ID
+         */
+        id: number;
+        /**
+         * Namespace ID
+         */
+        namespace: string;
+    };
+    query: {
+        /**
+         * Comma-separated list of keys to look up
+         */
+        keys: string;
+    };
+    url: '/networks/fabricx/{id}/state/{namespace}';
+};
+
+export type GetNetworksFabricxByIdStateByNamespaceErrors = {
+    /**
+     * Bad Request
+     */
+    400: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+};
+
+export type GetNetworksFabricxByIdStateByNamespaceError = GetNetworksFabricxByIdStateByNamespaceErrors[keyof GetNetworksFabricxByIdStateByNamespaceErrors];
+
+export type GetNetworksFabricxByIdStateByNamespaceResponses = {
+    /**
+     * OK
+     */
+    200: Array<HttpFabricXStateRowResponse>;
+};
+
+export type GetNetworksFabricxByIdStateByNamespaceResponse = GetNetworksFabricxByIdStateByNamespaceResponses[keyof GetNetworksFabricxByIdStateByNamespaceResponses];
+
+export type GetNetworksFabricxByIdTransactionsByTxIdData = {
+    body?: never;
+    path: {
+        /**
+         * Network ID
+         */
+        id: number;
+        /**
+         * Transaction ID
+         */
+        txId: string;
+    };
+    query?: never;
+    url: '/networks/fabricx/{id}/transactions/{txId}';
+};
+
+export type GetNetworksFabricxByIdTransactionsByTxIdErrors = {
+    /**
+     * Bad Request
+     */
+    400: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Not Found
+     */
+    404: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+};
+
+export type GetNetworksFabricxByIdTransactionsByTxIdError = GetNetworksFabricxByIdTransactionsByTxIdErrors[keyof GetNetworksFabricxByIdTransactionsByTxIdErrors];
+
+export type GetNetworksFabricxByIdTransactionsByTxIdResponses = {
+    /**
+     * OK
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type GetNetworksFabricxByIdTransactionsByTxIdResponse = GetNetworksFabricxByIdTransactionsByTxIdResponses[keyof GetNetworksFabricxByIdTransactionsByTxIdResponses];
+
+export type ExportNetworkTemplateData = {
+    body?: never;
+    path: {
+        /**
+         * Network ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/networks/templates/export/{id}';
+};
+
+export type ExportNetworkTemplateErrors = {
+    /**
+     * Bad Request
+     */
+    400: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Not Found
+     */
+    404: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+};
+
+export type ExportNetworkTemplateError = ExportNetworkTemplateErrors[keyof ExportNetworkTemplateErrors];
+
+export type ExportNetworkTemplateResponses = {
+    /**
+     * OK
+     */
+    200: TemplateExportTemplateResponse;
+};
+
+export type ExportNetworkTemplateResponse = ExportNetworkTemplateResponses[keyof ExportNetworkTemplateResponses];
+
+export type ImportNetworkFromTemplateData = {
+    /**
+     * Template import request
+     */
+    body: TemplateImportTemplateRequest;
+    path?: never;
+    query?: never;
+    url: '/networks/templates/import';
+};
+
+export type ImportNetworkFromTemplateErrors = {
+    /**
+     * Bad Request
+     */
+    400: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+};
+
+export type ImportNetworkFromTemplateError = ImportNetworkFromTemplateErrors[keyof ImportNetworkFromTemplateErrors];
+
+export type ImportNetworkFromTemplateResponses = {
+    /**
+     * Created
+     */
+    201: TemplateImportTemplateResponse;
+};
+
+export type ImportNetworkFromTemplateResponse = ImportNetworkFromTemplateResponses[keyof ImportNetworkFromTemplateResponses];
+
+export type ValidateTemplateImportData = {
+    /**
+     * Template validation request
+     */
+    body: TemplateValidateTemplateRequest;
+    path?: never;
+    query?: never;
+    url: '/networks/templates/validate';
+};
+
+export type ValidateTemplateImportErrors = {
+    /**
+     * Bad Request
+     */
+    400: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: GithubComChainlaunchChainlaunchPkgNetworksHttpErrorResponse;
+};
+
+export type ValidateTemplateImportError = ValidateTemplateImportErrors[keyof ValidateTemplateImportErrors];
+
+export type ValidateTemplateImportResponses = {
+    /**
+     * OK
+     */
+    200: TemplateValidateTemplateResponse;
+};
+
+export type ValidateTemplateImportResponse = ValidateTemplateImportResponses[keyof ValidateTemplateImportResponses];
+
 export type PutNetworksByIdGenesisData = {
     /**
      * Genesis block update request
@@ -6881,6 +8210,273 @@ export type PutNetworksByIdGenesisResponses = {
 };
 
 export type PutNetworksByIdGenesisResponse = PutNetworksByIdGenesisResponses[keyof PutNetworksByIdGenesisResponses];
+
+export type GetNodeGroupsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/node-groups';
+};
+
+export type GetNodeGroupsResponses = {
+    /**
+     * OK
+     */
+    200: Array<TypesNodeGroup>;
+};
+
+export type GetNodeGroupsResponse = GetNodeGroupsResponses[keyof GetNodeGroupsResponses];
+
+export type PostNodeGroupsData = {
+    /**
+     * Group creation request
+     */
+    body: HttpCreateRequest;
+    path?: never;
+    query?: never;
+    url: '/node-groups';
+};
+
+export type PostNodeGroupsResponses = {
+    /**
+     * Created
+     */
+    201: TypesNodeGroup;
+};
+
+export type PostNodeGroupsResponse = PostNodeGroupsResponses[keyof PostNodeGroupsResponses];
+
+export type DeleteNodeGroupsByIdData = {
+    body?: never;
+    path: {
+        /**
+         * Group ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/node-groups/{id}';
+};
+
+export type DeleteNodeGroupsByIdResponses = {
+    /**
+     * No Content
+     */
+    204: unknown;
+};
+
+export type GetNodeGroupsByIdData = {
+    body?: never;
+    path: {
+        /**
+         * Group ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/node-groups/{id}';
+};
+
+export type GetNodeGroupsByIdResponses = {
+    /**
+     * OK
+     */
+    200: TypesNodeGroup;
+};
+
+export type GetNodeGroupsByIdResponse = GetNodeGroupsByIdResponses[keyof GetNodeGroupsByIdResponses];
+
+export type GetNodeGroupsByIdChildrenData = {
+    body?: never;
+    path: {
+        /**
+         * Group ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/node-groups/{id}/children';
+};
+
+export type GetNodeGroupsByIdChildrenResponses = {
+    /**
+     * OK
+     */
+    200: Array<ServiceChild>;
+};
+
+export type GetNodeGroupsByIdChildrenResponse = GetNodeGroupsByIdChildrenResponses[keyof GetNodeGroupsByIdChildrenResponses];
+
+export type PostNodeGroupsByIdInitData = {
+    /**
+     * Port allocations
+     */
+    body: HttpInitOrdererRequest;
+    path: {
+        /**
+         * Group ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/node-groups/{id}/init';
+};
+
+export type PostNodeGroupsByIdInitResponses = {
+    /**
+     * OK
+     */
+    200: TypesNodeGroup;
+};
+
+export type PostNodeGroupsByIdInitResponse = PostNodeGroupsByIdInitResponses[keyof PostNodeGroupsByIdInitResponses];
+
+export type DeleteNodeGroupsByIdPostgresServiceData = {
+    body?: never;
+    path: {
+        /**
+         * Group ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/node-groups/{id}/postgres-service';
+};
+
+export type DeleteNodeGroupsByIdPostgresServiceResponses = {
+    /**
+     * OK
+     */
+    200: TypesNodeGroup;
+};
+
+export type DeleteNodeGroupsByIdPostgresServiceResponse = DeleteNodeGroupsByIdPostgresServiceResponses[keyof DeleteNodeGroupsByIdPostgresServiceResponses];
+
+export type PutNodeGroupsByIdPostgresServiceData = {
+    /**
+     * Service to attach
+     */
+    body: HttpAttachPostgresServiceRequest;
+    path: {
+        /**
+         * Group ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/node-groups/{id}/postgres-service';
+};
+
+export type PutNodeGroupsByIdPostgresServiceResponses = {
+    /**
+     * OK
+     */
+    200: TypesNodeGroup;
+};
+
+export type PutNodeGroupsByIdPostgresServiceResponse = PutNodeGroupsByIdPostgresServiceResponses[keyof PutNodeGroupsByIdPostgresServiceResponses];
+
+export type PostNodeGroupsByIdRestartData = {
+    body?: never;
+    path: {
+        /**
+         * Group ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/node-groups/{id}/restart';
+};
+
+export type PostNodeGroupsByIdRestartResponses = {
+    /**
+     * Accepted
+     */
+    202: unknown;
+};
+
+export type GetNodeGroupsByIdServicesData = {
+    body?: never;
+    path: {
+        /**
+         * Group ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/node-groups/{id}/services';
+};
+
+export type GetNodeGroupsByIdServicesResponses = {
+    /**
+     * OK
+     */
+    200: Array<TypesNodeGroupService>;
+};
+
+export type GetNodeGroupsByIdServicesResponse = GetNodeGroupsByIdServicesResponses[keyof GetNodeGroupsByIdServicesResponses];
+
+export type PostNodeGroupsByIdServicesPostgresData = {
+    /**
+     * Postgres service config
+     */
+    body: GithubComChainlaunchChainlaunchPkgNodegroupsHttpCreatePostgresRequest;
+    path: {
+        /**
+         * Group ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/node-groups/{id}/services/postgres';
+};
+
+export type PostNodeGroupsByIdServicesPostgresResponses = {
+    /**
+     * Created
+     */
+    201: TypesNodeGroupService;
+};
+
+export type PostNodeGroupsByIdServicesPostgresResponse = PostNodeGroupsByIdServicesPostgresResponses[keyof PostNodeGroupsByIdServicesPostgresResponses];
+
+export type PostNodeGroupsByIdStartData = {
+    body?: never;
+    path: {
+        /**
+         * Group ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/node-groups/{id}/start';
+};
+
+export type PostNodeGroupsByIdStartResponses = {
+    /**
+     * Accepted
+     */
+    202: unknown;
+};
+
+export type PostNodeGroupsByIdStopData = {
+    body?: never;
+    path: {
+        /**
+         * Group ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/node-groups/{id}/stop';
+};
+
+export type PostNodeGroupsByIdStopResponses = {
+    /**
+     * Accepted
+     */
+    202: unknown;
+};
 
 export type GetNodesData = {
     body?: never;
@@ -11432,6 +13028,234 @@ export type GetScFabricPeerByPeerIdChaincodeSequenceResponses = {
 };
 
 export type GetScFabricPeerByPeerIdChaincodeSequenceResponse = GetScFabricPeerByPeerIdChaincodeSequenceResponses[keyof GetScFabricPeerByPeerIdChaincodeSequenceResponses];
+
+export type GetServicesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter by service type (e.g. POSTGRES)
+         */
+        serviceType?: string;
+        /**
+         * Filter by status (e.g. RUNNING, STOPPED)
+         */
+        status?: string;
+        /**
+         * Page size (default 100)
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/services';
+};
+
+export type GetServicesResponses = {
+    /**
+     * OK
+     */
+    200: Array<GithubComChainlaunchChainlaunchPkgServicesTypesService>;
+};
+
+export type GetServicesResponse = GetServicesResponses[keyof GetServicesResponses];
+
+export type PostServicesPostgresData = {
+    /**
+     * Postgres creation request
+     */
+    body: GithubComChainlaunchChainlaunchPkgServicesHttpCreatePostgresRequest;
+    path?: never;
+    query?: never;
+    url: '/services/postgres';
+};
+
+export type PostServicesPostgresResponses = {
+    /**
+     * Created
+     */
+    201: GithubComChainlaunchChainlaunchPkgServicesTypesService;
+};
+
+export type PostServicesPostgresResponse = PostServicesPostgresResponses[keyof PostServicesPostgresResponses];
+
+export type DeleteServicesByIdData = {
+    body?: never;
+    path: {
+        /**
+         * Service ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/services/{id}';
+};
+
+export type DeleteServicesByIdResponses = {
+    /**
+     * No Content
+     */
+    204: unknown;
+};
+
+export type GetServicesByIdData = {
+    body?: never;
+    path: {
+        /**
+         * Service ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/services/{id}';
+};
+
+export type GetServicesByIdResponses = {
+    /**
+     * OK
+     */
+    200: GithubComChainlaunchChainlaunchPkgServicesTypesService;
+};
+
+export type GetServicesByIdResponse = GetServicesByIdResponses[keyof GetServicesByIdResponses];
+
+export type PutServicesByIdData = {
+    /**
+     * Mutable fields
+     */
+    body: HttpUpdateServiceRequest;
+    path: {
+        /**
+         * Service ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/services/{id}';
+};
+
+export type PutServicesByIdResponses = {
+    /**
+     * OK
+     */
+    200: GithubComChainlaunchChainlaunchPkgServicesTypesService;
+};
+
+export type PutServicesByIdResponse = PutServicesByIdResponses[keyof PutServicesByIdResponses];
+
+export type GetServicesByIdConsumersData = {
+    body?: never;
+    path: {
+        /**
+         * Service ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/services/{id}/consumers';
+};
+
+export type GetServicesByIdConsumersResponses = {
+    /**
+     * OK
+     */
+    200: Array<ServiceConsumer>;
+};
+
+export type GetServicesByIdConsumersResponse = GetServicesByIdConsumersResponses[keyof GetServicesByIdConsumersResponses];
+
+export type GetServicesByIdLogsData = {
+    body?: never;
+    path: {
+        /**
+         * Service ID
+         */
+        id: number;
+    };
+    query?: {
+        /**
+         * Max lines to return (default 200, max 2000)
+         */
+        tail?: number;
+    };
+    url: '/services/{id}/logs';
+};
+
+export type GetServicesByIdLogsResponses = {
+    /**
+     * OK
+     */
+    200: HttpLogsResponse;
+};
+
+export type GetServicesByIdLogsResponse = GetServicesByIdLogsResponses[keyof GetServicesByIdLogsResponses];
+
+export type PostServicesByIdPostgresDatabasesData = {
+    /**
+     * Databases to provision
+     */
+    body: HttpCreatePostgresDatabasesRequest;
+    path: {
+        /**
+         * Service ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/services/{id}/postgres/databases';
+};
+
+export type PostServicesByIdPostgresDatabasesResponses = {
+    /**
+     * No Content
+     */
+    204: unknown;
+};
+
+export type PostServicesByIdStartData = {
+    /**
+     * Network to run on
+     */
+    body: HttpStartServiceRequest;
+    path: {
+        /**
+         * Service ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/services/{id}/start';
+};
+
+export type PostServicesByIdStartResponses = {
+    /**
+     * OK
+     */
+    200: GithubComChainlaunchChainlaunchPkgServicesTypesService;
+};
+
+export type PostServicesByIdStartResponse = PostServicesByIdStartResponses[keyof PostServicesByIdStartResponses];
+
+export type PostServicesByIdStopData = {
+    body?: never;
+    path: {
+        /**
+         * Service ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/services/{id}/stop';
+};
+
+export type PostServicesByIdStopResponses = {
+    /**
+     * No Content
+     */
+    204: unknown;
+};
 
 export type GetSettingsData = {
     body?: never;

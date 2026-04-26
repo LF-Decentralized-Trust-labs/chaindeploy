@@ -236,58 +236,75 @@ export default function FabricNetworkWizard() {
 	// --- Node step logic ---
 
 	const generateNodes = useCallback(async () => {
-		const newNodes: NodeConfig[] = []
+		// Calculate total peers and orderers across all orgs
+		const totalPeers = orgs.filter((o) => o.isPeer).length * peerCount
+		const totalOrderers = orgs.filter((o) => o.isOrderer).length * ordererCount
 
-		for (let orgIdx = 0; orgIdx < orgs.length; orgIdx++) {
-			const org = orgs[orgIdx]
-			const sluggedMspId = slugify(org.mspId)
-			const orgPeerCount = org.isPeer ? peerCount : 0
-			const orgOrdererCount = org.isOrderer ? ordererCount : 0
-
-			if (orgPeerCount === 0 && orgOrdererCount === 0) continue
-
-			try {
-				const r = await getNodesDefaultsFabric({
-					query: { peerCount: orgPeerCount, ordererCount: orgOrdererCount },
-				})
-
-				for (let i = 0; i < (r.data?.peers?.length || 0); i++) {
-					const peer = r.data!.peers![i]
-					newNodes.push({
-						name: `peer${i}-${sluggedMspId}`,
-						nodeType: 'FABRIC_PEER',
-						orgIndex: orgIdx,
-						mode: 'service',
-						version: '3.1.3',
-						listenAddress: peer.listenAddress || '',
-						operationsListenAddress: peer.operationsListenAddress || '',
-						externalEndpoint: peer.externalEndpoint || '',
-						chaincodeAddress: peer.chaincodeAddress || '',
-						eventsAddress: peer.eventsAddress || '',
-					})
-				}
-
-				for (let i = 0; i < (r.data?.orderers?.length || 0); i++) {
-					const orderer = r.data!.orderers![i]
-					newNodes.push({
-						name: `orderer${i}-${sluggedMspId}`,
-						nodeType: 'FABRIC_ORDERER',
-						orgIndex: orgIdx,
-						mode: 'service',
-						version: '3.1.3',
-						listenAddress: orderer.listenAddress || '',
-						operationsListenAddress: orderer.operationsListenAddress || '',
-						externalEndpoint: orderer.externalEndpoint || '',
-						adminAddress: orderer.adminAddress || '',
-					})
-				}
-			} catch (err) {
-				console.error('Failed to load defaults for org', org.mspId, err)
-			}
+		if (totalPeers === 0 && totalOrderers === 0) {
+			setNodes([])
+			setNodesGenerated(true)
+			return
 		}
 
-		setNodes(newNodes)
-		setNodesGenerated(true)
+		try {
+			// Single API call with total counts to get non-overlapping ports
+			const r = await getNodesDefaultsFabric({
+				query: { peerCount: totalPeers, ordererCount: totalOrderers },
+			})
+
+			const newNodes: NodeConfig[] = []
+			let peerIdx = 0
+			let ordererIdx = 0
+
+			for (let orgIdx = 0; orgIdx < orgs.length; orgIdx++) {
+				const org = orgs[orgIdx]
+				const sluggedMspId = slugify(org.mspId)
+
+				if (org.isPeer) {
+					for (let i = 0; i < peerCount; i++) {
+						const peer = r.data?.peers?.[peerIdx]
+						if (!peer) break
+						newNodes.push({
+							name: `peer${i}-${sluggedMspId}`,
+							nodeType: 'FABRIC_PEER',
+							orgIndex: orgIdx,
+							mode: 'service',
+							version: '3.1.3',
+							listenAddress: peer.listenAddress || '',
+							operationsListenAddress: peer.operationsListenAddress || '',
+							externalEndpoint: peer.externalEndpoint || '',
+							chaincodeAddress: peer.chaincodeAddress || '',
+							eventsAddress: peer.eventsAddress || '',
+						})
+						peerIdx++
+					}
+				}
+
+				if (org.isOrderer) {
+					for (let i = 0; i < ordererCount; i++) {
+						const orderer = r.data?.orderers?.[ordererIdx]
+						if (!orderer) break
+						newNodes.push({
+							name: `orderer${i}-${sluggedMspId}`,
+							nodeType: 'FABRIC_ORDERER',
+							orgIndex: orgIdx,
+							mode: 'service',
+							version: '3.1.3',
+							listenAddress: orderer.listenAddress || '',
+							operationsListenAddress: orderer.operationsListenAddress || '',
+							externalEndpoint: orderer.externalEndpoint || '',
+							adminAddress: orderer.adminAddress || '',
+						})
+						ordererIdx++
+					}
+				}
+			}
+
+			setNodes(newNodes)
+			setNodesGenerated(true)
+		} catch (err) {
+			console.error('Failed to load node defaults', err)
+		}
 	}, [orgs, peerCount, ordererCount])
 
 	useEffect(() => {

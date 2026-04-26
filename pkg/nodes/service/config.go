@@ -45,9 +45,11 @@ type NodeResponse struct {
 	UpdatedAt    time.Time      `json:"updatedAt"`
 
 	// Type-specific fields
-	FabricPeer    *FabricPeerProperties    `json:"fabricPeer,omitempty"`
-	FabricOrderer *FabricOrdererProperties `json:"fabricOrderer,omitempty"`
-	BesuNode      *BesuNodeProperties      `json:"besuNode,omitempty"`
+	FabricPeer          *FabricPeerProperties          `json:"fabricPeer,omitempty"`
+	FabricOrderer       *FabricOrdererProperties       `json:"fabricOrderer,omitempty"`
+	BesuNode            *BesuNodeProperties             `json:"besuNode,omitempty"`
+	FabricXOrdererGroup *FabricXOrdererGroupProperties  `json:"fabricXOrdererGroup,omitempty"`
+	FabricXCommitter    *FabricXCommitterProperties     `json:"fabricXCommitter,omitempty"`
 }
 
 // FabricPeerProperties represents the properties specific to a Fabric peer node
@@ -118,4 +120,35 @@ type BesuNodeProperties struct {
 	// Key information
 	KeyAddress string `json:"keyAddress,omitempty"`
 	PublicKey  string `json:"publicKey,omitempty"`
+}
+
+// FabricXOrdererGroupProperties represents the properties specific to a Fabric X orderer group
+type FabricXOrdererGroupProperties struct {
+	MSPID          string `json:"mspId"`
+	OrganizationID int64  `json:"organizationId"`
+	PartyID        int    `json:"partyId"`
+	ExternalIP     string `json:"externalIp"`
+	RouterPort     int    `json:"routerPort"`
+	BatcherPort    int    `json:"batcherPort"`
+	ConsenterPort  int    `json:"consenterPort"`
+	AssemblerPort  int    `json:"assemblerPort"`
+	Version        string `json:"version"`
+	SignCert       string `json:"signCert,omitempty"`
+	TLSCert        string `json:"tlsCert,omitempty"`
+	CACert         string `json:"caCert,omitempty"`
+	TLSCACert      string `json:"tlsCaCert,omitempty"`
+}
+
+// FabricXCommitterProperties represents the properties specific to a Fabric X committer
+type FabricXCommitterProperties struct {
+	MSPID            string `json:"mspId"`
+	OrganizationID   int64  `json:"organizationId"`
+	PartyID          int    `json:"partyId"`
+	ExternalIP       string `json:"externalIp"`
+	SidecarPort      int    `json:"sidecarPort"`
+	CoordinatorPort  int    `json:"coordinatorPort"`
+	ValidatorPort    int    `json:"validatorPort"`
+	VerifierPort     int    `json:"verifierPort"`
+	QueryServicePort int    `json:"queryServicePort"`
+	Version          string `json:"version"`
 }

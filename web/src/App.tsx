@@ -28,6 +28,11 @@ const NetworksPage = lazy(() => import('./pages/networks'))
 const BesuPage = lazy(() => import('./pages/networks/besu'))
 const BesuNetworkDetailPage = lazy(() => import('./pages/networks/besu-page'))
 const CreateBesuNetworkPage = lazy(() => import('./pages/networks/besu/create'))
+const CreateFabricXNetworkPage = lazy(() => import('./pages/networks/fabricx/create'))
+const FabricXQuickStartPage = lazy(() => import('./pages/networks/fabricx/quickstart'))
+const FabricXBlockDetailPage = lazy(() => import('./pages/networks/fabricx/blocks/[blockNumber]'))
+const FabricXTransactionDetailPage = lazy(() => import('./pages/networks/fabricx/transactions/[txId]'))
+const FabricXNetworkDetailPage = lazy(() => import('./pages/networks/fabricx-page'))
 const FabricPage = lazy(() => import('./pages/networks/fabric'))
 const FabricNetworkDetailPage = lazy(() => import('./pages/networks/fabric-page'))
 const FabricCreateChannel = lazy(() => import('./pages/networks/fabric/create'))
@@ -71,6 +76,10 @@ const ChaincodePlaygroundPage = lazy(() => import('./pages/smart-contracts/fabri
 const BesuBlocksPage = lazy(() => import('./pages/networks/besu/[nodeId]/blocks'))
 const BesuBlockDetailsPage = lazy(() => import('./pages/networks/besu/[nodeId]/blocks/[blockNumber]'))
 const BesuTransactionDetailsPage = lazy(() => import('./pages/networks/besu/[nodeId]/blocks/[blockNumber]/transactions/[index]'))
+const ServicesPage = lazy(() => import('./pages/services'))
+const ServiceDetailPage = lazy(() => import('./pages/services/[id]'))
+const NodeGroupsPage = lazy(() => import('./pages/node-groups'))
+const NodeGroupDetailPage = lazy(() => import('./pages/node-groups/[id]'))
 
 import { Toaster } from './components/ui/sonner'
 import { AlertCircle, CheckCircle, Loader2, X } from 'lucide-react'
@@ -118,6 +127,10 @@ const App2 = () => {
 													<Route path="monitoring/providers/new" element={<CreateProviderPage />} />
 													<Route path="monitoring/providers/:id" element={<UpdateProviderPage />} />
 													<Route path="networks" element={<NetworksPage />} />
+													<Route path="services" element={<ServicesPage />} />
+													<Route path="services/:id" element={<ServiceDetailPage />} />
+													<Route path="node-groups" element={<NodeGroupsPage />} />
+													<Route path="node-groups/:id" element={<NodeGroupDetailPage />} />
 													<Route path="networks/import" element={<ImportNetworkPage />} />
 													<Route path="network/fabric" element={<FabricPage />} />
 													<Route path="network/besu" element={<BesuPage />} />
@@ -136,6 +149,11 @@ const App2 = () => {
 													<Route path="networks/fabric/create" element={<FabricCreateChannel />} />
 													<Route path="networks/fabric/wizard" element={<FabricNetworkWizard />} />
 													<Route path="networks/besu/create" element={<CreateBesuNetworkPage />} />
+													<Route path="networks/fabricx/create" element={<CreateFabricXNetworkPage />} />
+													<Route path="networks/fabricx/quickstart" element={<FabricXQuickStartPage />} />
+													<Route path="networks/:id/fabricx" element={<FabricXNetworkDetailPage />} />
+													<Route path="networks/:id/fabricx/blocks/:blockNumber" element={<FabricXBlockDetailPage />} />
+													<Route path="networks/:id/fabricx/transactions/:txId" element={<FabricXTransactionDetailPage />} />
 													<Route path="networks/:id/besu" element={<BesuNetworkDetailPage />} />
 													<Route path="networks/:id/fabric" element={<FabricNetworkDetailPage />} />
 													<Route path="networks/:id/blocks" element={<BlocksOverview />} />
@@ -217,6 +235,10 @@ const App = () => {
 														<Route path="monitoring/providers/new" element={<CreateProviderPage />} />
 														<Route path="monitoring/providers/:id" element={<UpdateProviderPage />} />
 														<Route path="networks" element={<NetworksPage />} />
+														<Route path="services" element={<ServicesPage />} />
+														<Route path="services/:id" element={<ServiceDetailPage />} />
+														<Route path="node-groups" element={<NodeGroupsPage />} />
+														<Route path="node-groups/:id" element={<NodeGroupDetailPage />} />
 														<Route path="networks/import" element={<ImportNetworkPage />} />
 														<Route path="network/fabric" element={<FabricPage />} />
 														<Route path="network/besu" element={<BesuPage />} />
@@ -235,6 +257,11 @@ const App = () => {
 														<Route path="networks/fabric/create" element={<FabricCreateChannel />} />
 														<Route path="networks/fabric/wizard" element={<FabricNetworkWizard />} />
 														<Route path="networks/besu/create" element={<CreateBesuNetworkPage />} />
+													<Route path="networks/fabricx/create" element={<CreateFabricXNetworkPage />} />
+													<Route path="networks/fabricx/quickstart" element={<FabricXQuickStartPage />} />
+													<Route path="networks/:id/fabricx" element={<FabricXNetworkDetailPage />} />
+													<Route path="networks/:id/fabricx/blocks/:blockNumber" element={<FabricXBlockDetailPage />} />
+													<Route path="networks/:id/fabricx/transactions/:txId" element={<FabricXTransactionDetailPage />} />
 														<Route path="networks/:id/besu" element={<BesuNetworkDetailPage />} />
 														<Route path="networks/:id/fabric" element={<FabricNetworkDetailPage />} />
 														<Route path="networks/:id/blocks" element={<BlocksOverview />} />

@@ -196,8 +196,15 @@ func (s *OrganizationService) CreateOrganization(ctx context.Context, params Cre
 
 	description := fmt.Sprintf("Sign key for organization %s", params.MspID)
 	curve := models.ECCurveP256
-	// Create SIGN key
+	// Create SIGN key — default to system default provider if not specified
 	providerID := int(params.ProviderID)
+	if providerID == 0 {
+		defaultProvider, err := s.queries.GetKeyProviderByDefault(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("no provider specified and no default provider found: %w", err)
+		}
+		providerID = int(defaultProvider.ID)
+	}
 
 	_, err := s.keyManagement.GetProviderByID(ctx, providerID)
 	if err != nil {
@@ -378,7 +385,7 @@ func (s *OrganizationService) CreateOrganization(ctx context.Context, params Cre
 	org, err := s.queries.CreateFabricOrganization(ctx, &db.CreateFabricOrganizationParams{
 		MspID:           params.MspID,
 		Description:     sql.NullString{String: params.Description, Valid: params.Description != ""},
-		ProviderID:      sql.NullInt64{Int64: params.ProviderID, Valid: true},
+		ProviderID:      sql.NullInt64{Int64: int64(providerID), Valid: true},
 		SignKeyID:       sql.NullInt64{Int64: int64(signKey.ID), Valid: true},
 		TlsRootKeyID:    sql.NullInt64{Int64: int64(tlsKey.ID), Valid: true},
 		AdminTlsKeyID:   sql.NullInt64{Int64: int64(tlsAdminKey.ID), Valid: true},

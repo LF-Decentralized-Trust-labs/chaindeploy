@@ -159,9 +159,11 @@ type NodeResponse struct {
 	Endpoint           string                           `json:"endpoint"`
 	CreatedAt          time.Time                        `json:"createdAt"`
 	UpdatedAt          time.Time                        `json:"updatedAt"`
-	FabricPeer         *service.FabricPeerProperties    `json:"fabricPeer,omitempty"`
-	FabricOrderer      *service.FabricOrdererProperties `json:"fabricOrderer,omitempty"`
-	BesuNode           *service.BesuNodeProperties      `json:"besuNode,omitempty"`
+	FabricPeer          *service.FabricPeerProperties          `json:"fabricPeer,omitempty"`
+	FabricOrderer       *service.FabricOrdererProperties       `json:"fabricOrderer,omitempty"`
+	BesuNode            *service.BesuNodeProperties             `json:"besuNode,omitempty"`
+	FabricXOrdererGroup *service.FabricXOrdererGroupProperties  `json:"fabricXOrdererGroup,omitempty"`
+	FabricXCommitter    *service.FabricXCommitterProperties     `json:"fabricXCommitter,omitempty"`
 }
 
 // ListNodesResponse represents the paginated response for listing nodes

@@ -10,6 +10,7 @@ import {
 } from '@/api/client/@tanstack/react-query.gen'
 import { FabricNodeDetails } from '@/components/nodes/FabricNodeDetails'
 import { BesuNodeDetails } from '@/components/nodes/BesuNodeDetails'
+import { FabricXNodeDetails } from '@/components/nodes/FabricXNodeDetails'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -51,6 +52,16 @@ function isFabricNode(node: HttpNodeResponse): node is HttpNodeResponse & { depl
 
 function isBesuNode(node: HttpNodeResponse): node is HttpNodeResponse & { deploymentConfig: DeploymentConfig } {
 	return node.platform === 'BESU' && node.besuNode !== undefined
+}
+
+function isFabricXNode(node: HttpNodeResponse): node is HttpNodeResponse & { deploymentConfig: DeploymentConfig } {
+	return node.platform === 'FABRICX' && (node.fabricXCommitter !== undefined || node.fabricXOrdererGroup !== undefined)
+}
+
+function getFabricXLabel(node: HttpNodeResponse): string {
+	if (node.fabricXOrdererGroup !== undefined) return 'Fabric-X Orderer Group'
+	if (node.fabricXCommitter !== undefined) return 'Fabric-X Committer'
+	return 'Fabric-X Node'
 }
 
 function getNodeActions(status: string) {
@@ -136,6 +147,10 @@ export default function NodeDetailPage() {
 	const [showRenewCertDialog, setShowRenewCertDialog] = useState(false)
 	const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 	const [logRefreshKey, setLogRefreshKey] = useState(0)
+	// Which of a FABRICX_COMMITTER's 5 internal containers to tail. Only
+	// FABRICX_COMMITTER nodes observe this; for every other node type the
+	// server rejects non-empty role with a 400 so we never set it.
+	const [committerLogRole, setCommitterLogRole] = useState<string>('sidecar')
 
 	// Get the active tab from URL or default to 'logs'
 	const activeTab = searchParams.get('tab') || 'logs'
@@ -270,13 +285,28 @@ export default function NodeDetailPage() {
 		}
 	}
 
+	// Whether this node is a committer — governs whether we append ?role=X
+	// to the log stream URL. Reading from the fetched node row below is
+	// fiddly here (state race); inferring from the DB node_type is fine
+	// because the switch happens via the selector state.
+	const isCommitterNode = node?.nodeType === 'FABRICX_COMMITTER'
+
 	useEffect(() => {
 		// Close existing EventSource if it exists
 		if (eventSourceRef.current) {
 			eventSourceRef.current.close()
 		}
 
-		const eventSource = new EventSource(`/api/v1/nodes/${id}/logs?follow=true`, {
+		// Per-role tail only makes sense for committer nodes — the server
+		// rejects ?role= on any other node type. Reset the buffer when the
+		// user picks a new role so we don't mix streams.
+		setLogs('')
+
+		const qs = new URLSearchParams({ follow: 'true' })
+		if (isCommitterNode && committerLogRole) {
+			qs.set('role', committerLogRole)
+		}
+		const eventSource = new EventSource(`/api/v1/nodes/${id}/logs?${qs.toString()}`, {
 			withCredentials: true,
 		})
 
@@ -308,7 +338,7 @@ export default function NodeDetailPage() {
 				eventSourceRef.current = null
 			}
 		}
-	}, [id, logRefreshKey])
+	}, [id, logRefreshKey, isCommitterNode, committerLogRole])
 
 	if (isLoading) {
 		return (
@@ -423,7 +453,11 @@ export default function NodeDetailPage() {
 					<h1 className="text-2xl font-semibold">{node.name}</h1>
 					<div className="flex items-center gap-4 mt-1">
 						<p className="text-muted-foreground">
-							{isFabricNode(node) ? 'Hyperledger Fabric' : 'Hyperledger Besu'} Node
+							{isFabricNode(node)
+								? 'Hyperledger Fabric Node'
+								: isFabricXNode(node)
+									? getFabricXLabel(node)
+									: 'Hyperledger Besu Node'}
 						</p>
 						<Badge variant="default">{node.status}</Badge>
 						<span className="text-sm text-muted-foreground">
@@ -510,6 +544,18 @@ export default function NodeDetailPage() {
 					events={renderEvents()}
 					activeTab={activeTab}
 					onTabChange={handleTabChange}
+				/>
+			)}
+
+			{isFabricXNode(node) && (
+				<FabricXNodeDetails
+					node={node}
+					logs={logs}
+					events={renderEvents()}
+					activeTab={activeTab}
+					onTabChange={handleTabChange}
+					committerLogRole={committerLogRole}
+					onCommitterLogRoleChange={setCommitterLogRole}
 				/>
 			)}
 
