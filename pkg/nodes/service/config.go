@@ -50,6 +50,10 @@ type NodeResponse struct {
 	BesuNode            *BesuNodeProperties             `json:"besuNode,omitempty"`
 	FabricXOrdererGroup *FabricXOrdererGroupProperties  `json:"fabricXOrdererGroup,omitempty"`
 	FabricXCommitter    *FabricXCommitterProperties     `json:"fabricXCommitter,omitempty"`
+	// FabricXChild is set on per-role child node rows (router/batcher/...
+	// and sidecar/coordinator/...) so the UI can render a single
+	// metricsUrl + container info directly off the leaf node.
+	FabricXChild *FabricXChildProperties `json:"fabricXChild,omitempty"`
 }
 
 // FabricPeerProperties represents the properties specific to a Fabric peer node
@@ -132,11 +136,22 @@ type FabricXOrdererGroupProperties struct {
 	BatcherPort    int    `json:"batcherPort"`
 	ConsenterPort  int    `json:"consenterPort"`
 	AssemblerPort  int    `json:"assemblerPort"`
-	Version        string `json:"version"`
-	SignCert       string `json:"signCert,omitempty"`
-	TLSCert        string `json:"tlsCert,omitempty"`
-	CACert         string `json:"caCert,omitempty"`
-	TLSCACert      string `json:"tlsCaCert,omitempty"`
+	// Per-role Prometheus /metrics host ports. Zero means "not allocated"
+	// (legacy nodes that predate monitoring support).
+	RouterMonitoringPort    int `json:"routerMonitoringPort,omitempty"`
+	BatcherMonitoringPort   int `json:"batcherMonitoringPort,omitempty"`
+	ConsenterMonitoringPort int `json:"consenterMonitoringPort,omitempty"`
+	AssemblerMonitoringPort int `json:"assemblerMonitoringPort,omitempty"`
+	// Pre-rendered URLs for the UI: http://<externalIp>:<port>/metrics
+	RouterMetricsUrl    string `json:"routerMetricsUrl,omitempty"`
+	BatcherMetricsUrl   string `json:"batcherMetricsUrl,omitempty"`
+	ConsenterMetricsUrl string `json:"consenterMetricsUrl,omitempty"`
+	AssemblerMetricsUrl string `json:"assemblerMetricsUrl,omitempty"`
+	Version             string `json:"version"`
+	SignCert            string `json:"signCert,omitempty"`
+	TLSCert             string `json:"tlsCert,omitempty"`
+	CACert              string `json:"caCert,omitempty"`
+	TLSCACert           string `json:"tlsCaCert,omitempty"`
 }
 
 // FabricXCommitterProperties represents the properties specific to a Fabric X committer
@@ -150,5 +165,29 @@ type FabricXCommitterProperties struct {
 	ValidatorPort    int    `json:"validatorPort"`
 	VerifierPort     int    `json:"verifierPort"`
 	QueryServicePort int    `json:"queryServicePort"`
-	Version          string `json:"version"`
+	// Per-role Prometheus /metrics host ports.
+	SidecarMonitoringPort      int `json:"sidecarMonitoringPort,omitempty"`
+	CoordinatorMonitoringPort  int `json:"coordinatorMonitoringPort,omitempty"`
+	ValidatorMonitoringPort    int `json:"validatorMonitoringPort,omitempty"`
+	VerifierMonitoringPort     int `json:"verifierMonitoringPort,omitempty"`
+	QueryServiceMonitoringPort int `json:"queryServiceMonitoringPort,omitempty"`
+	// Pre-rendered URLs.
+	SidecarMetricsUrl      string `json:"sidecarMetricsUrl,omitempty"`
+	CoordinatorMetricsUrl  string `json:"coordinatorMetricsUrl,omitempty"`
+	ValidatorMetricsUrl    string `json:"validatorMetricsUrl,omitempty"`
+	VerifierMetricsUrl     string `json:"verifierMetricsUrl,omitempty"`
+	QueryServiceMetricsUrl string `json:"queryServiceMetricsUrl,omitempty"`
+	Version                string `json:"version"`
+}
+
+// FabricXChildProperties is set on per-role child node rows
+// (FABRICX_*_ROUTER/BATCHER/.../QUERY_SERVICE) so the UI can render a
+// single metricsUrl directly off the leaf node without picking from
+// the parent group.
+type FabricXChildProperties struct {
+	Role           string `json:"role"`
+	ContainerName  string `json:"containerName,omitempty"`
+	HostPort       int    `json:"hostPort,omitempty"`
+	MonitoringPort int    `json:"monitoringPort,omitempty"`
+	MetricsUrl     string `json:"metricsUrl,omitempty"`
 }

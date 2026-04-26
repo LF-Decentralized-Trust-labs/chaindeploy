@@ -244,6 +244,49 @@ func (c *Committer) Init() (*nodetypes.FabricXCommitterDeploymentConfig, error) 
 		channelID = "testchannel"
 	}
 
+	// Allocate per-role Prometheus /metrics ports unless the caller
+	// pinned them. Search starts above the GRPC ports to keep metrics
+	// out of the adjacency that GRPC port allocators rely on.
+	exclude := map[int]struct{}{
+		c.opts.SidecarPort:      {},
+		c.opts.CoordinatorPort:  {},
+		c.opts.ValidatorPort:    {},
+		c.opts.VerifierPort:     {},
+		c.opts.QueryServicePort: {},
+	}
+	monSidecar := c.opts.SidecarMonitoringPort
+	monCoordinator := c.opts.CoordinatorMonitoringPort
+	monValidator := c.opts.ValidatorMonitoringPort
+	monVerifier := c.opts.VerifierMonitoringPort
+	monQueryService := c.opts.QueryServiceMonitoringPort
+	if monSidecar == 0 || monCoordinator == 0 || monValidator == 0 || monVerifier == 0 || monQueryService == 0 {
+		base := c.opts.SidecarPort
+		for _, p := range []int{c.opts.CoordinatorPort, c.opts.ValidatorPort, c.opts.VerifierPort, c.opts.QueryServicePort} {
+			if p > base {
+				base = p
+			}
+		}
+		ports, err := findFreePortsExcluding(base+100, 5, exclude)
+		if err != nil {
+			return nil, fmt.Errorf("allocate committer monitoring ports: %w", err)
+		}
+		if monSidecar == 0 {
+			monSidecar = ports[0]
+		}
+		if monCoordinator == 0 {
+			monCoordinator = ports[1]
+		}
+		if monValidator == 0 {
+			monValidator = ports[2]
+		}
+		if monVerifier == 0 {
+			monVerifier = ports[3]
+		}
+		if monQueryService == 0 {
+			monQueryService = ports[4]
+		}
+	}
+
 	cfg := &nodetypes.FabricXCommitterDeploymentConfig{
 		BaseDeploymentConfig: nodetypes.BaseDeploymentConfig{
 			Type: "fabricx-committer",
@@ -255,7 +298,7 @@ func (c *Committer) Init() (*nodetypes.FabricXCommitterDeploymentConfig, error) 
 		DomainNames:    domains,
 		Version:        version,
 		SignKeyID:      int64(signKeyDB.ID),
-		TLSKeyID:      int64(tlsKeyDB.ID),
+		TLSKeyID:       int64(tlsKeyDB.ID),
 		SignCert:       *signKeyDB.Certificate,
 		TLSCert:        *tlsKeyDB.Certificate,
 		CACert:         *signCAKeyDB.Certificate,
@@ -266,6 +309,12 @@ func (c *Committer) Init() (*nodetypes.FabricXCommitterDeploymentConfig, error) 
 		ValidatorPort:    c.opts.ValidatorPort,
 		VerifierPort:     c.opts.VerifierPort,
 		QueryServicePort: c.opts.QueryServicePort,
+
+		SidecarMonitoringPort:      monSidecar,
+		CoordinatorMonitoringPort:  monCoordinator,
+		ValidatorMonitoringPort:    monValidator,
+		VerifierMonitoringPort:     monVerifier,
+		QueryServiceMonitoringPort: monQueryService,
 
 		SidecarContainer:      prefix + "-sidecar",
 		CoordinatorContainer:  prefix + "-coordinator",
@@ -566,9 +615,15 @@ committer:
 ledger:
   path: /var/hyperledger/fabricx/ledger
 last-committed-block-set-interval: 5s
+# v1.0.0-alpha replaced the old monitoring.prometheus.enabled stanza
+# with a top-level monitoring server config. The unknown legacy keys
+# would be silently ignored and the metrics endpoint would never start,
+# leaving /metrics unreachable. See fabric-x-committer cmd/config/samples/.
 monitoring:
-  prometheus:
-    enabled: false
+  endpoint: 0.0.0.0:{{.MonitoringPort}}
+  rate-limit:
+    requests-per-second: 0
+    burst: 0
 logging:
   # logSpec controls per-module log levels (flogging syntax); info is the
   # sane default. level: keys in earlier versions were no-ops — the real
@@ -595,8 +650,10 @@ dependency-graph:
   num-of-workers-for-global-dep-manager: 1
 per-channel-buffer-size-per-goroutine: 10
 monitoring:
-  prometheus:
-    enabled: false
+  endpoint: 0.0.0.0:{{.MonitoringPort}}
+  rate-limit:
+    requests-per-second: 0
+    burst: 0
 logging:
   # logSpec controls per-module log levels (flogging syntax); info is the
   # sane default. level: keys in earlier versions were no-ops — the real
@@ -628,8 +685,10 @@ resource-limits:
   max-workers-for-committer: 20
   min-transaction-batch-size: 1000
 monitoring:
-  prometheus:
-    enabled: false
+  endpoint: 0.0.0.0:{{.MonitoringPort}}
+  rate-limit:
+    requests-per-second: 0
+    burst: 0
 logging:
   # logSpec controls per-module log levels (flogging syntax); info is the
   # sane default. level: keys in earlier versions were no-ops — the real
@@ -648,8 +707,10 @@ parallel-executor:
   channel-buffer-size: 1000
   parallelism: 80
 monitoring:
-  prometheus:
-    enabled: false
+  endpoint: 0.0.0.0:{{.MonitoringPort}}
+  rate-limit:
+    requests-per-second: 0
+    burst: 0
 logging:
   # logSpec controls per-module log levels (flogging syntax); info is the
   # sane default. level: keys in earlier versions were no-ops — the real
@@ -679,8 +740,10 @@ database:
   retry:
     max-elapsed-time: 1h
 monitoring:
-  prometheus:
-    enabled: false
+  endpoint: 0.0.0.0:{{.MonitoringPort}}
+  rate-limit:
+    requests-per-second: 0
+    burst: 0
 logging:
   # logSpec controls per-module log levels (flogging syntax); info is the
   # sane default. level: keys in earlier versions were no-ops — the real
@@ -695,6 +758,7 @@ type sidecarConfigData struct {
 	MSPID           string
 	ChannelID       string
 	SidecarPort     int
+	MonitoringPort  int
 	CoordinatorHost string
 	CoordinatorPort int
 	// RootCAPaths are container-side absolute paths to PEM files containing
@@ -705,17 +769,20 @@ type sidecarConfigData struct {
 
 type coordinatorConfigData struct {
 	CoordinatorPort   int
+	MonitoringPort    int
 	VerifierEndpoint  string
 	ValidatorEndpoint string
 }
 
 type verifierConfigData struct {
-	VerifierPort int
+	VerifierPort   int
+	MonitoringPort int
 }
 
 type dbConfigData struct {
 	ValidatorPort    int
 	QueryServicePort int
+	MonitoringPort   int
 	PostgresHost     string
 	PostgresPort     int
 	PostgresUser     string
@@ -747,6 +814,7 @@ func (c *Committer) writeSidecarConfig(cfg *nodetypes.FabricXCommitterDeployment
 		MSPID:           cfg.MSPID,
 		ChannelID:       cfg.ChannelID,
 		SidecarPort:     cfg.SidecarPort,
+		MonitoringPort:  cfg.SidecarMonitoringPort,
 		CoordinatorHost: cfg.CoordinatorContainer,
 		CoordinatorPort: cfg.CoordinatorPort,
 		RootCAPaths:     rootCAPaths,
@@ -759,6 +827,7 @@ func (c *Committer) writeCoordinatorConfig(cfg *nodetypes.FabricXCommitterDeploy
 	// other by container name on the container port.
 	data := coordinatorConfigData{
 		CoordinatorPort:   cfg.CoordinatorPort,
+		MonitoringPort:    cfg.CoordinatorMonitoringPort,
 		VerifierEndpoint:  fmt.Sprintf("%s:%d", cfg.VerifierContainer, cfg.VerifierPort),
 		ValidatorEndpoint: fmt.Sprintf("%s:%d", cfg.ValidatorContainer, cfg.ValidatorPort),
 	}
@@ -769,6 +838,7 @@ func (c *Committer) writeValidatorConfig(cfg *nodetypes.FabricXCommitterDeployme
 	pgHost, pgPort := c.postgresEndpoint(cfg)
 	data := dbConfigData{
 		ValidatorPort:    cfg.ValidatorPort,
+		MonitoringPort:   cfg.ValidatorMonitoringPort,
 		PostgresHost:     pgHost,
 		PostgresPort:     pgPort,
 		PostgresUser:     cfg.PostgresUser,
@@ -779,7 +849,10 @@ func (c *Committer) writeValidatorConfig(cfg *nodetypes.FabricXCommitterDeployme
 }
 
 func (c *Committer) writeVerifierConfig(cfg *nodetypes.FabricXCommitterDeploymentConfig) error {
-	data := verifierConfigData{VerifierPort: cfg.VerifierPort}
+	data := verifierConfigData{
+		VerifierPort:   cfg.VerifierPort,
+		MonitoringPort: cfg.VerifierMonitoringPort,
+	}
 	return writeTemplate(verifierConfigTemplate, filepath.Join(c.baseDir(), "verifier", "config", "verifier_config.yaml"), data)
 }
 
@@ -787,6 +860,7 @@ func (c *Committer) writeQueryServiceConfig(cfg *nodetypes.FabricXCommitterDeplo
 	pgHost, pgPort := c.postgresEndpoint(cfg)
 	data := dbConfigData{
 		QueryServicePort: cfg.QueryServicePort,
+		MonitoringPort:   cfg.QueryServiceMonitoringPort,
 		PostgresHost:     pgHost,
 		PostgresPort:     pgPort,
 		PostgresUser:     cfg.PostgresUser,
@@ -818,4 +892,120 @@ func (c *Committer) postgresEndpoint(cfg *nodetypes.FabricXCommitterDeploymentCo
 		}
 	}
 	return host, cfg.PostgresPort
+}
+
+// RenewCertificates re-signs the committer's signing and TLS certs
+// using the SAME key pair already in the DB (matching Fabric peer
+// renewal semantics). Returns an updated deployment config with the
+// new SignCert/TLSCert. The caller persists it and restarts the five
+// child containers so the rewritten msp/tls dirs take effect.
+//
+// Only the sidecar materializes MSP/TLS on disk (the other four
+// committer roles run unauthenticated on the per-group bridge
+// network), so the on-disk rewrite touches just sidecar/msp + sidecar/tls.
+func (c *Committer) RenewCertificates(cfg *nodetypes.FabricXCommitterDeploymentConfig) (*nodetypes.FabricXCommitterDeploymentConfig, error) {
+	ctx := context.Background()
+	c.logger.Info("Starting FabricX committer certificate renewal", "name", c.opts.Name)
+
+	if cfg.SignKeyID == 0 || cfg.TLSKeyID == 0 {
+		return nil, fmt.Errorf("committer missing SignKeyID/TLSKeyID; cannot renew")
+	}
+
+	org, err := c.orgService.GetOrganization(ctx, c.organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("get organization: %w", err)
+	}
+
+	signCAKey, err := c.keyService.GetKey(ctx, int(org.SignKeyID.Int64))
+	if err != nil {
+		return nil, fmt.Errorf("get sign CA key: %w", err)
+	}
+	tlsCAKey, err := c.keyService.GetKey(ctx, int(org.TlsRootKeyID.Int64))
+	if err != nil {
+		return nil, fmt.Errorf("get TLS CA key: %w", err)
+	}
+
+	signKeyDB, err := c.keyService.GetKey(ctx, int(cfg.SignKeyID))
+	if err != nil {
+		return nil, fmt.Errorf("get sign key: %w", err)
+	}
+	if signKeyDB.SigningKeyID == nil || *signKeyDB.SigningKeyID == 0 {
+		if err := c.keyService.SetSigningKeyIDForKey(ctx, int(cfg.SignKeyID), int(signCAKey.ID)); err != nil {
+			return nil, fmt.Errorf("set signing key id on sign key: %w", err)
+		}
+	}
+	tlsKeyDB, err := c.keyService.GetKey(ctx, int(cfg.TLSKeyID))
+	if err != nil {
+		return nil, fmt.Errorf("get TLS key: %w", err)
+	}
+	if tlsKeyDB.SigningKeyID == nil || *tlsKeyDB.SigningKeyID == 0 {
+		if err := c.keyService.SetSigningKeyIDForKey(ctx, int(cfg.TLSKeyID), int(tlsCAKey.ID)); err != nil {
+			return nil, fmt.Errorf("set signing key id on TLS key: %w", err)
+		}
+	}
+
+	validFor := kmodels.Duration(time.Hour * 24 * 365)
+
+	renewedSignKeyDB, err := c.keyService.RenewCertificate(ctx, int(cfg.SignKeyID), kmodels.CertificateRequest{
+		CommonName:         c.opts.Name,
+		Organization:       []string{c.mspID},
+		OrganizationalUnit: []string{"peer"},
+		DNSNames:           []string{c.opts.Name},
+		IsCA:               false,
+		ValidFor:           validFor,
+		KeyUsage:           x509.KeyUsageDigitalSignature,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("renew signing certificate: %w", err)
+	}
+
+	domains, ipAddresses := expandFabricxSANs(cfg.DomainNames)
+	renewedTLSKeyDB, err := c.keyService.RenewCertificate(ctx, int(cfg.TLSKeyID), kmodels.CertificateRequest{
+		CommonName:         c.opts.Name,
+		Organization:       []string{c.mspID},
+		OrganizationalUnit: []string{"peer"},
+		DNSNames:           domains,
+		IPAddresses:        ipAddresses,
+		IsCA:               false,
+		ValidFor:           validFor,
+		KeyUsage:           x509.KeyUsageDigitalSignature | x509.KeyUsageKeyAgreement,
+		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("renew TLS certificate: %w", err)
+	}
+
+	if renewedSignKeyDB.Certificate == nil || renewedTLSKeyDB.Certificate == nil {
+		return nil, fmt.Errorf("renewed certificates returned with nil PEM")
+	}
+
+	updated := *cfg
+	updated.SignCert = *renewedSignKeyDB.Certificate
+	updated.TLSCert = *renewedTLSKeyDB.Certificate
+
+	signKey, err := c.keyService.GetDecryptedPrivateKey(int(cfg.SignKeyID))
+	if err != nil {
+		return nil, fmt.Errorf("decrypt sign key: %w", err)
+	}
+	tlsKey, err := c.keyService.GetDecryptedPrivateKey(int(cfg.TLSKeyID))
+	if err != nil {
+		return nil, fmt.Errorf("decrypt TLS key: %w", err)
+	}
+
+	baseDir := c.baseDir()
+	if err := writeMSP(
+		filepath.Join(baseDir, "sidecar", "msp"),
+		updated.SignCert, signKey, updated.CACert, updated.TLSCACert,
+	); err != nil {
+		return nil, fmt.Errorf("write renewed sidecar MSP: %w", err)
+	}
+	if err := writeTLS(
+		filepath.Join(baseDir, "sidecar", "tls"),
+		updated.TLSCert, tlsKey, updated.TLSCACert,
+	); err != nil {
+		return nil, fmt.Errorf("write renewed sidecar TLS: %w", err)
+	}
+
+	c.logger.Info("Successfully renewed FabricX committer certificates", "name", c.opts.Name)
+	return &updated, nil
 }

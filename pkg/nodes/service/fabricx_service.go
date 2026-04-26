@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 
@@ -9,6 +10,53 @@ import (
 	"github.com/chainlaunch/chainlaunch/pkg/nodes/fabricx"
 	"github.com/chainlaunch/chainlaunch/pkg/nodes/types"
 )
+
+// nullStringValid is a small wrapper that returns an empty/invalid
+// NullString for "" so renewal calls don't accidentally clear a
+// previously-set DB column with a blank string.
+func nullStringValid(s string) sql.NullString {
+	if s == "" {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: s, Valid: true}
+}
+
+// fabricxMetricsURL formats the host-side Prometheus /metrics URL for a
+// FabricX role. Returns "" when externalIP or port are unset, so callers
+// can leave the field blank rather than emit a broken http://:0/metrics.
+func fabricxMetricsURL(externalIP string, port int) string {
+	if externalIP == "" || port <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("http://%s:%d/metrics", externalIP, port)
+}
+
+// fillOrdererMetricsUrls renders the per-role metrics URLs on an
+// orderer-group properties block from its externalIP + monitoring ports.
+// Idempotent and safe to call when monitoring ports are zero (legacy
+// nodes pre-monitoring); it leaves the URL fields empty in that case.
+func fillOrdererMetricsUrls(p *FabricXOrdererGroupProperties) {
+	if p == nil || p.ExternalIP == "" {
+		return
+	}
+	p.RouterMetricsUrl = fabricxMetricsURL(p.ExternalIP, p.RouterMonitoringPort)
+	p.BatcherMetricsUrl = fabricxMetricsURL(p.ExternalIP, p.BatcherMonitoringPort)
+	p.ConsenterMetricsUrl = fabricxMetricsURL(p.ExternalIP, p.ConsenterMonitoringPort)
+	p.AssemblerMetricsUrl = fabricxMetricsURL(p.ExternalIP, p.AssemblerMonitoringPort)
+}
+
+// fillCommitterMetricsUrls is the committer counterpart of
+// fillOrdererMetricsUrls.
+func fillCommitterMetricsUrls(p *FabricXCommitterProperties) {
+	if p == nil || p.ExternalIP == "" {
+		return
+	}
+	p.SidecarMetricsUrl = fabricxMetricsURL(p.ExternalIP, p.SidecarMonitoringPort)
+	p.CoordinatorMetricsUrl = fabricxMetricsURL(p.ExternalIP, p.CoordinatorMonitoringPort)
+	p.ValidatorMetricsUrl = fabricxMetricsURL(p.ExternalIP, p.ValidatorMonitoringPort)
+	p.VerifierMetricsUrl = fabricxMetricsURL(p.ExternalIP, p.VerifierMonitoringPort)
+	p.QueryServiceMetricsUrl = fabricxMetricsURL(p.ExternalIP, p.QueryServiceMonitoringPort)
+}
 
 // unmarshalStoredNodeConfig unwraps the StoredConfig envelope ({type, config})
 // and decodes the inner config into out. Falls back to direct unmarshal for
@@ -336,4 +384,293 @@ func (s *NodeService) stopFabricXCommitter(ctx context.Context, dbNode *db.Node)
 	)
 
 	return c.Stop(&cfg)
+}
+
+// renewFabricXNodeCertificates handles cert renewal for legacy
+// monolithic FabricX node rows (FABRICX_ORDERER_GROUP /
+// FABRICX_COMMITTER) — pre-node_groups installs where one nodes row
+// owns all child containers. Re-uses the same key pair (matches
+// Fabric peer renewal semantics): only the certs are reissued.
+//
+// Sequence:
+//  1. emit RENEWING_CERTIFICATES event
+//  2. stop all child containers (so we never have running
+//     containers reading stale msp/tls dirs while we rewrite them)
+//  3. call OrdererGroup.RenewCertificates / Committer.RenewCertificates
+//  4. persist updated deployment_config (new SignCert/TLSCert) on the row
+//  5. start the node again
+//  6. emit RENEWED_CERTIFICATES event
+func (s *NodeService) renewFabricXNodeCertificates(ctx context.Context, dbNode *db.Node, deploymentConfig types.NodeDeploymentConfig) error {
+	if err := s.eventService.CreateEvent(ctx, dbNode.ID, NodeEventRenewingCertificates, map[string]interface{}{
+		"node_id": dbNode.ID,
+		"name":    dbNode.Name,
+		"action":  "renewing_certificates",
+	}); err != nil {
+		s.logger.Error("Failed to create certificate renewal starting event", "error", err)
+	}
+
+	// Reconstruct the orchestrator from the node_config + deployment.
+	// Same opts shape Init/Start use so renewal sees the same domains,
+	// MSP id, etc. that were active when the certs were originally issued.
+	switch types.NodeType(dbNode.NodeType.String) {
+	case types.NodeTypeFabricXOrdererGroup:
+		ogCfg, ok := deploymentConfig.(*types.FabricXOrdererGroupDeploymentConfig)
+		if !ok {
+			return fmt.Errorf("expected FabricXOrdererGroupDeploymentConfig for node %d", dbNode.ID)
+		}
+		var nodeConfig types.FabricXOrdererGroupConfig
+		if dbNode.NodeConfig.Valid {
+			if err := unmarshalStoredNodeConfig([]byte(dbNode.NodeConfig.String), &nodeConfig); err != nil {
+				return fmt.Errorf("unmarshal node config: %w", err)
+			}
+		}
+		if nodeConfig.Name == "" {
+			nodeConfig.Name = dbNode.Name
+		}
+		og := fabricx.NewOrdererGroup(
+			s.db, s.orgService, s.keymanagementService, s.configService, s.logger,
+			dbNode.ID, nodeConfig,
+		)
+		if err := og.Stop(ogCfg); err != nil {
+			s.logger.Warn("orderer group stop before renewal failed; continuing", "node", dbNode.ID, "err", err)
+		}
+		updated, err := og.RenewCertificates(ogCfg)
+		if err != nil {
+			return err
+		}
+		if err := s.persistFabricXOrdererGroupDeployment(ctx, dbNode, updated); err != nil {
+			return fmt.Errorf("persist updated orderer group config: %w", err)
+		}
+		if err := og.Start(updated); err != nil {
+			return fmt.Errorf("restart orderer group after renewal: %w", err)
+		}
+
+	case types.NodeTypeFabricXCommitter:
+		cCfg, ok := deploymentConfig.(*types.FabricXCommitterDeploymentConfig)
+		if !ok {
+			return fmt.Errorf("expected FabricXCommitterDeploymentConfig for node %d", dbNode.ID)
+		}
+		var nodeConfig types.FabricXCommitterConfig
+		if dbNode.NodeConfig.Valid {
+			if err := unmarshalStoredNodeConfig([]byte(dbNode.NodeConfig.String), &nodeConfig); err != nil {
+				return fmt.Errorf("unmarshal node config: %w", err)
+			}
+		}
+		if nodeConfig.Name == "" {
+			nodeConfig.Name = dbNode.Name
+		}
+		c := fabricx.NewCommitter(
+			s.db, s.orgService, s.keymanagementService, s.configService, s.logger,
+			dbNode.ID, nodeConfig,
+		)
+		if err := c.Stop(cCfg); err != nil {
+			s.logger.Warn("committer stop before renewal failed; continuing", "node", dbNode.ID, "err", err)
+		}
+		updated, err := c.RenewCertificates(cCfg)
+		if err != nil {
+			return err
+		}
+		if err := s.persistFabricXCommitterDeployment(ctx, dbNode, updated); err != nil {
+			return fmt.Errorf("persist updated committer config: %w", err)
+		}
+		if err := c.Start(updated, true); err != nil {
+			return fmt.Errorf("restart committer after renewal: %w", err)
+		}
+
+	default:
+		return fmt.Errorf("renewFabricXNodeCertificates: unsupported node type %q", dbNode.NodeType.String)
+	}
+
+	if err := s.eventService.CreateEvent(ctx, dbNode.ID, NodeEventRenewedCertificates, map[string]interface{}{
+		"node_id": dbNode.ID,
+		"name":    dbNode.Name,
+		"action":  "renewing_certificates",
+	}); err != nil {
+		s.logger.Error("Failed to create certificate renewal completed event", "error", err)
+	}
+	return nil
+}
+
+// renewFabricXChildCertificates handles cert renewal for per-role
+// child node rows (FABRICX_ORDERER_ROUTER, FABRICX_COMMITTER_SIDECAR,
+// etc). Identity lives on the parent node_group, so we renew the
+// group's keys once and restart every sibling so the rewritten msp/
+// tls dirs take effect for the whole group.
+//
+// Calling renewal on any one child triggers a group-wide renewal.
+// That's the right tradeoff: all children share one cert pair by
+// design, so per-child renewal is meaningless.
+func (s *NodeService) renewFabricXChildCertificates(ctx context.Context, dbNode *db.Node) error {
+	if err := s.eventService.CreateEvent(ctx, dbNode.ID, NodeEventRenewingCertificates, map[string]interface{}{
+		"node_id": dbNode.ID,
+		"name":    dbNode.Name,
+		"action":  "renewing_certificates",
+	}); err != nil {
+		s.logger.Error("Failed to create certificate renewal starting event", "error", err)
+	}
+
+	child, err := loadChildDeploymentConfig(dbNode)
+	if err != nil {
+		return err
+	}
+
+	switch child.Role {
+	case types.FabricXRoleOrdererRouter,
+		types.FabricXRoleOrdererBatcher,
+		types.FabricXRoleOrdererConsenter,
+		types.FabricXRoleOrdererAssembler:
+		groupCfg, err := s.loadGroupOrdererDeployment(ctx, child.NodeGroupID)
+		if err != nil {
+			return err
+		}
+		grp, err := s.db.GetNodeGroup(ctx, child.NodeGroupID)
+		if err != nil {
+			return fmt.Errorf("load node_group %d: %w", child.NodeGroupID, err)
+		}
+		og := fabricx.NewOrdererGroup(
+			s.db, s.orgService, s.keymanagementService, s.configService, s.logger,
+			0,
+			types.FabricXOrdererGroupConfig{
+				Name:           grp.Name,
+				OrganizationID: groupCfg.OrganizationID,
+				MSPID:          groupCfg.MSPID,
+				PartyID:        groupCfg.PartyID,
+				ExternalIP:     groupCfg.ExternalIP,
+				DomainNames:    groupCfg.DomainNames,
+				Version:        groupCfg.Version,
+			},
+		)
+		// Group-wide renewal stops all four children, rewrites all
+		// msp/tls dirs, then restarts via Start. That covers the calling
+		// child too — no separate per-child restart needed.
+		if err := og.Stop(groupCfg); err != nil {
+			s.logger.Warn("orderer group stop before renewal failed; continuing", "group", child.NodeGroupID, "err", err)
+		}
+		updated, err := og.RenewCertificates(groupCfg)
+		if err != nil {
+			return err
+		}
+		if err := s.persistNodeGroupDeployment(ctx, grp, updated.SignCert, updated.TLSCert, updated); err != nil {
+			return fmt.Errorf("persist renewed orderer group: %w", err)
+		}
+		if err := og.Start(updated); err != nil {
+			return fmt.Errorf("restart orderer group after renewal: %w", err)
+		}
+
+	case types.FabricXRoleCommitterSidecar,
+		types.FabricXRoleCommitterCoordinator,
+		types.FabricXRoleCommitterValidator,
+		types.FabricXRoleCommitterVerifier,
+		types.FabricXRoleCommitterQueryService:
+		groupCfg, err := s.loadGroupCommitterDeployment(ctx, child.NodeGroupID)
+		if err != nil {
+			return err
+		}
+		grp, err := s.db.GetNodeGroup(ctx, child.NodeGroupID)
+		if err != nil {
+			return fmt.Errorf("load node_group %d: %w", child.NodeGroupID, err)
+		}
+		c := fabricx.NewCommitter(
+			s.db, s.orgService, s.keymanagementService, s.configService, s.logger,
+			0,
+			types.FabricXCommitterConfig{
+				Name:             grp.Name,
+				OrganizationID:   groupCfg.OrganizationID,
+				MSPID:            groupCfg.MSPID,
+				ExternalIP:       groupCfg.ExternalIP,
+				DomainNames:      groupCfg.DomainNames,
+				Version:          groupCfg.Version,
+				OrdererEndpoints: groupCfg.OrdererEndpoints,
+				PostgresHost:     groupCfg.PostgresHost,
+				PostgresPort:     groupCfg.PostgresPort,
+				PostgresDB:       groupCfg.PostgresDB,
+				PostgresUser:     groupCfg.PostgresUser,
+				PostgresPassword: groupCfg.PostgresPassword,
+				ChannelID:        groupCfg.ChannelID,
+			},
+		)
+		if err := c.Stop(groupCfg); err != nil {
+			s.logger.Warn("committer stop before renewal failed; continuing", "group", child.NodeGroupID, "err", err)
+		}
+		updated, err := c.RenewCertificates(groupCfg)
+		if err != nil {
+			return err
+		}
+		if err := s.persistNodeGroupDeployment(ctx, grp, updated.SignCert, updated.TLSCert, updated); err != nil {
+			return fmt.Errorf("persist renewed committer: %w", err)
+		}
+		if err := c.Start(updated, true); err != nil {
+			return fmt.Errorf("restart committer after renewal: %w", err)
+		}
+
+	default:
+		return fmt.Errorf("renewFabricXChildCertificates: unknown role %q on node %d", child.Role, dbNode.ID)
+	}
+
+	if err := s.eventService.CreateEvent(ctx, dbNode.ID, NodeEventRenewedCertificates, map[string]interface{}{
+		"node_id": dbNode.ID,
+		"name":    dbNode.Name,
+		"action":  "renewing_certificates",
+	}); err != nil {
+		s.logger.Error("Failed to create certificate renewal completed event", "error", err)
+	}
+	return nil
+}
+
+// persistFabricXOrdererGroupDeployment serializes an updated orderer
+// group deployment_config back to its `nodes` row (legacy monolithic path).
+func (s *NodeService) persistFabricXOrdererGroupDeployment(ctx context.Context, dbNode *db.Node, cfg *types.FabricXOrdererGroupDeploymentConfig) error {
+	js, err := json.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("marshal orderer group deployment_config: %w", err)
+	}
+	_, err = s.db.UpdateNodeDeploymentConfig(ctx, &db.UpdateNodeDeploymentConfigParams{
+		ID:               dbNode.ID,
+		DeploymentConfig: nullStringValid(string(js)),
+	})
+	return err
+}
+
+// persistFabricXCommitterDeployment serializes an updated committer
+// deployment_config back to its `nodes` row.
+func (s *NodeService) persistFabricXCommitterDeployment(ctx context.Context, dbNode *db.Node, cfg *types.FabricXCommitterDeploymentConfig) error {
+	js, err := json.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("marshal committer deployment_config: %w", err)
+	}
+	_, err = s.db.UpdateNodeDeploymentConfig(ctx, &db.UpdateNodeDeploymentConfigParams{
+		ID:               dbNode.ID,
+		DeploymentConfig: nullStringValid(string(js)),
+	})
+	return err
+}
+
+// persistNodeGroupDeployment serializes an updated node_group
+// deployment_config (orderer or committer; the JSON shape is opaque
+// to the SQL layer) and refreshes the denormalized cert columns so
+// the /node-groups list view doesn't lag the canonical deployment.
+func (s *NodeService) persistNodeGroupDeployment(ctx context.Context, grp *db.NodeGroup, signCert, tlsCert string, deploymentConfig interface{}) error {
+	js, err := json.Marshal(deploymentConfig)
+	if err != nil {
+		return fmt.Errorf("marshal node_group deployment_config: %w", err)
+	}
+	_, err = s.db.UpdateNodeGroup(ctx, &db.UpdateNodeGroupParams{
+		ID:               grp.ID,
+		Name:             grp.Name,
+		MspID:            grp.MspID,
+		OrganizationID:   grp.OrganizationID,
+		PartyID:          grp.PartyID,
+		Version:          grp.Version,
+		ExternalIp:       grp.ExternalIp,
+		DomainNames:      grp.DomainNames,
+		SignKeyID:        grp.SignKeyID,
+		TlsKeyID:         grp.TlsKeyID,
+		SignCert:         nullStringValid(signCert),
+		TlsCert:          nullStringValid(tlsCert),
+		CaCert:           grp.CaCert,
+		TlsCaCert:        grp.TlsCaCert,
+		Config:           grp.Config,
+		DeploymentConfig: nullStringValid(string(js)),
+	})
+	return err
 }

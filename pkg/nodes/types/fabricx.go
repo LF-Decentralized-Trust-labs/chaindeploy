@@ -22,6 +22,13 @@ type FabricXOrdererGroupConfig struct {
 	ConsenterPort int `json:"consenterPort,omitempty"`
 	AssemblerPort int `json:"assemblerPort,omitempty"`
 
+	// Monitoring (Prometheus /metrics) host ports per role. Zero means
+	// "auto-allocate during Init" (router GRPC port + 100 by default).
+	RouterMonitoringPort    int `json:"routerMonitoringPort,omitempty"`
+	BatcherMonitoringPort   int `json:"batcherMonitoringPort,omitempty"`
+	ConsenterMonitoringPort int `json:"consenterMonitoringPort,omitempty"`
+	AssemblerMonitoringPort int `json:"assemblerMonitoringPort,omitempty"`
+
 	// Tuning
 	ConsenterType string `json:"consenterType,omitempty"` // "raft" or "pbft", default "pbft"
 }
@@ -59,6 +66,16 @@ type FabricXCommitterConfig struct {
 	ValidatorPort    int `json:"validatorPort,omitempty"`
 	VerifierPort     int `json:"verifierPort,omitempty"`
 	QueryServicePort int `json:"queryServicePort,omitempty"`
+
+	// Monitoring (Prometheus /metrics) host ports per role. Zero means
+	// "auto-allocate during Init" using the upstream defaults
+	// (sidecar 2114, verifier 2115, validator 2116, queryservice 2117,
+	// coordinator 2119) — see fabric-x-committer service/*/config.go.
+	SidecarMonitoringPort      int `json:"sidecarMonitoringPort,omitempty"`
+	CoordinatorMonitoringPort  int `json:"coordinatorMonitoringPort,omitempty"`
+	ValidatorMonitoringPort    int `json:"validatorMonitoringPort,omitempty"`
+	VerifierMonitoringPort     int `json:"verifierMonitoringPort,omitempty"`
+	QueryServiceMonitoringPort int `json:"queryServiceMonitoringPort,omitempty"`
 
 	// Orderer endpoints (assembler addresses) for the sidecar to connect to
 	OrdererEndpoints []string `json:"ordererEndpoints" validate:"required"`
@@ -119,6 +136,12 @@ type FabricXOrdererGroupDeploymentConfig struct {
 	ConsenterPort int `json:"consenterPort"`
 	AssemblerPort int `json:"assemblerPort"`
 
+	// Allocated monitoring (Prometheus /metrics) host ports per role.
+	RouterMonitoringPort    int `json:"routerMonitoringPort"`
+	BatcherMonitoringPort   int `json:"batcherMonitoringPort"`
+	ConsenterMonitoringPort int `json:"consenterMonitoringPort"`
+	AssemblerMonitoringPort int `json:"assemblerMonitoringPort"`
+
 	// Container names
 	RouterContainer    string `json:"routerContainer"`
 	BatcherContainer   string `json:"batcherContainer"`
@@ -169,6 +192,13 @@ type FabricXCommitterDeploymentConfig struct {
 	ValidatorPort    int `json:"validatorPort"`
 	VerifierPort     int `json:"verifierPort"`
 	QueryServicePort int `json:"queryServicePort"`
+
+	// Allocated monitoring (Prometheus /metrics) host ports per role.
+	SidecarMonitoringPort      int `json:"sidecarMonitoringPort"`
+	CoordinatorMonitoringPort  int `json:"coordinatorMonitoringPort"`
+	ValidatorMonitoringPort    int `json:"validatorMonitoringPort"`
+	VerifierMonitoringPort     int `json:"verifierMonitoringPort"`
+	QueryServiceMonitoringPort int `json:"queryServiceMonitoringPort"`
 
 	// Container names
 	SidecarContainer      string `json:"sidecarContainer"`
@@ -253,10 +283,11 @@ func (c *FabricXChildConfig) Validate() error {
 // start exactly this container without touching siblings.
 type FabricXChildDeploymentConfig struct {
 	BaseDeploymentConfig
-	NodeGroupID   int64       `json:"nodeGroupId"`
-	Role          FabricXRole `json:"role"`
-	ContainerName string      `json:"containerName"`
-	HostPort      int         `json:"hostPort"`
+	NodeGroupID    int64       `json:"nodeGroupId"`
+	Role           FabricXRole `json:"role"`
+	ContainerName  string      `json:"containerName"`
+	HostPort       int         `json:"hostPort"`
+	MonitoringPort int         `json:"monitoringPort,omitempty"`
 }
 
 func (c *FabricXChildDeploymentConfig) Validate() error {

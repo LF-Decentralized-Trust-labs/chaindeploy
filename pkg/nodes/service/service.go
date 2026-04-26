@@ -1112,15 +1112,19 @@ func (s *NodeService) mapDBNodeToServiceNode(dbNode *db.Node) (*Node, *NodeRespo
 		case *types.FabricXOrdererGroupConfig:
 			node.MSPID = config.MSPID
 			nodeResponse.FabricXOrdererGroup = &FabricXOrdererGroupProperties{
-				MSPID:          config.MSPID,
-				OrganizationID: config.OrganizationID,
-				PartyID:        config.PartyID,
-				ExternalIP:     config.ExternalIP,
-				RouterPort:     config.RouterPort,
-				BatcherPort:    config.BatcherPort,
-				ConsenterPort:  config.ConsenterPort,
-				AssemblerPort:  config.AssemblerPort,
-				Version:        config.Version,
+				MSPID:                   config.MSPID,
+				OrganizationID:          config.OrganizationID,
+				PartyID:                 config.PartyID,
+				ExternalIP:              config.ExternalIP,
+				RouterPort:              config.RouterPort,
+				BatcherPort:             config.BatcherPort,
+				ConsenterPort:           config.ConsenterPort,
+				AssemblerPort:           config.AssemblerPort,
+				RouterMonitoringPort:    config.RouterMonitoringPort,
+				BatcherMonitoringPort:   config.BatcherMonitoringPort,
+				ConsenterMonitoringPort: config.ConsenterMonitoringPort,
+				AssemblerMonitoringPort: config.AssemblerMonitoringPort,
+				Version:                 config.Version,
 			}
 			// The canonical partyId/version live on the node_group row; the
 			// per-node config may be stale or predate the node_group refactor.
@@ -1139,28 +1143,65 @@ func (s *NodeService) mapDBNodeToServiceNode(dbNode *db.Node) (*Node, *NodeRespo
 				nodeResponse.FabricXOrdererGroup.TLSCert = ogDeployConfig.TLSCert
 				nodeResponse.FabricXOrdererGroup.CACert = ogDeployConfig.CACert
 				nodeResponse.FabricXOrdererGroup.TLSCACert = ogDeployConfig.TLSCACert
+				// deployment_config holds the canonical allocated monitoring
+				// ports; the user-input config above may be zero when the
+				// caller didn't pre-pin them.
+				if ogDeployConfig.RouterMonitoringPort != 0 {
+					nodeResponse.FabricXOrdererGroup.RouterMonitoringPort = ogDeployConfig.RouterMonitoringPort
+				}
+				if ogDeployConfig.BatcherMonitoringPort != 0 {
+					nodeResponse.FabricXOrdererGroup.BatcherMonitoringPort = ogDeployConfig.BatcherMonitoringPort
+				}
+				if ogDeployConfig.ConsenterMonitoringPort != 0 {
+					nodeResponse.FabricXOrdererGroup.ConsenterMonitoringPort = ogDeployConfig.ConsenterMonitoringPort
+				}
+				if ogDeployConfig.AssemblerMonitoringPort != 0 {
+					nodeResponse.FabricXOrdererGroup.AssemblerMonitoringPort = ogDeployConfig.AssemblerMonitoringPort
+				}
 			}
+			fillOrdererMetricsUrls(nodeResponse.FabricXOrdererGroup)
 		case *types.FabricXCommitterConfig:
 			node.MSPID = config.MSPID
 			nodeResponse.FabricXCommitter = &FabricXCommitterProperties{
-				MSPID:            config.MSPID,
-				OrganizationID:   config.OrganizationID,
-				ExternalIP:       config.ExternalIP,
-				SidecarPort:      config.SidecarPort,
-				CoordinatorPort:  config.CoordinatorPort,
-				ValidatorPort:    config.ValidatorPort,
-				VerifierPort:     config.VerifierPort,
-				QueryServicePort: config.QueryServicePort,
-				Version:          config.Version,
+				MSPID:                      config.MSPID,
+				OrganizationID:             config.OrganizationID,
+				ExternalIP:                 config.ExternalIP,
+				SidecarPort:                config.SidecarPort,
+				CoordinatorPort:            config.CoordinatorPort,
+				ValidatorPort:              config.ValidatorPort,
+				VerifierPort:               config.VerifierPort,
+				QueryServicePort:           config.QueryServicePort,
+				SidecarMonitoringPort:      config.SidecarMonitoringPort,
+				CoordinatorMonitoringPort:  config.CoordinatorMonitoringPort,
+				ValidatorMonitoringPort:    config.ValidatorMonitoringPort,
+				VerifierMonitoringPort:     config.VerifierMonitoringPort,
+				QueryServiceMonitoringPort: config.QueryServiceMonitoringPort,
+				Version:                    config.Version,
 			}
 			// The node_config's Version can be empty when the user didn't
 			// pass one on create; the authoritative resolved image tag lives
 			// on the deployment_config (defaulted to DefaultCommitterVersion).
-			if nodeResponse.FabricXCommitter.Version == "" {
-				if cDeployConfig, ok := deploymentConfig.(*types.FabricXCommitterDeploymentConfig); ok && cDeployConfig.Version != "" {
+			if cDeployConfig, ok := deploymentConfig.(*types.FabricXCommitterDeploymentConfig); ok {
+				if nodeResponse.FabricXCommitter.Version == "" && cDeployConfig.Version != "" {
 					nodeResponse.FabricXCommitter.Version = cDeployConfig.Version
 				}
+				if cDeployConfig.SidecarMonitoringPort != 0 {
+					nodeResponse.FabricXCommitter.SidecarMonitoringPort = cDeployConfig.SidecarMonitoringPort
+				}
+				if cDeployConfig.CoordinatorMonitoringPort != 0 {
+					nodeResponse.FabricXCommitter.CoordinatorMonitoringPort = cDeployConfig.CoordinatorMonitoringPort
+				}
+				if cDeployConfig.ValidatorMonitoringPort != 0 {
+					nodeResponse.FabricXCommitter.ValidatorMonitoringPort = cDeployConfig.ValidatorMonitoringPort
+				}
+				if cDeployConfig.VerifierMonitoringPort != 0 {
+					nodeResponse.FabricXCommitter.VerifierMonitoringPort = cDeployConfig.VerifierMonitoringPort
+				}
+				if cDeployConfig.QueryServiceMonitoringPort != 0 {
+					nodeResponse.FabricXCommitter.QueryServiceMonitoringPort = cDeployConfig.QueryServiceMonitoringPort
+				}
 			}
+			fillCommitterMetricsUrls(nodeResponse.FabricXCommitter)
 		case *types.FabricXChildConfig:
 			// Leaf FabricX child rows (router/batcher/consenter/assembler or
 			// committer sidecar/coordinator/validator/verifier/query-service)
@@ -1176,23 +1217,73 @@ func (s *NodeService) mapDBNodeToServiceNode(dbNode *db.Node) (*Node, *NodeRespo
 						types.NodeTypeFabricXOrdererBatcher,
 						types.NodeTypeFabricXOrdererConsenter,
 						types.NodeTypeFabricXOrdererAssembler:
-						nodeResponse.FabricXOrdererGroup = &FabricXOrdererGroupProperties{
+						props := &FabricXOrdererGroupProperties{
 							MSPID:          group.MspID.String,
 							OrganizationID: group.OrganizationID.Int64,
 							PartyID:        int(group.PartyID.Int64),
 							ExternalIP:     group.ExternalIp.String,
 							Version:        group.Version.String,
 						}
+						// The parent group's deployment_config holds the
+						// per-role monitoring ports. Pull them out so the
+						// UI can render a metrics URL on every child row.
+						if group.DeploymentConfig.Valid {
+							var depCfg types.FabricXOrdererGroupDeploymentConfig
+							if err := json.Unmarshal([]byte(group.DeploymentConfig.String), &depCfg); err == nil {
+								props.RouterPort = depCfg.RouterPort
+								props.BatcherPort = depCfg.BatcherPort
+								props.ConsenterPort = depCfg.ConsenterPort
+								props.AssemblerPort = depCfg.AssemblerPort
+								props.RouterMonitoringPort = depCfg.RouterMonitoringPort
+								props.BatcherMonitoringPort = depCfg.BatcherMonitoringPort
+								props.ConsenterMonitoringPort = depCfg.ConsenterMonitoringPort
+								props.AssemblerMonitoringPort = depCfg.AssemblerMonitoringPort
+							}
+						}
+						fillOrdererMetricsUrls(props)
+						nodeResponse.FabricXOrdererGroup = props
 					case types.NodeTypeFabricXCommitterSidecar,
 						types.NodeTypeFabricXCommitterCoordinator,
 						types.NodeTypeFabricXCommitterValidator,
 						types.NodeTypeFabricXCommitterVerifier,
 						types.NodeTypeFabricXCommitterQueryService:
-						nodeResponse.FabricXCommitter = &FabricXCommitterProperties{
+						props := &FabricXCommitterProperties{
 							MSPID:          group.MspID.String,
 							OrganizationID: group.OrganizationID.Int64,
 							ExternalIP:     group.ExternalIp.String,
 							Version:        group.Version.String,
+						}
+						if group.DeploymentConfig.Valid {
+							var depCfg types.FabricXCommitterDeploymentConfig
+							if err := json.Unmarshal([]byte(group.DeploymentConfig.String), &depCfg); err == nil {
+								props.SidecarPort = depCfg.SidecarPort
+								props.CoordinatorPort = depCfg.CoordinatorPort
+								props.ValidatorPort = depCfg.ValidatorPort
+								props.VerifierPort = depCfg.VerifierPort
+								props.QueryServicePort = depCfg.QueryServicePort
+								props.SidecarMonitoringPort = depCfg.SidecarMonitoringPort
+								props.CoordinatorMonitoringPort = depCfg.CoordinatorMonitoringPort
+								props.ValidatorMonitoringPort = depCfg.ValidatorMonitoringPort
+								props.VerifierMonitoringPort = depCfg.VerifierMonitoringPort
+								props.QueryServiceMonitoringPort = depCfg.QueryServiceMonitoringPort
+							}
+						}
+						fillCommitterMetricsUrls(props)
+						nodeResponse.FabricXCommitter = props
+					}
+
+					// Always populate the per-child summary so the UI can
+					// render a single metrics URL directly off the leaf
+					// row regardless of which group properties branch fired.
+					if childDep, ok := deploymentConfig.(*types.FabricXChildDeploymentConfig); ok {
+						nodeResponse.FabricXChild = &FabricXChildProperties{
+							Role:           string(childDep.Role),
+							ContainerName:  childDep.ContainerName,
+							HostPort:       childDep.HostPort,
+							MonitoringPort: childDep.MonitoringPort,
+						}
+						if group.ExternalIp.String != "" && childDep.MonitoringPort > 0 {
+							nodeResponse.FabricXChild.MetricsUrl = fabricxMetricsURL(group.ExternalIp.String, childDep.MonitoringPort)
 						}
 					}
 				} else {
@@ -1905,6 +1996,24 @@ func (s *NodeService) RenewCertificates(ctx context.Context, id int64) (*NodeRes
 		renewErr = s.renewPeerCertificates(ctx, node, deploymentConfig)
 	case types.NodeTypeFabricOrderer:
 		renewErr = s.renewOrdererCertificates(ctx, node, deploymentConfig)
+	case types.NodeTypeFabricXOrdererGroup,
+		types.NodeTypeFabricXCommitter:
+		// Legacy monolithic FabricX node rows: renew the parent group's
+		// keys directly off this row's deployment_config.
+		renewErr = s.renewFabricXNodeCertificates(ctx, node, deploymentConfig)
+	case types.NodeTypeFabricXOrdererRouter,
+		types.NodeTypeFabricXOrdererBatcher,
+		types.NodeTypeFabricXOrdererConsenter,
+		types.NodeTypeFabricXOrdererAssembler,
+		types.NodeTypeFabricXCommitterSidecar,
+		types.NodeTypeFabricXCommitterCoordinator,
+		types.NodeTypeFabricXCommitterValidator,
+		types.NodeTypeFabricXCommitterVerifier,
+		types.NodeTypeFabricXCommitterQueryService:
+		// Per-role child rows: identity lives on the parent node_group, so
+		// renewal renews the group's keys once and rewrites every child's
+		// on-disk msp/tls. All children share one identity by design.
+		renewErr = s.renewFabricXChildCertificates(ctx, node)
 	default:
 		renewErr = fmt.Errorf("certificate renewal not supported for node type: %s", node.NodeType.String)
 	}

@@ -740,6 +740,7 @@ func toNodeResponse(node *service.NodeResponse) NodeResponse {
 		BesuNode:            node.BesuNode,
 		FabricXOrdererGroup: node.FabricXOrdererGroup,
 		FabricXCommitter:    node.FabricXCommitter,
+		FabricXChild:        node.FabricXChild,
 	}
 }
 

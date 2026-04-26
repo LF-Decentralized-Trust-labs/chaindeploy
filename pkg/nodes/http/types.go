@@ -164,6 +164,7 @@ type NodeResponse struct {
 	BesuNode            *service.BesuNodeProperties             `json:"besuNode,omitempty"`
 	FabricXOrdererGroup *service.FabricXOrdererGroupProperties  `json:"fabricXOrdererGroup,omitempty"`
 	FabricXCommitter    *service.FabricXCommitterProperties     `json:"fabricXCommitter,omitempty"`
+	FabricXChild        *service.FabricXChildProperties         `json:"fabricXChild,omitempty"`
 }
 
 // ListNodesResponse represents the paginated response for listing nodes

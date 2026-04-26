@@ -522,13 +522,19 @@ func (c *serveCmd) setupServer(queries *db.Queries, authService *auth.AuthServic
 	committerFactory := func(q *db.Queries, nodeID int64, opts nodeTypes.FabricXCommitterConfig) *fabricx.Committer {
 		return fabricx.NewCommitter(q, organizationService, keyManagementService, configService, logger, nodeID, opts)
 	}
-	nodeGroupsService := ngroupsservice.NewService(queries, nodesService, ordererFactory, committerFactory, logger)
+	nodeGroupsService := ngroupsservice.NewService(queries, nodesService, ordererFactory, committerFactory, logger).
+		WithDataPath(dataPath)
 	nodeGroupsHandler := ngroupshttp.NewHandler(nodeGroupsService)
 
 	// Standalone services coordinator (POSTGRES and future service types).
 	// Services are a first-class resource; node groups reference them via
 	// postgres_service_id. See ADR 0001.
-	servicesService := svcservice.NewService(queries, logger)
+	// WithDataPath enables on-host bind mounts for managed postgres data
+	// dirs so backups capture PGDATA — without it, the container's
+	// writable layer holds all coordinator/queryservice tx state and
+	// gets lost on container removal.
+	servicesService := svcservice.NewService(queries, logger).
+		WithDataPath(dataPath)
 	servicesHandler := svchttp.NewHandler(servicesService)
 	networksHandler := networkshttp.NewHandler(
 		networksService,

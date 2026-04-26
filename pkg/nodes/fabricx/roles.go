@@ -28,7 +28,11 @@ type ordererComponent struct {
 	role          nodetypes.FabricXRole
 	containerName string
 	hostPort      int
-	cmd           []string
+	// monitoringPort is the host port to publish for this role's
+	// Prometheus /metrics endpoint. Zero means "no monitoring" (legacy
+	// nodes that predate monitoring port allocation).
+	monitoringPort int
+	cmd            []string
 	// mountTag is the trailing path segment inside /etc/hyperledger/fabricx
 	// where this component expects its msp/tls/genesis/store/data bind mounts
 	// (matches the historical per-component layout: "router", "batcher",
@@ -41,32 +45,36 @@ type ordererComponent struct {
 func ordererComponents(cfg *nodetypes.FabricXOrdererGroupDeploymentConfig) []ordererComponent {
 	return []ordererComponent{
 		{
-			role:          nodetypes.FabricXRoleOrdererRouter,
-			containerName: cfg.RouterContainer,
-			hostPort:      cfg.RouterPort,
-			cmd:           []string{"--config=/etc/hyperledger/fabricx/config/node_config.yaml", "router"},
-			mountTag:      "router",
+			role:           nodetypes.FabricXRoleOrdererRouter,
+			containerName:  cfg.RouterContainer,
+			hostPort:       cfg.RouterPort,
+			monitoringPort: cfg.RouterMonitoringPort,
+			cmd:            []string{"--config=/etc/hyperledger/fabricx/config/node_config.yaml", "router"},
+			mountTag:       "router",
 		},
 		{
-			role:          nodetypes.FabricXRoleOrdererBatcher,
-			containerName: cfg.BatcherContainer,
-			hostPort:      cfg.BatcherPort,
-			cmd:           []string{"--config=/etc/hyperledger/fabricx/config/node_config.yaml", "batcher"},
-			mountTag:      "batcher",
+			role:           nodetypes.FabricXRoleOrdererBatcher,
+			containerName:  cfg.BatcherContainer,
+			hostPort:       cfg.BatcherPort,
+			monitoringPort: cfg.BatcherMonitoringPort,
+			cmd:            []string{"--config=/etc/hyperledger/fabricx/config/node_config.yaml", "batcher"},
+			mountTag:       "batcher",
 		},
 		{
-			role:          nodetypes.FabricXRoleOrdererConsenter,
-			containerName: cfg.ConsenterContainer,
-			hostPort:      cfg.ConsenterPort,
-			cmd:           []string{"--config=/etc/hyperledger/fabricx/config/node_config.yaml", "consensus"},
-			mountTag:      "consenter",
+			role:           nodetypes.FabricXRoleOrdererConsenter,
+			containerName:  cfg.ConsenterContainer,
+			hostPort:       cfg.ConsenterPort,
+			monitoringPort: cfg.ConsenterMonitoringPort,
+			cmd:            []string{"--config=/etc/hyperledger/fabricx/config/node_config.yaml", "consensus"},
+			mountTag:       "consenter",
 		},
 		{
-			role:          nodetypes.FabricXRoleOrdererAssembler,
-			containerName: cfg.AssemblerContainer,
-			hostPort:      cfg.AssemblerPort,
-			cmd:           []string{"--config=/etc/hyperledger/fabricx/config/node_config.yaml", "assembler"},
-			mountTag:      "assembler",
+			role:           nodetypes.FabricXRoleOrdererAssembler,
+			containerName:  cfg.AssemblerContainer,
+			hostPort:       cfg.AssemblerPort,
+			monitoringPort: cfg.AssemblerMonitoringPort,
+			cmd:            []string{"--config=/etc/hyperledger/fabricx/config/node_config.yaml", "assembler"},
+			mountTag:       "assembler",
 		},
 	}
 }
@@ -124,6 +132,14 @@ func (og *OrdererGroup) StartOrdererRole(
 	portBindings := map[nat.Port][]nat.PortBinding{
 		containerPort: {{HostIP: "0.0.0.0", HostPort: fmt.Sprintf("%d", comp.hostPort)}},
 	}
+	// Publish the Prometheus /metrics port on the host. Skip when zero
+	// for legacy nodes that predate monitoring port allocation — the
+	// container-side template would write 0 in that case too, leaving
+	// the endpoint disabled, so leaving it unbound stays consistent.
+	if comp.monitoringPort > 0 {
+		monitorPort := nat.Port(fmt.Sprintf("%d/tcp", comp.monitoringPort))
+		portBindings[monitorPort] = []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: fmt.Sprintf("%d", comp.monitoringPort)}}
+	}
 
 	var extraHosts []string
 	if cfg.ExternalIP != "" && resolveLocalDevForNode(ctx, og.db, og.configService, og.nodeID) {
@@ -131,7 +147,8 @@ func (og *OrdererGroup) StartOrdererRole(
 	}
 
 	og.logger.Info("Starting FabricX orderer component",
-		"role", role, "container", comp.containerName, "hostPort", comp.hostPort)
+		"role", role, "container", comp.containerName,
+		"hostPort", comp.hostPort, "monitoringPort", comp.monitoringPort)
 
 	if err := startContainer(ctx, og.logger, imageName, comp.containerName, comp.cmd, env, portBindings, mounts, "", extraHosts); err != nil {
 		return fmt.Errorf("failed to start %s: %w", role, err)
@@ -187,53 +204,61 @@ type committerComponent struct {
 	role          nodetypes.FabricXRole
 	containerName string
 	hostPort      int
-	cmd           []string
-	subDir        string
-	needsMSP      bool
-	needsGenesis  bool
+	// monitoringPort is the host port for this role's Prometheus
+	// /metrics endpoint. Zero means "no monitoring".
+	monitoringPort int
+	cmd            []string
+	subDir         string
+	needsMSP       bool
+	needsGenesis   bool
 }
 
 // committerComponents derives the 5 role definitions from a deployment cfg.
 func committerComponents(cfg *nodetypes.FabricXCommitterDeploymentConfig) []committerComponent {
 	return []committerComponent{
 		{
-			role:          nodetypes.FabricXRoleCommitterSidecar,
-			containerName: cfg.SidecarContainer,
-			hostPort:      cfg.SidecarPort,
+			role:           nodetypes.FabricXRoleCommitterSidecar,
+			containerName:  cfg.SidecarContainer,
+			hostPort:       cfg.SidecarPort,
+			monitoringPort: cfg.SidecarMonitoringPort,
 			// v1.0.0-alpha restructured the CLI: `start-sidecar` → `start sidecar`
 			// (see hyperledger/fabric-x-committer #491). Config flag path unchanged.
-			cmd:           []string{"start", "sidecar", "--config=/etc/hyperledger/fabricx/config/sidecar_config.yaml"},
-			subDir:        "sidecar",
-			needsMSP:      true,
-			needsGenesis:  true,
+			cmd:          []string{"start", "sidecar", "--config=/etc/hyperledger/fabricx/config/sidecar_config.yaml"},
+			subDir:       "sidecar",
+			needsMSP:     true,
+			needsGenesis: true,
 		},
 		{
-			role:          nodetypes.FabricXRoleCommitterCoordinator,
-			containerName: cfg.CoordinatorContainer,
-			hostPort:      cfg.CoordinatorPort,
-			cmd:           []string{"start", "coordinator", "--config=/etc/hyperledger/fabricx/config/coordinator_config.yaml"},
-			subDir:        "coordinator",
+			role:           nodetypes.FabricXRoleCommitterCoordinator,
+			containerName:  cfg.CoordinatorContainer,
+			hostPort:       cfg.CoordinatorPort,
+			monitoringPort: cfg.CoordinatorMonitoringPort,
+			cmd:            []string{"start", "coordinator", "--config=/etc/hyperledger/fabricx/config/coordinator_config.yaml"},
+			subDir:         "coordinator",
 		},
 		{
-			role:          nodetypes.FabricXRoleCommitterValidator,
-			containerName: cfg.ValidatorContainer,
-			hostPort:      cfg.ValidatorPort,
-			cmd:           []string{"start", "vc", "--config=/etc/hyperledger/fabricx/config/validator_config.yaml"},
-			subDir:        "validator",
+			role:           nodetypes.FabricXRoleCommitterValidator,
+			containerName:  cfg.ValidatorContainer,
+			hostPort:       cfg.ValidatorPort,
+			monitoringPort: cfg.ValidatorMonitoringPort,
+			cmd:            []string{"start", "vc", "--config=/etc/hyperledger/fabricx/config/validator_config.yaml"},
+			subDir:         "validator",
 		},
 		{
-			role:          nodetypes.FabricXRoleCommitterVerifier,
-			containerName: cfg.VerifierContainer,
-			hostPort:      cfg.VerifierPort,
-			cmd:           []string{"start", "verifier", "--config=/etc/hyperledger/fabricx/config/verifier_config.yaml"},
-			subDir:        "verifier",
+			role:           nodetypes.FabricXRoleCommitterVerifier,
+			containerName:  cfg.VerifierContainer,
+			hostPort:       cfg.VerifierPort,
+			monitoringPort: cfg.VerifierMonitoringPort,
+			cmd:            []string{"start", "verifier", "--config=/etc/hyperledger/fabricx/config/verifier_config.yaml"},
+			subDir:         "verifier",
 		},
 		{
-			role:          nodetypes.FabricXRoleCommitterQueryService,
-			containerName: cfg.QueryServiceContainer,
-			hostPort:      cfg.QueryServicePort,
-			cmd:           []string{"start", "query", "--config=/etc/hyperledger/fabricx/config/config.yaml"},
-			subDir:        "query-service",
+			role:           nodetypes.FabricXRoleCommitterQueryService,
+			containerName:  cfg.QueryServiceContainer,
+			hostPort:       cfg.QueryServicePort,
+			monitoringPort: cfg.QueryServiceMonitoringPort,
+			cmd:            []string{"start", "query", "--config=/etc/hyperledger/fabricx/config/config.yaml"},
+			subDir:         "query-service",
 		},
 	}
 }
@@ -305,6 +330,10 @@ func (c *Committer) StartCommitterRole(
 	portBindings := map[nat.Port][]nat.PortBinding{
 		containerPort: {{HostIP: "0.0.0.0", HostPort: fmt.Sprintf("%d", comp.hostPort)}},
 	}
+	if comp.monitoringPort > 0 {
+		monitorPort := nat.Port(fmt.Sprintf("%d/tcp", comp.monitoringPort))
+		portBindings[monitorPort] = []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: fmt.Sprintf("%d", comp.monitoringPort)}}
+	}
 
 	var extraHosts []string
 	if cfg.ExternalIP != "" && resolveLocalDevForNode(ctx, c.db, c.configService, c.nodeID) {
@@ -312,7 +341,8 @@ func (c *Committer) StartCommitterRole(
 	}
 
 	c.logger.Info("Starting FabricX committer component",
-		"role", role, "container", comp.containerName, "hostPort", comp.hostPort)
+		"role", role, "container", comp.containerName,
+		"hostPort", comp.hostPort, "monitoringPort", comp.monitoringPort)
 
 	if err := startContainer(ctx, c.logger, imageName, comp.containerName, comp.cmd, env, portBindings, mounts, c.CommitterNetworkName(), extraHosts); err != nil {
 		return fmt.Errorf("failed to start %s: %w", role, err)

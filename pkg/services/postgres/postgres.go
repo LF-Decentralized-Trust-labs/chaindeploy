@@ -21,12 +21,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/chainlaunch/chainlaunch/pkg/docker"
 	"github.com/chainlaunch/chainlaunch/pkg/logger"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
 	dockerclient "github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
@@ -66,6 +68,16 @@ type Config struct {
 	// ExtraEnv optionally adds env vars (e.g. WAL-G creds once the
 	// archiving sidecar ships). Nil is fine.
 	ExtraEnv map[string]string
+	// DataDir is the host directory bind-mounted to /var/lib/postgresql/data
+	// inside the container. Without this, the container's PGDATA lives in
+	// the writable layer and is lost when the container is removed (upgrade,
+	// host migration, docker prune), which means restic snapshots of the
+	// chainlaunch data path would silently miss all FabricX coordinator/
+	// queryservice tx state.
+	//
+	// Empty DataDir is allowed for tests/short-lived containers — the
+	// container then falls back to the writable layer with no host bind.
+	DataDir string
 }
 
 // Start materializes the postgres container, replacing any existing one
@@ -134,10 +146,27 @@ func Start(ctx context.Context, log *logger.Logger, cfg Config) (string, error) 
 		Env:          env,
 		ExposedPorts: exposed,
 	}
+	var mounts []mount.Mount
+	if cfg.DataDir != "" {
+		// Ensure the host dir exists before docker tries to bind it. Docker
+		// will create a missing source as root-owned root:root (and then the
+		// upstream postgres image's USER 999 fails to chown PGDATA), so we
+		// pre-create with the standard chainlaunch data perms.
+		if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
+			return "", fmt.Errorf("postgres: create data dir %s: %w", cfg.DataDir, err)
+		}
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeBind,
+			Source: cfg.DataDir,
+			Target: "/var/lib/postgresql/data",
+		})
+	}
+
 	hostConfig := &container.HostConfig{
 		PortBindings:  portBindings,
 		NetworkMode:   container.NetworkMode(cfg.NetworkName),
 		RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyUnlessStopped},
+		Mounts:        mounts,
 	}
 
 	resp, err := cli.ContainerCreate(ctx, containerConfig, hostConfig, nil, nil, cfg.ContainerName)

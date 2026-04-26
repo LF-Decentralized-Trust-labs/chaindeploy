@@ -1,12 +1,14 @@
-import { HttpNodeResponse, ServiceFabricXCommitterProperties, ServiceFabricXOrdererGroupProperties } from '@/api/client'
+import { HttpNodeResponse, ServiceFabricXChildProperties, ServiceFabricXCommitterProperties, ServiceFabricXOrdererGroupProperties } from '@/api/client'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { CertificateViewer } from '@/components/ui/certificate-viewer'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { LogViewer } from '@/components/nodes/LogViewer'
-import { Globe, Key, Layers, Network, Server, Shield } from 'lucide-react'
+import { Activity, Copy, ExternalLink, Globe, Key, Layers, Network, Server, Shield } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface FabricXNodeDetailsProps {
 	node: HttpNodeResponse
@@ -39,6 +41,116 @@ function Port({ label, host, port }: { label: string; host?: string; port?: numb
 				{host ? `${host}:${port}` : port}
 			</p>
 		</div>
+	)
+}
+
+// MetricsRow renders a per-role Prometheus /metrics URL with a copy
+// button and external-link icon. Returns null when the URL is empty,
+// which handles legacy nodes that predate monitoring port allocation.
+function MetricsRow({ label, url }: { label: string; url?: string }) {
+	if (!url) return null
+	const onCopy = async () => {
+		try {
+			await navigator.clipboard.writeText(url)
+			toast.success(`${label} metrics URL copied`)
+		} catch {
+			toast.error('Failed to copy to clipboard')
+		}
+	}
+	return (
+		<div className="flex items-center justify-between gap-2 rounded-md border bg-muted/30 px-3 py-2">
+			<div className="min-w-0">
+				<p className="text-xs font-medium text-muted-foreground">{label}</p>
+				<p className="font-mono text-xs truncate">{url}</p>
+			</div>
+			<div className="flex shrink-0 items-center gap-1">
+				<Button size="icon" variant="ghost" className="h-7 w-7" onClick={onCopy} title="Copy URL">
+					<Copy className="h-3.5 w-3.5" />
+				</Button>
+				<Button size="icon" variant="ghost" className="h-7 w-7" asChild title="Open in new tab">
+					<a href={url} target="_blank" rel="noreferrer">
+						<ExternalLink className="h-3.5 w-3.5" />
+					</a>
+				</Button>
+			</div>
+		</div>
+	)
+}
+
+function OrdererMetricsCard({ config }: { config: ServiceFabricXOrdererGroupProperties }) {
+	const rows: { label: string; url?: string }[] = [
+		{ label: 'Router', url: config.routerMetricsUrl },
+		{ label: 'Batcher', url: config.batcherMetricsUrl },
+		{ label: 'Consenter', url: config.consenterMetricsUrl },
+		{ label: 'Assembler', url: config.assemblerMetricsUrl },
+	]
+	const visible = rows.filter((r) => !!r.url)
+	if (visible.length === 0) return null
+	return (
+		<Card>
+			<CardHeader>
+				<div className="flex items-center gap-2">
+					<Activity className="h-4 w-4 text-muted-foreground" />
+					<CardTitle>Prometheus Metrics</CardTitle>
+				</div>
+				<CardDescription>Scrape these endpoints from Prometheus or curl them directly.</CardDescription>
+			</CardHeader>
+			<CardContent className="space-y-2">
+				{visible.map((r) => (
+					<MetricsRow key={r.label} label={r.label} url={r.url} />
+				))}
+			</CardContent>
+		</Card>
+	)
+}
+
+function CommitterMetricsCard({ config }: { config: ServiceFabricXCommitterProperties }) {
+	const rows: { label: string; url?: string }[] = [
+		{ label: 'Sidecar', url: config.sidecarMetricsUrl },
+		{ label: 'Coordinator', url: config.coordinatorMetricsUrl },
+		{ label: 'Validator', url: config.validatorMetricsUrl },
+		{ label: 'Verifier', url: config.verifierMetricsUrl },
+		{ label: 'Query Service', url: config.queryServiceMetricsUrl },
+	]
+	const visible = rows.filter((r) => !!r.url)
+	if (visible.length === 0) return null
+	return (
+		<Card>
+			<CardHeader>
+				<div className="flex items-center gap-2">
+					<Activity className="h-4 w-4 text-muted-foreground" />
+					<CardTitle>Prometheus Metrics</CardTitle>
+				</div>
+				<CardDescription>Scrape these endpoints from Prometheus or curl them directly.</CardDescription>
+			</CardHeader>
+			<CardContent className="space-y-2">
+				{visible.map((r) => (
+					<MetricsRow key={r.label} label={r.label} url={r.url} />
+				))}
+			</CardContent>
+		</Card>
+	)
+}
+
+// ChildMetricsCard renders the leaf-row metrics URL for a single FabricX
+// child node (router/batcher/.../query-service). The parent group cards
+// already list every role; this is the focused view for one container.
+function ChildMetricsCard({ config }: { config: ServiceFabricXChildProperties }) {
+	if (!config.metricsUrl) return null
+	const role = config.role ?? 'role'
+	return (
+		<Card>
+			<CardHeader>
+				<div className="flex items-center gap-2">
+					<Activity className="h-4 w-4 text-muted-foreground" />
+					<CardTitle>Prometheus Metrics</CardTitle>
+				</div>
+				<CardDescription>{`This ${role} container exposes /metrics on the host below.`}</CardDescription>
+			</CardHeader>
+			<CardContent>
+				<MetricsRow label={role} url={config.metricsUrl} />
+			</CardContent>
+		</Card>
 	)
 }
 
@@ -253,6 +365,7 @@ export function FabricXNodeDetails({ node, logs, events, activeTab, onTabChange,
 	const isCommitter = node.fabricXCommitter !== undefined
 	const ordererGroup = node.fabricXOrdererGroup
 	const committer = node.fabricXCommitter
+	const child = node.fabricXChild
 
 	const signCert = ordererGroup?.signCert
 	const tlsCert = ordererGroup?.tlsCert
@@ -270,6 +383,11 @@ export function FabricXNodeDetails({ node, logs, events, activeTab, onTabChange,
 				{isOrdererGroup && ordererGroup && <OrdererGroupConfig config={ordererGroup} />}
 				{isCommitter && committer && <CommitterConfig config={committer} />}
 				<EndpointCard externalIp={externalIp} />
+				{/* Prefer the per-child metrics card on leaf nodes; fall back
+				    to the parent group's full per-role list otherwise. */}
+				{child && <ChildMetricsCard config={child} />}
+				{!child && isOrdererGroup && ordererGroup && <OrdererMetricsCard config={ordererGroup} />}
+				{!child && isCommitter && committer && <CommitterMetricsCard config={committer} />}
 			</div>
 
 			<Tabs value={activeTab} onValueChange={onTabChange} className="space-y-4">

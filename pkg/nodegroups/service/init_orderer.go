@@ -138,15 +138,16 @@ func (s *Service) InitOrdererGroup(ctx context.Context, id int64, in OrdererInit
 	// docker names the fabricx start code will look up. HostPort is the
 	// same published port (used by the nodes detail view for quick reference).
 	children := []struct {
-		role      nodetypes.FabricXRole
-		nodeType  nodetypes.NodeType
-		container string
-		port      int
+		role           nodetypes.FabricXRole
+		nodeType       nodetypes.NodeType
+		container      string
+		port           int
+		monitoringPort int
 	}{
-		{nodetypes.FabricXRoleOrdererRouter, nodetypes.NodeTypeFabricXOrdererRouter, cfg.RouterContainer, cfg.RouterPort},
-		{nodetypes.FabricXRoleOrdererBatcher, nodetypes.NodeTypeFabricXOrdererBatcher, cfg.BatcherContainer, cfg.BatcherPort},
-		{nodetypes.FabricXRoleOrdererConsenter, nodetypes.NodeTypeFabricXOrdererConsenter, cfg.ConsenterContainer, cfg.ConsenterPort},
-		{nodetypes.FabricXRoleOrdererAssembler, nodetypes.NodeTypeFabricXOrdererAssembler, cfg.AssemblerContainer, cfg.AssemblerPort},
+		{nodetypes.FabricXRoleOrdererRouter, nodetypes.NodeTypeFabricXOrdererRouter, cfg.RouterContainer, cfg.RouterPort, cfg.RouterMonitoringPort},
+		{nodetypes.FabricXRoleOrdererBatcher, nodetypes.NodeTypeFabricXOrdererBatcher, cfg.BatcherContainer, cfg.BatcherPort, cfg.BatcherMonitoringPort},
+		{nodetypes.FabricXRoleOrdererConsenter, nodetypes.NodeTypeFabricXOrdererConsenter, cfg.ConsenterContainer, cfg.ConsenterPort, cfg.ConsenterMonitoringPort},
+		{nodetypes.FabricXRoleOrdererAssembler, nodetypes.NodeTypeFabricXOrdererAssembler, cfg.AssemblerContainer, cfg.AssemblerPort, cfg.AssemblerMonitoringPort},
 	}
 
 	for _, c := range children {
@@ -156,10 +157,11 @@ func (s *Service) InitOrdererGroup(ctx context.Context, id int64, in OrdererInit
 				Type: "fabricx-child",
 				Mode: "docker",
 			},
-			NodeGroupID:   id,
-			Role:          c.role,
-			ContainerName: c.container,
-			HostPort:      c.port,
+			NodeGroupID:    id,
+			Role:           c.role,
+			ContainerName:  c.container,
+			HostPort:       c.port,
+			MonitoringPort: c.monitoringPort,
 		}
 		childDepJSON, err := json.Marshal(childDep)
 		if err != nil {

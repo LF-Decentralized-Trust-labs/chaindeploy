@@ -1647,6 +1647,7 @@ export type HttpNodeResponse = {
     errorMessage?: string;
     fabricOrderer?: ServiceFabricOrdererProperties;
     fabricPeer?: ServiceFabricPeerProperties;
+    fabricXChild?: ServiceFabricXChildProperties;
     fabricXCommitter?: ServiceFabricXCommitterProperties;
     fabricXOrdererGroup?: ServiceFabricXOrdererGroupProperties;
     id?: number;
@@ -2454,32 +2455,58 @@ export type ServiceFabricPeerProperties = {
 };
 
 export type ServiceFabricXCommitterProperties = {
+    coordinatorMetricsUrl?: string;
+    coordinatorMonitoringPort?: number;
     coordinatorPort?: number;
     externalIp?: string;
     mspId?: string;
     organizationId?: number;
     partyId?: number;
+    queryServiceMetricsUrl?: string;
+    queryServiceMonitoringPort?: number;
     queryServicePort?: number;
+    sidecarMetricsUrl?: string;
+    sidecarMonitoringPort?: number;
     sidecarPort?: number;
+    validatorMetricsUrl?: string;
+    validatorMonitoringPort?: number;
     validatorPort?: number;
+    verifierMetricsUrl?: string;
+    verifierMonitoringPort?: number;
     verifierPort?: number;
     version?: string;
 };
 
 export type ServiceFabricXOrdererGroupProperties = {
+    assemblerMetricsUrl?: string;
+    assemblerMonitoringPort?: number;
     assemblerPort?: number;
+    batcherMetricsUrl?: string;
+    batcherMonitoringPort?: number;
     batcherPort?: number;
     caCert?: string;
+    consenterMetricsUrl?: string;
+    consenterMonitoringPort?: number;
     consenterPort?: number;
     externalIp?: string;
     mspId?: string;
     organizationId?: number;
     partyId?: number;
+    routerMetricsUrl?: string;
+    routerMonitoringPort?: number;
     routerPort?: number;
     signCert?: string;
     tlsCaCert?: string;
     tlsCert?: string;
     version?: string;
+};
+
+export type ServiceFabricXChildProperties = {
+    role?: string;
+    containerName?: string;
+    hostPort?: number;
+    monitoringPort?: number;
+    metricsUrl?: string;
 };
 
 export type ServiceJavaReadinessInfo = {
@@ -2564,6 +2591,7 @@ export type ServiceNodeResponse = {
      * Type-specific fields
      */
     fabricPeer?: ServiceFabricPeerProperties;
+    fabricXChild?: ServiceFabricXChildProperties;
     fabricXCommitter?: ServiceFabricXCommitterProperties;
     fabricXOrdererGroup?: ServiceFabricXOrdererGroupProperties;
     id?: number;

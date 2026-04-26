@@ -20,6 +20,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 
 	"github.com/chainlaunch/chainlaunch/pkg/db"
 	"github.com/chainlaunch/chainlaunch/pkg/logger"
@@ -27,6 +28,16 @@ import (
 	pgservice "github.com/chainlaunch/chainlaunch/pkg/services/postgres"
 	svctypes "github.com/chainlaunch/chainlaunch/pkg/services/types"
 )
+
+// postgresDataDir is the canonical bind-mount source for a managed
+// postgres container. Returns "" when dataPath is empty so postgres
+// falls back to the container's writable layer (used in tests).
+func postgresDataDir(dataPath, containerName string) string {
+	if dataPath == "" || containerName == "" {
+		return ""
+	}
+	return filepath.Join(dataPath, "services", "postgres", containerName)
+}
 
 // PostgresLifecycle is the narrow subset of pkg/services/postgres the
 // coordinator uses. Pulled behind an interface so unit tests can record
@@ -44,6 +55,10 @@ type Service struct {
 	db       *db.Queries
 	postgres PostgresLifecycle
 	logger   *logger.Logger
+	// dataPath is the chainlaunch on-disk root; postgres bind mounts
+	// land under ${dataPath}/services/postgres/<container>. Empty means
+	// "no bind" (used in tests).
+	dataPath string
 }
 
 // NewService wires the coordinator. Production uses the docker-backed
@@ -61,6 +76,14 @@ func NewService(dbQueries *db.Queries, log *logger.Logger) *Service {
 // alone.
 func (s *Service) WithPostgresLifecycle(pl PostgresLifecycle) *Service {
 	s.postgres = pl
+	return s
+}
+
+// WithDataPath enables on-host bind mounts for managed postgres data
+// directories. Production wires this in serve.go so backups capture
+// PGDATA; tests pass "".
+func (s *Service) WithDataPath(dataPath string) *Service {
+	s.dataPath = dataPath
 	return s
 }
 
@@ -362,6 +385,7 @@ func (s *Service) StartPostgres(ctx context.Context, id int64, networkName strin
 		DB:            pgCfg.DB,
 		User:          pgCfg.User,
 		Password:      pgCfg.Password,
+		DataDir:       postgresDataDir(s.dataPath, containerName),
 	}); err != nil {
 		s.markServiceError(ctx, id, err)
 		return nil, fmt.Errorf("start postgres service %d: %w", id, err)

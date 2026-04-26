@@ -230,28 +230,73 @@ func (og *OrdererGroup) Init() (*nodetypes.FabricXOrdererGroupDeploymentConfig, 
 		consenterType = "pbft"
 	}
 
+	// Allocate per-role Prometheus /metrics ports unless the caller
+	// explicitly pinned them. We start the search at GRPC base + 100
+	// to avoid colliding with GRPC ports (which often live in dense
+	// blocks) and skip any GRPC port we just placed.
+	exclude := map[int]struct{}{
+		og.opts.RouterPort:    {},
+		og.opts.BatcherPort:   {},
+		og.opts.ConsenterPort: {},
+		og.opts.AssemblerPort: {},
+	}
+	monRouter := og.opts.RouterMonitoringPort
+	monBatcher := og.opts.BatcherMonitoringPort
+	monConsenter := og.opts.ConsenterMonitoringPort
+	monAssembler := og.opts.AssemblerMonitoringPort
+	if monRouter == 0 || monBatcher == 0 || monConsenter == 0 || monAssembler == 0 {
+		// Use the highest GRPC port + 100 as the search start so we
+		// stay above the typical adjacent allocations.
+		base := og.opts.RouterPort
+		for _, p := range []int{og.opts.BatcherPort, og.opts.ConsenterPort, og.opts.AssemblerPort} {
+			if p > base {
+				base = p
+			}
+		}
+		ports, err := findFreePortsExcluding(base+100, 4, exclude)
+		if err != nil {
+			return nil, fmt.Errorf("allocate orderer monitoring ports: %w", err)
+		}
+		if monRouter == 0 {
+			monRouter = ports[0]
+		}
+		if monBatcher == 0 {
+			monBatcher = ports[1]
+		}
+		if monConsenter == 0 {
+			monConsenter = ports[2]
+		}
+		if monAssembler == 0 {
+			monAssembler = ports[3]
+		}
+	}
+
 	cfg := &nodetypes.FabricXOrdererGroupDeploymentConfig{
 		BaseDeploymentConfig: nodetypes.BaseDeploymentConfig{
 			Type: "fabricx-orderer-group",
 			Mode: "docker",
 		},
-		OrganizationID: og.organizationID,
-		MSPID:          og.mspID,
-		PartyID:        og.opts.PartyID,
-		ExternalIP:     og.opts.ExternalIP,
-		DomainNames:    domains,
-		Version:        version,
-		SignKeyID:      int64(signKeyDB.ID),
-		TLSKeyID:      int64(tlsKeyDB.ID),
-		SignCert:       *signKeyDB.Certificate,
-		TLSCert:        *tlsKeyDB.Certificate,
-		CACert:         *signCAKeyDB.Certificate,
-		TLSCACert:      *tlsCAKeyDB.Certificate,
-		RouterPort:     og.opts.RouterPort,
-		BatcherPort:    og.opts.BatcherPort,
-		ConsenterPort:  og.opts.ConsenterPort,
-		AssemblerPort:  og.opts.AssemblerPort,
-		ConsenterType:  consenterType,
+		OrganizationID:          og.organizationID,
+		MSPID:                   og.mspID,
+		PartyID:                 og.opts.PartyID,
+		ExternalIP:              og.opts.ExternalIP,
+		DomainNames:             domains,
+		Version:                 version,
+		SignKeyID:               int64(signKeyDB.ID),
+		TLSKeyID:                int64(tlsKeyDB.ID),
+		SignCert:                *signKeyDB.Certificate,
+		TLSCert:                 *tlsKeyDB.Certificate,
+		CACert:                  *signCAKeyDB.Certificate,
+		TLSCACert:               *tlsCAKeyDB.Certificate,
+		RouterPort:              og.opts.RouterPort,
+		BatcherPort:             og.opts.BatcherPort,
+		ConsenterPort:           og.opts.ConsenterPort,
+		AssemblerPort:           og.opts.AssemblerPort,
+		RouterMonitoringPort:    monRouter,
+		BatcherMonitoringPort:   monBatcher,
+		ConsenterMonitoringPort: monConsenter,
+		AssemblerMonitoringPort: monAssembler,
+		ConsenterType:           consenterType,
 
 		RouterContainer:    prefix + "-router",
 		BatcherContainer:   prefix + "-batcher",
@@ -472,6 +517,10 @@ General:
         MaxDelay: 2m0s
     MaxRecvMsgSize: 104857600
     MaxSendMsgSize: 104857600
+    # Prometheus /metrics endpoint. Upstream default is 0 (disabled);
+    # the chaindeploy port allocator assigns this so the host can scrape.
+    MonitoringListenAddress: 0.0.0.0
+    MonitoringListenPort: {{.RouterMonitoringPort}}
     Bootstrap:
         Method: block
         File: /etc/hyperledger/fabricx/router/genesis/genesis.block
@@ -508,6 +557,8 @@ General:
         MaxDelay: 2m0s
     MaxRecvMsgSize: 104857600
     MaxSendMsgSize: 104857600
+    MonitoringListenAddress: 0.0.0.0
+    MonitoringListenPort: {{.BatcherMonitoringPort}}
     Bootstrap:
         Method: block
         File: /etc/hyperledger/fabricx/batcher/genesis/genesis.block
@@ -547,6 +598,8 @@ General:
         MaxDelay: 2m0s
     MaxRecvMsgSize: 104857600
     MaxSendMsgSize: 104857600
+    MonitoringListenAddress: 0.0.0.0
+    MonitoringListenPort: {{.ConsenterMonitoringPort}}
     Bootstrap:
         Method: block
         File: /etc/hyperledger/fabricx/consenter/genesis/genesis.block
@@ -592,6 +645,8 @@ General:
         MaxDelay: 2m0s
     MaxRecvMsgSize: 104857600
     MaxSendMsgSize: 104857600
+    MonitoringListenAddress: 0.0.0.0
+    MonitoringListenPort: {{.AssemblerMonitoringPort}}
     Bootstrap:
         Method: block
         File: /etc/hyperledger/fabricx/assembler/genesis/genesis.block
@@ -616,17 +671,29 @@ type ordererConfigData struct {
 	BatcherPort   int
 	ConsenterPort int
 	AssemblerPort int
+	// Per-role Prometheus /metrics ports. All four are set on every
+	// template render — each template only references the field for
+	// its own role, so this is a single source of truth that's safe
+	// to share across the four writers.
+	RouterMonitoringPort    int
+	BatcherMonitoringPort   int
+	ConsenterMonitoringPort int
+	AssemblerMonitoringPort int
 }
 
 func (og *OrdererGroup) ordererConfigData(cfg *nodetypes.FabricXOrdererGroupDeploymentConfig) ordererConfigData {
 	return ordererConfigData{
-		PartyID:       cfg.PartyID,
-		MSPID:         cfg.MSPID,
-		ConsenterType: cfg.ConsenterType,
-		RouterPort:    cfg.RouterPort,
-		BatcherPort:   cfg.BatcherPort,
-		ConsenterPort: cfg.ConsenterPort,
-		AssemblerPort: cfg.AssemblerPort,
+		PartyID:                 cfg.PartyID,
+		MSPID:                   cfg.MSPID,
+		ConsenterType:           cfg.ConsenterType,
+		RouterPort:              cfg.RouterPort,
+		BatcherPort:             cfg.BatcherPort,
+		ConsenterPort:           cfg.ConsenterPort,
+		AssemblerPort:           cfg.AssemblerPort,
+		RouterMonitoringPort:    cfg.RouterMonitoringPort,
+		BatcherMonitoringPort:   cfg.BatcherMonitoringPort,
+		ConsenterMonitoringPort: cfg.ConsenterMonitoringPort,
+		AssemblerMonitoringPort: cfg.AssemblerMonitoringPort,
 	}
 }
 
@@ -644,4 +711,172 @@ func (og *OrdererGroup) writeConsenterConfig(cfg *nodetypes.FabricXOrdererGroupD
 
 func (og *OrdererGroup) writeAssemblerConfig(cfg *nodetypes.FabricXOrdererGroupDeploymentConfig) error {
 	return writeTemplate(assemblerConfigTemplate, filepath.Join(og.baseDir(), "assembler", "config", "node_config.yaml"), og.ordererConfigData(cfg))
+}
+
+// RenewCertificates re-signs the orderer group's signing and TLS certs
+// using the SAME key pair that's already in the DB (matching the
+// Fabric peer/orderer renewal behavior). Returns an updated deployment
+// config with the new SignCert/TLSCert. The caller is responsible for
+// persisting the new config and restarting the four child containers
+// so they pick up the rewritten msp/tls dirs on disk.
+//
+// All four orderer roles share one identity, so a single key pair is
+// renewed and all four msp/tls dirs are rewritten from it. Same key
+// IDs (cfg.SignKeyID, cfg.TLSKeyID) are reused — the keys themselves
+// don't change, only the certificates.
+func (og *OrdererGroup) RenewCertificates(cfg *nodetypes.FabricXOrdererGroupDeploymentConfig) (*nodetypes.FabricXOrdererGroupDeploymentConfig, error) {
+	ctx := context.Background()
+	og.logger.Info("Starting FabricX orderer group certificate renewal", "name", og.opts.Name)
+
+	if cfg.SignKeyID == 0 || cfg.TLSKeyID == 0 {
+		return nil, fmt.Errorf("orderer group missing SignKeyID/TLSKeyID; cannot renew")
+	}
+
+	org, err := og.orgService.GetOrganization(ctx, og.organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("get organization: %w", err)
+	}
+
+	signCAKey, err := og.keyService.GetKey(ctx, int(org.SignKeyID.Int64))
+	if err != nil {
+		return nil, fmt.Errorf("get sign CA key: %w", err)
+	}
+	tlsCAKey, err := og.keyService.GetKey(ctx, int(org.TlsRootKeyID.Int64))
+	if err != nil {
+		return nil, fmt.Errorf("get TLS CA key: %w", err)
+	}
+
+	// If a key was minted before SigningKeyID became authoritative, hint
+	// the org's CA so RenewCertificate can locate the issuer without a
+	// guess. Mirrors the LocalPeer renewal path.
+	signKeyDB, err := og.keyService.GetKey(ctx, int(cfg.SignKeyID))
+	if err != nil {
+		return nil, fmt.Errorf("get sign key: %w", err)
+	}
+	if signKeyDB.SigningKeyID == nil || *signKeyDB.SigningKeyID == 0 {
+		if err := og.keyService.SetSigningKeyIDForKey(ctx, int(cfg.SignKeyID), int(signCAKey.ID)); err != nil {
+			return nil, fmt.Errorf("set signing key id on sign key: %w", err)
+		}
+	}
+	tlsKeyDB, err := og.keyService.GetKey(ctx, int(cfg.TLSKeyID))
+	if err != nil {
+		return nil, fmt.Errorf("get TLS key: %w", err)
+	}
+	if tlsKeyDB.SigningKeyID == nil || *tlsKeyDB.SigningKeyID == 0 {
+		if err := og.keyService.SetSigningKeyIDForKey(ctx, int(cfg.TLSKeyID), int(tlsCAKey.ID)); err != nil {
+			return nil, fmt.Errorf("set signing key id on TLS key: %w", err)
+		}
+	}
+
+	validFor := kmodels.Duration(time.Hour * 24 * 365)
+
+	renewedSignKeyDB, err := og.keyService.RenewCertificate(ctx, int(cfg.SignKeyID), kmodels.CertificateRequest{
+		CommonName:         og.opts.Name,
+		Organization:       []string{og.mspID},
+		OrganizationalUnit: []string{"orderer"},
+		DNSNames:           []string{og.opts.Name},
+		IsCA:               false,
+		ValidFor:           validFor,
+		KeyUsage:           x509.KeyUsageDigitalSignature,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("renew signing certificate: %w", err)
+	}
+
+	domains, ipAddresses := expandFabricxSANs(cfg.DomainNames)
+	renewedTLSKeyDB, err := og.keyService.RenewCertificate(ctx, int(cfg.TLSKeyID), kmodels.CertificateRequest{
+		CommonName:         og.opts.Name,
+		Organization:       []string{og.mspID},
+		OrganizationalUnit: []string{"orderer"},
+		DNSNames:           domains,
+		IPAddresses:        ipAddresses,
+		IsCA:               false,
+		ValidFor:           validFor,
+		KeyUsage:           x509.KeyUsageDigitalSignature | x509.KeyUsageKeyAgreement,
+		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("renew TLS certificate: %w", err)
+	}
+
+	if renewedSignKeyDB.Certificate == nil || renewedTLSKeyDB.Certificate == nil {
+		return nil, fmt.Errorf("renewed certificates returned with nil PEM")
+	}
+
+	// Build the updated deployment config. Caller persists it back to
+	// the parent node_group row.
+	updated := *cfg
+	updated.SignCert = *renewedSignKeyDB.Certificate
+	updated.TLSCert = *renewedTLSKeyDB.Certificate
+
+	// Rewrite all four roles' on-disk msp/ and tls/ directories with the
+	// fresh certs. Reuses the existing decrypted key pair — the keys
+	// themselves are unchanged.
+	signKey, err := og.keyService.GetDecryptedPrivateKey(int(cfg.SignKeyID))
+	if err != nil {
+		return nil, fmt.Errorf("decrypt sign key: %w", err)
+	}
+	tlsKey, err := og.keyService.GetDecryptedPrivateKey(int(cfg.TLSKeyID))
+	if err != nil {
+		return nil, fmt.Errorf("decrypt TLS key: %w", err)
+	}
+
+	baseDir := og.baseDir()
+	components := []string{"router", "batcher", "consenter", "assembler"}
+	for _, comp := range components {
+		if err := writeMSP(
+			filepath.Join(baseDir, comp, "msp"),
+			updated.SignCert, signKey, updated.CACert, updated.TLSCACert,
+		); err != nil {
+			return nil, fmt.Errorf("write renewed MSP for %s: %w", comp, err)
+		}
+		if err := writeTLS(
+			filepath.Join(baseDir, comp, "tls"),
+			updated.TLSCert, tlsKey, updated.TLSCACert,
+		); err != nil {
+			return nil, fmt.Errorf("write renewed TLS for %s: %w", comp, err)
+		}
+	}
+
+	og.logger.Info("Successfully renewed FabricX orderer group certificates", "name", og.opts.Name)
+	return &updated, nil
+}
+
+// expandFabricxSANs reproduces the SAN-collection logic Init() uses so
+// renewal certs cover the same DNS names and IP addresses. Adds
+// localhost / 127.0.0.1 when the saved DomainNames don't already
+// include them, plus host.docker.internal so local-dev mode keeps
+// working after renewal.
+func expandFabricxSANs(domainNames []string) ([]string, []net.IP) {
+	var ipAddresses []net.IP
+	var domains []string
+	hasLocalhost := false
+	hasLoopback := false
+	for _, domain := range domainNames {
+		if domain == "localhost" {
+			hasLocalhost = true
+			domains = append(domains, domain)
+			continue
+		}
+		if domain == "127.0.0.1" {
+			hasLoopback = true
+			ipAddresses = append(ipAddresses, net.ParseIP(domain))
+			continue
+		}
+		if ip := net.ParseIP(domain); ip != nil {
+			ipAddresses = append(ipAddresses, ip)
+		} else {
+			domains = append(domains, domain)
+		}
+	}
+	if !hasLocalhost {
+		domains = append(domains, "localhost")
+	}
+	if !hasLoopback {
+		ipAddresses = append(ipAddresses, net.ParseIP("127.0.0.1"))
+	}
+	if !slices.Contains(domains, localDevHost) {
+		domains = append(domains, localDevHost)
+	}
+	return domains, ipAddresses
 }

@@ -14,6 +14,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -68,6 +69,10 @@ type Service struct {
 	postgres    PostgresLifecycle
 	fabricxDeps fabricxDeps
 	logger      *logger.Logger
+	// dataPath is the chainlaunch on-disk root; postgres bind mounts
+	// land under ${dataPath}/services/postgres/<container>. Empty means
+	// "no bind" (tests / legacy installs).
+	dataPath string
 }
 
 // fabricxDeps is the subset of dependencies fabricx.NewOrdererGroup /
@@ -108,6 +113,15 @@ func NewService(
 // docker; production code can leave it alone.
 func (s *Service) WithPostgresLifecycle(pl PostgresLifecycle) *Service {
 	s.postgres = pl
+	return s
+}
+
+// WithDataPath enables on-host bind mounts for managed postgres data
+// directories. Required for backups to capture committer/queryservice
+// state — without it, postgres state lives only in the container's
+// writable layer. Production wires this in serve.go; tests pass "".
+func (s *Service) WithDataPath(dataPath string) *Service {
+	s.dataPath = dataPath
 	return s
 }
 
@@ -793,6 +807,7 @@ func (s *Service) startManagedPostgresForCommitter(ctx context.Context, groupID 
 		DB:            pgCfg.DB,
 		User:          pgCfg.User,
 		Password:      pgCfg.Password,
+		DataDir:       postgresDataDir(s.dataPath, containerName),
 	}); err != nil {
 		s.markServiceError(ctx, svc.ID, err)
 		return fmt.Errorf("start postgres service %d: %w", svc.ID, err)
@@ -1071,4 +1086,14 @@ func nullInt64FromPtr(p *int64) sql.NullInt64 {
 		return sql.NullInt64{}
 	}
 	return sql.NullInt64{Int64: *p, Valid: true}
+}
+
+// postgresDataDir is the canonical bind-mount source for a managed
+// postgres container. Returns "" when dataPath is empty so the postgres
+// helper falls back to the container's writable layer (used in tests).
+func postgresDataDir(dataPath, containerName string) string {
+	if dataPath == "" || containerName == "" {
+		return ""
+	}
+	return filepath.Join(dataPath, "services", "postgres", containerName)
 }
