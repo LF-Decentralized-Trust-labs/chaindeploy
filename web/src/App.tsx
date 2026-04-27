@@ -19,6 +19,7 @@ const ImportNetworkPage = lazy(() => import('@/pages/networks/import'))
 const CreateBesuNodePage = lazy(() => import('@/pages/nodes/besu/create'))
 const CreateFabricNodePage = lazy(() => import('@/pages/nodes/fabric/create'))
 const EditFabricNodePage = lazy(() => import('@/pages/nodes/fabric/edit'))
+const EditFabricXNodePage = lazy(() => import('@/pages/nodes/fabricx/edit'))
 const NodesLogsPage = lazy(() => import('@/pages/nodes/logs'))
 const CertificateTemplatesPage = lazy(() => import('./pages/identity/certificates'))
 const MonitoringPage = lazy(() => import('./pages/monitoring'))
@@ -145,6 +146,7 @@ const App2 = () => {
 													<Route path="nodes/fabric/create" element={<CreateFabricNodePage />} />
 													<Route path="nodes/fabric/edit/:id" element={<EditFabricNodePage />} />
 													<Route path="nodes/besu/edit/:id" element={<EditBesuNodePage />} />
+													<Route path="nodes/fabricx/edit/:id" element={<EditFabricXNodePage />} />
 													<Route path="nodes/:id" element={<NodeDetailPage />} />
 													<Route path="networks/fabric/create" element={<FabricCreateChannel />} />
 													<Route path="networks/fabric/wizard" element={<FabricNetworkWizard />} />
@@ -253,6 +255,7 @@ const App = () => {
 														<Route path="nodes/fabric/create" element={<CreateFabricNodePage />} />
 														<Route path="nodes/fabric/edit/:id" element={<EditFabricNodePage />} />
 														<Route path="nodes/besu/edit/:id" element={<EditBesuNodePage />} />
+														<Route path="nodes/fabricx/edit/:id" element={<EditFabricXNodePage />} />
 														<Route path="nodes/:id" element={<NodeDetailPage />} />
 														<Route path="networks/fabric/create" element={<FabricCreateChannel />} />
 														<Route path="networks/fabric/wizard" element={<FabricNetworkWizard />} />

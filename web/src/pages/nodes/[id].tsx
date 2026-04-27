@@ -508,6 +508,20 @@ export default function NodeDetailPage() {
 										</DropdownMenuItem>
 									</>
 								)}
+
+								{/* Edit only on parent group rows — per-role children share
+								    identity with the parent and the API rejects per-child
+								    version updates. The edit page itself also blocks them
+								    so a deep-link is safe; we just hide the button here. */}
+								{isFabricXNode(node) && (node.nodeType === 'FABRICX_ORDERER_GROUP' || node.nodeType === 'FABRICX_COMMITTER') && (
+									<>
+										<DropdownMenuSeparator />
+										<DropdownMenuItem onClick={() => navigate(`/nodes/fabricx/edit/${node.id}`)}>
+											<Pencil className="mr-2 h-4 w-4" />
+											Edit
+										</DropdownMenuItem>
+									</>
+								)}
 							</DropdownMenuGroup>
 						</DropdownMenuContent>
 					</DropdownMenu>
