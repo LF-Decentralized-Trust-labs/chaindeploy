@@ -11,6 +11,7 @@ import {
 	postServicesByIdPostgresDatabases,
 	HandlerOrganizationResponse,
 } from '@/api/client'
+import config from '@/config'
 import { getNodesDefaultsBesuNodeOptions, postNetworksFabricxMutation, postNetworksFabricxByIdNodesByNodeIdJoinMutation } from '@/api/client/@tanstack/react-query.gen'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -21,7 +22,7 @@ import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { useQuery } from '@tanstack/react-query'
 import { AlertCircle, CheckCircle2, Loader2, Rocket } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -111,10 +112,12 @@ const NUM_PARTIES = 4
 //   Orderer group: basePort + 0..3  (router, batcher, consenter, assembler)
 //   Committer:     basePort + 10..14 (sidecar, coordinator, validator, verifier, query-service)
 // One shared Postgres container (admin=postgres, one db+user per party) is
-// bound to SHARED_POSTGRES_PORT on the host so all 4 committers can reach it.
-const BASE_PORT = 17000
+// bound to a host port so all 4 committers can reach it. Both ports are
+// adjustable per quickstart so two networks can coexist on one host (the
+// CLI exposes the same --base-port / --postgres-port knobs).
+const DEFAULT_BASE_PORT = 17000
 const SLOT_SIZE = 20
-const SHARED_POSTGRES_PORT = 15432
+const DEFAULT_POSTGRES_PORT = 15432
 const SHARED_POSTGRES_ADMIN_USER = 'postgres'
 const SHARED_POSTGRES_ADMIN_PASSWORD = 'postgres'
 // Service and docker network names derive from the user-chosen network name so
@@ -129,8 +132,8 @@ function sharedPostgresNetworkName(networkName: string) {
 	return `${networkName}-pg-net`
 }
 
-function portsForParty(i: number) {
-	const base = BASE_PORT + i * SLOT_SIZE
+function portsForParty(basePort: number, i: number) {
+	const base = basePort + i * SLOT_SIZE
 	return {
 		router: base,
 		batcher: base + 1,
@@ -142,6 +145,20 @@ function portsForParty(i: number) {
 		verifier: base + 13,
 		queryService: base + 14,
 	}
+}
+
+// portsToProbe enumerates every host port the quickstart would publish for
+// a given (basePort, postgresPort): 9 ports/party × NUM_PARTIES + 1 for the
+// shared postgres. Sent to /system/ports/free so the UI can verify the
+// whole slot is bindable before the user clicks "Provision".
+function portsToProbe(basePort: number, postgresPort: number): number[] {
+	const out: number[] = []
+	for (let i = 0; i < NUM_PARTIES; i++) {
+		const p = portsForParty(basePort, i)
+		out.push(p.router, p.batcher, p.consenter, p.assembler, p.sidecar, p.coordinator, p.validator, p.verifier, p.queryService)
+	}
+	out.push(postgresPort)
+	return out
 }
 
 function partyDatabaseSpec(partyId: number) {
@@ -161,6 +178,73 @@ export default function FabricXQuickStartPage() {
 	// 4 distinct MSPs (production-shape Arma BFT setup).
 	const [mode, setMode] = useState<'single' | 'multi'>('single')
 	const [singleMSPID, setSingleMSPID] = useState('AcmeMSP')
+	// Per-network port range. Defaults match the CLI (--base-port 17000,
+	// --postgres-port 15432) on a fresh host; if existing FabricX networks
+	// already occupy those ranges we shift forward to the next free block.
+	// The user can still override both manually.
+	const [basePort, setBasePort] = useState(DEFAULT_BASE_PORT)
+	const [postgresPort, setPostgresPort] = useState(DEFAULT_POSTGRES_PORT)
+	const [portsAutoShifted, setPortsAutoShifted] = useState(false)
+	// Each network reserves NUM_PARTIES × SLOT_SIZE host ports (4×20=80 with
+	// the current defaults). Probe every candidate port via the server-side
+	// /api/v1/system/ports/free endpoint and walk forward through 1000-port
+	// blocks until we find a base where every port the quickstart would
+	// publish is verified bindable. Just shifting "above the highest used
+	// FabricX port" isn't enough — non-fabricx services on the host also
+	// need to be respected.
+	useEffect(() => {
+		let cancelled = false
+		;(async () => {
+			try {
+				let candidateBase = DEFAULT_BASE_PORT
+				let candidatePg = DEFAULT_POSTGRES_PORT
+				let shifted = false
+				// Cap iterations so a fully-saturated host doesn't spin.
+				// 20 × 1000 covers ports up to 36000 from the default 17000.
+				for (let attempt = 0; attempt < 20; attempt++) {
+					const ports = portsToProbe(candidateBase, candidatePg)
+					const qs = new URLSearchParams({ ports: ports.join(',') }).toString()
+					const resp = await fetch(`${config.apiUrl}/system/ports/free?${qs}`, {
+						credentials: 'same-origin',
+						headers: { Accept: 'application/json' },
+					})
+					if (!resp.ok) {
+						// Server too old or endpoint unavailable — keep static
+						// defaults and let the user override manually.
+						return
+					}
+					const data = (await resp.json()) as { free?: number[]; busy?: number[] }
+					if (cancelled) return
+					const busy = new Set(data.busy ?? [])
+					if (busy.size === 0) {
+						break
+					}
+					shifted = true
+					// Advance basePort to the next clean 1000-port boundary
+					// above the highest busy port that falls inside our slot,
+					// so the displayed numbers stay predictable. Postgres
+					// just bumps to the next free integer.
+					const maxBusy = Math.max(...Array.from(busy))
+					candidateBase = Math.max(candidateBase + NUM_PARTIES * SLOT_SIZE, Math.ceil((maxBusy + 1) / 1000) * 1000)
+					do {
+						candidatePg++
+					} while (busy.has(candidatePg))
+				}
+				if (cancelled) return
+				if (shifted) {
+					setBasePort(candidateBase)
+					setPostgresPort(candidatePg)
+					setPortsAutoShifted(true)
+				}
+			} catch {
+				// Best-effort — on any failure (network, parse, etc.) the
+				// static defaults stand and the user can override manually.
+			}
+		})()
+		return () => {
+			cancelled = true
+		}
+	}, [])
 	// Docker Desktop (macOS/Windows) cannot reach containers via the host's external IP,
 	// so rewrite addresses to host.docker.internal / 127.0.0.1. Default to true on
 	// platforms where Docker Desktop is typical.
@@ -191,24 +275,37 @@ export default function FabricXQuickStartPage() {
 
 	const makeInitialSteps = (): Step[] => {
 		const arr: Step[] = []
+		// Org rows: in single-MSP mode every party shares one MSP, so the
+		// step label uses that MSPID for all four rows. In multi-MSP mode
+		// each party gets its own Party<N>MSP. Multi mode is still
+		// 1-row-per-party (Party1MSP..Party4MSP).
 		for (let i = 0; i < NUM_PARTIES; i++) {
-			arr.push({ id: `org-${i}`, label: `Ensure Party${i + 1}MSP organization`, status: 'pending' })
+			const mspLabel = mode === 'single' ? singleMSPID : `Party${i + 1}MSP`
+			arr.push({ id: `org-${i}`, label: `Ensure ${mspLabel} organization`, status: 'pending' })
 		}
 		arr.push({ id: 'pg-create', label: 'Create shared Postgres service', status: 'pending' })
 		arr.push({ id: 'pg-start', label: 'Start shared Postgres container', status: 'pending' })
 		arr.push({ id: 'pg-dbs', label: 'Provision per-party databases + roles', status: 'pending' })
 		for (let i = 0; i < NUM_PARTIES; i++) {
-			arr.push({ id: `orderer-${i}`, label: `Create + init Party${i + 1} orderer node group`, status: 'pending' })
+			const orgLabel = mode === 'single' ? `${singleMSPID} (Party ${i + 1})` : `Party${i + 1}`
+			arr.push({ id: `orderer-${i}`, label: `Create + init ${orgLabel} orderer node group`, status: 'pending' })
 		}
+		// Committer rows: single-MSP creates one shared committer used by
+		// all 4 parties; multi-MSP creates one committer per MSP.
 		for (let i = 0; i < NUM_PARTIES; i++) {
-			arr.push({ id: `committer-${i}`, label: `Create Party${i + 1} committer node`, status: 'pending' })
+			const commLabel =
+				mode === 'single' ? (i === 0 ? `Create shared ${singleMSPID} committer node` : `Create Party${i + 1} committer node`) : `Create Party${i + 1} committer node`
+			arr.push({ id: `committer-${i}`, label: commLabel, status: 'pending' })
 		}
 		arr.push({ id: 'network', label: 'Create FabricX network + genesis block', status: 'pending' })
 		for (let i = 0; i < NUM_PARTIES; i++) {
-			arr.push({ id: `join-orderer-${i}`, label: `Join + start Party${i + 1} orderer (4 children)`, status: 'pending' })
+			const orgLabel = mode === 'single' ? `${singleMSPID} (Party ${i + 1})` : `Party${i + 1}`
+			arr.push({ id: `join-orderer-${i}`, label: `Join + start ${orgLabel} orderer (4 children)`, status: 'pending' })
 		}
 		for (let i = 0; i < NUM_PARTIES; i++) {
-			arr.push({ id: `join-committer-${i}`, label: `Join + start Party${i + 1} committer`, status: 'pending' })
+			const commLabel =
+				mode === 'single' ? (i === 0 ? `Join + start shared ${singleMSPID} committer` : `Join + start Party${i + 1} committer`) : `Join + start Party${i + 1} committer`
+			arr.push({ id: `join-committer-${i}`, label: commLabel, status: 'pending' })
 		}
 		return arr
 	}
@@ -242,7 +339,7 @@ export default function FabricXQuickStartPage() {
 	// the backend's InitOrdererGroup creates them: router, batcher, consenter,
 	// assembler.
 	async function createOrdererNodeGroup(party: { partyId: number; mspId: string; orgId: number }): Promise<{ groupId: number; childIds: number[] }> {
-		const p = portsForParty(party.partyId - 1)
+		const p = portsForParty(basePort, party.partyId - 1)
 		// In single-MSP mode every orderer group shares the same MSPID,
 		// so disambiguate by PartyID. In multi-MSP mode the MSPID is
 		// already unique per party so the historical name stays.
@@ -332,7 +429,7 @@ export default function FabricXQuickStartPage() {
 	// containers (sidecar/coordinator/validator/verifier/query-service); the
 	// per-container view is reachable via /api/v1/nodes/{id}/logs?role=<role>.
 	async function createCommitter(party: { partyId: number; mspId: string; orgId: number; ordererAssemblerPort: number }, committerGroupId: number): Promise<number> {
-		const p = portsForParty(party.partyId - 1)
+		const p = portsForParty(basePort, party.partyId - 1)
 		const nodeName = `${party.mspId.toLowerCase()}-committer`
 		const dbSpec = partyDatabaseSpec(party.partyId)
 		const resp = await postNodes({
@@ -351,7 +448,7 @@ export default function FabricXQuickStartPage() {
 					verifierPort: p.verifier,
 					queryServicePort: p.queryService,
 					postgresHost: externalIp,
-					postgresPort: SHARED_POSTGRES_PORT,
+					postgresPort: postgresPort,
 					postgresDb: dbSpec.db,
 					postgresUser: dbSpec.user,
 					postgresPassword: dbSpec.password,
@@ -381,7 +478,7 @@ export default function FabricXQuickStartPage() {
 				db: 'postgres',
 				user: SHARED_POSTGRES_ADMIN_USER,
 				password: SHARED_POSTGRES_ADMIN_PASSWORD,
-				hostPort: SHARED_POSTGRES_PORT,
+				hostPort: postgresPort,
 			},
 		})
 		const id = (createResp.data as unknown as { id?: number } | undefined)?.id
@@ -470,7 +567,7 @@ export default function FabricXQuickStartPage() {
 
 			setStep('pg-start', { status: 'running' })
 			await startSharedPostgres(pgServiceId, pgNetworkName)
-			setStep('pg-start', { status: 'done', detail: `host :${SHARED_POSTGRES_PORT}` })
+			setStep('pg-start', { status: 'done', detail: `host :${postgresPort}` })
 
 			setStep('pg-dbs', { status: 'running' })
 			await provisionPartyDatabases(pgServiceId)
@@ -494,7 +591,7 @@ export default function FabricXQuickStartPage() {
 			//     its own committer.
 			if (mode === 'single') {
 				setStep('committer-0', { status: 'running' })
-				const ports = portsForParty(parties[0].partyId - 1)
+				const ports = portsForParty(basePort, parties[0].partyId - 1)
 				const { groupId, nodeId } = await createCommitterNodeGroup({
 					partyId: parties[0].partyId,
 					mspId: parties[0].mspId,
@@ -514,7 +611,7 @@ export default function FabricXQuickStartPage() {
 			} else {
 				for (let i = 0; i < NUM_PARTIES; i++) {
 					setStep(`committer-${i}`, { status: 'running' })
-					const ports = portsForParty(parties[i].partyId - 1)
+					const ports = portsForParty(basePort, parties[i].partyId - 1)
 					const { groupId, nodeId } = await createCommitterNodeGroup({
 						partyId: parties[i].partyId,
 						mspId: parties[i].mspId,
@@ -727,17 +824,51 @@ export default function FabricXQuickStartPage() {
 								Reuses the platform-wide external host configured for Fabric and Besu nodes.
 							</p>
 						</div>
+						<div className="grid grid-cols-2 gap-3">
+							<div className="space-y-2">
+								<Label htmlFor="basePort">Base port</Label>
+								<Input
+									id="basePort"
+									type="number"
+									value={basePort}
+									onChange={(e) => setBasePort(Number.parseInt(e.target.value, 10) || DEFAULT_BASE_PORT)}
+								/>
+								<p className="text-xs text-muted-foreground">
+									Each party reserves a {SLOT_SIZE}-port slot starting here. Pick a different
+									base when standing up a second quickstart on the same host.
+								</p>
+							</div>
+							<div className="space-y-2">
+								<Label htmlFor="postgresPort">Postgres host port</Label>
+								<Input
+									id="postgresPort"
+									type="number"
+									value={postgresPort}
+									onChange={(e) => setPostgresPort(Number.parseInt(e.target.value, 10) || DEFAULT_POSTGRES_PORT)}
+								/>
+								<p className="text-xs text-muted-foreground">
+									Host port the shared Postgres container binds to. Must be unique per network.
+								</p>
+							</div>
+						</div>
+						{portsAutoShifted && (
+							<div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs">
+								Existing FabricX networks already bind ports near {DEFAULT_BASE_PORT} / {DEFAULT_POSTGRES_PORT};
+								shifted defaults to <code>{basePort}</code> and <code>{postgresPort}</code> so this provision
+								won&rsquo;t collide. Edit the inputs above to override.
+							</div>
+						)}
 						<div className="rounded-md bg-muted p-3 text-xs font-mono">
-							<div>Ports per party (base {BASE_PORT}, slot {SLOT_SIZE}):</div>
+							<div>Ports per party (base {basePort}, slot {SLOT_SIZE}):</div>
 							{Array.from({ length: NUM_PARTIES }, (_, i) => {
-								const p = portsForParty(i)
+								const p = portsForParty(basePort, i)
 								return (
 									<div key={i}>
 										Party{i + 1}: router={p.router} batcher={p.batcher} consenter={p.consenter} assembler={p.assembler} | committer={p.sidecar}-{p.queryService}
 									</div>
 								)
 							})}
-							<div className="mt-1">Shared Postgres: :{SHARED_POSTGRES_PORT} (one container, {NUM_PARTIES} databases)</div>
+							<div className="mt-1">Shared Postgres: :{postgresPort} (one container, {NUM_PARTIES} databases)</div>
 						</div>
 					</CardContent>
 				</Card>

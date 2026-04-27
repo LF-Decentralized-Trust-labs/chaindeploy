@@ -56,6 +56,7 @@ import (
 	"github.com/chainlaunch/chainlaunch/pkg/plugin"
 	pluginregistry "github.com/chainlaunch/chainlaunch/pkg/plugin/registry"
 	settingshttp "github.com/chainlaunch/chainlaunch/pkg/settings/http"
+	systemhttp "github.com/chainlaunch/chainlaunch/pkg/system/http"
 	settingsservice "github.com/chainlaunch/chainlaunch/pkg/settings/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -317,6 +318,7 @@ func (c *serveCmd) setupServer(queries *db.Queries, authService *auth.AuthServic
 		log.Fatalf("Failed to initialize default settings: %v", err)
 	}
 	settingsHandler := settingshttp.NewHandler(settingsService, logger)
+	systemHandler := systemhttp.NewHandler(logger)
 
 	// Initialize metrics service
 	metricsConfig := metricscommon.DefaultConfig()
@@ -653,6 +655,8 @@ func (c *serveCmd) setupServer(queries *db.Queries, authService *auth.AuthServic
 			notificationHandler.RegisterRoutes(r)
 			// Mount settings routes
 			settingsHandler.RegisterRoutes(r)
+			// Mount system routes (host introspection: port-probe, etc.)
+			systemHandler.RegisterRoutes(r)
 			// Mount plugin routes
 			pluginHandler.RegisterRoutes(r)
 			// Mount metrics routes
