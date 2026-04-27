@@ -24,8 +24,9 @@ type NetworkConfig interface {
 type NetworkConfigType string
 
 const (
-	NetworkTypeFabric NetworkConfigType = "fabric"
-	NetworkTypeBesu   NetworkConfigType = "besu"
+	NetworkTypeFabric  NetworkConfigType = "fabric"
+	NetworkTypeBesu    NetworkConfigType = "besu"
+	NetworkTypeFabricX NetworkConfigType = "fabricx"
 )
 
 // BaseNetworkConfig contains common fields for all network configurations
@@ -131,6 +132,44 @@ type BesuNetworkConfig struct {
 	MetricsProtocol string `json:"metricsProtocol"`
 }
 
+// FabricXNetworkConfig represents the configuration for a Fabric X network
+type FabricXNetworkConfig struct {
+	BaseNetworkConfig `json:",inline"`
+	ChannelName       string                `json:"channel_name"`
+	Organizations     []FabricXOrganization `json:"organizations"`
+	// LocalDev enables Docker Desktop (macOS/Windows) compatibility mode for
+	// this network: host.docker.internal replaces the externalIP in the
+	// genesis block, and runtime dials from the host (namespaces, explorer)
+	// target 127.0.0.1 instead of the externalIP. When unset, falls back to
+	// the CHAINLAUNCH_FABRICX_LOCAL_DEV env var for backward compatibility.
+	LocalDev bool `json:"localDev,omitempty"`
+}
+
+// FabricXOrganization represents an organization participating in a Fabric X network
+type FabricXOrganization struct {
+	ID                   int64 `json:"id"`                                  // Organization ID in database
+	OrdererNodeGroupID   int64 `json:"orderer_node_group_id,omitempty"`     // Existing orderer node_group ID (new ADR-0001 path)
+	OrdererNodeID        int64 `json:"orderer_node_id,omitempty"`           // Legacy monolithic orderer group node ID
+	CommitterNodeGroupID int64 `json:"committer_node_group_id,omitempty"`   // Existing committer node_group ID (new path)
+	CommitterNodeID      int64 `json:"committer_node_id,omitempty"`         // Legacy monolithic committer node ID
+}
+
+// Validate implements NetworkConfig interface for FabricXNetworkConfig
+func (c *FabricXNetworkConfig) Validate() error {
+	if c.ChannelName == "" {
+		return fmt.Errorf("channel name is required")
+	}
+	if len(c.Organizations) == 0 {
+		return fmt.Errorf("at least one organization is required")
+	}
+	return nil
+}
+
+// Type implements NetworkConfig interface for FabricXNetworkConfig
+func (c *FabricXNetworkConfig) Type() string {
+	return string(NetworkTypeFabricX)
+}
+
 // UnmarshalNetworkConfig unmarshals network configuration based on its type
 func UnmarshalNetworkConfig(data []byte) (NetworkConfig, error) {
 	var base BaseNetworkConfig
@@ -149,6 +188,12 @@ func UnmarshalNetworkConfig(data []byte) (NetworkConfig, error) {
 		var config BesuNetworkConfig
 		if err := json.Unmarshal(data, &config); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal Besu config: %w", err)
+		}
+		return &config, nil
+	case NetworkTypeFabricX:
+		var config FabricXNetworkConfig
+		if err := json.Unmarshal(data, &config); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal FabricX config: %w", err)
 		}
 		return &config, nil
 	default:

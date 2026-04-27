@@ -1,0 +1,116 @@
+{
+  "version": "2.0.0",
+  "exportedAt": "2026-03-20T00:00:00Z",
+  "network": {
+    "name": "supply-chain-network",
+    "description": "A Hyperledger Fabric network for supply chain tracking with 1 peer org and 1 orderer org",
+    "platform": "fabric",
+    "fabric": {
+      "channelName": "supplychainchannel",
+      "consensusType": "etcdraft",
+      "batchSize": {
+        "maxMessageCount": 10,
+        "absoluteMaxBytes": 98304,
+        "preferredMaxBytes": 524288
+      },
+      "batchTimeout": "2s",
+      "etcdRaftOptions": {
+        "tickInterval": "500ms",
+        "electionTick": 10,
+        "heartbeatTick": 1,
+        "maxInflightBlocks": 5,
+        "snapshotIntervalSize": 16777216
+      },
+      "channelCapabilities": ["V2_0"],
+      "applicationCapabilities": ["V2_0"],
+      "ordererCapabilities": ["V2_0"],
+      "applicationPolicies": {
+        "Readers": { "type": "ImplicitMeta", "rule": "ANY Readers" },
+        "Writers": { "type": "ImplicitMeta", "rule": "ANY Writers" },
+        "Admins": { "type": "ImplicitMeta", "rule": "MAJORITY Admins" },
+        "LifecycleEndorsement": { "type": "ImplicitMeta", "rule": "MAJORITY Endorsement" },
+        "Endorsement": { "type": "ImplicitMeta", "rule": "MAJORITY Endorsement" }
+      },
+      "ordererPolicies": {
+        "Readers": { "type": "ImplicitMeta", "rule": "ANY Readers" },
+        "Writers": { "type": "ImplicitMeta", "rule": "ANY Writers" },
+        "Admins": { "type": "ImplicitMeta", "rule": "MAJORITY Admins" },
+        "BlockValidation": { "type": "ImplicitMeta", "rule": "ANY Writers" }
+      },
+      "channelPolicies": {
+        "Readers": { "type": "ImplicitMeta", "rule": "ANY Readers" },
+        "Writers": { "type": "ImplicitMeta", "rule": "ANY Writers" },
+        "Admins": { "type": "ImplicitMeta", "rule": "MAJORITY Admins" }
+      },
+      "peerOrgRefs": [
+        {
+          "variableRef": "peerOrg1",
+          "nodeRefs": [
+            { "variableRef": "peerOrg1_peer1" }
+          ]
+        }
+      ],
+      "ordererOrgRefs": [
+        {
+          "variableRef": "ordererOrg1",
+          "nodeRefs": [
+            { "variableRef": "ordererOrg1_orderer1" }
+          ]
+        }
+      ]
+    }
+  },
+  "variables": [
+    {
+      "name": "peerOrg1",
+      "type": "organization",
+      "description": "Peer organization for supply chain participants",
+      "required": true,
+      "scope": "organization",
+      "platform": ["fabric"],
+      "properties": [
+        { "name": "mspId", "type": "mspId", "required": true }
+      ]
+    },
+    {
+      "name": "peerOrg1_peer1",
+      "type": "node",
+      "description": "Peer node for the peer organization",
+      "required": false,
+      "scope": "node",
+      "platform": ["fabric"]
+    },
+    {
+      "name": "ordererOrg1",
+      "type": "organization",
+      "description": "Orderer organization",
+      "required": true,
+      "scope": "organization",
+      "platform": ["fabric"],
+      "properties": [
+        { "name": "mspId", "type": "mspId", "required": true }
+      ]
+    },
+    {
+      "name": "ordererOrg1_orderer1",
+      "type": "node",
+      "description": "Orderer node",
+      "required": true,
+      "scope": "node",
+      "platform": ["fabric"]
+    }
+  ],
+  "chaincodes": [
+    {
+      "name": "supplychain",
+      "platform": "fabric",
+      "fabric": {
+        "version": "1.0",
+        "sequence": 1,
+        "dockerImage": "ghcr.io/chainlaunch/supplychain-cc:latest",
+        "endorsementPolicy": "",
+        "chaincodeAddress": ""
+      }
+    }
+  ]
+}

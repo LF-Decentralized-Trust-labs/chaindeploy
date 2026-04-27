@@ -5555,6 +5555,770 @@
                 }
             }
         },
+        "/networks/fabricx": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "FabricX Networks"
+                ],
+                "summary": "List FabricX networks",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/http.ListNetworksResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Creates a FabricX network and generates the Arma-consensus genesis block from the referenced orderer-group nodes. The nodes must already be created (certs/config generated) but not yet started.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "FabricX Networks"
+                ],
+                "summary": "Create a FabricX network",
+                "parameters": [
+                    {
+                        "description": "Network creation request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http.CreateFabricXNetworkRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/http.FabricXNetworkResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/networks/fabricx/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "FabricX Networks"
+                ],
+                "summary": "Get a FabricX network by ID",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Network ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/http.FabricXNetworkResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "FabricX Networks"
+                ],
+                "summary": "Delete a FabricX network",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Network ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/networks/fabricx/{id}/blocks": {
+            "get": {
+                "description": "Returns a paginated list of blocks by calling BlockQueryService.GetBlockByNumber against the committer sidecar. Latest-first when reverse=true.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "FabricX Networks"
+                ],
+                "summary": "List FabricX blocks",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Network ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Number of blocks to return (default: 10)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Number of blocks to skip from the chain tip (default: 0)",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Return newest first when true (default: true)",
+                        "name": "reverse",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/http.FabricXBlockListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/networks/fabricx/{id}/blocks/{blockNum}": {
+            "get": {
+                "description": "Returns a fully decoded block (with tx headers) by calling BlockQueryService.GetBlockByNumber.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "FabricX Networks"
+                ],
+                "summary": "Get a FabricX block",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Network ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Block number",
+                        "name": "blockNum",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/networks/fabricx/{id}/chain-info": {
+            "get": {
+                "description": "Returns ledger height for a FabricX network by calling the committer sidecar's BlockQueryService.GetBlockchainInfo.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "FabricX Networks"
+                ],
+                "summary": "Get FabricX chain info",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Network ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/http.FabricXChainInfoResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/networks/fabricx/{id}/namespace-policies": {
+            "get": {
+                "description": "Returns the on-chain namespace policies from the committer query-service. These are the authoritative namespaces on the channel (distinct from the local namespace creation records).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "FabricX Networks"
+                ],
+                "summary": "List FabricX namespace policies",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Network ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/http.FabricXNamespacePolicyResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/networks/fabricx/{id}/namespaces": {
+            "get": {
+                "description": "Returns the merged view of namespaces for a FabricX network. The chain is the source of truth for existence and version (queried live from the committer query-service via GetNamespacePolicies); the local DB adds submission metadata (submitter, txId, pending/failed attempts). Rows carry source ∈ {chain, db, both}. If the committer is unreachable, chainError is set and only DB rows are returned.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "FabricX Networks"
+                ],
+                "summary": "List FabricX namespaces (merged chain + DB view)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Network ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/http.FabricXNamespaceListResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Creates (or updates) a namespace within a FabricX channel by broadcasting a signed applicationpb.Tx to the channel's orderer router. Requires an existing network whose orderer group is running.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "FabricX Networks"
+                ],
+                "summary": "Create a FabricX namespace",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Network ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Namespace creation request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http.CreateFabricXNamespaceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/http.FabricXNamespaceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/networks/fabricx/{id}/namespaces/{namespaceId}": {
+            "delete": {
+                "description": "Removes the local database record for the namespace. On-chain the namespace is not removed — FabricX supports only namespace updates, not deletion.",
+                "tags": [
+                    "FabricX Networks"
+                ],
+                "summary": "Delete a FabricX namespace record (local only)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Network ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Namespace record ID",
+                        "name": "namespaceId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Deleted"
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/networks/fabricx/{id}/nodes": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "FabricX Networks"
+                ],
+                "summary": "Get nodes of a FabricX network",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Network ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/http.GetNetworkNodesResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/networks/fabricx/{id}/nodes/{nodeId}/join": {
+            "post": {
+                "description": "Writes the network genesis block into the node's config dirs and starts the node. The node must already be created and initialized (stage 1), and the network must already have its genesis block.",
+                "tags": [
+                    "FabricX Networks"
+                ],
+                "summary": "Join a FabricX node to a network (stage 2)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Network ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Node ID (orderer group or committer)",
+                        "name": "nodeId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/http.FabricXJoinNodeResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/networks/fabricx/{id}/state/{namespace}": {
+            "get": {
+                "description": "Queries specific keys within a namespace via the committer query-service GetRows. FabricX does not expose a full scan, so the keys parameter is required and comma-separated.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "FabricX Networks"
+                ],
+                "summary": "Query FabricX namespace state",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Network ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Namespace ID",
+                        "name": "namespace",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated list of keys to look up",
+                        "name": "keys",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/http.FabricXStateRowResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/networks/fabricx/{id}/transactions/{txId}": {
+            "get": {
+                "description": "Returns a decoded transaction envelope (type, timestamp, namespaces, endorsers) by calling BlockQueryService.GetTxByID against the committer sidecar.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "FabricX Networks"
+                ],
+                "summary": "Get a FabricX transaction",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Network ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Transaction ID",
+                        "name": "txId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/networks/templates/export/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    },
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "description": "Export a network's configuration as a reusable template that can be imported to create similar networks. Supports both Fabric and Besu platforms.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Network Templates"
+                ],
+                "summary": "Export network as template",
+                "operationId": "exportNetworkTemplate",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Network ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/template.ExportTemplateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/networks/templates/import": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    },
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "description": "Create a new network from a template with organization and node mappings. Supports both Fabric and Besu templates, with optional chaincode/smart contract definitions.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Network Templates"
+                ],
+                "summary": "Import network from template",
+                "operationId": "importNetworkFromTemplate",
+                "parameters": [
+                    {
+                        "description": "Template import request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/template.ImportTemplateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/template.ImportTemplateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/networks/templates/validate": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    },
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "description": "Validate a template import request and get a preview of what would be created. Supports both Fabric and Besu templates.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Network Templates"
+                ],
+                "summary": "Validate template import",
+                "operationId": "validateTemplateImport",
+                "parameters": [
+                    {
+                        "description": "Template validation request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/template.ValidateTemplateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/template.ValidateTemplateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/networks/{id}/genesis": {
             "put": {
                 "description": "Update the genesis block for a network with change tracking",
@@ -5611,6 +6375,385 @@
                         "schema": {
                             "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse"
                         }
+                    }
+                }
+            }
+        },
+        "/node-groups": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "NodeGroups"
+                ],
+                "summary": "List node groups",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/types.NodeGroup"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "NodeGroups"
+                ],
+                "summary": "Create a node group",
+                "parameters": [
+                    {
+                        "description": "Group creation request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http.CreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/types.NodeGroup"
+                        }
+                    }
+                }
+            }
+        },
+        "/node-groups/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "NodeGroups"
+                ],
+                "summary": "Get a node group",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Group ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.NodeGroup"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "NodeGroups"
+                ],
+                "summary": "Delete a node group",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Group ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/node-groups/{id}/children": {
+            "get": {
+                "description": "Returns the nodes owned by this group in canonical role order\n(the same order StartGroup uses). For a committer that's\nsidecar → coordinator → validator → verifier → query; for an\norderer group it's router → batcher → consenter → assembler.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "NodeGroups"
+                ],
+                "summary": "List child nodes of a group",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Group ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/service.Child"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/node-groups/{id}/init": {
+            "post": {
+                "description": "Generates crypto, writes on-disk config, persists deployment_config on the group,\nand creates one child nodes row per role (router, batcher, consenter, assembler).\nOnly valid for FABRICX_ORDERER_GROUP groups. Idempotency: fails if already initialized.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "NodeGroups"
+                ],
+                "summary": "Initialize a FabricX orderer group",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Group ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Port allocations",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http.InitOrdererRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.NodeGroup"
+                        }
+                    }
+                }
+            }
+        },
+        "/node-groups/{id}/postgres-service": {
+            "put": {
+                "description": "Sets node_groups.postgres_service_id. The service must already exist\n(create it via POST /services/postgres). Only FABRICX_COMMITTER groups\naccept postgres services.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "NodeGroups"
+                ],
+                "summary": "Attach an existing postgres service to a node group",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Group ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Service to attach",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http.AttachPostgresServiceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.NodeGroup"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Clears node_groups.postgres_service_id. The underlying service is\nNOT stopped — use POST /services/{id}/stop for that.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "NodeGroups"
+                ],
+                "summary": "Detach the postgres service pointer from a node group",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Group ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.NodeGroup"
+                        }
+                    }
+                }
+            }
+        },
+        "/node-groups/{id}/restart": {
+            "post": {
+                "tags": [
+                    "NodeGroups"
+                ],
+                "summary": "Restart a node group",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Group ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted"
+                    }
+                }
+            }
+        },
+        "/node-groups/{id}/services": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "NodeGroups"
+                ],
+                "summary": "List services attached to a node group",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Group ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/types.NodeGroupService"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/node-groups/{id}/services/postgres": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "NodeGroups"
+                ],
+                "summary": "Attach a managed PostgreSQL service to a node group",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Group ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Postgres service config",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_nodegroups_http.CreatePostgresRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/types.NodeGroupService"
+                        }
+                    }
+                }
+            }
+        },
+        "/node-groups/{id}/start": {
+            "post": {
+                "tags": [
+                    "NodeGroups"
+                ],
+                "summary": "Start all children in a node group",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Group ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted"
+                    }
+                }
+            }
+        },
+        "/node-groups/{id}/stop": {
+            "post": {
+                "tags": [
+                    "NodeGroups"
+                ],
+                "summary": "Stop all children in a node group",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Group ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted"
                     }
                 }
             }
@@ -11772,6 +12915,340 @@
                 }
             }
         },
+        "/services": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Services"
+                ],
+                "summary": "List services",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by service type (e.g. POSTGRES)",
+                        "name": "serviceType",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by status (e.g. RUNNING, STOPPED)",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Offset",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_services_types.Service"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/services/postgres": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Services"
+                ],
+                "summary": "Create a POSTGRES service",
+                "parameters": [
+                    {
+                        "description": "Postgres creation request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_services_http.CreatePostgresRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_services_types.Service"
+                        }
+                    }
+                }
+            }
+        },
+        "/services/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Services"
+                ],
+                "summary": "Get a service",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Service ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_services_types.Service"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Services"
+                ],
+                "summary": "Update a service",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Service ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Mutable fields",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http.UpdateServiceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_services_types.Service"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "Services"
+                ],
+                "summary": "Delete a service",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Service ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/services/{id}/consumers": {
+            "get": {
+                "description": "Returns node_groups that reference this service via postgres_service_id.\nEmpty response means the service has no consumers and can be safely deleted.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Services"
+                ],
+                "summary": "List consumers of a service",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Service ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/service.Consumer"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/services/{id}/logs": {
+            "get": {
+                "description": "Returns the last N lines of the service's container logs. Tail capped server-side.\nReturns an empty logs string when the service has never been started.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Services"
+                ],
+                "summary": "Get container logs for a service",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Service ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Max lines to return (default 200, max 2000)",
+                        "name": "tail",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/http.LogsResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/services/{id}/postgres/databases": {
+            "post": {
+                "description": "Creates (or updates) one role + database per entry. Idempotent: re-runs safely update the password.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Services"
+                ],
+                "summary": "Provision databases inside a running POSTGRES service",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Service ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Databases to provision",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http.CreatePostgresDatabasesRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/services/{id}/start": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Services"
+                ],
+                "summary": "Start a service on a docker network",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Service ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Network to run on",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http.StartServiceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_services_types.Service"
+                        }
+                    }
+                }
+            }
+        },
+        "/services/{id}/stop": {
+            "post": {
+                "tags": [
+                    "Services"
+                ],
+                "summary": "Stop a service",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Service ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
         "/settings": {
             "get": {
                 "description": "Get the default setting's details",
@@ -13812,6 +15289,44 @@
                 }
             }
         },
+        "github_com_chainlaunch_chainlaunch_pkg_nodegroups_http.CreatePostgresRequest": {
+            "type": "object",
+            "required": [
+                "db",
+                "name",
+                "password",
+                "user"
+            ],
+            "properties": {
+                "db": {
+                    "type": "string"
+                },
+                "hostPort": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                },
+                "user": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_chainlaunch_chainlaunch_pkg_nodegroups_types.ServiceType": {
+            "type": "string",
+            "enum": [
+                "POSTGRES"
+            ],
+            "x-enum-varnames": [
+                "ServiceTypePostgres"
+            ]
+        },
         "github_com_chainlaunch_chainlaunch_pkg_notifications_http.ErrorResponse": {
             "type": "object",
             "properties": {
@@ -13876,6 +15391,117 @@
                     "type": "string"
                 }
             }
+        },
+        "github_com_chainlaunch_chainlaunch_pkg_plugin_types.Service": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "image": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "ports": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_plugin_types.Port"
+                    }
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_chainlaunch_chainlaunch_pkg_services_http.CreatePostgresRequest": {
+            "type": "object",
+            "required": [
+                "db",
+                "name",
+                "password",
+                "user"
+            ],
+            "properties": {
+                "db": {
+                    "type": "string"
+                },
+                "hostPort": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                },
+                "user": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_chainlaunch_chainlaunch_pkg_services_types.Service": {
+            "type": "object",
+            "properties": {
+                "backupConfig": {
+                    "$ref": "#/definitions/types.BackupConfig"
+                },
+                "backupTargetId": {
+                    "type": "integer"
+                },
+                "config": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "deploymentConfig": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "errorMessage": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "nodeGroupId": {
+                    "type": "integer"
+                },
+                "serviceType": {
+                    "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_services_types.ServiceType"
+                },
+                "status": {
+                    "$ref": "#/definitions/types.ServiceStatus"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_chainlaunch_chainlaunch_pkg_services_types.ServiceType": {
+            "type": "string",
+            "enum": [
+                "POSTGRES"
+            ],
+            "x-enum-varnames": [
+                "ServiceTypePostgres"
+            ]
         },
         "handler.CreateKeyRequest": {
             "type": "object",
@@ -14341,6 +15967,17 @@
                     "type": "string"
                 },
                 "port": {
+                    "type": "integer"
+                }
+            }
+        },
+        "http.AttachPostgresServiceRequest": {
+            "type": "object",
+            "required": [
+                "serviceId"
+            ],
+            "properties": {
+                "serviceId": {
                     "type": "integer"
                 }
             }
@@ -14906,6 +16543,49 @@
                 }
             }
         },
+        "http.CreateFabricXNamespaceRequest": {
+            "type": "object",
+            "required": [
+                "name",
+                "submitterOrgId"
+            ],
+            "properties": {
+                "finalityTimeoutSeconds": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "submitterOrgId": {
+                    "type": "integer"
+                },
+                "version": {
+                    "description": "-1 (default) creates a new ns; \u003e=0 updates an existing one",
+                    "type": "integer"
+                },
+                "waitForFinality": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "http.CreateFabricXNetworkRequest": {
+            "type": "object",
+            "required": [
+                "config",
+                "name"
+            ],
+            "properties": {
+                "config": {
+                    "$ref": "#/definitions/http.FabricXNetworkConfig"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "http.CreateNodeRequest": {
             "description": "Request payload for creating a new node",
             "type": "object",
@@ -14947,10 +16627,41 @@
                         }
                     ]
                 },
+                "fabricXCommitter": {
+                    "description": "@Description Fabric X committer configuration, required when creating a FabricX committer node",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.FabricXCommitterConfig"
+                        }
+                    ]
+                },
+                "fabricXOrdererGroup": {
+                    "description": "@Description Fabric X orderer group configuration, required when creating a FabricX orderer group node",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.FabricXOrdererGroupConfig"
+                        }
+                    ]
+                },
                 "name": {
                     "description": "@Description Name of the node",
                     "type": "string",
                     "example": "peer0-org1"
+                }
+            }
+        },
+        "http.CreatePostgresDatabasesRequest": {
+            "type": "object",
+            "required": [
+                "databases"
+            ],
+            "properties": {
+                "databases": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/http.DatabaseSpec"
+                    }
                 }
             }
         },
@@ -14995,6 +16706,71 @@
                             "$ref": "#/definitions/notifications.ProviderType"
                         }
                     ]
+                }
+            }
+        },
+        "http.CreateRequest": {
+            "type": "object",
+            "required": [
+                "groupType",
+                "name",
+                "platform"
+            ],
+            "properties": {
+                "config": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "domainNames": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "externalIp": {
+                    "type": "string"
+                },
+                "groupType": {
+                    "$ref": "#/definitions/types.GroupType"
+                },
+                "mspId": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "organizationId": {
+                    "type": "integer"
+                },
+                "partyId": {
+                    "type": "integer"
+                },
+                "platform": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "http.DatabaseSpec": {
+            "type": "object",
+            "required": [
+                "db",
+                "password",
+                "user"
+            ],
+            "properties": {
+                "db": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                },
+                "user": {
+                    "type": "string"
                 }
             }
         },
@@ -15112,6 +16888,222 @@
                 }
             }
         },
+        "http.FabricXBlockListResponse": {
+            "type": "object",
+            "properties": {
+                "blocks": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/http.FabricXBlockSummary"
+                    }
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "http.FabricXBlockSummary": {
+            "type": "object",
+            "properties": {
+                "dataHash": {
+                    "type": "string"
+                },
+                "number": {
+                    "type": "integer"
+                },
+                "previousHash": {
+                    "type": "string"
+                },
+                "txCount": {
+                    "type": "integer"
+                }
+            }
+        },
+        "http.FabricXChainInfoResponse": {
+            "type": "object",
+            "properties": {
+                "height": {
+                    "type": "integer"
+                }
+            }
+        },
+        "http.FabricXJoinNodeResponse": {
+            "type": "object",
+            "properties": {
+                "networkId": {
+                    "type": "integer"
+                },
+                "nodeId": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "http.FabricXNamespaceListResponse": {
+            "type": "object",
+            "properties": {
+                "chainError": {
+                    "type": "string"
+                },
+                "namespaces": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/http.FabricXNamespaceResponse"
+                    }
+                }
+            }
+        },
+        "http.FabricXNamespacePolicyResponse": {
+            "type": "object",
+            "properties": {
+                "namespace": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "http.FabricXNamespaceResponse": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "networkId": {
+                    "type": "integer"
+                },
+                "onChain": {
+                    "type": "boolean"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "submitterMspId": {
+                    "type": "string"
+                },
+                "submitterOrgId": {
+                    "type": "integer"
+                },
+                "txId": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "http.FabricXNetworkConfig": {
+            "type": "object",
+            "required": [
+                "organizations"
+            ],
+            "properties": {
+                "channelName": {
+                    "type": "string"
+                },
+                "localDev": {
+                    "description": "LocalDev enables Docker Desktop (macOS/Windows) compatibility mode for\nthis network. Set to true when ChainLaunch itself runs on macOS/Windows\nwith Docker Desktop so containers can reach each other via\nhost.docker.internal and the host can dial published ports on 127.0.0.1.",
+                    "type": "boolean"
+                },
+                "organizations": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/http.FabricXOrganization"
+                    }
+                }
+            }
+        },
+        "http.FabricXNetworkResponse": {
+            "type": "object",
+            "properties": {
+                "channelName": {
+                    "type": "string"
+                },
+                "config": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "genesisBlock": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "platform": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "http.FabricXOrganization": {
+            "type": "object",
+            "required": [
+                "id"
+            ],
+            "properties": {
+                "committerNodeId": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "ordererNodeGroupId": {
+                    "type": "integer"
+                },
+                "ordererNodeId": {
+                    "type": "integer"
+                }
+            }
+        },
+        "http.FabricXStateRowResponse": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
         "http.GetNetworkNodesResponse": {
             "type": "object",
             "properties": {
@@ -15207,6 +17199,32 @@
                 }
             }
         },
+        "http.InitOrdererRequest": {
+            "type": "object",
+            "required": [
+                "assemblerPort",
+                "batcherPort",
+                "consenterPort",
+                "routerPort"
+            ],
+            "properties": {
+                "assemblerPort": {
+                    "type": "integer"
+                },
+                "batcherPort": {
+                    "type": "integer"
+                },
+                "consenterPort": {
+                    "type": "integer"
+                },
+                "consenterType": {
+                    "type": "string"
+                },
+                "routerPort": {
+                    "type": "integer"
+                }
+            }
+        },
         "http.ListBesuNetworksResponse": {
             "type": "object",
             "properties": {
@@ -15231,6 +17249,17 @@
                     }
                 },
                 "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "http.LogsResponse": {
+            "type": "object",
+            "properties": {
+                "logs": {
+                    "type": "string"
+                },
+                "tail": {
                     "type": "integer"
                 }
             }
@@ -15352,6 +17381,12 @@
                 },
                 "fabricPeer": {
                     "$ref": "#/definitions/service.FabricPeerProperties"
+                },
+                "fabricXCommitter": {
+                    "$ref": "#/definitions/service.FabricXCommitterProperties"
+                },
+                "fabricXOrdererGroup": {
+                    "$ref": "#/definitions/service.FabricXOrdererGroupProperties"
                 },
                 "id": {
                     "type": "integer"
@@ -15682,6 +17717,17 @@
                     "type": "string"
                 },
                 "viewChangeTimeout": {
+                    "type": "string"
+                }
+            }
+        },
+        "http.StartServiceRequest": {
+            "type": "object",
+            "required": [
+                "networkName"
+            ],
+            "properties": {
+                "networkName": {
                     "type": "string"
                 }
             }
@@ -16299,6 +18345,23 @@
                             "$ref": "#/definitions/notifications.ProviderType"
                         }
                     ]
+                }
+            }
+        },
+        "http.UpdateServiceRequest": {
+            "type": "object",
+            "properties": {
+                "hostPort": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
                 }
             }
         },
@@ -17390,6 +19453,52 @@
                 }
             }
         },
+        "service.Child": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "endpoint": {
+                    "type": "string"
+                },
+                "errorMessage": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "nodeType": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "service.Consumer": {
+            "type": "object",
+            "properties": {
+                "groupType": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
         "service.CreateSettingParams": {
             "type": "object",
             "properties": {
@@ -17511,6 +19620,85 @@
                 },
                 "tlsKeyId": {
                     "type": "integer"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "service.FabricXCommitterProperties": {
+            "type": "object",
+            "properties": {
+                "coordinatorPort": {
+                    "type": "integer"
+                },
+                "externalIp": {
+                    "type": "string"
+                },
+                "mspId": {
+                    "type": "string"
+                },
+                "organizationId": {
+                    "type": "integer"
+                },
+                "partyId": {
+                    "type": "integer"
+                },
+                "queryServicePort": {
+                    "type": "integer"
+                },
+                "sidecarPort": {
+                    "type": "integer"
+                },
+                "validatorPort": {
+                    "type": "integer"
+                },
+                "verifierPort": {
+                    "type": "integer"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "service.FabricXOrdererGroupProperties": {
+            "type": "object",
+            "properties": {
+                "assemblerPort": {
+                    "type": "integer"
+                },
+                "batcherPort": {
+                    "type": "integer"
+                },
+                "caCert": {
+                    "type": "string"
+                },
+                "consenterPort": {
+                    "type": "integer"
+                },
+                "externalIp": {
+                    "type": "string"
+                },
+                "mspId": {
+                    "type": "string"
+                },
+                "organizationId": {
+                    "type": "integer"
+                },
+                "partyId": {
+                    "type": "integer"
+                },
+                "routerPort": {
+                    "type": "integer"
+                },
+                "signCert": {
+                    "type": "string"
+                },
+                "tlsCaCert": {
+                    "type": "string"
+                },
+                "tlsCert": {
+                    "type": "string"
                 },
                 "version": {
                     "type": "string"
@@ -17699,6 +19887,12 @@
                         }
                     ]
                 },
+                "fabricXCommitter": {
+                    "$ref": "#/definitions/service.FabricXCommitterProperties"
+                },
+                "fabricXOrdererGroup": {
+                    "$ref": "#/definitions/service.FabricXOrdererGroupProperties"
+                },
                 "id": {
                     "type": "integer"
                 },
@@ -17796,6 +19990,809 @@
                 }
             }
         },
+        "template.AllocTemplate": {
+            "type": "object",
+            "properties": {
+                "balance": {
+                    "type": "string"
+                }
+            }
+        },
+        "template.BatchSizeTemplate": {
+            "type": "object",
+            "properties": {
+                "absoluteMaxBytes": {
+                    "type": "integer"
+                },
+                "maxMessageCount": {
+                    "type": "integer"
+                },
+                "preferredMaxBytes": {
+                    "type": "integer"
+                }
+            }
+        },
+        "template.BesuContractTemplate": {
+            "type": "object",
+            "properties": {
+                "abi": {
+                    "description": "Contract ABI JSON",
+                    "type": "string"
+                },
+                "bytecode": {
+                    "description": "Compiled bytecode (hex)",
+                    "type": "string"
+                }
+            }
+        },
+        "template.BesuNetworkTemplate": {
+            "type": "object",
+            "properties": {
+                "alloc": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/template.AllocTemplate"
+                    }
+                },
+                "blockPeriod": {
+                    "type": "integer"
+                },
+                "chainId": {
+                    "type": "integer"
+                },
+                "consensus": {
+                    "description": "\"qbft\"",
+                    "type": "string"
+                },
+                "difficulty": {
+                    "type": "string"
+                },
+                "epochLength": {
+                    "type": "integer"
+                },
+                "gasLimit": {
+                    "type": "string"
+                },
+                "requestTimeout": {
+                    "type": "integer"
+                },
+                "validatorRefs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/template.ValidatorRef"
+                    }
+                }
+            }
+        },
+        "template.ChaincodePreview": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "platform": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "template.ChaincodeTemplate": {
+            "type": "object",
+            "properties": {
+                "besu": {
+                    "$ref": "#/definitions/template.BesuContractTemplate"
+                },
+                "fabric": {
+                    "$ref": "#/definitions/template.FabricChaincodeTemplate"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "platform": {
+                    "description": "\"fabric\" or \"besu\"",
+                    "type": "string"
+                }
+            }
+        },
+        "template.CreatedChaincode": {
+            "type": "object",
+            "properties": {
+                "chaincodeId": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "platform": {
+                    "type": "string"
+                }
+            }
+        },
+        "template.CreatedNode": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "nodeId": {
+                    "type": "integer"
+                },
+                "templateId": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "template.CreatedOrg": {
+            "type": "object",
+            "properties": {
+                "mspId": {
+                    "type": "string"
+                },
+                "orgId": {
+                    "type": "integer"
+                },
+                "templateId": {
+                    "type": "string"
+                }
+            }
+        },
+        "template.EtcdRaftOptionsTemplate": {
+            "type": "object",
+            "properties": {
+                "electionTick": {
+                    "type": "integer"
+                },
+                "heartbeatTick": {
+                    "type": "integer"
+                },
+                "maxInflightBlocks": {
+                    "type": "integer"
+                },
+                "snapshotIntervalSize": {
+                    "type": "integer"
+                },
+                "tickInterval": {
+                    "type": "string"
+                }
+            }
+        },
+        "template.ExistingNodePreview": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "nodeId": {
+                    "type": "integer"
+                },
+                "templateId": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "template.ExistingOrgPreview": {
+            "type": "object",
+            "properties": {
+                "mspId": {
+                    "type": "string"
+                },
+                "orgId": {
+                    "type": "integer"
+                },
+                "templateId": {
+                    "type": "string"
+                }
+            }
+        },
+        "template.ExportTemplateResponse": {
+            "type": "object",
+            "properties": {
+                "template": {
+                    "$ref": "#/definitions/template.NetworkTemplate"
+                }
+            }
+        },
+        "template.FabricChaincodeTemplate": {
+            "type": "object",
+            "properties": {
+                "chaincodeAddress": {
+                    "type": "string"
+                },
+                "dockerImage": {
+                    "type": "string"
+                },
+                "endorsementPolicy": {
+                    "type": "string"
+                },
+                "sequence": {
+                    "type": "integer"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "template.FabricNetworkTemplate": {
+            "type": "object",
+            "properties": {
+                "applicationCapabilities": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "applicationPolicies": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/template.PolicyTemplate"
+                    }
+                },
+                "batchSize": {
+                    "$ref": "#/definitions/template.BatchSizeTemplate"
+                },
+                "batchTimeout": {
+                    "type": "string"
+                },
+                "channelCapabilities": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "channelName": {
+                    "type": "string"
+                },
+                "channelPolicies": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/template.PolicyTemplate"
+                    }
+                },
+                "consensusType": {
+                    "description": "\"etcdraft\" | \"smartbft\"",
+                    "type": "string"
+                },
+                "etcdRaftOptions": {
+                    "$ref": "#/definitions/template.EtcdRaftOptionsTemplate"
+                },
+                "ordererCapabilities": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "ordererOrgRefs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/template.OrganizationRef"
+                    }
+                },
+                "ordererPolicies": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/template.PolicyTemplate"
+                    }
+                },
+                "peerOrgRefs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/template.OrganizationRef"
+                    }
+                },
+                "smartBFTOptions": {
+                    "$ref": "#/definitions/template.SmartBFTOptionsTemplate"
+                }
+            }
+        },
+        "template.ImportOverrides": {
+            "type": "object",
+            "properties": {
+                "channelName": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "networkName": {
+                    "type": "string"
+                }
+            }
+        },
+        "template.ImportPreview": {
+            "type": "object",
+            "properties": {
+                "chaincodes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/template.ChaincodePreview"
+                    }
+                },
+                "existingNodesUsed": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/template.ExistingNodePreview"
+                    }
+                },
+                "existingOrgsUsed": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/template.ExistingOrgPreview"
+                    }
+                },
+                "network": {
+                    "$ref": "#/definitions/template.NetworkPreview"
+                },
+                "nodesToCreate": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/template.NodePreview"
+                    }
+                },
+                "organizationsToCreate": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/template.OrgPreview"
+                    }
+                }
+            }
+        },
+        "template.ImportTemplateRequest": {
+            "type": "object",
+            "properties": {
+                "overrides": {
+                    "$ref": "#/definitions/template.ImportOverrides"
+                },
+                "template": {
+                    "$ref": "#/definitions/template.NetworkTemplate"
+                },
+                "variableBindings": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/template.VariableBinding"
+                    }
+                }
+            }
+        },
+        "template.ImportTemplateResponse": {
+            "type": "object",
+            "properties": {
+                "createdChaincodes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/template.CreatedChaincode"
+                    }
+                },
+                "createdNodes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/template.CreatedNode"
+                    }
+                },
+                "createdOrganizations": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/template.CreatedOrg"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                },
+                "networkId": {
+                    "type": "integer"
+                },
+                "networkName": {
+                    "type": "string"
+                }
+            }
+        },
+        "template.NetworkDefinition": {
+            "type": "object",
+            "properties": {
+                "besu": {
+                    "$ref": "#/definitions/template.BesuNetworkTemplate"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "fabric": {
+                    "$ref": "#/definitions/template.FabricNetworkTemplate"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "platform": {
+                    "description": "\"fabric\" or \"besu\"",
+                    "type": "string"
+                }
+            }
+        },
+        "template.NetworkPreview": {
+            "type": "object",
+            "properties": {
+                "channelName": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "platform": {
+                    "type": "string"
+                }
+            }
+        },
+        "template.NetworkTemplate": {
+            "type": "object",
+            "properties": {
+                "chaincodes": {
+                    "description": "Chaincode/smart contract definitions",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/template.ChaincodeTemplate"
+                    }
+                },
+                "exportedAt": {
+                    "description": "ISO timestamp",
+                    "type": "string"
+                },
+                "exportedFrom": {
+                    "description": "Source instance identifier",
+                    "type": "string"
+                },
+                "network": {
+                    "$ref": "#/definitions/template.NetworkDefinition"
+                },
+                "variables": {
+                    "description": "Variable declarations",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/template.TemplateVariable"
+                    }
+                },
+                "version": {
+                    "description": "Schema version",
+                    "type": "string"
+                }
+            }
+        },
+        "template.NodePreview": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "orgMspId": {
+                    "type": "string"
+                },
+                "templateId": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "template.NodeRef": {
+            "type": "object",
+            "properties": {
+                "variableRef": {
+                    "type": "string"
+                }
+            }
+        },
+        "template.OrgPreview": {
+            "type": "object",
+            "properties": {
+                "mspId": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "providerId": {
+                    "type": "integer"
+                },
+                "providerName": {
+                    "type": "string"
+                },
+                "templateId": {
+                    "type": "string"
+                }
+            }
+        },
+        "template.OrganizationRef": {
+            "type": "object",
+            "properties": {
+                "nodeRefs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/template.NodeRef"
+                    }
+                },
+                "variableRef": {
+                    "type": "string"
+                }
+            }
+        },
+        "template.PolicyTemplate": {
+            "type": "object",
+            "properties": {
+                "rule": {
+                    "type": "string"
+                },
+                "type": {
+                    "description": "\"ImplicitMeta\" | \"Signature\"",
+                    "type": "string"
+                }
+            }
+        },
+        "template.SmartBFTOptionsTemplate": {
+            "type": "object",
+            "properties": {
+                "collectTimeout": {
+                    "type": "string"
+                },
+                "decisionsPerLeader": {
+                    "type": "integer"
+                },
+                "incomingMessageBufferSize": {
+                    "type": "integer"
+                },
+                "leaderHeartbeatCount": {
+                    "type": "integer"
+                },
+                "leaderHeartbeatTimeout": {
+                    "type": "string"
+                },
+                "leaderRotation": {
+                    "type": "string"
+                },
+                "requestAutoRemoveTimeout": {
+                    "type": "string"
+                },
+                "requestBatchMaxBytes": {
+                    "type": "integer"
+                },
+                "requestBatchMaxCount": {
+                    "type": "integer"
+                },
+                "requestBatchMaxInterval": {
+                    "type": "string"
+                },
+                "requestComplainTimeout": {
+                    "type": "string"
+                },
+                "requestForwardTimeout": {
+                    "type": "string"
+                },
+                "requestMaxBytes": {
+                    "type": "integer"
+                },
+                "requestPoolSize": {
+                    "type": "integer"
+                },
+                "speedUpViewChange": {
+                    "type": "boolean"
+                },
+                "syncOnStart": {
+                    "type": "boolean"
+                },
+                "viewChangeResendInterval": {
+                    "type": "string"
+                },
+                "viewChangeTimeout": {
+                    "type": "string"
+                }
+            }
+        },
+        "template.TemplateVariable": {
+            "type": "object",
+            "properties": {
+                "default": {},
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "platform": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "properties": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/template.TemplateVariable"
+                    }
+                },
+                "required": {
+                    "type": "boolean"
+                },
+                "scope": {
+                    "$ref": "#/definitions/template.VariableScope"
+                },
+                "type": {
+                    "$ref": "#/definitions/template.VariableType"
+                },
+                "validation": {
+                    "$ref": "#/definitions/template.VariableValidation"
+                }
+            }
+        },
+        "template.ValidateTemplateRequest": {
+            "type": "object",
+            "properties": {
+                "overrides": {
+                    "$ref": "#/definitions/template.ImportOverrides"
+                },
+                "template": {
+                    "$ref": "#/definitions/template.NetworkTemplate"
+                },
+                "variableBindings": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/template.VariableBinding"
+                    }
+                }
+            }
+        },
+        "template.ValidateTemplateResponse": {
+            "type": "object",
+            "properties": {
+                "errors": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/template.ValidationError"
+                    }
+                },
+                "preview": {
+                    "$ref": "#/definitions/template.ImportPreview"
+                },
+                "valid": {
+                    "type": "boolean"
+                },
+                "warnings": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/template.ValidationWarning"
+                    }
+                }
+            }
+        },
+        "template.ValidationError": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "field": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "template.ValidationWarning": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "suggestion": {
+                    "type": "string"
+                }
+            }
+        },
+        "template.ValidatorRef": {
+            "type": "object",
+            "properties": {
+                "variableRef": {
+                    "type": "string"
+                }
+            }
+        },
+        "template.VariableBinding": {
+            "type": "object",
+            "properties": {
+                "existingKeyId": {
+                    "type": "integer"
+                },
+                "existingNodeId": {
+                    "type": "integer"
+                },
+                "existingOrgId": {
+                    "description": "Reference to existing resources",
+                    "type": "integer"
+                },
+                "properties": {
+                    "description": "Property bindings (for composite types like organization)",
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "value": {
+                    "description": "Direct value binding (for simple types)"
+                },
+                "variableName": {
+                    "type": "string"
+                }
+            }
+        },
+        "template.VariableScope": {
+            "type": "string",
+            "enum": [
+                "network",
+                "organization",
+                "node",
+                "validator"
+            ],
+            "x-enum-varnames": [
+                "ScopeNetwork",
+                "ScopeOrganization",
+                "ScopeNode",
+                "ScopeValidator"
+            ]
+        },
+        "template.VariableType": {
+            "type": "string",
+            "enum": [
+                "string",
+                "integer",
+                "mspId",
+                "ethereumAddress",
+                "publicKey",
+                "hostPort",
+                "organization",
+                "key",
+                "node"
+            ],
+            "x-enum-varnames": [
+                "TypeString",
+                "TypeInteger",
+                "TypeMspId",
+                "TypeEthereumAddress",
+                "TypePublicKey",
+                "TypeHostPort",
+                "TypeOrganization",
+                "TypeKey",
+                "TypeNode"
+            ]
+        },
+        "template.VariableValidation": {
+            "type": "object",
+            "properties": {
+                "maxLength": {
+                    "type": "integer"
+                },
+                "maxValue": {
+                    "type": "integer"
+                },
+                "minLength": {
+                    "type": "integer"
+                },
+                "minValue": {
+                    "type": "integer"
+                },
+                "pattern": {
+                    "type": "string"
+                }
+            }
+        },
         "time.Duration": {
             "type": "integer",
             "format": "int64",
@@ -17830,6 +20827,31 @@
                     "type": "string"
                 },
                 "to": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.BackupConfig": {
+            "type": "object",
+            "properties": {
+                "baseBackupCron": {
+                    "description": "BaseBackupCron is a cron expression used by the scheduler to\ntrigger `wal-g backup-push`. Empty disables base backups (WAL\narchiving remains active if Enabled).",
+                    "type": "string"
+                },
+                "enabled": {
+                    "description": "Enabled gates WAL archiving and base backups. When false the\nservice still runs but no backups are produced.",
+                    "type": "boolean"
+                },
+                "retentionBaseBackups": {
+                    "description": "RetentionBaseBackups is the number of base backups to keep;\nWAL-G's `delete retain FIND_FULL N` semantics.",
+                    "type": "integer"
+                },
+                "retentionWalDays": {
+                    "description": "RetentionWALDays retains WAL segments for this many days past\nthe oldest kept base backup.",
+                    "type": "integer"
+                },
+                "s3Prefix": {
+                    "description": "S3Prefix is the per-service key prefix inside the backup target's\nbucket (WALG_S3_PREFIX = s3://\u003cbucket\u003e/\u003cprefix\u003e).",
                     "type": "string"
                 }
             }
@@ -17941,11 +20963,13 @@
             "type": "string",
             "enum": [
                 "FABRIC",
-                "BESU"
+                "BESU",
+                "FABRICX"
             ],
             "x-enum-varnames": [
                 "PlatformFabric",
-                "PlatformBesu"
+                "PlatformBesu",
+                "PlatformFabricX"
             ]
         },
         "types.CustomQueryRequest": {
@@ -18009,7 +21033,7 @@
                 "services": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/types.Service"
+                        "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_plugin_types.Service"
                     }
                 },
                 "startedAt": {
@@ -18235,6 +21259,204 @@
                 }
             }
         },
+        "types.FabricXCommitterConfig": {
+            "type": "object",
+            "required": [
+                "mspId",
+                "name",
+                "ordererEndpoints",
+                "organizationId",
+                "postgresHost"
+            ],
+            "properties": {
+                "channelId": {
+                    "description": "Channel ID for the sidecar",
+                    "type": "string"
+                },
+                "coordinatorPort": {
+                    "type": "integer"
+                },
+                "domainNames": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "env": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "externalIp": {
+                    "type": "string"
+                },
+                "mode": {
+                    "description": "@Description The deployment mode (service or docker)",
+                    "type": "string",
+                    "example": "service"
+                },
+                "mspId": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "ordererEndpoints": {
+                    "description": "Orderer endpoints (assembler addresses) for the sidecar to connect to",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "organizationId": {
+                    "type": "integer"
+                },
+                "postgresDb": {
+                    "type": "string"
+                },
+                "postgresHost": {
+                    "description": "PostgreSQL config for validator and query-service",
+                    "type": "string"
+                },
+                "postgresPassword": {
+                    "type": "string"
+                },
+                "postgresPort": {
+                    "type": "integer"
+                },
+                "postgresUser": {
+                    "type": "string"
+                },
+                "queryServicePort": {
+                    "type": "integer"
+                },
+                "sidecarPort": {
+                    "description": "Ports (auto-allocated if zero)",
+                    "type": "integer"
+                },
+                "type": {
+                    "description": "@Description The type of node (fabric-peer, fabric-orderer, besu)",
+                    "type": "string",
+                    "example": "fabric-peer"
+                },
+                "validatorPort": {
+                    "type": "integer"
+                },
+                "verifierPort": {
+                    "type": "integer"
+                },
+                "version": {
+                    "description": "fabric-x-committer image tag",
+                    "type": "string"
+                }
+            }
+        },
+        "types.FabricXOrdererGroupConfig": {
+            "type": "object",
+            "required": [
+                "mspId",
+                "name",
+                "organizationId",
+                "partyId"
+            ],
+            "properties": {
+                "assemblerPort": {
+                    "type": "integer"
+                },
+                "batcherPort": {
+                    "type": "integer"
+                },
+                "consenterPort": {
+                    "type": "integer"
+                },
+                "consenterType": {
+                    "description": "Tuning",
+                    "type": "string"
+                },
+                "domainNames": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "env": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "externalIp": {
+                    "type": "string"
+                },
+                "mode": {
+                    "description": "@Description The deployment mode (service or docker)",
+                    "type": "string",
+                    "example": "service"
+                },
+                "mspId": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "organizationId": {
+                    "type": "integer"
+                },
+                "partyId": {
+                    "type": "integer"
+                },
+                "routerPort": {
+                    "description": "Ports (auto-allocated if zero)",
+                    "type": "integer"
+                },
+                "type": {
+                    "description": "@Description The type of node (fabric-peer, fabric-orderer, besu)",
+                    "type": "string",
+                    "example": "fabric-peer"
+                },
+                "version": {
+                    "description": "fabric-x-orderer image tag",
+                    "type": "string"
+                }
+            }
+        },
+        "types.GroupStatus": {
+            "type": "string",
+            "enum": [
+                "PENDING",
+                "RUNNING",
+                "STOPPED",
+                "STOPPING",
+                "STARTING",
+                "UPDATING",
+                "ERROR",
+                "DEGRADED",
+                "CREATED"
+            ],
+            "x-enum-varnames": [
+                "NodeStatusPending",
+                "NodeStatusRunning",
+                "NodeStatusStopped",
+                "NodeStatusStopping",
+                "NodeStatusStarting",
+                "NodeStatusUpdating",
+                "NodeStatusError",
+                "NodeStatusDegraded",
+                "NodeStatusCreated"
+            ]
+        },
+        "types.GroupType": {
+            "type": "string",
+            "enum": [
+                "FABRICX_ORDERER_GROUP",
+                "FABRICX_COMMITTER"
+            ],
+            "x-enum-varnames": [
+                "GroupTypeFabricXOrderer",
+                "GroupTypeFabricXCommitter"
+            ]
+        },
         "types.LabelValuesResponse": {
             "type": "object",
             "properties": {
@@ -18295,17 +21517,168 @@
                 }
             }
         },
+        "types.NodeGroup": {
+            "type": "object",
+            "properties": {
+                "caCert": {
+                    "type": "string"
+                },
+                "config": {
+                    "description": "Config is group-shared logical configuration (JSON payload whose\nconcrete shape depends on GroupType).",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "deploymentConfig": {
+                    "description": "DeploymentConfig is group-shared deployment configuration (network\nname, shared mounts, etc.).",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "domainNames": {
+                    "description": "DomainNames is a parsed JSON array of SANs/SNI hostnames shared by\nall children. Stored as a JSON string column.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "errorMessage": {
+                    "type": "string"
+                },
+                "externalIp": {
+                    "type": "string"
+                },
+                "groupType": {
+                    "$ref": "#/definitions/types.GroupType"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "mspId": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "organizationId": {
+                    "type": "integer"
+                },
+                "partyId": {
+                    "type": "integer"
+                },
+                "platform": {
+                    "type": "string"
+                },
+                "signCert": {
+                    "type": "string"
+                },
+                "signKeyId": {
+                    "type": "integer"
+                },
+                "status": {
+                    "$ref": "#/definitions/types.GroupStatus"
+                },
+                "tlsCaCert": {
+                    "type": "string"
+                },
+                "tlsCert": {
+                    "type": "string"
+                },
+                "tlsKeyId": {
+                    "type": "integer"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.NodeGroupService": {
+            "type": "object",
+            "properties": {
+                "config": {
+                    "description": "Config is service-type-specific logical configuration supplied at\ncreation time. For POSTGRES this carries db/user/password/hostPort.",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "deploymentConfig": {
+                    "description": "DeploymentConfig is resolved at runtime (host/port the coordinator\ndials). Empty until the service has been started at least once.",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "errorMessage": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "nodeGroupId": {
+                    "type": "integer"
+                },
+                "serviceType": {
+                    "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_nodegroups_types.ServiceType"
+                },
+                "status": {
+                    "$ref": "#/definitions/types.GroupStatus"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
         "types.NodeType": {
             "type": "string",
             "enum": [
                 "FABRIC_PEER",
                 "FABRIC_ORDERER",
-                "BESU_FULLNODE"
+                "BESU_FULLNODE",
+                "FABRICX_ORDERER_GROUP",
+                "FABRICX_COMMITTER",
+                "FABRICX_ORDERER_ROUTER",
+                "FABRICX_ORDERER_BATCHER",
+                "FABRICX_ORDERER_CONSENTER",
+                "FABRICX_ORDERER_ASSEMBLER",
+                "FABRICX_COMMITTER_SIDECAR",
+                "FABRICX_COMMITTER_COORDINATOR",
+                "FABRICX_COMMITTER_VALIDATOR",
+                "FABRICX_COMMITTER_VERIFIER",
+                "FABRICX_COMMITTER_QUERY_SERVICE"
             ],
             "x-enum-varnames": [
                 "NodeTypeFabricPeer",
                 "NodeTypeFabricOrderer",
-                "NodeTypeBesuFullnode"
+                "NodeTypeBesuFullnode",
+                "NodeTypeFabricXOrdererGroup",
+                "NodeTypeFabricXCommitter",
+                "NodeTypeFabricXOrdererRouter",
+                "NodeTypeFabricXOrdererBatcher",
+                "NodeTypeFabricXOrdererConsenter",
+                "NodeTypeFabricXOrdererAssembler",
+                "NodeTypeFabricXCommitterSidecar",
+                "NodeTypeFabricXCommitterCoordinator",
+                "NodeTypeFabricXCommitterValidator",
+                "NodeTypeFabricXCommitterVerifier",
+                "NodeTypeFabricXCommitterQueryService"
             ]
         },
         "types.OrdererAddressOverride": {
@@ -18399,28 +21772,30 @@
                 }
             }
         },
-        "types.Service": {
-            "type": "object",
-            "properties": {
-                "createdAt": {
-                    "type": "string"
-                },
-                "image": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "ports": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_chainlaunch_chainlaunch_pkg_plugin_types.Port"
-                    }
-                },
-                "status": {
-                    "type": "string"
-                }
-            }
+        "types.ServiceStatus": {
+            "type": "string",
+            "enum": [
+                "PENDING",
+                "RUNNING",
+                "STOPPED",
+                "STOPPING",
+                "STARTING",
+                "UPDATING",
+                "ERROR",
+                "DEGRADED",
+                "CREATED"
+            ],
+            "x-enum-varnames": [
+                "NodeStatusPending",
+                "NodeStatusRunning",
+                "NodeStatusStopped",
+                "NodeStatusStopping",
+                "NodeStatusStarting",
+                "NodeStatusUpdating",
+                "NodeStatusError",
+                "NodeStatusDegraded",
+                "NodeStatusCreated"
+            ]
         },
         "types.Spec": {
             "type": "object",

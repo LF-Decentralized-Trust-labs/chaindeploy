@@ -1089,6 +1089,32 @@ definitions:
       message:
         type: string
     type: object
+  github_com_chainlaunch_chainlaunch_pkg_nodegroups_http.CreatePostgresRequest:
+    properties:
+      db:
+        type: string
+      hostPort:
+        type: integer
+      name:
+        type: string
+      password:
+        type: string
+      user:
+        type: string
+      version:
+        type: string
+    required:
+    - db
+    - name
+    - password
+    - user
+    type: object
+  github_com_chainlaunch_chainlaunch_pkg_nodegroups_types.ServiceType:
+    enum:
+    - POSTGRES
+    type: string
+    x-enum-varnames:
+    - ServiceTypePostgres
   github_com_chainlaunch_chainlaunch_pkg_notifications_http.ErrorResponse:
     properties:
       error:
@@ -1131,6 +1157,80 @@ definitions:
       protocol:
         type: string
     type: object
+  github_com_chainlaunch_chainlaunch_pkg_plugin_types.Service:
+    properties:
+      createdAt:
+        type: string
+      image:
+        type: string
+      name:
+        type: string
+      ports:
+        items:
+          $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_plugin_types.Port'
+        type: array
+      status:
+        type: string
+    type: object
+  github_com_chainlaunch_chainlaunch_pkg_services_http.CreatePostgresRequest:
+    properties:
+      db:
+        type: string
+      hostPort:
+        type: integer
+      name:
+        type: string
+      password:
+        type: string
+      user:
+        type: string
+      version:
+        type: string
+    required:
+    - db
+    - name
+    - password
+    - user
+    type: object
+  github_com_chainlaunch_chainlaunch_pkg_services_types.Service:
+    properties:
+      backupConfig:
+        $ref: '#/definitions/types.BackupConfig'
+      backupTargetId:
+        type: integer
+      config:
+        items:
+          type: integer
+        type: array
+      createdAt:
+        type: string
+      deploymentConfig:
+        items:
+          type: integer
+        type: array
+      errorMessage:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      nodeGroupId:
+        type: integer
+      serviceType:
+        $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_services_types.ServiceType'
+      status:
+        $ref: '#/definitions/types.ServiceStatus'
+      updatedAt:
+        type: string
+      version:
+        type: string
+    type: object
+  github_com_chainlaunch_chainlaunch_pkg_services_types.ServiceType:
+    enum:
+    - POSTGRES
+    type: string
+    x-enum-varnames:
+    - ServiceTypePostgres
   handler.CreateKeyRequest:
     properties:
       description:
@@ -1450,6 +1550,13 @@ definitions:
     required:
     - host
     - port
+    type: object
+  http.AttachPostgresServiceRequest:
+    properties:
+      serviceId:
+        type: integer
+    required:
+    - serviceId
     type: object
   http.BackupResponse:
     properties:
@@ -1935,6 +2042,35 @@ definitions:
     - config
     - name
     type: object
+  http.CreateFabricXNamespaceRequest:
+    properties:
+      finalityTimeoutSeconds:
+        type: integer
+      name:
+        type: string
+      submitterOrgId:
+        type: integer
+      version:
+        description: -1 (default) creates a new ns; >=0 updates an existing one
+        type: integer
+      waitForFinality:
+        type: boolean
+    required:
+    - name
+    - submitterOrgId
+    type: object
+  http.CreateFabricXNetworkRequest:
+    properties:
+      config:
+        $ref: '#/definitions/http.FabricXNetworkConfig'
+      description:
+        type: string
+      name:
+        type: string
+    required:
+    - config
+    - name
+    type: object
   http.CreateNodeRequest:
     description: Request payload for creating a new node
     properties:
@@ -1958,6 +2094,16 @@ definitions:
         - $ref: '#/definitions/types.FabricPeerConfig'
         description: '@Description Fabric peer configuration, required when creating
           a Fabric peer node'
+      fabricXCommitter:
+        allOf:
+        - $ref: '#/definitions/types.FabricXCommitterConfig'
+        description: '@Description Fabric X committer configuration, required when
+          creating a FabricX committer node'
+      fabricXOrdererGroup:
+        allOf:
+        - $ref: '#/definitions/types.FabricXOrdererGroupConfig'
+        description: '@Description Fabric X orderer group configuration, required
+          when creating a FabricX orderer group node'
       name:
         description: '@Description Name of the node'
         example: peer0-org1
@@ -1965,6 +2111,16 @@ definitions:
     required:
     - blockchainPlatform
     - name
+    type: object
+  http.CreatePostgresDatabasesRequest:
+    properties:
+      databases:
+        items:
+          $ref: '#/definitions/http.DatabaseSpec'
+        minItems: 1
+        type: array
+    required:
+    - databases
     type: object
   http.CreateProviderRequest:
     properties:
@@ -1994,6 +2150,50 @@ definitions:
     - config
     - name
     - type
+    type: object
+  http.CreateRequest:
+    properties:
+      config:
+        items:
+          type: integer
+        type: array
+      domainNames:
+        items:
+          type: string
+        type: array
+      externalIp:
+        type: string
+      groupType:
+        $ref: '#/definitions/types.GroupType'
+      mspId:
+        type: string
+      name:
+        type: string
+      organizationId:
+        type: integer
+      partyId:
+        type: integer
+      platform:
+        type: string
+      version:
+        type: string
+    required:
+    - groupType
+    - name
+    - platform
+    type: object
+  http.DatabaseSpec:
+    properties:
+      db:
+        type: string
+      password:
+        type: string
+      user:
+        type: string
+    required:
+    - db
+    - password
+    - user
     type: object
   http.EtcdRaftOptions:
     properties:
@@ -2070,6 +2270,151 @@ definitions:
       type:
         type: string
     type: object
+  http.FabricXBlockListResponse:
+    properties:
+      blocks:
+        items:
+          $ref: '#/definitions/http.FabricXBlockSummary'
+        type: array
+      total:
+        type: integer
+    type: object
+  http.FabricXBlockSummary:
+    properties:
+      dataHash:
+        type: string
+      number:
+        type: integer
+      previousHash:
+        type: string
+      txCount:
+        type: integer
+    type: object
+  http.FabricXChainInfoResponse:
+    properties:
+      height:
+        type: integer
+    type: object
+  http.FabricXJoinNodeResponse:
+    properties:
+      networkId:
+        type: integer
+      nodeId:
+        type: integer
+      status:
+        type: string
+    type: object
+  http.FabricXNamespaceListResponse:
+    properties:
+      chainError:
+        type: string
+      namespaces:
+        items:
+          $ref: '#/definitions/http.FabricXNamespaceResponse'
+        type: array
+    type: object
+  http.FabricXNamespacePolicyResponse:
+    properties:
+      namespace:
+        type: string
+      version:
+        type: integer
+    type: object
+  http.FabricXNamespaceResponse:
+    properties:
+      createdAt:
+        type: string
+      error:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      networkId:
+        type: integer
+      onChain:
+        type: boolean
+      source:
+        type: string
+      status:
+        type: string
+      submitterMspId:
+        type: string
+      submitterOrgId:
+        type: integer
+      txId:
+        type: string
+      updatedAt:
+        type: string
+      version:
+        type: integer
+    type: object
+  http.FabricXNetworkConfig:
+    properties:
+      channelName:
+        type: string
+      localDev:
+        description: |-
+          LocalDev enables Docker Desktop (macOS/Windows) compatibility mode for
+          this network. Set to true when ChainLaunch itself runs on macOS/Windows
+          with Docker Desktop so containers can reach each other via
+          host.docker.internal and the host can dial published ports on 127.0.0.1.
+        type: boolean
+      organizations:
+        items:
+          $ref: '#/definitions/http.FabricXOrganization'
+        minItems: 1
+        type: array
+    required:
+    - organizations
+    type: object
+  http.FabricXNetworkResponse:
+    properties:
+      channelName:
+        type: string
+      config:
+        items:
+          type: integer
+        type: array
+      createdAt:
+        type: string
+      description:
+        type: string
+      genesisBlock:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      platform:
+        type: string
+      status:
+        type: string
+      updatedAt:
+        type: string
+    type: object
+  http.FabricXOrganization:
+    properties:
+      committerNodeId:
+        type: integer
+      id:
+        type: integer
+      ordererNodeGroupId:
+        type: integer
+      ordererNodeId:
+        type: integer
+    required:
+    - id
+    type: object
+  http.FabricXStateRowResponse:
+    properties:
+      key:
+        type: string
+      value:
+        type: string
+      version:
+        type: integer
+    type: object
   http.GetNetworkNodesResponse:
     properties:
       nodes:
@@ -2133,6 +2478,24 @@ definitions:
       networkId:
         type: integer
     type: object
+  http.InitOrdererRequest:
+    properties:
+      assemblerPort:
+        type: integer
+      batcherPort:
+        type: integer
+      consenterPort:
+        type: integer
+      consenterType:
+        type: string
+      routerPort:
+        type: integer
+    required:
+    - assemblerPort
+    - batcherPort
+    - consenterPort
+    - routerPort
+    type: object
   http.ListBesuNetworksResponse:
     properties:
       networks:
@@ -2149,6 +2512,13 @@ definitions:
           $ref: '#/definitions/http.NetworkResponse'
         type: array
       total:
+        type: integer
+    type: object
+  http.LogsResponse:
+    properties:
+      logs:
+        type: string
+      tail:
         type: integer
     type: object
   http.NetworkResponse:
@@ -2229,6 +2599,10 @@ definitions:
         $ref: '#/definitions/service.FabricOrdererProperties'
       fabricPeer:
         $ref: '#/definitions/service.FabricPeerProperties'
+      fabricXCommitter:
+        $ref: '#/definitions/service.FabricXCommitterProperties'
+      fabricXOrdererGroup:
+        $ref: '#/definitions/service.FabricXOrdererGroupProperties'
       id:
         type: integer
       name:
@@ -2449,6 +2823,13 @@ definitions:
         type: string
       viewChangeTimeout:
         type: string
+    type: object
+  http.StartServiceRequest:
+    properties:
+      networkName:
+        type: string
+    required:
+    - networkName
     type: object
   http.TestProviderRequest:
     properties:
@@ -2866,6 +3247,17 @@ definitions:
     - config
     - name
     - type
+    type: object
+  http.UpdateServiceRequest:
+    properties:
+      hostPort:
+        type: integer
+      name:
+        type: string
+      password:
+        type: string
+      version:
+        type: string
     type: object
   models.CertificateRequest:
     properties:
@@ -3619,6 +4011,36 @@ definitions:
           type: string
         type: array
     type: object
+  service.Child:
+    properties:
+      createdAt:
+        type: string
+      endpoint:
+        type: string
+      errorMessage:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      nodeType:
+        type: string
+      status:
+        type: string
+      updatedAt:
+        type: string
+    type: object
+  service.Consumer:
+    properties:
+      groupType:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      status:
+        type: string
+    type: object
   service.CreateSettingParams:
     properties:
       config:
@@ -3701,6 +4123,58 @@ definitions:
         type: string
       tlsKeyId:
         type: integer
+      version:
+        type: string
+    type: object
+  service.FabricXCommitterProperties:
+    properties:
+      coordinatorPort:
+        type: integer
+      externalIp:
+        type: string
+      mspId:
+        type: string
+      organizationId:
+        type: integer
+      partyId:
+        type: integer
+      queryServicePort:
+        type: integer
+      sidecarPort:
+        type: integer
+      validatorPort:
+        type: integer
+      verifierPort:
+        type: integer
+      version:
+        type: string
+    type: object
+  service.FabricXOrdererGroupProperties:
+    properties:
+      assemblerPort:
+        type: integer
+      batcherPort:
+        type: integer
+      caCert:
+        type: string
+      consenterPort:
+        type: integer
+      externalIp:
+        type: string
+      mspId:
+        type: string
+      organizationId:
+        type: integer
+      partyId:
+        type: integer
+      routerPort:
+        type: integer
+      signCert:
+        type: string
+      tlsCaCert:
+        type: string
+      tlsCert:
+        type: string
       version:
         type: string
     type: object
@@ -3825,6 +4299,10 @@ definitions:
         allOf:
         - $ref: '#/definitions/service.FabricPeerProperties'
         description: Type-specific fields
+      fabricXCommitter:
+        $ref: '#/definitions/service.FabricXCommitterProperties'
+      fabricXOrdererGroup:
+        $ref: '#/definitions/service.FabricXOrdererGroupProperties'
       id:
         type: integer
       name:
@@ -3888,6 +4366,542 @@ definitions:
       peerTemplateCMD:
         type: string
     type: object
+  template.AllocTemplate:
+    properties:
+      balance:
+        type: string
+    type: object
+  template.BatchSizeTemplate:
+    properties:
+      absoluteMaxBytes:
+        type: integer
+      maxMessageCount:
+        type: integer
+      preferredMaxBytes:
+        type: integer
+    type: object
+  template.BesuContractTemplate:
+    properties:
+      abi:
+        description: Contract ABI JSON
+        type: string
+      bytecode:
+        description: Compiled bytecode (hex)
+        type: string
+    type: object
+  template.BesuNetworkTemplate:
+    properties:
+      alloc:
+        additionalProperties:
+          $ref: '#/definitions/template.AllocTemplate'
+        type: object
+      blockPeriod:
+        type: integer
+      chainId:
+        type: integer
+      consensus:
+        description: '"qbft"'
+        type: string
+      difficulty:
+        type: string
+      epochLength:
+        type: integer
+      gasLimit:
+        type: string
+      requestTimeout:
+        type: integer
+      validatorRefs:
+        items:
+          $ref: '#/definitions/template.ValidatorRef'
+        type: array
+    type: object
+  template.ChaincodePreview:
+    properties:
+      name:
+        type: string
+      platform:
+        type: string
+      version:
+        type: string
+    type: object
+  template.ChaincodeTemplate:
+    properties:
+      besu:
+        $ref: '#/definitions/template.BesuContractTemplate'
+      fabric:
+        $ref: '#/definitions/template.FabricChaincodeTemplate'
+      name:
+        type: string
+      platform:
+        description: '"fabric" or "besu"'
+        type: string
+    type: object
+  template.CreatedChaincode:
+    properties:
+      chaincodeId:
+        type: integer
+      name:
+        type: string
+      platform:
+        type: string
+    type: object
+  template.CreatedNode:
+    properties:
+      name:
+        type: string
+      nodeId:
+        type: integer
+      templateId:
+        type: string
+      type:
+        type: string
+    type: object
+  template.CreatedOrg:
+    properties:
+      mspId:
+        type: string
+      orgId:
+        type: integer
+      templateId:
+        type: string
+    type: object
+  template.EtcdRaftOptionsTemplate:
+    properties:
+      electionTick:
+        type: integer
+      heartbeatTick:
+        type: integer
+      maxInflightBlocks:
+        type: integer
+      snapshotIntervalSize:
+        type: integer
+      tickInterval:
+        type: string
+    type: object
+  template.ExistingNodePreview:
+    properties:
+      name:
+        type: string
+      nodeId:
+        type: integer
+      templateId:
+        type: string
+      type:
+        type: string
+    type: object
+  template.ExistingOrgPreview:
+    properties:
+      mspId:
+        type: string
+      orgId:
+        type: integer
+      templateId:
+        type: string
+    type: object
+  template.ExportTemplateResponse:
+    properties:
+      template:
+        $ref: '#/definitions/template.NetworkTemplate'
+    type: object
+  template.FabricChaincodeTemplate:
+    properties:
+      chaincodeAddress:
+        type: string
+      dockerImage:
+        type: string
+      endorsementPolicy:
+        type: string
+      sequence:
+        type: integer
+      version:
+        type: string
+    type: object
+  template.FabricNetworkTemplate:
+    properties:
+      applicationCapabilities:
+        items:
+          type: string
+        type: array
+      applicationPolicies:
+        additionalProperties:
+          $ref: '#/definitions/template.PolicyTemplate'
+        type: object
+      batchSize:
+        $ref: '#/definitions/template.BatchSizeTemplate'
+      batchTimeout:
+        type: string
+      channelCapabilities:
+        items:
+          type: string
+        type: array
+      channelName:
+        type: string
+      channelPolicies:
+        additionalProperties:
+          $ref: '#/definitions/template.PolicyTemplate'
+        type: object
+      consensusType:
+        description: '"etcdraft" | "smartbft"'
+        type: string
+      etcdRaftOptions:
+        $ref: '#/definitions/template.EtcdRaftOptionsTemplate'
+      ordererCapabilities:
+        items:
+          type: string
+        type: array
+      ordererOrgRefs:
+        items:
+          $ref: '#/definitions/template.OrganizationRef'
+        type: array
+      ordererPolicies:
+        additionalProperties:
+          $ref: '#/definitions/template.PolicyTemplate'
+        type: object
+      peerOrgRefs:
+        items:
+          $ref: '#/definitions/template.OrganizationRef'
+        type: array
+      smartBFTOptions:
+        $ref: '#/definitions/template.SmartBFTOptionsTemplate'
+    type: object
+  template.ImportOverrides:
+    properties:
+      channelName:
+        type: string
+      description:
+        type: string
+      networkName:
+        type: string
+    type: object
+  template.ImportPreview:
+    properties:
+      chaincodes:
+        items:
+          $ref: '#/definitions/template.ChaincodePreview'
+        type: array
+      existingNodesUsed:
+        items:
+          $ref: '#/definitions/template.ExistingNodePreview'
+        type: array
+      existingOrgsUsed:
+        items:
+          $ref: '#/definitions/template.ExistingOrgPreview'
+        type: array
+      network:
+        $ref: '#/definitions/template.NetworkPreview'
+      nodesToCreate:
+        items:
+          $ref: '#/definitions/template.NodePreview'
+        type: array
+      organizationsToCreate:
+        items:
+          $ref: '#/definitions/template.OrgPreview'
+        type: array
+    type: object
+  template.ImportTemplateRequest:
+    properties:
+      overrides:
+        $ref: '#/definitions/template.ImportOverrides'
+      template:
+        $ref: '#/definitions/template.NetworkTemplate'
+      variableBindings:
+        items:
+          $ref: '#/definitions/template.VariableBinding'
+        type: array
+    type: object
+  template.ImportTemplateResponse:
+    properties:
+      createdChaincodes:
+        items:
+          $ref: '#/definitions/template.CreatedChaincode'
+        type: array
+      createdNodes:
+        items:
+          $ref: '#/definitions/template.CreatedNode'
+        type: array
+      createdOrganizations:
+        items:
+          $ref: '#/definitions/template.CreatedOrg'
+        type: array
+      message:
+        type: string
+      networkId:
+        type: integer
+      networkName:
+        type: string
+    type: object
+  template.NetworkDefinition:
+    properties:
+      besu:
+        $ref: '#/definitions/template.BesuNetworkTemplate'
+      description:
+        type: string
+      fabric:
+        $ref: '#/definitions/template.FabricNetworkTemplate'
+      name:
+        type: string
+      platform:
+        description: '"fabric" or "besu"'
+        type: string
+    type: object
+  template.NetworkPreview:
+    properties:
+      channelName:
+        type: string
+      description:
+        type: string
+      name:
+        type: string
+      platform:
+        type: string
+    type: object
+  template.NetworkTemplate:
+    properties:
+      chaincodes:
+        description: Chaincode/smart contract definitions
+        items:
+          $ref: '#/definitions/template.ChaincodeTemplate'
+        type: array
+      exportedAt:
+        description: ISO timestamp
+        type: string
+      exportedFrom:
+        description: Source instance identifier
+        type: string
+      network:
+        $ref: '#/definitions/template.NetworkDefinition'
+      variables:
+        description: Variable declarations
+        items:
+          $ref: '#/definitions/template.TemplateVariable'
+        type: array
+      version:
+        description: Schema version
+        type: string
+    type: object
+  template.NodePreview:
+    properties:
+      name:
+        type: string
+      orgMspId:
+        type: string
+      templateId:
+        type: string
+      type:
+        type: string
+    type: object
+  template.NodeRef:
+    properties:
+      variableRef:
+        type: string
+    type: object
+  template.OrgPreview:
+    properties:
+      mspId:
+        type: string
+      name:
+        type: string
+      providerId:
+        type: integer
+      providerName:
+        type: string
+      templateId:
+        type: string
+    type: object
+  template.OrganizationRef:
+    properties:
+      nodeRefs:
+        items:
+          $ref: '#/definitions/template.NodeRef'
+        type: array
+      variableRef:
+        type: string
+    type: object
+  template.PolicyTemplate:
+    properties:
+      rule:
+        type: string
+      type:
+        description: '"ImplicitMeta" | "Signature"'
+        type: string
+    type: object
+  template.SmartBFTOptionsTemplate:
+    properties:
+      collectTimeout:
+        type: string
+      decisionsPerLeader:
+        type: integer
+      incomingMessageBufferSize:
+        type: integer
+      leaderHeartbeatCount:
+        type: integer
+      leaderHeartbeatTimeout:
+        type: string
+      leaderRotation:
+        type: string
+      requestAutoRemoveTimeout:
+        type: string
+      requestBatchMaxBytes:
+        type: integer
+      requestBatchMaxCount:
+        type: integer
+      requestBatchMaxInterval:
+        type: string
+      requestComplainTimeout:
+        type: string
+      requestForwardTimeout:
+        type: string
+      requestMaxBytes:
+        type: integer
+      requestPoolSize:
+        type: integer
+      speedUpViewChange:
+        type: boolean
+      syncOnStart:
+        type: boolean
+      viewChangeResendInterval:
+        type: string
+      viewChangeTimeout:
+        type: string
+    type: object
+  template.TemplateVariable:
+    properties:
+      default: {}
+      description:
+        type: string
+      name:
+        type: string
+      platform:
+        items:
+          type: string
+        type: array
+      properties:
+        items:
+          $ref: '#/definitions/template.TemplateVariable'
+        type: array
+      required:
+        type: boolean
+      scope:
+        $ref: '#/definitions/template.VariableScope'
+      type:
+        $ref: '#/definitions/template.VariableType'
+      validation:
+        $ref: '#/definitions/template.VariableValidation'
+    type: object
+  template.ValidateTemplateRequest:
+    properties:
+      overrides:
+        $ref: '#/definitions/template.ImportOverrides'
+      template:
+        $ref: '#/definitions/template.NetworkTemplate'
+      variableBindings:
+        items:
+          $ref: '#/definitions/template.VariableBinding'
+        type: array
+    type: object
+  template.ValidateTemplateResponse:
+    properties:
+      errors:
+        items:
+          $ref: '#/definitions/template.ValidationError'
+        type: array
+      preview:
+        $ref: '#/definitions/template.ImportPreview'
+      valid:
+        type: boolean
+      warnings:
+        items:
+          $ref: '#/definitions/template.ValidationWarning'
+        type: array
+    type: object
+  template.ValidationError:
+    properties:
+      code:
+        type: string
+      field:
+        type: string
+      message:
+        type: string
+    type: object
+  template.ValidationWarning:
+    properties:
+      code:
+        type: string
+      message:
+        type: string
+      suggestion:
+        type: string
+    type: object
+  template.ValidatorRef:
+    properties:
+      variableRef:
+        type: string
+    type: object
+  template.VariableBinding:
+    properties:
+      existingKeyId:
+        type: integer
+      existingNodeId:
+        type: integer
+      existingOrgId:
+        description: Reference to existing resources
+        type: integer
+      properties:
+        additionalProperties: true
+        description: Property bindings (for composite types like organization)
+        type: object
+      value:
+        description: Direct value binding (for simple types)
+      variableName:
+        type: string
+    type: object
+  template.VariableScope:
+    enum:
+    - network
+    - organization
+    - node
+    - validator
+    type: string
+    x-enum-varnames:
+    - ScopeNetwork
+    - ScopeOrganization
+    - ScopeNode
+    - ScopeValidator
+  template.VariableType:
+    enum:
+    - string
+    - integer
+    - mspId
+    - ethereumAddress
+    - publicKey
+    - hostPort
+    - organization
+    - key
+    - node
+    type: string
+    x-enum-varnames:
+    - TypeString
+    - TypeInteger
+    - TypeMspId
+    - TypeEthereumAddress
+    - TypePublicKey
+    - TypeHostPort
+    - TypeOrganization
+    - TypeKey
+    - TypeNode
+  template.VariableValidation:
+    properties:
+      maxLength:
+        type: integer
+      maxValue:
+        type: integer
+      minLength:
+        type: integer
+      minValue:
+        type: integer
+      pattern:
+        type: string
+    type: object
   time.Duration:
     enum:
     - -9223372036854775808
@@ -3916,6 +4930,35 @@ definitions:
       tlsCACert:
         type: string
       to:
+        type: string
+    type: object
+  types.BackupConfig:
+    properties:
+      baseBackupCron:
+        description: |-
+          BaseBackupCron is a cron expression used by the scheduler to
+          trigger `wal-g backup-push`. Empty disables base backups (WAL
+          archiving remains active if Enabled).
+        type: string
+      enabled:
+        description: |-
+          Enabled gates WAL archiving and base backups. When false the
+          service still runs but no backups are produced.
+        type: boolean
+      retentionBaseBackups:
+        description: |-
+          RetentionBaseBackups is the number of base backups to keep;
+          WAL-G's `delete retain FIND_FULL N` semantics.
+        type: integer
+      retentionWalDays:
+        description: |-
+          RetentionWALDays retains WAL segments for this many days past
+          the oldest kept base backup.
+        type: integer
+      s3Prefix:
+        description: |-
+          S3Prefix is the per-service key prefix inside the backup target's
+          bucket (WALG_S3_PREFIX = s3://<bucket>/<prefix>).
         type: string
     type: object
   types.BesuNodeConfig:
@@ -3996,10 +5039,12 @@ definitions:
     enum:
     - FABRIC
     - BESU
+    - FABRICX
     type: string
     x-enum-varnames:
     - PlatformFabric
     - PlatformBesu
+    - PlatformFabricX
   types.CustomQueryRequest:
     properties:
       end:
@@ -4041,7 +5086,7 @@ definitions:
         type: string
       services:
         items:
-          $ref: '#/definitions/types.Service'
+          $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_plugin_types.Service'
         type: array
       startedAt:
         type: string
@@ -4205,6 +5250,154 @@ definitions:
     - name
     - organizationId
     type: object
+  types.FabricXCommitterConfig:
+    properties:
+      channelId:
+        description: Channel ID for the sidecar
+        type: string
+      coordinatorPort:
+        type: integer
+      domainNames:
+        items:
+          type: string
+        type: array
+      env:
+        additionalProperties:
+          type: string
+        type: object
+      externalIp:
+        type: string
+      mode:
+        description: '@Description The deployment mode (service or docker)'
+        example: service
+        type: string
+      mspId:
+        type: string
+      name:
+        type: string
+      ordererEndpoints:
+        description: Orderer endpoints (assembler addresses) for the sidecar to connect
+          to
+        items:
+          type: string
+        type: array
+      organizationId:
+        type: integer
+      postgresDb:
+        type: string
+      postgresHost:
+        description: PostgreSQL config for validator and query-service
+        type: string
+      postgresPassword:
+        type: string
+      postgresPort:
+        type: integer
+      postgresUser:
+        type: string
+      queryServicePort:
+        type: integer
+      sidecarPort:
+        description: Ports (auto-allocated if zero)
+        type: integer
+      type:
+        description: '@Description The type of node (fabric-peer, fabric-orderer,
+          besu)'
+        example: fabric-peer
+        type: string
+      validatorPort:
+        type: integer
+      verifierPort:
+        type: integer
+      version:
+        description: fabric-x-committer image tag
+        type: string
+    required:
+    - mspId
+    - name
+    - ordererEndpoints
+    - organizationId
+    - postgresHost
+    type: object
+  types.FabricXOrdererGroupConfig:
+    properties:
+      assemblerPort:
+        type: integer
+      batcherPort:
+        type: integer
+      consenterPort:
+        type: integer
+      consenterType:
+        description: Tuning
+        type: string
+      domainNames:
+        items:
+          type: string
+        type: array
+      env:
+        additionalProperties:
+          type: string
+        type: object
+      externalIp:
+        type: string
+      mode:
+        description: '@Description The deployment mode (service or docker)'
+        example: service
+        type: string
+      mspId:
+        type: string
+      name:
+        type: string
+      organizationId:
+        type: integer
+      partyId:
+        type: integer
+      routerPort:
+        description: Ports (auto-allocated if zero)
+        type: integer
+      type:
+        description: '@Description The type of node (fabric-peer, fabric-orderer,
+          besu)'
+        example: fabric-peer
+        type: string
+      version:
+        description: fabric-x-orderer image tag
+        type: string
+    required:
+    - mspId
+    - name
+    - organizationId
+    - partyId
+    type: object
+  types.GroupStatus:
+    enum:
+    - PENDING
+    - RUNNING
+    - STOPPED
+    - STOPPING
+    - STARTING
+    - UPDATING
+    - ERROR
+    - DEGRADED
+    - CREATED
+    type: string
+    x-enum-varnames:
+    - NodeStatusPending
+    - NodeStatusRunning
+    - NodeStatusStopped
+    - NodeStatusStopping
+    - NodeStatusStarting
+    - NodeStatusUpdating
+    - NodeStatusError
+    - NodeStatusDegraded
+    - NodeStatusCreated
+  types.GroupType:
+    enum:
+    - FABRICX_ORDERER_GROUP
+    - FABRICX_COMMITTER
+    type: string
+    x-enum-varnames:
+    - GroupTypeFabricXOrderer
+    - GroupTypeFabricXCommitter
   types.LabelValuesResponse:
     properties:
       data:
@@ -4244,16 +5437,135 @@ definitions:
       status:
         type: string
     type: object
+  types.NodeGroup:
+    properties:
+      caCert:
+        type: string
+      config:
+        description: |-
+          Config is group-shared logical configuration (JSON payload whose
+          concrete shape depends on GroupType).
+        items:
+          type: integer
+        type: array
+      createdAt:
+        type: string
+      deploymentConfig:
+        description: |-
+          DeploymentConfig is group-shared deployment configuration (network
+          name, shared mounts, etc.).
+        items:
+          type: integer
+        type: array
+      domainNames:
+        description: |-
+          DomainNames is a parsed JSON array of SANs/SNI hostnames shared by
+          all children. Stored as a JSON string column.
+        items:
+          type: string
+        type: array
+      errorMessage:
+        type: string
+      externalIp:
+        type: string
+      groupType:
+        $ref: '#/definitions/types.GroupType'
+      id:
+        type: integer
+      mspId:
+        type: string
+      name:
+        type: string
+      organizationId:
+        type: integer
+      partyId:
+        type: integer
+      platform:
+        type: string
+      signCert:
+        type: string
+      signKeyId:
+        type: integer
+      status:
+        $ref: '#/definitions/types.GroupStatus'
+      tlsCaCert:
+        type: string
+      tlsCert:
+        type: string
+      tlsKeyId:
+        type: integer
+      updatedAt:
+        type: string
+      version:
+        type: string
+    type: object
+  types.NodeGroupService:
+    properties:
+      config:
+        description: |-
+          Config is service-type-specific logical configuration supplied at
+          creation time. For POSTGRES this carries db/user/password/hostPort.
+        items:
+          type: integer
+        type: array
+      createdAt:
+        type: string
+      deploymentConfig:
+        description: |-
+          DeploymentConfig is resolved at runtime (host/port the coordinator
+          dials). Empty until the service has been started at least once.
+        items:
+          type: integer
+        type: array
+      errorMessage:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      nodeGroupId:
+        type: integer
+      serviceType:
+        $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_nodegroups_types.ServiceType'
+      status:
+        $ref: '#/definitions/types.GroupStatus'
+      updatedAt:
+        type: string
+      version:
+        type: string
+    type: object
   types.NodeType:
     enum:
     - FABRIC_PEER
     - FABRIC_ORDERER
     - BESU_FULLNODE
+    - FABRICX_ORDERER_GROUP
+    - FABRICX_COMMITTER
+    - FABRICX_ORDERER_ROUTER
+    - FABRICX_ORDERER_BATCHER
+    - FABRICX_ORDERER_CONSENTER
+    - FABRICX_ORDERER_ASSEMBLER
+    - FABRICX_COMMITTER_SIDECAR
+    - FABRICX_COMMITTER_COORDINATOR
+    - FABRICX_COMMITTER_VALIDATOR
+    - FABRICX_COMMITTER_VERIFIER
+    - FABRICX_COMMITTER_QUERY_SERVICE
     type: string
     x-enum-varnames:
     - NodeTypeFabricPeer
     - NodeTypeFabricOrderer
     - NodeTypeBesuFullnode
+    - NodeTypeFabricXOrdererGroup
+    - NodeTypeFabricXCommitter
+    - NodeTypeFabricXOrdererRouter
+    - NodeTypeFabricXOrdererBatcher
+    - NodeTypeFabricXOrdererConsenter
+    - NodeTypeFabricXOrdererAssembler
+    - NodeTypeFabricXCommitterSidecar
+    - NodeTypeFabricXCommitterCoordinator
+    - NodeTypeFabricXCommitterValidator
+    - NodeTypeFabricXCommitterVerifier
+    - NodeTypeFabricXCommitterQueryService
   types.OrdererAddressOverride:
     properties:
       from:
@@ -4315,21 +5627,28 @@ definitions:
       scrape_interval:
         type: integer
     type: object
-  types.Service:
-    properties:
-      createdAt:
-        type: string
-      image:
-        type: string
-      name:
-        type: string
-      ports:
-        items:
-          $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_plugin_types.Port'
-        type: array
-      status:
-        type: string
-    type: object
+  types.ServiceStatus:
+    enum:
+    - PENDING
+    - RUNNING
+    - STOPPED
+    - STOPPING
+    - STARTING
+    - UPDATING
+    - ERROR
+    - DEGRADED
+    - CREATED
+    type: string
+    x-enum-varnames:
+    - NodeStatusPending
+    - NodeStatusRunning
+    - NodeStatusStopped
+    - NodeStatusStopping
+    - NodeStatusStarting
+    - NodeStatusUpdating
+    - NodeStatusError
+    - NodeStatusDegraded
+    - NodeStatusCreated
   types.Spec:
     properties:
       dockerCompose:
@@ -8207,6 +9526,785 @@ paths:
       summary: Import a Fabric network with organization
       tags:
       - Fabric Networks
+  /networks/fabricx:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.ListNetworksResponse'
+      summary: List FabricX networks
+      tags:
+      - FabricX Networks
+    post:
+      consumes:
+      - application/json
+      description: Creates a FabricX network and generates the Arma-consensus genesis
+        block from the referenced orderer-group nodes. The nodes must already be created
+        (certs/config generated) but not yet started.
+      parameters:
+      - description: Network creation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/http.CreateFabricXNetworkRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/http.FabricXNetworkResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+      summary: Create a FabricX network
+      tags:
+      - FabricX Networks
+  /networks/fabricx/{id}:
+    delete:
+      parameters:
+      - description: Network ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+      summary: Delete a FabricX network
+      tags:
+      - FabricX Networks
+    get:
+      parameters:
+      - description: Network ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.FabricXNetworkResponse'
+      summary: Get a FabricX network by ID
+      tags:
+      - FabricX Networks
+  /networks/fabricx/{id}/blocks:
+    get:
+      description: Returns a paginated list of blocks by calling BlockQueryService.GetBlockByNumber
+        against the committer sidecar. Latest-first when reverse=true.
+      parameters:
+      - description: Network ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 'Number of blocks to return (default: 10)'
+        in: query
+        name: limit
+        type: integer
+      - description: 'Number of blocks to skip from the chain tip (default: 0)'
+        in: query
+        name: offset
+        type: integer
+      - description: 'Return newest first when true (default: true)'
+        in: query
+        name: reverse
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.FabricXBlockListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+      summary: List FabricX blocks
+      tags:
+      - FabricX Networks
+  /networks/fabricx/{id}/blocks/{blockNum}:
+    get:
+      description: Returns a fully decoded block (with tx headers) by calling BlockQueryService.GetBlockByNumber.
+      parameters:
+      - description: Network ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Block number
+        in: path
+        name: blockNum
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+      summary: Get a FabricX block
+      tags:
+      - FabricX Networks
+  /networks/fabricx/{id}/chain-info:
+    get:
+      description: Returns ledger height for a FabricX network by calling the committer
+        sidecar's BlockQueryService.GetBlockchainInfo.
+      parameters:
+      - description: Network ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.FabricXChainInfoResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+      summary: Get FabricX chain info
+      tags:
+      - FabricX Networks
+  /networks/fabricx/{id}/namespace-policies:
+    get:
+      description: Returns the on-chain namespace policies from the committer query-service.
+        These are the authoritative namespaces on the channel (distinct from the local
+        namespace creation records).
+      parameters:
+      - description: Network ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/http.FabricXNamespacePolicyResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+      summary: List FabricX namespace policies
+      tags:
+      - FabricX Networks
+  /networks/fabricx/{id}/namespaces:
+    get:
+      description: Returns the merged view of namespaces for a FabricX network. The
+        chain is the source of truth for existence and version (queried live from
+        the committer query-service via GetNamespacePolicies); the local DB adds submission
+        metadata (submitter, txId, pending/failed attempts). Rows carry source ∈ {chain,
+        db, both}. If the committer is unreachable, chainError is set and only DB
+        rows are returned.
+      parameters:
+      - description: Network ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.FabricXNamespaceListResponse'
+      summary: List FabricX namespaces (merged chain + DB view)
+      tags:
+      - FabricX Networks
+    post:
+      consumes:
+      - application/json
+      description: Creates (or updates) a namespace within a FabricX channel by broadcasting
+        a signed applicationpb.Tx to the channel's orderer router. Requires an existing
+        network whose orderer group is running.
+      parameters:
+      - description: Network ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Namespace creation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/http.CreateFabricXNamespaceRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/http.FabricXNamespaceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+      summary: Create a FabricX namespace
+      tags:
+      - FabricX Networks
+  /networks/fabricx/{id}/namespaces/{namespaceId}:
+    delete:
+      description: Removes the local database record for the namespace. On-chain the
+        namespace is not removed — FabricX supports only namespace updates, not deletion.
+      parameters:
+      - description: Network ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Namespace record ID
+        in: path
+        name: namespaceId
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: Deleted
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+      summary: Delete a FabricX namespace record (local only)
+      tags:
+      - FabricX Networks
+  /networks/fabricx/{id}/nodes:
+    get:
+      parameters:
+      - description: Network ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.GetNetworkNodesResponse'
+      summary: Get nodes of a FabricX network
+      tags:
+      - FabricX Networks
+  /networks/fabricx/{id}/nodes/{nodeId}/join:
+    post:
+      description: Writes the network genesis block into the node's config dirs and
+        starts the node. The node must already be created and initialized (stage 1),
+        and the network must already have its genesis block.
+      parameters:
+      - description: Network ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Node ID (orderer group or committer)
+        in: path
+        name: nodeId
+        required: true
+        type: integer
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.FabricXJoinNodeResponse'
+      summary: Join a FabricX node to a network (stage 2)
+      tags:
+      - FabricX Networks
+  /networks/fabricx/{id}/state/{namespace}:
+    get:
+      description: Queries specific keys within a namespace via the committer query-service
+        GetRows. FabricX does not expose a full scan, so the keys parameter is required
+        and comma-separated.
+      parameters:
+      - description: Network ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Namespace ID
+        in: path
+        name: namespace
+        required: true
+        type: string
+      - description: Comma-separated list of keys to look up
+        in: query
+        name: keys
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/http.FabricXStateRowResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+      summary: Query FabricX namespace state
+      tags:
+      - FabricX Networks
+  /networks/fabricx/{id}/transactions/{txId}:
+    get:
+      description: Returns a decoded transaction envelope (type, timestamp, namespaces,
+        endorsers) by calling BlockQueryService.GetTxByID against the committer sidecar.
+      parameters:
+      - description: Network ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Transaction ID
+        in: path
+        name: txId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+      summary: Get a FabricX transaction
+      tags:
+      - FabricX Networks
+  /networks/templates/export/{id}:
+    get:
+      description: Export a network's configuration as a reusable template that can
+        be imported to create similar networks. Supports both Fabric and Besu platforms.
+      operationId: exportNetworkTemplate
+      parameters:
+      - description: Network ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/template.ExportTemplateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+      security:
+      - BasicAuth: []
+      - CookieAuth: []
+      summary: Export network as template
+      tags:
+      - Network Templates
+  /networks/templates/import:
+    post:
+      consumes:
+      - application/json
+      description: Create a new network from a template with organization and node
+        mappings. Supports both Fabric and Besu templates, with optional chaincode/smart
+        contract definitions.
+      operationId: importNetworkFromTemplate
+      parameters:
+      - description: Template import request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/template.ImportTemplateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/template.ImportTemplateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+      security:
+      - BasicAuth: []
+      - CookieAuth: []
+      summary: Import network from template
+      tags:
+      - Network Templates
+  /networks/templates/validate:
+    post:
+      consumes:
+      - application/json
+      description: Validate a template import request and get a preview of what would
+        be created. Supports both Fabric and Besu templates.
+      operationId: validateTemplateImport
+      parameters:
+      - description: Template validation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/template.ValidateTemplateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/template.ValidateTemplateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_networks_http.ErrorResponse'
+      security:
+      - BasicAuth: []
+      - CookieAuth: []
+      summary: Validate template import
+      tags:
+      - Network Templates
+  /node-groups:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/types.NodeGroup'
+            type: array
+      summary: List node groups
+      tags:
+      - NodeGroups
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Group creation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/http.CreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/types.NodeGroup'
+      summary: Create a node group
+      tags:
+      - NodeGroups
+  /node-groups/{id}:
+    delete:
+      parameters:
+      - description: Group ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+      summary: Delete a node group
+      tags:
+      - NodeGroups
+    get:
+      parameters:
+      - description: Group ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.NodeGroup'
+      summary: Get a node group
+      tags:
+      - NodeGroups
+  /node-groups/{id}/children:
+    get:
+      description: |-
+        Returns the nodes owned by this group in canonical role order
+        (the same order StartGroup uses). For a committer that's
+        sidecar → coordinator → validator → verifier → query; for an
+        orderer group it's router → batcher → consenter → assembler.
+      parameters:
+      - description: Group ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/service.Child'
+            type: array
+      summary: List child nodes of a group
+      tags:
+      - NodeGroups
+  /node-groups/{id}/init:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Generates crypto, writes on-disk config, persists deployment_config on the group,
+        and creates one child nodes row per role (router, batcher, consenter, assembler).
+        Only valid for FABRICX_ORDERER_GROUP groups. Idempotency: fails if already initialized.
+      parameters:
+      - description: Group ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Port allocations
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/http.InitOrdererRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.NodeGroup'
+      summary: Initialize a FabricX orderer group
+      tags:
+      - NodeGroups
+  /node-groups/{id}/postgres-service:
+    delete:
+      description: |-
+        Clears node_groups.postgres_service_id. The underlying service is
+        NOT stopped — use POST /services/{id}/stop for that.
+      parameters:
+      - description: Group ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.NodeGroup'
+      summary: Detach the postgres service pointer from a node group
+      tags:
+      - NodeGroups
+    put:
+      consumes:
+      - application/json
+      description: |-
+        Sets node_groups.postgres_service_id. The service must already exist
+        (create it via POST /services/postgres). Only FABRICX_COMMITTER groups
+        accept postgres services.
+      parameters:
+      - description: Group ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Service to attach
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/http.AttachPostgresServiceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.NodeGroup'
+      summary: Attach an existing postgres service to a node group
+      tags:
+      - NodeGroups
+  /node-groups/{id}/restart:
+    post:
+      parameters:
+      - description: Group ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "202":
+          description: Accepted
+      summary: Restart a node group
+      tags:
+      - NodeGroups
+  /node-groups/{id}/services:
+    get:
+      parameters:
+      - description: Group ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/types.NodeGroupService'
+            type: array
+      summary: List services attached to a node group
+      tags:
+      - NodeGroups
+  /node-groups/{id}/services/postgres:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Group ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Postgres service config
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_nodegroups_http.CreatePostgresRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/types.NodeGroupService'
+      summary: Attach a managed PostgreSQL service to a node group
+      tags:
+      - NodeGroups
+  /node-groups/{id}/start:
+    post:
+      parameters:
+      - description: Group ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "202":
+          description: Accepted
+      summary: Start all children in a node group
+      tags:
+      - NodeGroups
+  /node-groups/{id}/stop:
+    post:
+      parameters:
+      - description: Group ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "202":
+          description: Accepted
+      summary: Stop all children in a node group
+      tags:
+      - NodeGroups
   /nodes:
     get:
       consumes:
@@ -12310,6 +14408,228 @@ paths:
       summary: Get Fabric chaincode sequence
       tags:
       - SmartContracts
+  /services:
+    get:
+      parameters:
+      - description: Filter by service type (e.g. POSTGRES)
+        in: query
+        name: serviceType
+        type: string
+      - description: Filter by status (e.g. RUNNING, STOPPED)
+        in: query
+        name: status
+        type: string
+      - description: Page size (default 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_services_types.Service'
+            type: array
+      summary: List services
+      tags:
+      - Services
+  /services/{id}:
+    delete:
+      parameters:
+      - description: Service ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+      summary: Delete a service
+      tags:
+      - Services
+    get:
+      parameters:
+      - description: Service ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_services_types.Service'
+      summary: Get a service
+      tags:
+      - Services
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Service ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Mutable fields
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/http.UpdateServiceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_services_types.Service'
+      summary: Update a service
+      tags:
+      - Services
+  /services/{id}/consumers:
+    get:
+      description: |-
+        Returns node_groups that reference this service via postgres_service_id.
+        Empty response means the service has no consumers and can be safely deleted.
+      parameters:
+      - description: Service ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/service.Consumer'
+            type: array
+      summary: List consumers of a service
+      tags:
+      - Services
+  /services/{id}/logs:
+    get:
+      description: |-
+        Returns the last N lines of the service's container logs. Tail capped server-side.
+        Returns an empty logs string when the service has never been started.
+      parameters:
+      - description: Service ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Max lines to return (default 200, max 2000)
+        in: query
+        name: tail
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.LogsResponse'
+      summary: Get container logs for a service
+      tags:
+      - Services
+  /services/{id}/postgres/databases:
+    post:
+      consumes:
+      - application/json
+      description: 'Creates (or updates) one role + database per entry. Idempotent:
+        re-runs safely update the password.'
+      parameters:
+      - description: Service ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Databases to provision
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/http.CreatePostgresDatabasesRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+      summary: Provision databases inside a running POSTGRES service
+      tags:
+      - Services
+  /services/{id}/start:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Service ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Network to run on
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/http.StartServiceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_services_types.Service'
+      summary: Start a service on a docker network
+      tags:
+      - Services
+  /services/{id}/stop:
+    post:
+      parameters:
+      - description: Service ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+      summary: Stop a service
+      tags:
+      - Services
+  /services/postgres:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Postgres creation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_services_http.CreatePostgresRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_chainlaunch_chainlaunch_pkg_services_types.Service'
+      summary: Create a POSTGRES service
+      tags:
+      - Services
   /settings:
     get:
       description: Get the default setting's details

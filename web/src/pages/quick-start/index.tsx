@@ -307,7 +307,7 @@ export default function QuickStartPage() {
 						</div>
 					</div>
 
-					<div className="grid gap-6 md:grid-cols-2 max-w-3xl mx-auto">
+					<div className="grid gap-6 md:grid-cols-3 max-w-5xl mx-auto">
 						<Card
 							className="relative overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group border-2 hover:border-primary/50"
 							onClick={() => {
@@ -387,6 +387,45 @@ export default function QuickStartPage() {
 								</div>
 							</CardContent>
 						</Card>
+
+						<Link to="/networks/fabricx/quickstart" className="block">
+							<Card className="relative overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group border-2 hover:border-primary/50 h-full">
+								<div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+								<CardHeader className="pb-4">
+									<div className="flex items-center justify-between mb-2">
+										<FabricIcon className="h-12 w-12" />
+										<ArrowRight className="h-5 w-5 text-muted-foreground group-hover:translate-x-1 transition-transform" />
+									</div>
+									<div className="flex items-center gap-2">
+										<CardTitle className="text-xl">FabricX (MVP)</CardTitle>
+										<span className="text-[10px] font-medium bg-amber-500/20 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded uppercase tracking-wide">Preview</span>
+									</div>
+									<CardDescription>4-party Arma consensus network</CardDescription>
+								</CardHeader>
+								<CardContent>
+									<div className="space-y-2 text-sm text-muted-foreground">
+										<p className="font-medium text-foreground">What gets created:</p>
+										<ul className="space-y-1">
+											<li className="flex items-center gap-2">
+												<CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+												4 organizations (Party1–4 MSP)
+											</li>
+											<li className="flex items-center gap-2">
+												<CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+												4 orderer groups + 4 committers
+											</li>
+											<li className="flex items-center gap-2">
+												<CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+												Genesis block + all nodes joined
+											</li>
+										</ul>
+									</div>
+									<div className="mt-4 pt-3 border-t text-xs text-muted-foreground">
+										Best for: High-throughput BFT, research, Arma testing
+									</div>
+								</CardContent>
+							</Card>
+						</Link>
 					</div>
 
 					<div className="mt-8 text-center">

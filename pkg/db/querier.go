@@ -20,8 +20,13 @@ type Querier interface {
 	CountFabricOrganizations(ctx context.Context) (int64, error)
 	CountNetworks(ctx context.Context) (int64, error)
 	CountNodeEvents(ctx context.Context, nodeID int64) (int64, error)
+	CountNodeGroups(ctx context.Context) (int64, error)
+	CountNodeGroupsByStatus(ctx context.Context, status string) (int64, error)
 	CountNodes(ctx context.Context) (int64, error)
 	CountNodesByPlatform(ctx context.Context, platform string) (int64, error)
+	CountServiceBackupsByService(ctx context.Context, serviceID int64) (int64, error)
+	CountServiceEventsByService(ctx context.Context, serviceID int64) (int64, error)
+	CountServices(ctx context.Context) (int64, error)
 	CountUsers(ctx context.Context) (int64, error)
 	CreateAuditLog(ctx context.Context, arg *CreateAuditLogParams) (*AuditLog, error)
 	CreateBackup(ctx context.Context, arg *CreateBackupParams) (*Backup, error)
@@ -32,6 +37,7 @@ type Querier interface {
 	CreateConversation(ctx context.Context, projectID int64) (*Conversation, error)
 	CreateFabricChaincode(ctx context.Context, arg *CreateFabricChaincodeParams) (*CreateFabricChaincodeRow, error)
 	CreateFabricOrganization(ctx context.Context, arg *CreateFabricOrganizationParams) (*FabricOrganization, error)
+	CreateFabricXNamespace(ctx context.Context, arg *CreateFabricXNamespaceParams) (*FabricxNamespace, error)
 	CreateKey(ctx context.Context, arg *CreateKeyParams) (*Key, error)
 	CreateKeyProvider(ctx context.Context, arg *CreateKeyProviderParams) (*KeyProvider, error)
 	CreateNetwork(ctx context.Context, arg *CreateNetworkParams) (*Network, error)
@@ -40,10 +46,14 @@ type Querier interface {
 	CreateNetworkNode(ctx context.Context, arg *CreateNetworkNodeParams) (*NetworkNode, error)
 	CreateNode(ctx context.Context, arg *CreateNodeParams) (*Node, error)
 	CreateNodeEvent(ctx context.Context, arg *CreateNodeEventParams) (*NodeEvent, error)
+	CreateNodeGroup(ctx context.Context, arg *CreateNodeGroupParams) (*NodeGroup, error)
 	CreateNotificationProvider(ctx context.Context, arg *CreateNotificationProviderParams) (*NotificationProvider, error)
 	CreatePlugin(ctx context.Context, arg *CreatePluginParams) (*Plugin, error)
 	CreateProject(ctx context.Context, arg *CreateProjectParams) (*ChaincodeProject, error)
 	CreatePrometheusConfig(ctx context.Context, arg *CreatePrometheusConfigParams) (*PrometheusConfig, error)
+	CreateService(ctx context.Context, arg *CreateServiceParams) (*Service, error)
+	CreateServiceBackup(ctx context.Context, arg *CreateServiceBackupParams) (*ServiceBackup, error)
+	CreateServiceEvent(ctx context.Context, arg *CreateServiceEventParams) (*ServiceEvent, error)
 	CreateSession(ctx context.Context, arg *CreateSessionParams) (*Session, error)
 	CreateSetting(ctx context.Context, config string) (*Setting, error)
 	CreateUser(ctx context.Context, arg *CreateUserParams) (*User, error)
@@ -57,16 +67,20 @@ type Querier interface {
 	DeleteChaincodesByNetwork(ctx context.Context, networkID int64) error
 	DeleteExpiredSessions(ctx context.Context) error
 	DeleteFabricOrganization(ctx context.Context, id int64) error
+	DeleteFabricXNamespace(ctx context.Context, id int64) error
 	DeleteKey(ctx context.Context, id int64) error
 	DeleteKeyProvider(ctx context.Context, id int64) error
 	DeleteNetwork(ctx context.Context, id int64) error
 	DeleteNetworkNode(ctx context.Context, arg *DeleteNetworkNodeParams) error
 	DeleteNode(ctx context.Context, id int64) error
+	DeleteNodeGroup(ctx context.Context, id int64) error
 	DeleteNotificationProvider(ctx context.Context, id int64) error
 	DeleteOldBackups(ctx context.Context, arg *DeleteOldBackupsParams) error
 	DeletePlugin(ctx context.Context, name string) error
 	DeleteProject(ctx context.Context, id int64) error
 	DeleteRevokedCertificate(ctx context.Context, arg *DeleteRevokedCertificateParams) error
+	DeleteService(ctx context.Context, id int64) error
+	DeleteServiceBackupsOlderThan(ctx context.Context, arg *DeleteServiceBackupsOlderThanParams) error
 	DeleteSession(ctx context.Context, token string) error
 	DeleteSetting(ctx context.Context, id int64) error
 	DeleteUser(ctx context.Context, id int64) error
@@ -97,6 +111,8 @@ type Querier interface {
 	GetFabricOrganizationByMSPID(ctx context.Context, mspID string) (*FabricOrganization, error)
 	GetFabricOrganizationByMspID(ctx context.Context, mspID string) (*GetFabricOrganizationByMspIDRow, error)
 	GetFabricOrganizationWithKeys(ctx context.Context, id int64) (*GetFabricOrganizationWithKeysRow, error)
+	GetFabricXNamespace(ctx context.Context, id int64) (*FabricxNamespace, error)
+	GetFabricXNamespaceByName(ctx context.Context, arg *GetFabricXNamespaceByNameParams) (*FabricxNamespace, error)
 	GetKey(ctx context.Context, id int64) (*GetKeyRow, error)
 	GetKeyByEthereumAddress(ctx context.Context, ethereumAddress sql.NullString) (*GetKeyByEthereumAddressRow, error)
 	GetKeyByID(ctx context.Context, id int64) (*GetKeyByIDRow, error)
@@ -116,6 +132,9 @@ type Querier interface {
 	GetNode(ctx context.Context, id int64) (*Node, error)
 	GetNodeBySlug(ctx context.Context, slug string) (*Node, error)
 	GetNodeEvent(ctx context.Context, id int64) (*NodeEvent, error)
+	GetNodeGroup(ctx context.Context, id int64) (*NodeGroup, error)
+	GetNodeGroupByName(ctx context.Context, name string) (*NodeGroup, error)
+	GetNodeGroupPostgresServiceID(ctx context.Context, id int64) (sql.NullInt64, error)
 	GetNotificationProvider(ctx context.Context, id int64) (*NotificationProvider, error)
 	GetOldestBackupByTarget(ctx context.Context, targetID int64) (*Backup, error)
 	GetOrdererPorts(ctx context.Context) ([]*GetOrdererPortsRow, error)
@@ -130,6 +149,9 @@ type Querier interface {
 	GetRevokedCertificate(ctx context.Context, arg *GetRevokedCertificateParams) (*FabricRevokedCertificate, error)
 	GetRevokedCertificateCount(ctx context.Context, fabricOrganizationID int64) (int64, error)
 	GetRevokedCertificates(ctx context.Context, fabricOrganizationID int64) ([]*FabricRevokedCertificate, error)
+	GetService(ctx context.Context, id int64) (*Service, error)
+	GetServiceBackup(ctx context.Context, id int64) (*ServiceBackup, error)
+	GetServiceByName(ctx context.Context, name string) (*Service, error)
 	GetSession(ctx context.Context, token string) (*Session, error)
 	GetSessionBySessionID(ctx context.Context, sessionID string) (*Session, error)
 	GetSessionByToken(ctx context.Context, token string) (*Session, error)
@@ -151,6 +173,7 @@ type Querier interface {
 	ListFabricChaincodes(ctx context.Context) ([]*FabricChaincode, error)
 	ListFabricOrganizations(ctx context.Context) ([]*FabricOrganization, error)
 	ListFabricOrganizationsWithKeys(ctx context.Context, arg *ListFabricOrganizationsWithKeysParams) ([]*ListFabricOrganizationsWithKeysRow, error)
+	ListFabricXNamespacesByNetwork(ctx context.Context, networkID int64) ([]*FabricxNamespace, error)
 	ListKeyProviders(ctx context.Context) ([]*KeyProvider, error)
 	ListKeys(ctx context.Context, arg *ListKeysParams) ([]*ListKeysRow, error)
 	ListMessagesForConversation(ctx context.Context, conversationID int64) ([]*Message, error)
@@ -160,13 +183,22 @@ type Querier interface {
 	ListNetworksByPlatform(ctx context.Context, platform string) ([]*Network, error)
 	ListNodeEvents(ctx context.Context, arg *ListNodeEventsParams) ([]*NodeEvent, error)
 	ListNodeEventsByType(ctx context.Context, arg *ListNodeEventsByTypeParams) ([]*NodeEvent, error)
+	ListNodeGroups(ctx context.Context, arg *ListNodeGroupsParams) ([]*NodeGroup, error)
+	ListNodeGroupsByPlatform(ctx context.Context, arg *ListNodeGroupsByPlatformParams) ([]*NodeGroup, error)
+	ListNodeGroupsByPostgresServiceID(ctx context.Context, postgresServiceID sql.NullInt64) ([]*NodeGroup, error)
 	ListNodes(ctx context.Context, arg *ListNodesParams) ([]*Node, error)
+	ListNodesByGroup(ctx context.Context, nodeGroupID sql.NullInt64) ([]*Node, error)
 	ListNodesByNetwork(ctx context.Context, arg *ListNodesByNetworkParams) ([]*Node, error)
 	ListNodesByPlatform(ctx context.Context, arg *ListNodesByPlatformParams) ([]*Node, error)
 	ListNotificationProviders(ctx context.Context) ([]*NotificationProvider, error)
 	ListPeerStatuses(ctx context.Context, definitionID int64) ([]*FabricChaincodeDefinitionPeerStatus, error)
 	ListPlugins(ctx context.Context) ([]*Plugin, error)
 	ListProjects(ctx context.Context) ([]*ListProjectsRow, error)
+	ListServiceBackupsByService(ctx context.Context, arg *ListServiceBackupsByServiceParams) ([]*ServiceBackup, error)
+	ListServiceEventsByService(ctx context.Context, arg *ListServiceEventsByServiceParams) ([]*ServiceEvent, error)
+	ListServices(ctx context.Context, arg *ListServicesParams) ([]*Service, error)
+	ListServicesByNodeGroup(ctx context.Context, nodeGroupID sql.NullInt64) ([]*Service, error)
+	ListServicesByType(ctx context.Context, serviceType string) ([]*Service, error)
 	ListSettings(ctx context.Context) ([]*Setting, error)
 	ListToolCallsForConversation(ctx context.Context, conversationID int64) ([]*ToolCall, error)
 	ListToolCallsForMessage(ctx context.Context, messageID int64) ([]*ToolCall, error)
@@ -190,6 +222,7 @@ type Querier interface {
 	UpdateDeploymentStatus(ctx context.Context, arg *UpdateDeploymentStatusParams) error
 	UpdateFabricChaincodeDefinitionAddress(ctx context.Context, arg *UpdateFabricChaincodeDefinitionAddressParams) error
 	UpdateFabricOrganization(ctx context.Context, arg *UpdateFabricOrganizationParams) (*FabricOrganization, error)
+	UpdateFabricXNamespaceStatus(ctx context.Context, arg *UpdateFabricXNamespaceStatusParams) (*FabricxNamespace, error)
 	UpdateKey(ctx context.Context, arg *UpdateKeyParams) (*Key, error)
 	UpdateKeyProvider(ctx context.Context, arg *UpdateKeyProviderParams) (*KeyProvider, error)
 	UpdateMessageEnhancedContent(ctx context.Context, arg *UpdateMessageEnhancedContentParams) (*Message, error)
@@ -202,6 +235,11 @@ type Querier interface {
 	UpdateNodeConfig(ctx context.Context, arg *UpdateNodeConfigParams) (*Node, error)
 	UpdateNodeDeploymentConfig(ctx context.Context, arg *UpdateNodeDeploymentConfigParams) (*Node, error)
 	UpdateNodeEndpoint(ctx context.Context, arg *UpdateNodeEndpointParams) (*Node, error)
+	UpdateNodeGroup(ctx context.Context, arg *UpdateNodeGroupParams) (*NodeGroup, error)
+	UpdateNodeGroupID(ctx context.Context, arg *UpdateNodeGroupIDParams) error
+	UpdateNodeGroupPostgresServiceID(ctx context.Context, arg *UpdateNodeGroupPostgresServiceIDParams) (*NodeGroup, error)
+	UpdateNodeGroupStatus(ctx context.Context, arg *UpdateNodeGroupStatusParams) (*NodeGroup, error)
+	UpdateNodeGroupStatusWithError(ctx context.Context, arg *UpdateNodeGroupStatusWithErrorParams) (*NodeGroup, error)
 	UpdateNodePublicEndpoint(ctx context.Context, arg *UpdateNodePublicEndpointParams) (*Node, error)
 	UpdateNodeStatus(ctx context.Context, arg *UpdateNodeStatusParams) (*Node, error)
 	UpdateNodeStatusWithError(ctx context.Context, arg *UpdateNodeStatusWithErrorParams) (*Node, error)
@@ -212,6 +250,11 @@ type Querier interface {
 	UpdateProjectEndorsementPolicy(ctx context.Context, arg *UpdateProjectEndorsementPolicyParams) (*ChaincodeProject, error)
 	UpdatePrometheusConfig(ctx context.Context, arg *UpdatePrometheusConfigParams) (*PrometheusConfig, error)
 	UpdateProviderTestResults(ctx context.Context, arg *UpdateProviderTestResultsParams) (*NotificationProvider, error)
+	UpdateService(ctx context.Context, arg *UpdateServiceParams) (*Service, error)
+	UpdateServiceBackupStatus(ctx context.Context, arg *UpdateServiceBackupStatusParams) (*ServiceBackup, error)
+	UpdateServiceDeploymentConfig(ctx context.Context, arg *UpdateServiceDeploymentConfigParams) (*Service, error)
+	UpdateServiceStatus(ctx context.Context, arg *UpdateServiceStatusParams) (*Service, error)
+	UpdateServiceStatusWithError(ctx context.Context, arg *UpdateServiceStatusWithErrorParams) (*Service, error)
 	UpdateSetting(ctx context.Context, arg *UpdateSettingParams) (*Setting, error)
 	UpdateUser(ctx context.Context, arg *UpdateUserParams) (*User, error)
 	UpdateUserLastLogin(ctx context.Context, id int64) (*User, error)

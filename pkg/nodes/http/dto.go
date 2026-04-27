@@ -18,6 +18,10 @@ type CreateNodeRequest struct {
 	FabricOrderer *types.FabricOrdererConfig `json:"fabricOrderer,omitempty"`
 	// @Description Besu node configuration, required when creating a Besu node
 	BesuNode *types.BesuNodeConfig `json:"besuNode,omitempty"`
+	// @Description Fabric X orderer group configuration, required when creating a FabricX orderer group node
+	FabricXOrdererGroup *types.FabricXOrdererGroupConfig `json:"fabricXOrdererGroup,omitempty"`
+	// @Description Fabric X committer configuration, required when creating a FabricX committer node
+	FabricXCommitter *types.FabricXCommitterConfig `json:"fabricXCommitter,omitempty"`
 }
 
 // PaginatedNodesResponse represents the HTTP response for a paginated list of nodes

@@ -76,6 +76,31 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Put("/{id}/genesis", h.UpdateGenesisBlock)
 	})
 
+	// FabricX network routes (MVP)
+	r.Route("/networks/fabricx", func(r chi.Router) {
+		r.Use(httpchainlaunch.ResourceMiddleware("fabricx_network"))
+
+		r.Get("/", h.FabricXNetworkList)
+		r.Post("/", h.FabricXNetworkCreate)
+		r.Get("/{id}", h.FabricXNetworkGet)
+		r.Delete("/{id}", h.FabricXNetworkDelete)
+		r.Get("/{id}/nodes", h.FabricXNetworkGetNodes)
+		r.Post("/{id}/nodes/{nodeId}/join", h.FabricXNetworkJoinNode)
+
+		r.Get("/{id}/namespaces", h.FabricXNamespaceList)
+		r.Post("/{id}/namespaces", h.FabricXNamespaceCreate)
+		r.Delete("/{id}/namespaces/{namespaceId}", h.FabricXNamespaceDelete)
+		r.Post("/{id}/namespaces/{name}/public-params", h.FabricXNamespacePublishPublicParams)
+
+		// Explorer (live queries against the committer sidecar + query-service)
+		r.Get("/{id}/chain-info", h.FabricXGetChainInfo)
+		r.Get("/{id}/blocks", h.FabricXGetBlocks)
+		r.Get("/{id}/blocks/{blockNum}", h.FabricXGetBlock)
+		r.Get("/{id}/transactions/{txId}", h.FabricXGetTransaction)
+		r.Get("/{id}/namespace-policies", h.FabricXGetNamespacePolicies)
+		r.Get("/{id}/state/{namespace}", h.FabricXGetNamespaceState)
+	})
+
 	// Besu network routes with resource middleware
 	r.Route("/networks/besu", func(r chi.Router) {
 		// Add resource middleware for all Besu network routes

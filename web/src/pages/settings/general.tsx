@@ -1,5 +1,6 @@
 import { ServiceSettingConfig } from '@/api/client'
 import { getSettingsOptions, postSettingsMutation } from '@/api/client/@tanstack/react-query.gen'
+import { PageHeader, PageShell } from '@/components/layout/page-shell'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
@@ -153,48 +154,39 @@ export default function SettingsPage() {
 
 	if (isLoading) {
 		return (
-			<div className="flex-1 space-y-4 p-8 pt-6">
-				<div className="flex items-center justify-between space-y-2">
-					<h2 className="text-3xl font-bold tracking-tight">Settings</h2>
-				</div>
-				<div className="hidden h-full flex-1 flex-col space-y-8 md:flex">
-					<div>Loading...</div>
-				</div>
-			</div>
+			<PageShell maxWidth="detail">
+				<PageHeader title="Settings" description="Platform-wide configuration" />
+				<div className="text-sm text-muted-foreground">Loading…</div>
+			</PageShell>
 		)
 	}
 
 	return (
-		<div className="flex-1 space-y-4 p-8 pt-6">
-			<div className="flex items-center justify-between space-y-2">
-				<h2 className="text-3xl font-bold tracking-tight">Settings</h2>
-			</div>
-			<Tabs defaultValue="templates" className="space-y-4">
+		<PageShell maxWidth="detail">
+			<PageHeader title="Settings" description="Platform-wide configuration" />
+			<Tabs defaultValue="templates" className="space-y-6">
 				<TabsList>
 					<TabsTrigger value="templates">Templates</TabsTrigger>
-					{/* Add more tabs here as needed */}
 				</TabsList>
-				<TabsContent value="templates" className="space-y-4">
-					<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-						<Card className="col-span-4">
-							<CardHeader>
-								<CardTitle>Settings</CardTitle>
-							</CardHeader>
-							<CardContent>
-								<Form {...form}>
-									<form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-										<ExternalIPSection form={form} />
-										<TemplatesSection form={form} />
-										<Button type="submit" disabled={updateSettings.isPending}>
-											{updateSettings.isPending ? 'Saving...' : 'Save changes'}
-										</Button>
-									</form>
-								</Form>
-							</CardContent>
-						</Card>
-					</div>
+				<TabsContent value="templates">
+					<Card>
+						<CardHeader>
+							<CardTitle>Node Defaults</CardTitle>
+						</CardHeader>
+						<CardContent>
+							<Form {...form}>
+								<form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+									<ExternalIPSection form={form} />
+									<TemplatesSection form={form} />
+									<Button type="submit" disabled={updateSettings.isPending}>
+										{updateSettings.isPending ? 'Saving...' : 'Save changes'}
+									</Button>
+								</form>
+							</Form>
+						</CardContent>
+					</Card>
 				</TabsContent>
 			</Tabs>
-		</div>
+		</PageShell>
 	)
 }

@@ -10,6 +10,7 @@ import {
 } from '@/api/client/@tanstack/react-query.gen'
 import { FabricNodeDetails } from '@/components/nodes/FabricNodeDetails'
 import { BesuNodeDetails } from '@/components/nodes/BesuNodeDetails'
+import { FabricXNodeDetails } from '@/components/nodes/FabricXNodeDetails'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -51,6 +52,16 @@ function isFabricNode(node: HttpNodeResponse): node is HttpNodeResponse & { depl
 
 function isBesuNode(node: HttpNodeResponse): node is HttpNodeResponse & { deploymentConfig: DeploymentConfig } {
 	return node.platform === 'BESU' && node.besuNode !== undefined
+}
+
+function isFabricXNode(node: HttpNodeResponse): node is HttpNodeResponse & { deploymentConfig: DeploymentConfig } {
+	return node.platform === 'FABRICX' && (node.fabricXCommitter !== undefined || node.fabricXOrdererGroup !== undefined)
+}
+
+function getFabricXLabel(node: HttpNodeResponse): string {
+	if (node.fabricXOrdererGroup !== undefined) return 'Fabric-X Orderer Group'
+	if (node.fabricXCommitter !== undefined) return 'Fabric-X Committer'
+	return 'Fabric-X Node'
 }
 
 function getNodeActions(status: string) {
@@ -136,6 +147,10 @@ export default function NodeDetailPage() {
 	const [showRenewCertDialog, setShowRenewCertDialog] = useState(false)
 	const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 	const [logRefreshKey, setLogRefreshKey] = useState(0)
+	// Which of a FABRICX_COMMITTER's 5 internal containers to tail. Only
+	// observed for FABRICX_COMMITTER node type — the server rejects
+	// non-empty role on every other node type with a 400.
+	const [committerLogRole, setCommitterLogRole] = useState<string>('sidecar')
 
 	// Get the active tab from URL or default to 'logs'
 	const activeTab = searchParams.get('tab') || 'logs'
@@ -270,13 +285,24 @@ export default function NodeDetailPage() {
 		}
 	}
 
+	const isCommitterNode = node?.nodeType === 'FABRICX_COMMITTER'
+
 	useEffect(() => {
 		// Close existing EventSource if it exists
 		if (eventSourceRef.current) {
 			eventSourceRef.current.close()
 		}
 
-		const eventSource = new EventSource(`/api/v1/nodes/${id}/logs?follow=true`, {
+		// FABRICX_COMMITTER runs 5 internal containers. The server's
+		// TailLogs handler accepts ?role= for that node type only.
+		// Reset the buffer when the role changes so streams don't mix.
+		setLogs('')
+
+		const qs = new URLSearchParams({ follow: 'true' })
+		if (isCommitterNode && committerLogRole) {
+			qs.set('role', committerLogRole)
+		}
+		const eventSource = new EventSource(`/api/v1/nodes/${id}/logs?${qs.toString()}`, {
 			withCredentials: true,
 		})
 
@@ -308,7 +334,7 @@ export default function NodeDetailPage() {
 				eventSourceRef.current = null
 			}
 		}
-	}, [id, logRefreshKey])
+	}, [id, logRefreshKey, isCommitterNode, committerLogRole])
 
 	if (isLoading) {
 		return (
@@ -423,7 +449,11 @@ export default function NodeDetailPage() {
 					<h1 className="text-2xl font-semibold">{node.name}</h1>
 					<div className="flex items-center gap-4 mt-1">
 						<p className="text-muted-foreground">
-							{isFabricNode(node) ? 'Hyperledger Fabric' : 'Hyperledger Besu'} Node
+							{isFabricNode(node)
+								? 'Hyperledger Fabric Node'
+								: isFabricXNode(node)
+									? getFabricXLabel(node)
+									: 'Hyperledger Besu Node'}
 						</p>
 						<Badge variant="default">{node.status}</Badge>
 						<span className="text-sm text-muted-foreground">
@@ -474,6 +504,20 @@ export default function NodeDetailPage() {
 										</DropdownMenuItem>
 									</>
 								)}
+
+								{/* Edit only on parent group rows — per-role children share
+								    identity with the parent and the API rejects per-child
+								    version updates. The edit page itself also blocks them
+								    so a deep-link is safe; we just hide the button here. */}
+								{isFabricXNode(node) && (node.nodeType === 'FABRICX_ORDERER_GROUP' || node.nodeType === 'FABRICX_COMMITTER') && (
+									<>
+										<DropdownMenuSeparator />
+										<DropdownMenuItem onClick={() => navigate(`/nodes/fabricx/edit/${node.id}`)}>
+											<Pencil className="mr-2 h-4 w-4" />
+											Edit
+										</DropdownMenuItem>
+									</>
+								)}
 							</DropdownMenuGroup>
 						</DropdownMenuContent>
 					</DropdownMenu>
@@ -510,6 +554,18 @@ export default function NodeDetailPage() {
 					events={renderEvents()}
 					activeTab={activeTab}
 					onTabChange={handleTabChange}
+				/>
+			)}
+
+			{isFabricXNode(node) && (
+				<FabricXNodeDetails
+					node={node}
+					logs={logs}
+					events={renderEvents()}
+					activeTab={activeTab}
+					onTabChange={handleTabChange}
+					committerLogRole={committerLogRole}
+					onCommitterLogRoleChange={setCommitterLogRole}
 				/>
 			)}
 

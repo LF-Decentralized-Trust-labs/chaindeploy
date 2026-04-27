@@ -1,0 +1,92 @@
+{
+  "version": "2.0.0",
+  "exportedAt": "2026-03-20T00:00:00Z",
+  "network": {
+    "name": "defi-network",
+    "description": "A Hyperledger Besu QBFT network for DeFi applications with 4 validators and pre-funded accounts",
+    "platform": "besu",
+    "besu": {
+      "consensus": "qbft",
+      "chainId": 1337,
+      "blockPeriod": 5,
+      "epochLength": 30000,
+      "requestTimeout": 10,
+      "gasLimit": "0x1fffffffffffff",
+      "difficulty": "0x1",
+      "alloc": {
+        "0xfe3b557e8fb62b89f4916b721be55ceb828dbd73": {
+          "balance": "0x200000000000000000000000000000000000000000000000000000000000000"
+        },
+        "0x627306090abaB3A6e1400e9345bC60c78a8BEf57": {
+          "balance": "0x200000000000000000000000000000000000000000000000000000000000000"
+        }
+      },
+      "validatorRefs": [
+        { "variableRef": "validator1" },
+        { "variableRef": "validator2" },
+        { "variableRef": "validator3" },
+        { "variableRef": "validator4" }
+      ]
+    }
+  },
+  "variables": [
+    {
+      "name": "validator1",
+      "type": "key",
+      "description": "Validator 1 key",
+      "required": true,
+      "scope": "validator",
+      "platform": ["besu"],
+      "properties": [
+        { "name": "ethereumAddress", "type": "ethereumAddress", "required": true },
+        { "name": "publicKey", "type": "publicKey", "required": false }
+      ]
+    },
+    {
+      "name": "validator2",
+      "type": "key",
+      "description": "Validator 2 key",
+      "required": true,
+      "scope": "validator",
+      "platform": ["besu"],
+      "properties": [
+        { "name": "ethereumAddress", "type": "ethereumAddress", "required": true },
+        { "name": "publicKey", "type": "publicKey", "required": false }
+      ]
+    },
+    {
+      "name": "validator3",
+      "type": "key",
+      "description": "Validator 3 key",
+      "required": true,
+      "scope": "validator",
+      "platform": ["besu"],
+      "properties": [
+        { "name": "ethereumAddress", "type": "ethereumAddress", "required": true },
+        { "name": "publicKey", "type": "publicKey", "required": false }
+      ]
+    },
+    {
+      "name": "validator4",
+      "type": "key",
+      "description": "Validator 4 key",
+      "required": true,
+      "scope": "validator",
+      "platform": ["besu"],
+      "properties": [
+        { "name": "ethereumAddress", "type": "ethereumAddress", "required": true },
+        { "name": "publicKey", "type": "publicKey", "required": false }
+      ]
+    }
+  ],
+  "chaincodes": [
+    {
+      "name": "SimpleToken",
+      "platform": "besu",
+      "besu": {
+        "abi": "[{\"inputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[{\"name\":\"to\",\"type\":\"address\"},{\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"transfer\",\"outputs\":[{\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"name\":\"account\",\"type\":\"address\"}],\"name\":\"balanceOf\",\"outputs\":[{\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"}]",
+        "bytecode": "0x608060405234801561001057600080fd5b50"
+      }
+    }
+  ]
+}

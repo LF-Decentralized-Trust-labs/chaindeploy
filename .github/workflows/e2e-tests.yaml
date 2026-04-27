@@ -296,6 +296,202 @@ jobs:
                     docker logs $cid || true
                   done
 
+    testnet-fabricx:
+        name: Create FabricX Testnet
+        runs-on: ubuntu-latest
+        needs: build
+        env:
+            CHAINLAUNCH_USER: admin
+            CHAINLAUNCH_PASSWORD: admin123
+            CHAINLAUNCH_DATA: ${{ github.workspace }}/test-data
+            CHAINLAUNCH_API_URL: http://localhost:8100/api/v1
+            # Force the FabricX runtime to add host.docker.internal:host-gateway
+            # extra-hosts and rewrite 127.0.0.1 → host.docker.internal in
+            # container configs. Docker on Linux runners doesn't auto-publish
+            # this name, so without it the inter-party gRPC dials fail.
+            CHAINLAUNCH_FABRICX_LOCAL_DEV: 'true'
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+            - name: Download build artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  name: build-artifacts
+            - name: Pre-pull FabricX docker images
+              # Pulled up-front so the (substantial) image fetch isn't
+              # accounted to the per-node 3-minute HTTP-timeout budget the
+              # quickstart enforces around /nodes/{id}/start.
+              run: |
+                  docker pull ghcr.io/hyperledger/fabric-x-orderer:1.0.0-alpha
+                  docker pull ghcr.io/hyperledger/fabric-x-committer:1.0.0-alpha
+                  docker pull postgres:16-alpine
+            - name: Map host.docker.internal on the runner host
+              # The FabricX runtime rewrites postgres host (and inter-container
+              # endpoints) to host.docker.internal in local-dev mode and
+              # adds <ExternalIP>:host-gateway as a docker extra-host. With
+              # --external-ip host.docker.internal everything inside the
+              # docker network resolves correctly via the host-gateway map.
+              # But the chainlaunch *server* runs on the host, not in a
+              # container, and Linux Docker doesn't auto-publish that name
+              # on the host like Docker Desktop does on macOS. Add a
+              # /etc/hosts entry so the server's namespace-create dial can
+              # also reach host.docker.internal.
+              run: |
+                  echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts
+                  getent hosts host.docker.internal
+            - name: Start the application and verify API is available
+              run: |
+                  echo "CHAINLAUNCH_DATA: $CHAINLAUNCH_DATA"
+                  chmod +x chainlaunch
+                  ./chainlaunch serve --data=$CHAINLAUNCH_DATA --port=8100 --db data.db &
+                  # Wait for port 8100 to be available (60 seconds timeout)
+                  timeout=60
+                  while ! curl -s http://localhost:8100 > /dev/null; do
+                    if [ $timeout -le 0 ]; then
+                      echo "Timeout waiting for API to become available"
+                      exit 1
+                    fi
+                    echo "Waiting for API to become available... ($timeout seconds remaining)"
+                    sleep 1
+                    timeout=$((timeout - 1))
+                  done
+            - name: Provision FabricX 4-party single-MSP network
+              # quickstart provisions the full 4-party Arma BFT network end
+              # to end (orgs, postgres, 4 orderer-groups + their child join,
+              # 1 committer + its 5-container start, post-join reconcile).
+              # Non-zero exit on any phase failure. The built-in namespace
+              # check is skipped here (--namespace "") because the committer
+              # sidecar takes a few extra seconds beyond container "Up" to
+              # become reachable on its gRPC port — covered by the next
+              # step's retry loop.
+              run: |
+                  ./chainlaunch fabricx quickstart \
+                    --network-name e2e-fabricx \
+                    --single-msp E2eMSP \
+                    --base-port 17000 \
+                    --postgres-port 15432 \
+                    --external-ip host.docker.internal \
+                    --namespace "" \
+                    --http-timeout 4m
+            - name: Wait for committer sidecar gRPC to be reachable
+              # The committer sidecar (host port 17010) is started last and
+              # has to discover the four other committer subroles
+              # (coordinator, validator, verifier, query-service) over the
+              # internal docker network before it accepts gRPC. A simple
+              # nc port-probe confirms it's accepting TCP — the namespace
+              # POST below is the real gRPC liveness check.
+              run: |
+                  for i in $(seq 1 60); do
+                    if nc -z 127.0.0.1 17010 2>/dev/null; then
+                      echo "Committer sidecar reachable on :17010 after ${i}s"
+                      exit 0
+                    fi
+                    sleep 1
+                  done
+                  echo "Committer sidecar never came up on :17010"
+                  exit 1
+            - name: Create namespace via API and verify finality
+              # Dedicated namespace step with its own retry — the gRPC dial
+              # to the sidecar can still race the listener's acceptance of
+              # the first client even after the TCP probe succeeds. Mirrors
+              # the body the CLI's --namespace flag sends:
+              # {name, submitterOrgId, waitForFinality, finalityTimeoutSeconds}.
+              run: |
+                  net_id=$(curl -sf -u "$CHAINLAUNCH_USER:$CHAINLAUNCH_PASSWORD" \
+                    -H 'Accept: application/json' \
+                    "$CHAINLAUNCH_API_URL/networks/fabricx?limit=20" \
+                    | jq -r '.networks[] | select(.name=="e2e-fabricx") | .id')
+                  org_id=$(curl -sf -u "$CHAINLAUNCH_USER:$CHAINLAUNCH_PASSWORD" \
+                    -H 'Accept: application/json' \
+                    "$CHAINLAUNCH_API_URL/organizations?limit=200" \
+                    | jq -r '.items[] | select(.mspId=="E2eMSP") | .id' | head -1)
+                  if [ -z "$net_id" ] || [ -z "$org_id" ]; then
+                    echo "Failed to resolve net_id=$net_id or org_id=$org_id"
+                    exit 1
+                  fi
+                  echo "Creating namespace 'e2etest' on network #$net_id (submitter org #$org_id)"
+                  body=$(jq -n --argjson o "$org_id" \
+                    '{name:"e2etest",submitterOrgId:$o,waitForFinality:true,finalityTimeoutSeconds:90}')
+                  for i in $(seq 1 5); do
+                    code=$(curl -s -u "$CHAINLAUNCH_USER:$CHAINLAUNCH_PASSWORD" \
+                      -H 'Content-Type: application/json' \
+                      -o /tmp/ns-resp.json -w '%{http_code}' \
+                      -X POST "$CHAINLAUNCH_API_URL/networks/fabricx/$net_id/namespaces" \
+                      -d "$body" || echo "000")
+                    if [ "$code" = "200" ] || [ "$code" = "201" ]; then
+                      echo "Namespace 'e2etest' committed (attempt $i)"
+                      jq . /tmp/ns-resp.json 2>/dev/null || cat /tmp/ns-resp.json
+                      exit 0
+                    fi
+                    echo "Namespace create attempt $i returned HTTP $code:"
+                    cat /tmp/ns-resp.json || true
+                    echo
+                    sleep 10
+                  done
+                  echo "Namespace creation never succeeded after 5 retries"
+                  exit 1
+            - name: Verify FabricX network is queryable via API
+              run: |
+                  net_id=$(curl -sf -u "$CHAINLAUNCH_USER:$CHAINLAUNCH_PASSWORD" \
+                    -H 'Accept: application/json' \
+                    "$CHAINLAUNCH_API_URL/networks/fabricx?limit=20" \
+                    | jq -r '.networks[] | select(.name=="e2e-fabricx") | .id')
+                  if [ -z "$net_id" ]; then
+                    echo "Could not locate provisioned FabricX network in API listing"
+                    exit 1
+                  fi
+                  echo "FabricX network id: $net_id"
+                  status=$(curl -sf -u "$CHAINLAUNCH_USER:$CHAINLAUNCH_PASSWORD" \
+                    -H 'Accept: application/json' \
+                    "$CHAINLAUNCH_API_URL/networks/fabricx/$net_id" \
+                    | jq -r '.status')
+                  echo "FabricX network status: $status"
+                  if [ "$status" != "genesis_block_created" ]; then
+                    echo "Expected status genesis_block_created, got $status"
+                    exit 1
+                  fi
+            - name: Verify all FabricX nodes are RUNNING
+              # 17 nodes/network in single-MSP mode (4 orderer-groups × 4
+              # children + 1 committer). Anything not RUNNING means the
+              # join+start phase silently dropped a node despite the
+              # namespace check passing.
+              run: |
+                  not_running=$(curl -sf -u "$CHAINLAUNCH_USER:$CHAINLAUNCH_PASSWORD" \
+                    -H 'Accept: application/json' \
+                    "$CHAINLAUNCH_API_URL/nodes?platform=FABRICX&limit=200" \
+                    | jq -r '.items[] | select(.status != null) | "\(.name)\t\(.status)"' \
+                    | grep -v 'RUNNING' || true)
+                  if [ -n "$not_running" ]; then
+                    echo "Some FabricX nodes are not RUNNING:"
+                    echo "$not_running"
+                    exit 1
+                  fi
+                  count=$(curl -sf -u "$CHAINLAUNCH_USER:$CHAINLAUNCH_PASSWORD" \
+                    -H 'Accept: application/json' \
+                    "$CHAINLAUNCH_API_URL/nodes?platform=FABRICX&limit=200" \
+                    | jq -r '.items | length')
+                  echo "FabricX node count: $count"
+                  if [ "$count" -lt 17 ]; then
+                    echo "Expected at least 17 FabricX nodes, got $count"
+                    exit 1
+                  fi
+            - name: Show FabricX containers and logs (debug)
+              if: always()
+              run: |
+                  echo "==== docker ps ===="
+                  docker ps -a || true
+                  echo "==== docker logs (fabricx-* containers) ===="
+                  for cid in $(docker ps -a --filter "name=fabricx-" --format "{{.ID}}" ); do
+                    name=$(docker inspect --format '{{.Name}}' "$cid" 2>/dev/null | sed 's@^/@@')
+                    echo "--- Logs for $name ($cid) ---"
+                    docker logs --tail 200 "$cid" 2>&1 || true
+                  done
+                  echo "==== chainlaunch FABRICX nodes ===="
+                  curl -sf -u "$CHAINLAUNCH_USER:$CHAINLAUNCH_PASSWORD" \
+                    -H 'Accept: application/json' \
+                    "$CHAINLAUNCH_API_URL/nodes?platform=FABRICX&limit=200" \
+                    | jq '.items[] | {id,name,status,endpoint}' || true
+
     api-e2e:
         name: Run API E2E Tests
         runs-on: ubuntu-latest

@@ -71,6 +71,17 @@ func (s *KeyManagementService) CreateKey(ctx context.Context, req models.CreateK
 	if err := req.Validate(); err != nil {
 		return nil, err
 	}
+
+	// Default ProviderID to the system default provider when not provided
+	if req.ProviderID == nil {
+		defaultProvider, err := s.queries.GetKeyProviderByDefault(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("no provider specified and no default provider found: %w", err)
+		}
+		pid := int(defaultProvider.ID)
+		req.ProviderID = &pid
+	}
+
 	// Get provider
 	provider, err := s.providerFactory.GetProvider(providers.ProviderTypeDatabase)
 	if err != nil {

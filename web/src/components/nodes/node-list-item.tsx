@@ -20,6 +20,10 @@ function isFabricNode(node: HttpNodeResponse): node is HttpNodeResponse & { plat
 	return node.platform === 'FABRIC'
 }
 
+function isFabricXNode(node: HttpNodeResponse): boolean {
+	return node.platform === 'FABRICX'
+}
+
 function getStatusColor(status: string) {
 	switch (status?.toLowerCase()) {
 		case 'running':
@@ -39,16 +43,22 @@ export function NodeListItem({ node, isSelected, onSelectionChange, disabled = f
 	// Fetch organization data if organizationId exists
 
 	return (
-		<div className="flex items-center gap-4 p-4">
+		<div className="flex items-center gap-4 p-4 min-w-0">
 			{showCheckbox && <Checkbox checked={isSelected} onCheckedChange={onSelectionChange} disabled={disabled || ['starting', 'stopping'].includes(node.status?.toLowerCase() || '')} />}
-			<Link to={`/nodes/${node.id}`} className="flex-1 flex items-center justify-between hover:bg-muted/50 transition-colors rounded-lg">
-				<div className="flex items-center gap-4">
-					<div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-						{isFabricNode(node) ? <FabricIcon className="h-5 w-5 text-primary" /> : <BesuIcon className="h-5 w-5 text-primary" />}
+			<Link to={`/nodes/${node.id}`} className="flex-1 min-w-0 flex items-center justify-between hover:bg-muted/50 transition-colors rounded-lg">
+				<div className="flex items-center gap-4 min-w-0">
+					<div className="h-10 w-10 shrink-0 rounded-full bg-primary/10 flex items-center justify-center" aria-label={node.platform}>
+						{isFabricNode(node) ? (
+							<FabricIcon className="h-5 w-5 text-primary" />
+						) : isFabricXNode(node) ? (
+							<span className="text-xs font-semibold tracking-tight text-primary">FX</span>
+						) : (
+							<BesuIcon className="h-5 w-5 text-primary" />
+						)}
 					</div>
-					<div>
-						<div className="flex items-center gap-2">
-							<h3 className="font-medium">{node.name}</h3>
+					<div className="min-w-0">
+						<div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+							<h3 className="font-medium truncate">{node.name}</h3>
 							{node.createdAt && (
 								<span className="text-xs text-muted-foreground" title={format(new Date(node.createdAt), 'PPP p')}>
 									Created {formatDistanceToNow(new Date(node.createdAt), { addSuffix: true })}
@@ -59,7 +69,7 @@ export function NodeListItem({ node, isSelected, onSelectionChange, disabled = f
 								{node.status}
 							</Badge>
 						</div>
-						<div className="flex items-center gap-2 text-sm text-muted-foreground">
+						<div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
 							<span className="flex items-center gap-1">
 								<Network className="h-3 w-3" />
 								{node.platform}
@@ -113,6 +123,62 @@ export function NodeListItem({ node, isSelected, onSelectionChange, disabled = f
 										<>
 											<span>•</span>
 											<span>v{node.fabricOrderer.version}</span>
+										</>
+									)}
+								</>
+							)}
+							{node.fabricXOrdererGroup && (
+								<>
+									<span>•</span>
+									<span>{node.fabricXOrdererGroup.mspId}</span>
+									<span>•</span>
+									<span>{node.nodeType}</span>
+									{node.fabricXOrdererGroup.partyId !== undefined && (
+										<>
+											<span>•</span>
+											<span>Party {node.fabricXOrdererGroup.partyId}</span>
+										</>
+									)}
+									{node.fabricXOrdererGroup.externalIp && node.fabricXOrdererGroup.routerPort && (
+										<>
+											<span>•</span>
+											<span className="font-mono text-xs">
+												{node.fabricXOrdererGroup.externalIp}:{node.fabricXOrdererGroup.routerPort}
+											</span>
+										</>
+									)}
+									{node.fabricXOrdererGroup.version && (
+										<>
+											<span>•</span>
+											<span>v{node.fabricXOrdererGroup.version}</span>
+										</>
+									)}
+								</>
+							)}
+							{node.fabricXCommitter && (
+								<>
+									<span>•</span>
+									<span>{node.fabricXCommitter.mspId}</span>
+									<span>•</span>
+									<span>{node.nodeType}</span>
+									{node.fabricXCommitter.partyId !== undefined && (
+										<>
+											<span>•</span>
+											<span>Party {node.fabricXCommitter.partyId}</span>
+										</>
+									)}
+									{node.fabricXCommitter.externalIp && node.fabricXCommitter.sidecarPort && (
+										<>
+											<span>•</span>
+											<span className="font-mono text-xs">
+												{node.fabricXCommitter.externalIp}:{node.fabricXCommitter.sidecarPort}
+											</span>
+										</>
+									)}
+									{node.fabricXCommitter.version && (
+										<>
+											<span>•</span>
+											<span>v{node.fabricXCommitter.version}</span>
 										</>
 									)}
 								</>
