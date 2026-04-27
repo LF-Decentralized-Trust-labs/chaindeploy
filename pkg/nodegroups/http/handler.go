@@ -18,6 +18,7 @@ package http
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 
@@ -447,7 +448,12 @@ func parseInt32(s string, def int32) int32 {
 		return def
 	}
 	v, err := strconv.Atoi(s)
-	if err != nil || v < 0 {
+	// strconv.Atoi returns an int (architecture-dependent bit width); on a
+	// 64-bit host that includes values outside the int32 range. Reject
+	// negative input and anything above math.MaxInt32 before the narrowing
+	// conversion so the result can't silently wrap to a negative pagination
+	// value. Flagged as CodeQL go/incorrect-integer-conversion otherwise.
+	if err != nil || v < 0 || v > math.MaxInt32 {
 		return def
 	}
 	return int32(v)
