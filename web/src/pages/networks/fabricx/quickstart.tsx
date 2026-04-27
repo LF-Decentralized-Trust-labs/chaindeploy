@@ -4,6 +4,7 @@ import {
 	getServices,
 	postNodeGroups,
 	postNodeGroupsByIdInit,
+	postNodes,
 	postOrganizations,
 	postServicesPostgres,
 	postServicesByIdStart,
@@ -95,10 +96,10 @@ interface PartyResult {
 	ordererNodeGroupId: number
 	// Ordered: router, batcher, consenter, assembler (same order as InitOrdererGroup)
 	ordererChildNodeIds: number[]
-	committerNodeGroupId: number
-	// Ordered to match ChildRoles(GroupTypeFabricXCommitter):
-	// verifier, validator, coordinator, sidecar, query-service.
-	committerChildNodeIds: number[]
+	// Single legacy monolithic FABRICX_COMMITTER node id per party. The
+	// committer internally runs 5 containers; per-container logs are
+	// reachable via /api/v1/nodes/{id}/logs?role=<role>.
+	committerNodeId: number
 }
 
 const NUM_PARTIES = 4
@@ -280,75 +281,66 @@ export default function FabricXQuickStartPage() {
 		return { groupId, childIds }
 	}
 
-	// createCommitterNodeGroup creates a FABRICX_COMMITTER node_group plus
-	// its 5 per-role child rows (sidecar/coordinator/validator/verifier/
-	// query-service) via the same /node-groups + /init flow the orderer
-	// path uses. Children share one identity by design; per-container
-	// logs come from each child's own /logs endpoint.
-	async function createCommitterNodeGroup(party: { partyId: number; mspId: string; orgId: number; ordererAssemblerPort: number }): Promise<{ groupId: number; childIds: number[] }> {
-		const p = portsForParty(party.partyId - 1)
-		const groupName = `${party.mspId.toLowerCase()}-committer`
-		const dbSpec = partyDatabaseSpec(party.partyId)
-
-		// Stage 1a: create empty node_group row
-		const createResp = await postNodeGroups({
+	// createSharedCommitterGroup creates the per-network FABRICX_COMMITTER
+	// node-group. The group is a thin parent: it has no MSP/org/partyID of
+	// its own. Each party's committer node hangs off it as a child, carrying
+	// its own MSP identity. Returns the new group's ID.
+	async function createSharedCommitterGroup(): Promise<number> {
+		const groupName = `${networkName}-committers`
+		const resp = await postNodeGroups({
 			body: {
 				name: groupName,
 				platform: 'FABRICX',
 				groupType: 'FABRICX_COMMITTER',
-				organizationId: party.orgId,
-				mspId: party.mspId,
-				externalIp: externalIp,
-				domainNames: [externalIp, 'localhost'],
+				// No mspId/organizationId/partyId — those live on the children.
 			},
 		})
-		const groupId = (createResp.data as unknown as { id?: number } | undefined)?.id
+		const groupId = (resp.data as unknown as { id?: number } | undefined)?.id
 		if (!groupId) {
-			const serverErr = (createResp as unknown as { error?: { error?: string } | string })?.error
+			const serverErr = (resp as unknown as { error?: { error?: string } | string })?.error
 			const detail = typeof serverErr === 'string' ? serverErr : serverErr?.error || 'unknown error'
-			throw new Error(`node_group creation failed for ${groupName}: ${detail}`)
+			throw new Error(`committer node-group creation failed: ${detail}`)
 		}
+		return groupId
+	}
 
-		// Stage 1b: init — generates certs, populates deployment_config, creates 5 children
-		await postNodeGroupsByIdInit({
-			path: { id: groupId },
+	// createCommitter creates one FABRICX_COMMITTER node per party, parented
+	// to the shared committer node-group. The committer internally runs 5
+	// containers (sidecar/coordinator/validator/verifier/query-service); the
+	// per-container view is reachable via /api/v1/nodes/{id}/logs?role=<role>.
+	async function createCommitter(party: { partyId: number; mspId: string; orgId: number; ordererAssemblerPort: number }, committerGroupId: number): Promise<number> {
+		const p = portsForParty(party.partyId - 1)
+		const nodeName = `${party.mspId.toLowerCase()}-committer`
+		const dbSpec = partyDatabaseSpec(party.partyId)
+		const resp = await postNodes({
 			body: {
-				sidecarPort: p.sidecar,
-				coordinatorPort: p.coordinator,
-				validatorPort: p.validator,
-				verifierPort: p.verifier,
-				queryServicePort: p.queryService,
-				// All committers share the same postgres container (bound to
-				// the host on SHARED_POSTGRES_PORT). Each party gets its own
-				// database + role inside it.
-				postgresHost: externalIp,
-				postgresPort: SHARED_POSTGRES_PORT,
-				postgresDb: dbSpec.db,
-				postgresUser: dbSpec.user,
-				postgresPassword: dbSpec.password,
-				channelId: channelName,
-				ordererEndpoints: [`${externalIp}:${party.ordererAssemblerPort}`],
-			} as never,
+				name: nodeName,
+				blockchainPlatform: 'FABRICX',
+				fabricXCommitter: {
+					name: nodeName,
+					organizationId: party.orgId,
+					mspId: party.mspId,
+					externalIp: externalIp,
+					domainNames: [externalIp, 'localhost'],
+					sidecarPort: p.sidecar,
+					coordinatorPort: p.coordinator,
+					validatorPort: p.validator,
+					verifierPort: p.verifier,
+					queryServicePort: p.queryService,
+					postgresHost: externalIp,
+					postgresPort: SHARED_POSTGRES_PORT,
+					postgresDb: dbSpec.db,
+					postgresUser: dbSpec.user,
+					postgresPassword: dbSpec.password,
+					channelId: channelName,
+					ordererEndpoints: [`${externalIp}:${party.ordererAssemblerPort}`],
+					nodeGroupId: committerGroupId,
+				} as never,
+			},
 		})
-
-		// Fetch children. Order matches ChildRoles(GroupTypeFabricXCommitter):
-		// verifier, validator, coordinator, sidecar, query-service.
-		const childrenResp = await getNodeGroupsByIdChildren({ path: { id: groupId } })
-		const childRows = (childrenResp.data as unknown as Array<{ id?: number; nodeType?: string }> | undefined) ?? []
-		const order = [
-			'FABRICX_COMMITTER_VERIFIER',
-			'FABRICX_COMMITTER_VALIDATOR',
-			'FABRICX_COMMITTER_COORDINATOR',
-			'FABRICX_COMMITTER_SIDECAR',
-			'FABRICX_COMMITTER_QUERY_SERVICE',
-		]
-		const childIds: number[] = []
-		for (const role of order) {
-			const row = childRows.find((r) => r.nodeType === role)
-			if (!row?.id) throw new Error(`node_group ${groupId} missing child for role ${role}`)
-			childIds.push(row.id)
-		}
-		return { groupId, childIds }
+		const id = (resp.data as unknown as { id?: number } | undefined)?.id
+		if (!id) throw new Error(`committer node creation returned no id for ${nodeName}`)
+		return id
 	}
 
 	async function setupSharedPostgres(serviceName: string): Promise<number> {
@@ -416,8 +408,7 @@ export default function FabricXQuickStartPage() {
 					organizationId: orgId,
 					ordererNodeGroupId: 0,
 					ordererChildNodeIds: [],
-					committerNodeGroupId: 0,
-					committerChildNodeIds: [],
+					committerNodeId: 0,
 				})
 			}
 
@@ -445,19 +436,30 @@ export default function FabricXQuickStartPage() {
 				setStep(`orderer-${i}`, { status: 'done', detail: `group #${groupId}, children ${childIds.join(',')}` })
 			}
 
-			// Phase 3: committer node groups (ADR-0001 path)
+			// Phase 3a: shared committer node-group (one per network).
+			// All party committers hang off this thin parent — each child
+			// owns its own MSP identity.
+			setStep('committer-group', { status: 'running' })
+			const committerGroupId = await createSharedCommitterGroup()
+			setStep('committer-group', { status: 'done', detail: `group #${committerGroupId}` })
+
+			// Phase 3b: per-party committer nodes (legacy monolithic
+			// FABRICX_COMMITTER, 5 internal containers each), parented to
+			// the shared committer group.
 			for (let i = 0; i < NUM_PARTIES; i++) {
 				setStep(`committer-${i}`, { status: 'running' })
 				const ports = portsForParty(parties[i].partyId - 1)
-				const { groupId, childIds } = await createCommitterNodeGroup({
-					partyId: parties[i].partyId,
-					mspId: parties[i].mspId,
-					orgId: parties[i].organizationId,
-					ordererAssemblerPort: ports.assembler,
-				})
-				parties[i].committerNodeGroupId = groupId
-				parties[i].committerChildNodeIds = childIds
-				setStep(`committer-${i}`, { status: 'done', detail: `group #${groupId}, children ${childIds.join(',')}` })
+				const id = await createCommitter(
+					{
+						partyId: parties[i].partyId,
+						mspId: parties[i].mspId,
+						orgId: parties[i].organizationId,
+						ordererAssemblerPort: ports.assembler,
+					},
+					committerGroupId,
+				)
+				parties[i].committerNodeId = id
+				setStep(`committer-${i}`, { status: 'done', detail: `node #${id}` })
 			}
 
 			// Phase 4: create network (produces Arma genesis)
@@ -472,7 +474,7 @@ export default function FabricXQuickStartPage() {
 						organizations: parties.map((p) => ({
 							id: p.organizationId,
 							ordererNodeGroupId: p.ordererNodeGroupId,
-							committerNodeGroupId: p.committerNodeGroupId,
+							committerNodeId: p.committerNodeId,
 						})),
 					},
 				},
@@ -513,18 +515,15 @@ export default function FabricXQuickStartPage() {
 			}
 			for (let i = 0; i < NUM_PARTIES; i++) {
 				setStep(`join-committer-${i}`, { status: 'running' })
-				let hadErr = false
-				for (const childId of parties[i].committerChildNodeIds) {
-					try {
-						await joinMutation.mutationFn!({
-							path: { id: createdNetworkId, nodeId: childId },
-						} as unknown as Parameters<typeof joinMutation.mutationFn>[0])
-					} catch (e) {
-						hadErr = true
-						joinErrors.push(`committer party${i + 1} child #${childId}: ${formatError(e)}`)
-					}
+				try {
+					await joinMutation.mutationFn!({
+						path: { id: createdNetworkId, nodeId: parties[i].committerNodeId },
+					} as unknown as Parameters<typeof joinMutation.mutationFn>[0])
+					setStep(`join-committer-${i}`, { status: 'done' })
+				} catch (e) {
+					joinErrors.push(`committer party${i + 1}: ${formatError(e)}`)
+					setStep(`join-committer-${i}`, { status: 'error', detail: 'transient docker error — retry via node page' })
 				}
-				setStep(`join-committer-${i}`, { status: hadErr ? 'error' : 'done', detail: hadErr ? 'transient docker error — retry via node page' : undefined })
 			}
 			if (joinErrors.length > 0) {
 				toast.error(`${joinErrors.length} join(s) hit transient Docker errors; retry via Nodes page`)

@@ -96,13 +96,12 @@ func partyDatabaseSpec(partyID int) partyDB {
 }
 
 type partyResult struct {
-	partyID               int
-	mspID                 string
-	organizationID        int64
-	ordererNodeGroupID    int64
-	ordererChildNodeIDs   []int64 // router, batcher, consenter, assembler
-	committerNodeGroupID  int64
-	committerChildNodeIDs []int64 // sidecar, coordinator, validator, verifier, query-service
+	partyID             int
+	mspID               string
+	organizationID      int64
+	ordererNodeGroupID  int64
+	ordererChildNodeIDs []int64 // router, batcher, consenter, assembler
+	committerNodeID     int64   // legacy monolithic committer node (5 internal containers)
 }
 
 // apiClient is a local HTTP wrapper with per-request timeout. The shared
@@ -386,15 +385,29 @@ func runQuickstart(ctx context.Context, c *apiClient, cfg quickstartConfig) erro
 	}
 
 	// Phase 6: committers
+	// Phase 6a: shared committer node-group. One per network — every
+	// party's committer is a child of this group, each carrying its own
+	// MSP identity. The group is a thin organizational parent; it has no
+	// MSP/orgID/partyID of its own.
+	status("Creating shared committer node-group for network %s", cfg.networkName)
+	committerGroupID, err := createSharedCommitterGroup(ctx, c, cfg)
+	if err != nil {
+		return fmt.Errorf("create shared committer group: %w", err)
+	}
+	done("  → committer node-group #%d", committerGroupID)
+
+	// Phase 6b: per-party committer child nodes. Each is the legacy
+	// monolithic FABRICX_COMMITTER node (5 internal containers), but
+	// linked to the shared group via fabricXCommitter.nodeGroupId so
+	// /node-groups/{id}/children lists all 4 of them together.
 	for i := range parties {
-		status("Creating committer node-group for %s", parties[i].mspID)
-		groupID, childIDs, err := createCommitterNodeGroup(ctx, c, parties[i], cfg)
+		status("Creating committer for %s (under group #%d)", parties[i].mspID, committerGroupID)
+		id, err := createCommitter(ctx, c, parties[i], cfg, committerGroupID)
 		if err != nil {
 			return fmt.Errorf("committer %s: %w", parties[i].mspID, err)
 		}
-		parties[i].committerNodeGroupID = groupID
-		parties[i].committerChildNodeIDs = childIDs
-		done("  → group #%d, children %v", groupID, childIDs)
+		parties[i].committerNodeID = id
+		done("  → node #%d", id)
 	}
 
 	// Phase 7: network (genesis)
@@ -428,22 +441,21 @@ func runQuickstart(ctx context.Context, c *apiClient, cfg quickstartConfig) erro
 		}
 	}
 	for i := range parties {
-		status("Joining %s committer children (verifier→validator→coordinator→sidecar→query-service)", parties[i].mspID)
-		for _, childID := range parties[i].committerChildNodeIDs {
-			if err := joinNodeWithRetry(ctx, c, networkID, childID, cfg); err != nil {
-				joinErrors = append(joinErrors, fmt.Sprintf("committer %s child #%d: %v", parties[i].mspID, childID, err))
-				if !cfg.keepGoing {
-					return fmt.Errorf("join committer child #%d: %w", childID, err)
-				}
-				fail("  ! child #%d: %v (continuing)", childID, err)
-				continue
+		status("Joining %s committer", parties[i].mspID)
+		nid := parties[i].committerNodeID
+		if err := joinNodeWithRetry(ctx, c, networkID, nid, cfg); err != nil {
+			joinErrors = append(joinErrors, fmt.Sprintf("committer %s #%d: %v", parties[i].mspID, nid, err))
+			if !cfg.keepGoing {
+				return fmt.Errorf("join committer #%d: %w", nid, err)
 			}
-			if healthy, detail := verifyNodeJoined(ctx, c, childID); !healthy {
-				unhealthy = append(unhealthy, fmt.Sprintf("committer %s child #%d: %s", parties[i].mspID, childID, detail))
-				warn("  ⚠ child #%d joined but %s", childID, detail)
-			} else {
-				done("  → child #%d joined", childID)
-			}
+			fail("  ! committer #%d: %v (continuing)", nid, err)
+			continue
+		}
+		if healthy, detail := verifyNodeJoined(ctx, c, nid); !healthy {
+			unhealthy = append(unhealthy, fmt.Sprintf("committer %s #%d: %s", parties[i].mspID, nid, detail))
+			warn("  ⚠ committer #%d joined but %s", nid, detail)
+		} else {
+			done("  → committer #%d joined", nid)
 		}
 	}
 
@@ -454,10 +466,10 @@ func runQuickstart(ctx context.Context, c *apiClient, cfg quickstartConfig) erro
 	// every node after all joins have completed; by then the Docker apiproxy
 	// queue has drained and the retry actually creates the containers.
 	status("Reconciling node containers (post-join /start retry)")
-	allNodeIDs := make([]int64, 0, cfg.numParties*9)
+	allNodeIDs := make([]int64, 0, cfg.numParties*5)
 	for i := range parties {
 		allNodeIDs = append(allNodeIDs, parties[i].ordererChildNodeIDs...)
-		allNodeIDs = append(allNodeIDs, parties[i].committerChildNodeIDs...)
+		allNodeIDs = append(allNodeIDs, parties[i].committerNodeID)
 	}
 	var reconcileErrors []string
 	for _, nid := range allNodeIDs {
@@ -492,10 +504,11 @@ func runQuickstart(ctx context.Context, c *apiClient, cfg quickstartConfig) erro
 		networkID, cfg.networkName, cfg.numParties)
 	for _, p := range parties {
 		pp := portsForParty(cfg.basePort, cfg.slotSize, p.partyID-1)
-		fmt.Printf("  %s: orderer-group=#%d (ports %d-%d), committer-group=#%d (ports %d-%d)\n",
+		fmt.Printf("  %s: orderer-group=#%d (ports %d-%d), committer=#%d (ports %d-%d)\n",
 			p.mspID, p.ordererNodeGroupID, pp.router, pp.assembler,
-			p.committerNodeGroupID, pp.sidecar, pp.queryService)
+			p.committerNodeID, pp.sidecar, pp.queryService)
 	}
+	fmt.Printf("  Shared committer node-group: #%d\n", committerGroupID)
 	fmt.Printf("  Shared Postgres: host :%d (%d databases)\n", cfg.postgresPort, cfg.numParties)
 
 	if len(joinErrors) > 0 || len(unhealthy) > 0 {
@@ -791,121 +804,100 @@ func createOrdererNodeGroup(ctx context.Context, c *apiClient, p partyResult, cf
 	return groupID, childIDs, nil
 }
 
-// createCommitterNodeGroup creates a FABRICX_COMMITTER node_group plus
-// its 5 per-role child rows (sidecar, coordinator, validator, verifier,
-// query-service) via the same /node-groups/{id}/init dispatch the
-// orderer side uses. Returns the parent group ID and the ordered list
-// of child node IDs.
-func createCommitterNodeGroup(ctx context.Context, c *apiClient, p partyResult, cfg quickstartConfig) (int64, []int64, error) {
-	pp := portsForParty(cfg.basePort, cfg.slotSize, p.partyID-1)
-	db := partyDatabaseSpec(p.partyID)
-	groupName := strings.ToLower(p.mspID) + "-committer"
-
-	createBody := map[string]any{
-		"name":           groupName,
-		"platform":       "FABRICX",
-		"groupType":      "FABRICX_COMMITTER",
-		"organizationId": p.organizationID,
-		"mspId":          p.mspID,
-		"externalIp":     cfg.externalIP,
-		"domainNames":    []string{cfg.externalIP, "localhost"},
+// createSharedCommitterGroup creates the per-network FABRICX_COMMITTER
+// node-group. The group is a thin parent: it has no MSP/org/partyID of
+// its own. Each party's committer node hangs off it as a child, carrying
+// its own MSP identity. Returns the new group's ID.
+func createSharedCommitterGroup(ctx context.Context, c *apiClient, cfg quickstartConfig) (int64, error) {
+	groupName := cfg.networkName + "-committers"
+	body := map[string]any{
+		"name":      groupName,
+		"platform":  "FABRICX",
+		"groupType": "FABRICX_COMMITTER",
+		// No mspId / organizationId / partyId — those live on the children.
 	}
-	resp, err := c.post(ctx, "/node-groups", createBody)
+	resp, err := c.post(ctx, "/node-groups", body)
 	if err != nil {
-		return 0, nil, err
+		return 0, err
 	}
 	if resp.StatusCode != http.StatusCreated {
 		defer resp.Body.Close()
-		return 0, nil, fmt.Errorf("create node_group %s: %s", groupName, readErrorBody(resp))
+		return 0, fmt.Errorf("create committer node_group: %s", readErrorBody(resp))
 	}
 	var created struct {
 		ID int64 `json:"id"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
 		resp.Body.Close()
-		return 0, nil, fmt.Errorf("decode node_group: %w", err)
+		return 0, fmt.Errorf("decode node_group: %w", err)
 	}
 	resp.Body.Close()
 	if created.ID == 0 {
-		return 0, nil, fmt.Errorf("server returned no id for node_group %s", groupName)
+		return 0, fmt.Errorf("server returned no id for committer node_group")
 	}
-	groupID := created.ID
+	return created.ID, nil
+}
 
-	initBody := map[string]any{
-		"sidecarPort":      pp.sidecar,
-		"coordinatorPort":  pp.coordinator,
-		"validatorPort":    pp.validator,
-		"verifierPort":     pp.verifier,
-		"queryServicePort": pp.queryService,
-		"postgresHost":     cfg.externalIP,
-		"postgresPort":     cfg.postgresPort,
-		"postgresDb":       db.DB,
-		"postgresUser":     db.User,
-		"postgresPassword": db.Password,
-		"channelId":        cfg.channelID,
-		"ordererEndpoints": []string{fmt.Sprintf("%s:%d", cfg.externalIP, pp.assembler)},
-	}
-	iresp, err := c.post(ctx, fmt.Sprintf("/node-groups/%d/init", groupID), initBody)
-	if err != nil {
-		return 0, nil, err
-	}
-	iresp.Body.Close()
-	if iresp.StatusCode != http.StatusOK && iresp.StatusCode != http.StatusCreated {
-		return 0, nil, fmt.Errorf("init node_group %d: HTTP %d", groupID, iresp.StatusCode)
-	}
+// createCommitter creates one FABRICX_COMMITTER node for a party, parented
+// to the shared committer node-group. The committer internally runs 5
+// containers (sidecar/coordinator/validator/verifier/query-service); the
+// per-container view is reachable via /api/v1/nodes/{id}/logs?role=<role>.
+func createCommitter(ctx context.Context, c *apiClient, p partyResult, cfg quickstartConfig, committerGroupID int64) (int64, error) {
+	pp := portsForParty(cfg.basePort, cfg.slotSize, p.partyID-1)
+	db := partyDatabaseSpec(p.partyID)
+	nodeName := strings.ToLower(p.mspID) + "-committer"
 
-	cresp, err := c.get(ctx, fmt.Sprintf("/node-groups/%d/children", groupID))
+	body := map[string]any{
+		"name":               nodeName,
+		"blockchainPlatform": "FABRICX",
+		"fabricXCommitter": map[string]any{
+			"name":             nodeName,
+			"organizationId":   p.organizationID,
+			"mspId":            p.mspID,
+			"externalIp":       cfg.externalIP,
+			"domainNames":      []string{cfg.externalIP, "localhost"},
+			"sidecarPort":      pp.sidecar,
+			"coordinatorPort":  pp.coordinator,
+			"validatorPort":    pp.validator,
+			"verifierPort":     pp.verifier,
+			"queryServicePort": pp.queryService,
+			"postgresHost":     cfg.externalIP,
+			"postgresPort":     cfg.postgresPort,
+			"postgresDb":       db.DB,
+			"postgresUser":     db.User,
+			"postgresPassword": db.Password,
+			"channelId":        cfg.channelID,
+			"ordererEndpoints": []string{fmt.Sprintf("%s:%d", cfg.externalIP, pp.assembler)},
+			"nodeGroupId":      committerGroupID,
+		},
+	}
+	resp, err := c.post(ctx, "/nodes", body)
 	if err != nil {
-		return 0, nil, err
+		return 0, err
 	}
-	if cresp.StatusCode != http.StatusOK {
-		defer cresp.Body.Close()
-		return 0, nil, fmt.Errorf("fetch children %d: %s", groupID, readErrorBody(cresp))
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("create committer %s: %s", nodeName, readErrorBody(resp))
 	}
-	var children []struct {
-		ID       int64  `json:"id"`
-		NodeType string `json:"nodeType"`
+	var created struct {
+		ID int64 `json:"id"`
 	}
-	if err := json.NewDecoder(cresp.Body).Decode(&children); err != nil {
-		cresp.Body.Close()
-		return 0, nil, fmt.Errorf("decode children: %w", err)
+	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+		return 0, fmt.Errorf("decode committer: %w", err)
 	}
-	cresp.Body.Close()
-	// Order matches StartGroup's ChildRoles ordering: verifier and
-	// validator first (downstream of coordinator), then coordinator,
-	// then sidecar (which dials the orderer), and finally query-service
-	// (read-only). Mirrors ngtypes.ChildRoles(GroupTypeFabricXCommitter).
-	order := []string{
-		"FABRICX_COMMITTER_VERIFIER",
-		"FABRICX_COMMITTER_VALIDATOR",
-		"FABRICX_COMMITTER_COORDINATOR",
-		"FABRICX_COMMITTER_SIDECAR",
-		"FABRICX_COMMITTER_QUERY_SERVICE",
+	if created.ID == 0 {
+		return 0, fmt.Errorf("server returned no id for committer %s", nodeName)
 	}
-	childIDs := make([]int64, 0, 5)
-	for _, role := range order {
-		var found int64
-		for _, ch := range children {
-			if ch.NodeType == role {
-				found = ch.ID
-				break
-			}
-		}
-		if found == 0 {
-			return 0, nil, fmt.Errorf("group %d missing child for role %s", groupID, role)
-		}
-		childIDs = append(childIDs, found)
-	}
-	return groupID, childIDs, nil
+	return created.ID, nil
 }
 
 func createNetwork(ctx context.Context, c *apiClient, cfg quickstartConfig, parties []partyResult) (int64, error) {
 	orgs := make([]map[string]any, 0, len(parties))
 	for _, p := range parties {
 		orgs = append(orgs, map[string]any{
-			"id":                   p.organizationID,
-			"ordererNodeGroupId":   p.ordererNodeGroupID,
-			"committerNodeGroupId": p.committerNodeGroupID,
+			"id":                 p.organizationID,
+			"ordererNodeGroupId": p.ordererNodeGroupID,
+			"committerNodeId":    p.committerNodeID,
 		})
 	}
 	body := map[string]any{

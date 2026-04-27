@@ -60,6 +60,13 @@ type FabricXCommitterConfig struct {
 	Env            map[string]string `json:"env,omitempty"`
 	Version        string            `json:"version"` // fabric-x-committer image tag
 
+	// NodeGroupID points at the parent FABRICX_COMMITTER node-group that
+	// owns this committer node. Required: a network has one shared
+	// committer node-group that all per-party committer nodes hang off
+	// (each carries its own MSP identity, but they're listed together
+	// under one group so the network can be reasoned about as a whole).
+	NodeGroupID int64 `json:"nodeGroupId" validate:"required"`
+
 	// Ports (auto-allocated if zero)
 	SidecarPort      int `json:"sidecarPort,omitempty"`
 	CoordinatorPort  int `json:"coordinatorPort,omitempty"`

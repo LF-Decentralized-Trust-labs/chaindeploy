@@ -147,6 +147,10 @@ export default function NodeDetailPage() {
 	const [showRenewCertDialog, setShowRenewCertDialog] = useState(false)
 	const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 	const [logRefreshKey, setLogRefreshKey] = useState(0)
+	// Which of a FABRICX_COMMITTER's 5 internal containers to tail. Only
+	// observed for FABRICX_COMMITTER node type — the server rejects
+	// non-empty role on every other node type with a 400.
+	const [committerLogRole, setCommitterLogRole] = useState<string>('sidecar')
 
 	// Get the active tab from URL or default to 'logs'
 	const activeTab = searchParams.get('tab') || 'logs'
@@ -281,18 +285,23 @@ export default function NodeDetailPage() {
 		}
 	}
 
+	const isCommitterNode = node?.nodeType === 'FABRICX_COMMITTER'
+
 	useEffect(() => {
 		// Close existing EventSource if it exists
 		if (eventSourceRef.current) {
 			eventSourceRef.current.close()
 		}
 
-		// Each FabricX child has its own /nodes/{id} detail page now;
-		// we no longer pass ?role= because the server resolves the
-		// role from the node row.
+		// FABRICX_COMMITTER runs 5 internal containers. The server's
+		// TailLogs handler accepts ?role= for that node type only.
+		// Reset the buffer when the role changes so streams don't mix.
 		setLogs('')
 
 		const qs = new URLSearchParams({ follow: 'true' })
+		if (isCommitterNode && committerLogRole) {
+			qs.set('role', committerLogRole)
+		}
 		const eventSource = new EventSource(`/api/v1/nodes/${id}/logs?${qs.toString()}`, {
 			withCredentials: true,
 		})
@@ -325,7 +334,7 @@ export default function NodeDetailPage() {
 				eventSourceRef.current = null
 			}
 		}
-	}, [id, logRefreshKey])
+	}, [id, logRefreshKey, isCommitterNode, committerLogRole])
 
 	if (isLoading) {
 		return (
@@ -555,6 +564,8 @@ export default function NodeDetailPage() {
 					events={renderEvents()}
 					activeTab={activeTab}
 					onTabChange={handleTabChange}
+					committerLogRole={committerLogRole}
+					onCommitterLogRoleChange={setCommitterLogRole}
 				/>
 			)}
 

@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { CertificateViewer } from '@/components/ui/certificate-viewer'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { LogViewer } from '@/components/nodes/LogViewer'
 import { Activity, Copy, ExternalLink, Globe, Key, Layers, Network, Server, Shield } from 'lucide-react'
 import { toast } from 'sonner'
@@ -15,7 +16,22 @@ interface FabricXNodeDetailsProps {
 	events: any
 	activeTab: string
 	onTabChange: (value: string) => void
+	// FABRICX_COMMITTER nodes run 5 internal containers (sidecar /
+	// coordinator / validator / verifier / query-service). The selector
+	// lets the user pick which one to tail. The parent owns the state
+	// so [id].tsx can re-create the EventSource when the selection
+	// changes. Other node types ignore these props.
+	committerLogRole?: string
+	onCommitterLogRoleChange?: (role: string) => void
 }
+
+const COMMITTER_ROLES: { value: string; label: string }[] = [
+	{ value: 'sidecar', label: 'sidecar' },
+	{ value: 'coordinator', label: 'coordinator' },
+	{ value: 'validator', label: 'validator' },
+	{ value: 'verifier', label: 'verifier' },
+	{ value: 'query-service', label: 'query-service' },
+]
 
 function Port({ label, host, port }: { label: string; host?: string; port?: number }) {
 	if (!port) return null
@@ -345,7 +361,7 @@ function EndpointCard({ externalIp }: { externalIp?: string }) {
 	)
 }
 
-export function FabricXNodeDetails({ node, logs, events, activeTab, onTabChange }: FabricXNodeDetailsProps) {
+export function FabricXNodeDetails({ node, logs, events, activeTab, onTabChange, committerLogRole, onCommitterLogRoleChange }: FabricXNodeDetailsProps) {
 	const isOrdererGroup = node.fabricXOrdererGroup !== undefined
 	const isCommitter = node.fabricXCommitter !== undefined
 	const ordererGroup = node.fabricXOrdererGroup
@@ -385,8 +401,30 @@ export function FabricXNodeDetails({ node, logs, events, activeTab, onTabChange 
 				<TabsContent value="logs" className="space-y-4">
 					<Card>
 						<CardHeader>
-							<CardTitle>Container Logs</CardTitle>
-							<CardDescription>Real-time logs from the Fabric-X node</CardDescription>
+							<div className="flex items-center justify-between gap-4">
+								<div>
+									<CardTitle>Container Logs</CardTitle>
+									<CardDescription>
+										{isCommitter
+											? 'A committer runs 5 containers internally — pick one to stream.'
+											: 'Real-time logs from the Fabric-X node'}
+									</CardDescription>
+								</div>
+								{isCommitter && onCommitterLogRoleChange && (
+									<Select value={committerLogRole ?? 'sidecar'} onValueChange={onCommitterLogRoleChange}>
+										<SelectTrigger className="w-[180px]">
+											<SelectValue />
+										</SelectTrigger>
+										<SelectContent>
+											{COMMITTER_ROLES.map((r) => (
+												<SelectItem key={r.value} value={r.value}>
+													{r.label}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								)}
+							</div>
 						</CardHeader>
 						<CardContent>
 							<LogViewer logs={logs} onScroll={() => {}} />
