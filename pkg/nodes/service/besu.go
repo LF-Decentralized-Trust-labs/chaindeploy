@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,6 +24,33 @@ import (
 	"github.com/chainlaunch/chainlaunch/pkg/nodes/types"
 	"github.com/chainlaunch/chainlaunch/pkg/nodes/utils"
 )
+
+// decodeBesuGenesisFile decodes the base64-encoded genesis-block string
+// stored on the network row into the raw JSON the besu binary expects on
+// disk. Networks persist genesisBlockB64 as base64 (see
+// pkg/networks/service/service.go) but the besu node service writes the
+// content directly to genesis.json — and besu's validation step parses it
+// as JSON. Without this decode the validator rejects the input with
+// "invalid character 'e' looking for beginning of value" because the
+// base64 string starts with 'e' (e.g. "eyJjb25maWci…" → `{"config":…`).
+//
+// The function tolerates a previously-decoded value: if base64 decoding
+// fails but the input already looks like JSON we return it untouched, so
+// callers can adopt this without risking a regression for any in-memory
+// path that happens to hand us raw JSON.
+func decodeBesuGenesisFile(b64 string) (string, error) {
+	if b64 == "" {
+		return "", nil
+	}
+	decoded, err := base64.StdEncoding.DecodeString(b64)
+	if err == nil {
+		return string(decoded), nil
+	}
+	if trimmed := strings.TrimSpace(b64); strings.HasPrefix(trimmed, "{") {
+		return b64, nil
+	}
+	return "", fmt.Errorf("decode genesis block (expected base64-encoded JSON): %w", err)
+}
 
 // GetBesuPorts attempts to find available ports for P2P and RPC, starting from default ports
 func GetBesuPorts(baseP2PPort, baseRPCPort uint) (p2pPort uint, rpcPort uint, err error) {
@@ -155,10 +183,15 @@ func (s *NodeService) getBesuFromConfig(ctx context.Context, dbNode *db.Node, co
 		return nil, fmt.Errorf("failed to unmarshal network config: %w", err)
 	}
 
+	genesisJSON, err := decodeBesuGenesisFile(network.GenesisBlockB64.String)
+	if err != nil {
+		return nil, err
+	}
+
 	localBesu := besu.NewLocalBesu(
 		besu.StartBesuOpts{
 			ID:              dbNode.Slug,
-			GenesisFile:     network.GenesisBlockB64.String,
+			GenesisFile:     genesisJSON,
 			NetworkID:       deployConfig.NetworkID,
 			P2PPort:         fmt.Sprintf("%d", deployConfig.P2PPort),
 			RPCPort:         fmt.Sprintf("%d", deployConfig.RPCPort),
@@ -268,11 +301,15 @@ func (s *NodeService) startBesuNode(ctx context.Context, dbNode *db.Node) error 
 	if version == "" {
 		version = "25.7.0"
 	}
+	genesisJSON, err := decodeBesuGenesisFile(network.GenesisBlockB64.String)
+	if err != nil {
+		return err
+	}
 	// Create LocalBesu instance
 	localBesu := besu.NewLocalBesu(
 		besu.StartBesuOpts{
 			ID:              dbNode.Slug,
-			GenesisFile:     network.GenesisBlockB64.String,
+			GenesisFile:     genesisJSON,
 			NetworkID:       besuDeployConfig.NetworkID,
 			ChainID:         networkConfig.ChainID,
 			P2PPort:         fmt.Sprintf("%d", besuDeployConfig.P2PPort),
@@ -674,10 +711,15 @@ func (s *NodeService) initializeBesuNode(ctx context.Context, dbNode *db.Node, c
 		return nil, fmt.Errorf("failed to decrypt key: %w", err)
 	}
 
+	genesisJSON, err := decodeBesuGenesisFile(network.GenesisBlockB64.String)
+	if err != nil {
+		return nil, err
+	}
+
 	// Validate Besu node configuration using comprehensive validation
 	opts := besu.StartBesuOpts{
 		ID:                         dbNode.Slug,
-		GenesisFile:                network.GenesisBlockB64.String,
+		GenesisFile:                genesisJSON,
 		NetworkID:                  config.NetworkID,
 		ChainID:                    networkConfig.ChainID,
 		P2PPort:                    fmt.Sprintf("%d", config.P2PPort),
