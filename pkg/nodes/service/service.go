@@ -128,20 +128,22 @@ func (s *NodeService) validateCreateNodeRequest(req CreateNodeRequest) error {
 			validationErrors.Add("besuNode", fmt.Sprintf("invalid besu configuration: %v", err))
 		}
 	case types.PlatformFabricX:
-		if req.FabricXOrdererGroup == nil && req.FabricXCommitter == nil {
-			validationErrors.Add("fabricXOrdererGroup/fabricXCommitter", "fabricx configuration is required (either orderer group or committer)")
+		// Legacy monolithic FABRICX_COMMITTER node creation is removed: new
+		// committers MUST be created via POST /node-groups (groupType
+		// FABRICX_COMMITTER) followed by POST /node-groups/{id}/init, which
+		// spawns 5 per-role child rows. Reject the field with a clear pointer
+		// so callers don't get a surprise empty-response on success.
+		if req.FabricXCommitter != nil {
+			validationErrors.Add("fabricXCommitter",
+				"creating a monolithic committer node is removed; create a node_group "+
+					"with groupType=FABRICX_COMMITTER and call POST /node-groups/{id}/init")
 		}
-		if req.FabricXOrdererGroup != nil && req.FabricXCommitter != nil {
-			validationErrors.Add("fabricXOrdererGroup/fabricXCommitter", "cannot specify both orderer group and committer configurations")
+		if req.FabricXOrdererGroup == nil {
+			validationErrors.Add("fabricXOrdererGroup", "fabricXOrdererGroup configuration is required for fabric-x nodes")
 		}
 		if req.FabricXOrdererGroup != nil {
 			if err := req.FabricXOrdererGroup.Validate(); err != nil {
 				validationErrors.Add("fabricXOrdererGroup", fmt.Sprintf("invalid fabricx orderer group configuration: %v", err))
-			}
-		}
-		if req.FabricXCommitter != nil {
-			if err := req.FabricXCommitter.Validate(); err != nil {
-				validationErrors.Add("fabricXCommitter", fmt.Sprintf("invalid fabricx committer configuration: %v", err))
 			}
 		}
 	case "":

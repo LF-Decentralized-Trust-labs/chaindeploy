@@ -147,10 +147,6 @@ export default function NodeDetailPage() {
 	const [showRenewCertDialog, setShowRenewCertDialog] = useState(false)
 	const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 	const [logRefreshKey, setLogRefreshKey] = useState(0)
-	// Which of a FABRICX_COMMITTER's 5 internal containers to tail. Only
-	// FABRICX_COMMITTER nodes observe this; for every other node type the
-	// server rejects non-empty role with a 400 so we never set it.
-	const [committerLogRole, setCommitterLogRole] = useState<string>('sidecar')
 
 	// Get the active tab from URL or default to 'logs'
 	const activeTab = searchParams.get('tab') || 'logs'
@@ -285,27 +281,18 @@ export default function NodeDetailPage() {
 		}
 	}
 
-	// Whether this node is a committer — governs whether we append ?role=X
-	// to the log stream URL. Reading from the fetched node row below is
-	// fiddly here (state race); inferring from the DB node_type is fine
-	// because the switch happens via the selector state.
-	const isCommitterNode = node?.nodeType === 'FABRICX_COMMITTER'
-
 	useEffect(() => {
 		// Close existing EventSource if it exists
 		if (eventSourceRef.current) {
 			eventSourceRef.current.close()
 		}
 
-		// Per-role tail only makes sense for committer nodes — the server
-		// rejects ?role= on any other node type. Reset the buffer when the
-		// user picks a new role so we don't mix streams.
+		// Each FabricX child has its own /nodes/{id} detail page now;
+		// we no longer pass ?role= because the server resolves the
+		// role from the node row.
 		setLogs('')
 
 		const qs = new URLSearchParams({ follow: 'true' })
-		if (isCommitterNode && committerLogRole) {
-			qs.set('role', committerLogRole)
-		}
 		const eventSource = new EventSource(`/api/v1/nodes/${id}/logs?${qs.toString()}`, {
 			withCredentials: true,
 		})
@@ -338,7 +325,7 @@ export default function NodeDetailPage() {
 				eventSourceRef.current = null
 			}
 		}
-	}, [id, logRefreshKey, isCommitterNode, committerLogRole])
+	}, [id, logRefreshKey])
 
 	if (isLoading) {
 		return (
@@ -568,8 +555,6 @@ export default function NodeDetailPage() {
 					events={renderEvents()}
 					activeTab={activeTab}
 					onTabChange={handleTabChange}
-					committerLogRole={committerLogRole}
-					onCommitterLogRoleChange={setCommitterLogRole}
 				/>
 			)}
 
