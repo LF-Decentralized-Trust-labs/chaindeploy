@@ -51,16 +51,14 @@ import (
 // Default port layout — matches constants in the web UI quickstart page.
 // Changing these here without updating the UI creates divergent bundles.
 const (
-	defaultBasePort           = 17000
-	defaultSlotSize           = 20
-	defaultPostgresPort       = 15432
-	defaultNumParties         = 4
-	defaultChannelID          = "arma"
-	defaultNetworkName        = "fabricx-quickstart"
-	sharedPostgresServiceName = "fabricx-quickstart-pg"
-	sharedPostgresNetworkName = "fabricx-quickstart-pg-net"
-	sharedPostgresAdminUser   = "postgres"
-	sharedPostgresAdminPass   = "postgres"
+	defaultBasePort         = 17000
+	defaultSlotSize         = 20
+	defaultPostgresPort     = 15432
+	defaultNumParties       = 4
+	defaultChannelID        = "arma"
+	defaultNetworkName      = "fabricx-quickstart"
+	sharedPostgresAdminUser = "postgres"
+	sharedPostgresAdminPass = "postgres"
 
 	defaultHTTPTimeout      = 3 * time.Minute
 	defaultJoinRetries      = 2
@@ -93,6 +91,55 @@ func partyDatabaseSpec(partyID int) partyDB {
 		User:     fmt.Sprintf("party%d", partyID),
 		Password: fmt.Sprintf("party%dpw", partyID),
 	}
+}
+
+// sharedPostgresServiceName returns the per-network postgres services-row
+// name. Two parallel quickstarts (different --network-name) get distinct
+// services + container names so they don't collide. Mirrors the helper
+// of the same name in web/src/pages/networks/fabricx/quickstart.tsx.
+//
+// The result feeds into the docker container name (postgres.go derives
+// `chainlaunch-service-<name>`), so we slugify the input — docker
+// rejects names containing characters outside [a-zA-Z0-9_.-].
+func sharedPostgresServiceName(networkName string) string {
+	return sanitizeForContainerName(networkName) + "-pg"
+}
+
+// sharedPostgresNetworkName is the docker bridge network the postgres
+// container is started on (and that committers attach to). Per-network
+// scope so two parallel quickstarts have distinct bridge networks.
+// Same docker naming constraints as the service name.
+func sharedPostgresNetworkName(networkName string) string {
+	return sanitizeForContainerName(networkName) + "-pg-net"
+}
+
+// sanitizeForContainerName lowercases the input and replaces every
+// character outside the docker-allowed set [a-z0-9_-] with `-`. Docker
+// container/network names must match `[a-zA-Z0-9][a-zA-Z0-9_.-]+`;
+// keeping the output strictly lowercase + ASCII-safe means the helper
+// works regardless of what users type in --network-name.
+func sanitizeForContainerName(in string) string {
+	if in == "" {
+		return "fabricx"
+	}
+	var b strings.Builder
+	b.Grow(len(in))
+	for _, r := range strings.ToLower(in) {
+		switch {
+		case r >= 'a' && r <= 'z',
+			r >= '0' && r <= '9',
+			r == '-' || r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('-')
+		}
+	}
+	out := b.String()
+	// Docker requires the leading character to be alphanumeric.
+	if out == "" || (out[0] != '_' && out[0] == '-') {
+		out = "x" + out
+	}
+	return out
 }
 
 type partyResult struct {
@@ -399,16 +446,17 @@ func runQuickstart(ctx context.Context, c *apiClient, cfg quickstartConfig) erro
 		}
 	}
 
-	// Phase 2-4: shared postgres
-	status("Creating shared Postgres service %s", sharedPostgresServiceName)
-	pgID, err := findOrCreatePostgresService(ctx, c, cfg.postgresPort)
+	// Phase 2-4: shared postgres (per-network — two parallel quickstarts
+	// get distinct service rows + bridge networks).
+	status("Creating shared Postgres service %s", sharedPostgresServiceName(cfg.networkName))
+	pgID, err := findOrCreatePostgresService(ctx, c, cfg)
 	if err != nil {
 		return fmt.Errorf("postgres service: %w", err)
 	}
 	done("  → service #%d", pgID)
 
 	status("Starting shared Postgres container (host :%d)", cfg.postgresPort)
-	if err := startPostgresService(ctx, c, pgID); err != nil {
+	if err := startPostgresService(ctx, c, cfg, pgID); err != nil {
 		return fmt.Errorf("start postgres: %w", err)
 	}
 	// Mirror UI behavior: small pause so CREATE ROLE doesn't race startup.
@@ -689,13 +737,14 @@ func findOrCreateOrg(ctx context.Context, c *apiClient, mspID string) (int64, er
 	return created.ID, nil
 }
 
-func findOrCreatePostgresService(ctx context.Context, c *apiClient, hostPort int) (int64, error) {
+func findOrCreatePostgresService(ctx context.Context, c *apiClient, cfg quickstartConfig) (int64, error) {
+	svcName := sharedPostgresServiceName(cfg.networkName)
 	body := map[string]any{
-		"name":     sharedPostgresServiceName,
+		"name":     svcName,
 		"db":       "postgres",
 		"user":     sharedPostgresAdminUser,
 		"password": sharedPostgresAdminPass,
-		"hostPort": hostPort,
+		"hostPort": cfg.postgresPort,
 	}
 	resp, err := c.post(ctx, "/services/postgres", body)
 	if err != nil {
@@ -713,7 +762,7 @@ func findOrCreatePostgresService(ctx context.Context, c *apiClient, hostPort int
 	}
 	b, _ := readBody(resp)
 	if strings.Contains(string(b), "UNIQUE") || strings.Contains(string(b), "already") || resp.StatusCode == http.StatusConflict {
-		return findPostgresServiceByName(ctx, c, sharedPostgresServiceName)
+		return findPostgresServiceByName(ctx, c, svcName)
 	}
 	return 0, fmt.Errorf("create postgres service: %s", strings.TrimSpace(string(b)))
 }
@@ -755,8 +804,8 @@ func findPostgresServiceByName(ctx context.Context, c *apiClient, name string) (
 	return 0, fmt.Errorf("service %q not found", name)
 }
 
-func startPostgresService(ctx context.Context, c *apiClient, serviceID int64) error {
-	body := map[string]any{"networkName": sharedPostgresNetworkName}
+func startPostgresService(ctx context.Context, c *apiClient, cfg quickstartConfig, serviceID int64) error {
+	body := map[string]any{"networkName": sharedPostgresNetworkName(cfg.networkName)}
 	resp, err := c.post(ctx, fmt.Sprintf("/services/%d/start", serviceID), body)
 	if err != nil {
 		return err
@@ -1192,20 +1241,40 @@ func verifyNodeJoined(ctx context.Context, c *apiClient, nodeID int64) (bool, st
 	}
 }
 
-// cleanBundle tears down any prior quickstart bundle so reruns don't hit
-// UNIQUE-constraint failures on node_groups.name. Order matters: networks
-// first (they reference nodes), then nodes, then node_groups, then orgs.
-// The shared Postgres service is left running — it's reused across runs.
+// cleanBundle tears down any prior quickstart bundle owned by
+// cfg.networkName so reruns don't hit UNIQUE-constraint failures on
+// node_groups.name. Scoped to one network: parallel networks running
+// alongside this one are left untouched.
+//
+// Resolution order:
+//  1. Find the target network by name and read its config.organizations
+//     to discover the orderer/committer node-group IDs used by it.
+//  2. Delete child + parent nodes for those groups.
+//  3. Delete the groups themselves, plus the per-network postgres
+//     service.
+//  4. Purge bind-mount dirs for those groups + the postgres service.
+//  5. Delete orgs owned only by this network (best-effort: Party*MSP
+//     pattern + the singleMSPID).
 func cleanBundle(ctx context.Context, c *apiClient, cfg quickstartConfig) error {
-	status("Cleaning any prior bundle named %q", cfg.networkName)
+	status("Cleaning any prior bundle named %q (scoped — parallel networks untouched)", cfg.networkName)
 
-	// Delete networks matching the name.
+	// 1. Resolve the network and the node-group IDs it owns.
+	var targetNetID int64
+	var ourGroupIDs []int64
 	if resp, err := c.get(ctx, "/networks/fabricx?limit=500"); err == nil {
 		body, _ := readBody(resp)
 		var env struct {
 			Networks []struct {
-				ID   int64  `json:"id"`
-				Name string `json:"name"`
+				ID     int64  `json:"id"`
+				Name   string `json:"name"`
+				Config struct {
+					Organizations []struct {
+						OrdererNodeGroupID   int64 `json:"orderer_node_group_id"`
+						OrdererNodeID        int64 `json:"orderer_node_id"`
+						CommitterNodeGroupID int64 `json:"committer_node_group_id"`
+						CommitterNodeID      int64 `json:"committer_node_id"`
+					} `json:"organizations"`
+				} `json:"config"`
 			} `json:"networks"`
 		}
 		if err := json.Unmarshal(body, &env); err == nil {
@@ -1213,74 +1282,137 @@ func cleanBundle(ctx context.Context, c *apiClient, cfg quickstartConfig) error 
 				if n.Name != cfg.networkName {
 					continue
 				}
-				dresp, derr := c.delete_(ctx, fmt.Sprintf("/networks/fabricx/%d", n.ID))
-				if derr != nil {
-					warn("  ⚠ delete network #%d: %v", n.ID, derr)
-					continue
+				targetNetID = n.ID
+				for _, o := range n.Config.Organizations {
+					if o.OrdererNodeGroupID != 0 {
+						ourGroupIDs = append(ourGroupIDs, o.OrdererNodeGroupID)
+					}
+					if o.CommitterNodeGroupID != 0 {
+						ourGroupIDs = append(ourGroupIDs, o.CommitterNodeGroupID)
+					}
 				}
-				dresp.Body.Close()
-				done("  → deleted network #%d", n.ID)
 			}
 		}
 	}
 
-	// Delete FabricX nodes (committers + orderer children + any stray).
-	if resp, err := c.get(ctx, "/nodes?platform=FABRICX&limit=1000"); err == nil {
-		body, _ := readBody(resp)
-		var env struct {
-			Items []struct {
-				ID int64 `json:"id"`
-			} `json:"items"`
+	// Snapshot the groups' display names + child IDs before we delete
+	// them; needed for the bind-mount purge step.
+	groupSlugs := map[string]bool{}
+	childNodeIDs := map[int64]bool{}
+	parentNodeIDs := map[int64]bool{}
+	for _, gid := range ourGroupIDs {
+		gresp, gerr := c.get(ctx, fmt.Sprintf("/node-groups/%d", gid))
+		if gerr != nil {
+			continue
 		}
-		if err := json.Unmarshal(body, &env); err == nil {
-			for _, n := range env.Items {
-				dresp, derr := c.delete_(ctx, fmt.Sprintf("/nodes/%d", n.ID))
-				if derr != nil {
-					warn("  ⚠ delete node #%d: %v", n.ID, derr)
-					continue
-				}
-				dresp.Body.Close()
-			}
-			if len(env.Items) > 0 {
-				done("  → deleted %d nodes", len(env.Items))
-			}
+		gbody, _ := readBody(gresp)
+		var grp struct {
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal(gbody, &grp); err == nil && grp.Name != "" {
+			groupSlugs[grp.Name] = true
+		}
+		cresp, cerr := c.get(ctx, fmt.Sprintf("/node-groups/%d/children", gid))
+		if cerr != nil {
+			continue
+		}
+		cbody, _ := readBody(cresp)
+		var kids []struct {
+			ID int64 `json:"id"`
+		}
+		_ = json.Unmarshal(cbody, &kids)
+		for _, k := range kids {
+			childNodeIDs[k.ID] = true
 		}
 	}
 
-	// Delete FabricX node_groups.
-	if resp, err := c.get(ctx, "/node-groups?limit=500"); err == nil {
-		body, _ := readBody(resp)
-		var groups []struct {
-			ID       int64  `json:"id"`
-			Platform string `json:"platform"`
-		}
-		_ = json.Unmarshal(body, &groups)
-		deleted := 0
-		for _, g := range groups {
-			if !strings.EqualFold(g.Platform, "FABRICX") {
-				continue
-			}
-			dresp, derr := c.delete_(ctx, fmt.Sprintf("/node-groups/%d", g.ID))
-			if derr != nil {
-				warn("  ⚠ delete node_group #%d: %v", g.ID, derr)
-				continue
-			}
+	// 2. Delete the network row first (drops network_nodes + genesis).
+	if targetNetID != 0 {
+		dresp, derr := c.delete_(ctx, fmt.Sprintf("/networks/fabricx/%d", targetNetID))
+		if derr != nil {
+			warn("  ⚠ delete network #%d: %v", targetNetID, derr)
+		} else {
 			dresp.Body.Close()
-			deleted++
-		}
-		if deleted > 0 {
-			done("  → deleted %d node_groups", deleted)
+			done("  → deleted network #%d", targetNetID)
 		}
 	}
 
-	// Delete Party*MSP orgs.
+	// Also pick up any monolithic FABRICX_COMMITTER / FABRICX_ORDERER_GROUP
+	// node rows owned by the network's orgs but referenced through
+	// committer_node_id / orderer_node_id (the legacy single-node path).
+	// They sit on the same parent node-group rows we already collected,
+	// so the children fetch above covers them.
+	_ = parentNodeIDs
+
+	// 3. Delete the child nodes.
+	deletedNodes := 0
+	for nid := range childNodeIDs {
+		dresp, derr := c.delete_(ctx, fmt.Sprintf("/nodes/%d", nid))
+		if derr != nil {
+			warn("  ⚠ delete node #%d: %v", nid, derr)
+			continue
+		}
+		dresp.Body.Close()
+		deletedNodes++
+	}
+	if deletedNodes > 0 {
+		done("  → deleted %d nodes", deletedNodes)
+	}
+
+	// 4. Delete the node-groups.
+	deletedGroups := 0
+	for _, gid := range ourGroupIDs {
+		dresp, derr := c.delete_(ctx, fmt.Sprintf("/node-groups/%d", gid))
+		if derr != nil {
+			warn("  ⚠ delete node_group #%d: %v", gid, derr)
+			continue
+		}
+		dresp.Body.Close()
+		deletedGroups++
+	}
+	if deletedGroups > 0 {
+		done("  → deleted %d node_groups", deletedGroups)
+	}
+
+	// 5. Delete the per-network postgres service (so its container is
+	// stopped + the bind mount can be purged).
+	pgServiceName := sharedPostgresServiceName(cfg.networkName)
+	if pgID, err := findPostgresServiceByName(ctx, c, pgServiceName); err == nil {
+		// Stop is best-effort — service may already be stopped.
+		if sresp, serr := c.post(ctx, fmt.Sprintf("/services/%d/stop", pgID), nil); serr == nil {
+			sresp.Body.Close()
+		}
+		if dresp, derr := c.delete_(ctx, fmt.Sprintf("/services/%d", pgID)); derr == nil {
+			dresp.Body.Close()
+			done("  → deleted postgres service #%d (%s)", pgID, pgServiceName)
+		}
+	}
+
+	// 6. Best-effort org cleanup. We can't always tell which orgs
+	// belong to this network (orgs are first-class and can be reused),
+	// so we only remove orgs whose name matches the patterns the
+	// quickstart creates and which are no longer referenced by any
+	// remaining node. Skip the singleMSPID in single mode if other
+	// networks may share it — we'd nuke their identity. To stay safe:
+	// only delete an org if it has zero nodes left.
 	if resp, err := c.get(ctx, "/organizations?limit=1000"); err == nil {
 		body, _ := readBody(resp)
 		var env orgListResponse
 		_ = json.Unmarshal(body, &env)
 		deleted := 0
 		for _, o := range env.Items {
-			if !strings.HasPrefix(o.MspID, "Party") || !strings.HasSuffix(o.MspID, "MSP") {
+			match := strings.HasPrefix(o.MspID, "Party") && strings.HasSuffix(o.MspID, "MSP")
+			if cfg.mode == "single" && o.MspID == cfg.singleMSPID {
+				match = true
+			}
+			if !match {
+				continue
+			}
+			// Probe: only delete the org if no nodes/groups still ref it.
+			// The DB FK is ON DELETE SET NULL on nodes, so this is just
+			// a safety check to avoid yanking an org used by a parallel
+			// network that happened to share an MSPID.
+			if used, _ := orgHasFabricxRefs(ctx, c, o.MspID); used {
 				continue
 			}
 			dresp, derr := c.delete_(ctx, fmt.Sprintf("/organizations/%d", o.ID))
@@ -1296,30 +1428,60 @@ func cleanBundle(ctx context.Context, c *apiClient, cfg quickstartConfig) error 
 		}
 	}
 
-	// Purge on-disk bind-mount state. API delete only drops DB rows — it
-	// leaves per-node data/ directories behind. On a rerun, the old TLS
-	// cert survives; fresh Init() generates new DB keys; genesis is built
-	// from new keys; orderer containers start with a cert that doesn't
-	// match the shared config and crash. See orderergroup.go ensureMaterials
-	// drift-detection for the matching backend-side fix.
+	// 7. Purge on-disk bind-mount state. API delete only drops DB rows
+	// — it leaves per-node data/ directories behind. Stale TLS certs
+	// surviving a rerun would collide with freshly-generated DB keys.
+	// Scoped to the groups we just removed plus this network's postgres.
 	if cfg.dataPath != "" {
-		// services/postgres/<container>/ holds the per-service Postgres
-		// PGDATA bind mount (added when committer state moved off the
-		// container's writable layer). On a rerun, leftover databases /
-		// roles trip provisionPartyDatabases' CREATE DATABASE / CREATE
-		// ROLE paths because they're not idempotent on the postgres
-		// side. Wipe so initdb runs fresh.
-		for _, sub := range []string{"fabricx-orderers", "fabricx-committers", "services/postgres"} {
-			dir := cfg.dataPath + "/" + sub
-			if _, err := os.Stat(dir); err == nil {
-				if err := os.RemoveAll(dir); err != nil {
-					warn("  ⚠ purge %s: %v", dir, err)
-					continue
+		for slug := range groupSlugs {
+			for _, sub := range []string{"fabricx-orderers", "fabricx-committers"} {
+				dir := cfg.dataPath + "/" + sub + "/" + slug
+				if _, err := os.Stat(dir); err == nil {
+					if err := os.RemoveAll(dir); err != nil {
+						warn("  ⚠ purge %s: %v", dir, err)
+						continue
+					}
+					done("  → purged %s", dir)
 				}
-				done("  → purged %s", dir)
+			}
+		}
+		// services/postgres/<container>/ — the postgres service we just
+		// deleted has its bind mount under the container name docker
+		// uses, which is `chainlaunch-service-<service-name>`.
+		pgDir := cfg.dataPath + "/services/postgres/chainlaunch-service-" + pgServiceName
+		if _, err := os.Stat(pgDir); err == nil {
+			if err := os.RemoveAll(pgDir); err != nil {
+				warn("  ⚠ purge %s: %v", pgDir, err)
+			} else {
+				done("  → purged %s", pgDir)
 			}
 		}
 	}
 
 	return nil
+}
+
+// orgHasFabricxRefs returns true if any FabricX node still references
+// the given MSPID. Used by cleanBundle's org-deletion step to avoid
+// nuking an org used by a parallel network.
+func orgHasFabricxRefs(ctx context.Context, c *apiClient, mspID string) (bool, error) {
+	resp, err := c.get(ctx, "/nodes?platform=FABRICX&limit=2000")
+	if err != nil {
+		return false, err
+	}
+	body, _ := readBody(resp)
+	var env struct {
+		Items []struct {
+			MspID string `json:"mspId"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		return false, err
+	}
+	for _, n := range env.Items {
+		if n.MspID == mspID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
