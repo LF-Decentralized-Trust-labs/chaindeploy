@@ -51,8 +51,41 @@ const (
 )
 
 // slugify converts a name to a Docker-safe slug
+// slugify produces a path-safe slug derived from a user-supplied node
+// name. The result is the lower-case input with every character outside
+// [a-z0-9-_] replaced by '-', collapsed of repeated dashes, and trimmed.
+// This is critical because the slug becomes a directory component under
+// the chainlaunch data path (see baseDir) and from there flows into
+// os.MkdirAll / os.WriteFile / os.ReadDir calls. Without this filter a
+// node name like "../../etc/passwd" would let an authenticated caller
+// escape the data directory; CodeQL's go/path-injection rule catches
+// the original strings.ReplaceAll-only implementation.
+//
+// Empty or all-junk input falls back to "node" so the caller still
+// gets a usable, predictable directory name instead of an empty string
+// (which would resolve baseDir to the parent and overwrite siblings).
 func slugify(name string) string {
-	return strings.ReplaceAll(strings.ToLower(name), " ", "-")
+	lower := strings.ToLower(name)
+	var b strings.Builder
+	b.Grow(len(lower))
+	prevDash := false
+	for _, r := range lower {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_':
+			b.WriteRune(r)
+			prevDash = false
+		default:
+			if !prevDash {
+				b.WriteByte('-')
+				prevDash = true
+			}
+		}
+	}
+	out := strings.Trim(b.String(), "-")
+	if out == "" {
+		return "node"
+	}
+	return out
 }
 
 // containerNamePrefix returns a consistent container name prefix
