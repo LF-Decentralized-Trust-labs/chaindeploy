@@ -96,12 +96,13 @@ func partyDatabaseSpec(partyID int) partyDB {
 }
 
 type partyResult struct {
-	partyID             int
-	mspID               string
-	organizationID      int64
-	ordererNodeGroupID  int64
-	ordererChildNodeIDs []int64 // router, batcher, consenter, assembler
-	committerNodeID     int64
+	partyID               int
+	mspID                 string
+	organizationID        int64
+	ordererNodeGroupID    int64
+	ordererChildNodeIDs   []int64 // router, batcher, consenter, assembler
+	committerNodeGroupID  int64
+	committerChildNodeIDs []int64 // sidecar, coordinator, validator, verifier, query-service
 }
 
 // apiClient is a local HTTP wrapper with per-request timeout. The shared
@@ -386,13 +387,14 @@ func runQuickstart(ctx context.Context, c *apiClient, cfg quickstartConfig) erro
 
 	// Phase 6: committers
 	for i := range parties {
-		status("Creating committer for %s", parties[i].mspID)
-		id, err := createCommitter(ctx, c, parties[i], cfg)
+		status("Creating committer node-group for %s", parties[i].mspID)
+		groupID, childIDs, err := createCommitterNodeGroup(ctx, c, parties[i], cfg)
 		if err != nil {
 			return fmt.Errorf("committer %s: %w", parties[i].mspID, err)
 		}
-		parties[i].committerNodeID = id
-		done("  → node #%d", id)
+		parties[i].committerNodeGroupID = groupID
+		parties[i].committerChildNodeIDs = childIDs
+		done("  → group #%d, children %v", groupID, childIDs)
 	}
 
 	// Phase 7: network (genesis)
@@ -426,20 +428,22 @@ func runQuickstart(ctx context.Context, c *apiClient, cfg quickstartConfig) erro
 		}
 	}
 	for i := range parties {
-		status("Joining %s committer", parties[i].mspID)
-		if err := joinNodeWithRetry(ctx, c, networkID, parties[i].committerNodeID, cfg); err != nil {
-			joinErrors = append(joinErrors, fmt.Sprintf("committer %s: %v", parties[i].mspID, err))
-			if !cfg.keepGoing {
-				return fmt.Errorf("join committer #%d: %w", parties[i].committerNodeID, err)
+		status("Joining %s committer children (verifier→validator→coordinator→sidecar→query-service)", parties[i].mspID)
+		for _, childID := range parties[i].committerChildNodeIDs {
+			if err := joinNodeWithRetry(ctx, c, networkID, childID, cfg); err != nil {
+				joinErrors = append(joinErrors, fmt.Sprintf("committer %s child #%d: %v", parties[i].mspID, childID, err))
+				if !cfg.keepGoing {
+					return fmt.Errorf("join committer child #%d: %w", childID, err)
+				}
+				fail("  ! child #%d: %v (continuing)", childID, err)
+				continue
 			}
-			fail("  ! committer #%d: %v (continuing)", parties[i].committerNodeID, err)
-			continue
-		}
-		if healthy, detail := verifyNodeJoined(ctx, c, parties[i].committerNodeID); !healthy {
-			unhealthy = append(unhealthy, fmt.Sprintf("committer %s #%d: %s", parties[i].mspID, parties[i].committerNodeID, detail))
-			warn("  ⚠ committer #%d joined but %s", parties[i].committerNodeID, detail)
-		} else {
-			done("  → committer #%d joined", parties[i].committerNodeID)
+			if healthy, detail := verifyNodeJoined(ctx, c, childID); !healthy {
+				unhealthy = append(unhealthy, fmt.Sprintf("committer %s child #%d: %s", parties[i].mspID, childID, detail))
+				warn("  ⚠ child #%d joined but %s", childID, detail)
+			} else {
+				done("  → child #%d joined", childID)
+			}
 		}
 	}
 
@@ -450,10 +454,10 @@ func runQuickstart(ctx context.Context, c *apiClient, cfg quickstartConfig) erro
 	// every node after all joins have completed; by then the Docker apiproxy
 	// queue has drained and the retry actually creates the containers.
 	status("Reconciling node containers (post-join /start retry)")
-	allNodeIDs := make([]int64, 0, cfg.numParties*5)
+	allNodeIDs := make([]int64, 0, cfg.numParties*9)
 	for i := range parties {
 		allNodeIDs = append(allNodeIDs, parties[i].ordererChildNodeIDs...)
-		allNodeIDs = append(allNodeIDs, parties[i].committerNodeID)
+		allNodeIDs = append(allNodeIDs, parties[i].committerChildNodeIDs...)
 	}
 	var reconcileErrors []string
 	for _, nid := range allNodeIDs {
@@ -488,9 +492,9 @@ func runQuickstart(ctx context.Context, c *apiClient, cfg quickstartConfig) erro
 		networkID, cfg.networkName, cfg.numParties)
 	for _, p := range parties {
 		pp := portsForParty(cfg.basePort, cfg.slotSize, p.partyID-1)
-		fmt.Printf("  %s: orderer-group=#%d (ports %d-%d), committer=#%d (ports %d-%d)\n",
+		fmt.Printf("  %s: orderer-group=#%d (ports %d-%d), committer-group=#%d (ports %d-%d)\n",
 			p.mspID, p.ordererNodeGroupID, pp.router, pp.assembler,
-			p.committerNodeID, pp.sidecar, pp.queryService)
+			p.committerNodeGroupID, pp.sidecar, pp.queryService)
 	}
 	fmt.Printf("  Shared Postgres: host :%d (%d databases)\n", cfg.postgresPort, cfg.numParties)
 
@@ -787,61 +791,121 @@ func createOrdererNodeGroup(ctx context.Context, c *apiClient, p partyResult, cf
 	return groupID, childIDs, nil
 }
 
-func createCommitter(ctx context.Context, c *apiClient, p partyResult, cfg quickstartConfig) (int64, error) {
+// createCommitterNodeGroup creates a FABRICX_COMMITTER node_group plus
+// its 5 per-role child rows (sidecar, coordinator, validator, verifier,
+// query-service) via the same /node-groups/{id}/init dispatch the
+// orderer side uses. Returns the parent group ID and the ordered list
+// of child node IDs.
+func createCommitterNodeGroup(ctx context.Context, c *apiClient, p partyResult, cfg quickstartConfig) (int64, []int64, error) {
 	pp := portsForParty(cfg.basePort, cfg.slotSize, p.partyID-1)
 	db := partyDatabaseSpec(p.partyID)
-	nodeName := strings.ToLower(p.mspID) + "-committer"
+	groupName := strings.ToLower(p.mspID) + "-committer"
 
-	body := map[string]any{
-		"name":               nodeName,
-		"blockchainPlatform": "FABRICX",
-		"fabricXCommitter": map[string]any{
-			"name":             nodeName,
-			"organizationId":   p.organizationID,
-			"mspId":            p.mspID,
-			"externalIp":       cfg.externalIP,
-			"domainNames":      []string{cfg.externalIP, "localhost"},
-			"sidecarPort":      pp.sidecar,
-			"coordinatorPort":  pp.coordinator,
-			"validatorPort":    pp.validator,
-			"verifierPort":     pp.verifier,
-			"queryServicePort": pp.queryService,
-			"postgresHost":     cfg.externalIP,
-			"postgresPort":     cfg.postgresPort,
-			"postgresDb":       db.DB,
-			"postgresUser":     db.User,
-			"postgresPassword": db.Password,
-			"channelId":        cfg.channelID,
-			"ordererEndpoints": []string{fmt.Sprintf("%s:%d", cfg.externalIP, pp.assembler)},
-		},
+	createBody := map[string]any{
+		"name":           groupName,
+		"platform":       "FABRICX",
+		"groupType":      "FABRICX_COMMITTER",
+		"organizationId": p.organizationID,
+		"mspId":          p.mspID,
+		"externalIp":     cfg.externalIP,
+		"domainNames":    []string{cfg.externalIP, "localhost"},
 	}
-	resp, err := c.post(ctx, "/nodes", body)
+	resp, err := c.post(ctx, "/node-groups", createBody)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("create committer %s: %s", nodeName, readErrorBody(resp))
+	if resp.StatusCode != http.StatusCreated {
+		defer resp.Body.Close()
+		return 0, nil, fmt.Errorf("create node_group %s: %s", groupName, readErrorBody(resp))
 	}
 	var created struct {
 		ID int64 `json:"id"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
-		return 0, fmt.Errorf("decode committer: %w", err)
+		resp.Body.Close()
+		return 0, nil, fmt.Errorf("decode node_group: %w", err)
 	}
+	resp.Body.Close()
 	if created.ID == 0 {
-		return 0, fmt.Errorf("server returned no id for committer %s", nodeName)
+		return 0, nil, fmt.Errorf("server returned no id for node_group %s", groupName)
 	}
-	return created.ID, nil
+	groupID := created.ID
+
+	initBody := map[string]any{
+		"sidecarPort":      pp.sidecar,
+		"coordinatorPort":  pp.coordinator,
+		"validatorPort":    pp.validator,
+		"verifierPort":     pp.verifier,
+		"queryServicePort": pp.queryService,
+		"postgresHost":     cfg.externalIP,
+		"postgresPort":     cfg.postgresPort,
+		"postgresDb":       db.DB,
+		"postgresUser":     db.User,
+		"postgresPassword": db.Password,
+		"channelId":        cfg.channelID,
+		"ordererEndpoints": []string{fmt.Sprintf("%s:%d", cfg.externalIP, pp.assembler)},
+	}
+	iresp, err := c.post(ctx, fmt.Sprintf("/node-groups/%d/init", groupID), initBody)
+	if err != nil {
+		return 0, nil, err
+	}
+	iresp.Body.Close()
+	if iresp.StatusCode != http.StatusOK && iresp.StatusCode != http.StatusCreated {
+		return 0, nil, fmt.Errorf("init node_group %d: HTTP %d", groupID, iresp.StatusCode)
+	}
+
+	cresp, err := c.get(ctx, fmt.Sprintf("/node-groups/%d/children", groupID))
+	if err != nil {
+		return 0, nil, err
+	}
+	if cresp.StatusCode != http.StatusOK {
+		defer cresp.Body.Close()
+		return 0, nil, fmt.Errorf("fetch children %d: %s", groupID, readErrorBody(cresp))
+	}
+	var children []struct {
+		ID       int64  `json:"id"`
+		NodeType string `json:"nodeType"`
+	}
+	if err := json.NewDecoder(cresp.Body).Decode(&children); err != nil {
+		cresp.Body.Close()
+		return 0, nil, fmt.Errorf("decode children: %w", err)
+	}
+	cresp.Body.Close()
+	// Order matches StartGroup's ChildRoles ordering: verifier and
+	// validator first (downstream of coordinator), then coordinator,
+	// then sidecar (which dials the orderer), and finally query-service
+	// (read-only). Mirrors ngtypes.ChildRoles(GroupTypeFabricXCommitter).
+	order := []string{
+		"FABRICX_COMMITTER_VERIFIER",
+		"FABRICX_COMMITTER_VALIDATOR",
+		"FABRICX_COMMITTER_COORDINATOR",
+		"FABRICX_COMMITTER_SIDECAR",
+		"FABRICX_COMMITTER_QUERY_SERVICE",
+	}
+	childIDs := make([]int64, 0, 5)
+	for _, role := range order {
+		var found int64
+		for _, ch := range children {
+			if ch.NodeType == role {
+				found = ch.ID
+				break
+			}
+		}
+		if found == 0 {
+			return 0, nil, fmt.Errorf("group %d missing child for role %s", groupID, role)
+		}
+		childIDs = append(childIDs, found)
+	}
+	return groupID, childIDs, nil
 }
 
 func createNetwork(ctx context.Context, c *apiClient, cfg quickstartConfig, parties []partyResult) (int64, error) {
 	orgs := make([]map[string]any, 0, len(parties))
 	for _, p := range parties {
 		orgs = append(orgs, map[string]any{
-			"id":                 p.organizationID,
-			"ordererNodeGroupId": p.ordererNodeGroupID,
-			"committerNodeId":    p.committerNodeID,
+			"id":                   p.organizationID,
+			"ordererNodeGroupId":   p.ordererNodeGroupID,
+			"committerNodeGroupId": p.committerNodeGroupID,
 		})
 	}
 	body := map[string]any{

@@ -18,6 +18,7 @@ package http
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -43,7 +44,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Route("/{id}", func(r chi.Router) {
 			r.Get("/", h.Get)
 			r.Delete("/", h.Delete)
-			r.Post("/init", h.InitOrderer)
+			r.Post("/init", h.Init)
 			r.Post("/start", h.Start)
 			r.Post("/stop", h.Stop)
 			r.Post("/restart", h.Restart)
@@ -173,43 +174,114 @@ type InitOrdererRequest struct {
 	ConsenterType string `json:"consenterType,omitempty"`
 }
 
-// @Summary Initialize a FabricX orderer group
-// @Description Generates crypto, writes on-disk config, persists deployment_config on the group,
-// @Description and creates one child nodes row per role (router, batcher, consenter, assembler).
-// @Description Only valid for FABRICX_ORDERER_GROUP groups. Idempotency: fails if already initialized.
+// InitCommitterRequest is the JSON body for POST /node-groups/{id}/init
+// when the group is a FABRICX_COMMITTER. Ports + ordererEndpoints +
+// postgresHost are required; the rest is derived from the persisted
+// group row.
+type InitCommitterRequest struct {
+	SidecarPort      int      `json:"sidecarPort" validate:"required,gt=0"`
+	CoordinatorPort  int      `json:"coordinatorPort" validate:"required,gt=0"`
+	ValidatorPort    int      `json:"validatorPort" validate:"required,gt=0"`
+	VerifierPort     int      `json:"verifierPort" validate:"required,gt=0"`
+	QueryServicePort int      `json:"queryServicePort" validate:"required,gt=0"`
+	OrdererEndpoints []string `json:"ordererEndpoints" validate:"required,min=1"`
+	PostgresHost     string   `json:"postgresHost" validate:"required"`
+	PostgresPort     int      `json:"postgresPort,omitempty"`
+	PostgresDB       string   `json:"postgresDb,omitempty"`
+	PostgresUser     string   `json:"postgresUser,omitempty"`
+	PostgresPassword string   `json:"postgresPassword,omitempty"`
+	ChannelID        string   `json:"channelId,omitempty"`
+}
+
+// @Summary Initialize a FabricX node group (orderer or committer)
+// @Description Dispatches by group type. For FABRICX_ORDERER_GROUP, expects
+// @Description an InitOrdererRequest body and spawns 4 child role rows.
+// @Description For FABRICX_COMMITTER, expects an InitCommitterRequest body
+// @Description and spawns 5 child role rows. Idempotency: fails if already
+// @Description initialized.
 // @Tags NodeGroups
 // @Accept json
 // @Produce json
 // @Param id path int true "Group ID"
-// @Param request body InitOrdererRequest true "Port allocations"
 // @Success 200 {object} types.NodeGroup
 // @Router /node-groups/{id}/init [post]
-func (h *Handler) InitOrderer(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Init(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r)
 	if !ok {
 		return
 	}
-	var req InitOrdererRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-	if err := h.validate.Struct(req); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	grp, err := h.service.InitOrdererGroup(r.Context(), id, ngservice.OrdererInitInput{
-		RouterPort:    req.RouterPort,
-		BatcherPort:   req.BatcherPort,
-		ConsenterPort: req.ConsenterPort,
-		AssemblerPort: req.AssemblerPort,
-		ConsenterType: req.ConsenterType,
-	})
+
+	// Dispatch by group type so the single /init route works for both
+	// orderer and committer groups. The body shape differs, so we read
+	// it once into a buffer and decode against the right struct.
+	grp, err := h.service.Get(r.Context(), id)
 	if err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
+		writeErr(w, http.StatusNotFound, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, grp)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "failed to read body")
+		return
+	}
+
+	switch grp.GroupType {
+	case ngtypes.GroupTypeFabricXOrderer:
+		var req InitOrdererRequest
+		if err := json.Unmarshal(body, &req); err != nil {
+			writeErr(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		if err := h.validate.Struct(req); err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		out, err := h.service.InitOrdererGroup(r.Context(), id, ngservice.OrdererInitInput{
+			RouterPort:    req.RouterPort,
+			BatcherPort:   req.BatcherPort,
+			ConsenterPort: req.ConsenterPort,
+			AssemblerPort: req.AssemblerPort,
+			ConsenterType: req.ConsenterType,
+		})
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+
+	case ngtypes.GroupTypeFabricXCommitter:
+		var req InitCommitterRequest
+		if err := json.Unmarshal(body, &req); err != nil {
+			writeErr(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		if err := h.validate.Struct(req); err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		out, err := h.service.InitCommitterGroup(r.Context(), id, ngservice.CommitterInitInput{
+			SidecarPort:      req.SidecarPort,
+			CoordinatorPort:  req.CoordinatorPort,
+			ValidatorPort:    req.ValidatorPort,
+			VerifierPort:     req.VerifierPort,
+			QueryServicePort: req.QueryServicePort,
+			OrdererEndpoints: req.OrdererEndpoints,
+			PostgresHost:     req.PostgresHost,
+			PostgresPort:     req.PostgresPort,
+			PostgresDB:       req.PostgresDB,
+			PostgresUser:     req.PostgresUser,
+			PostgresPassword: req.PostgresPassword,
+			ChannelID:        req.ChannelID,
+		})
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+
+	default:
+		writeErr(w, http.StatusBadRequest, fmt.Sprintf("init not supported for group type %q", grp.GroupType))
+	}
 }
 
 // @Summary Start all children in a node group

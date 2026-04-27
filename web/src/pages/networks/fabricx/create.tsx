@@ -65,6 +65,12 @@ export default function FabricXCreatePage() {
 	const organizations = (orgsQuery.data as unknown as { items?: HandlerOrganizationResponse[] } | undefined)?.items ?? []
 	const allFabricXNodes: FabricXNode[] = (fabricXNodesQuery.data as unknown as { items?: FabricXNode[] } | undefined)?.items ?? []
 
+	// TODO(node-groups): both committer and orderer are now node_groups, not
+	// monolithic nodes. The picker should query getNodeGroups() instead of
+	// getNodes() + filter by groupType. Today this filter resolves to empty
+	// for new installs because no FABRICX_COMMITTER / FABRICX_ORDERER_GROUP
+	// node-type rows are created anymore. New deployments should use the
+	// quickstart flow which already speaks node_groups end-to-end.
 	const ordererGroupNodes = useMemo(
 		() => allFabricXNodes.filter((n) => n.nodeType === 'FABRICX_ORDERER_GROUP'),
 		[allFabricXNodes]
