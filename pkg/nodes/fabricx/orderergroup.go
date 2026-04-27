@@ -192,13 +192,29 @@ func (og *OrdererGroup) Init() (*nodetypes.FabricXOrdererGroupDeploymentConfig, 
 		return nil, fmt.Errorf("failed to get TLS private key: %w", err)
 	}
 
-	// Create directory structure
+	// Create directory structure. The "data" and "store" subdirs are
+	// bind-mounted read-write into the orderer containers (router,
+	// batcher, consenter, assembler) which run as a non-host UID. 0755
+	// owned by the host user means the container can't create children
+	// inside — chmod to 0777 so any UID can write. See the equivalent
+	// committer comment in committer.go for the full rationale.
 	baseDir := og.baseDir()
 	components := []string{"router", "batcher", "consenter", "assembler"}
+	writableSubs := map[string]bool{"data": true, "store": true}
 	for _, comp := range components {
 		for _, sub := range []string{"config", "msp", "tls", "genesis", "data", "store"} {
-			if err := os.MkdirAll(filepath.Join(baseDir, comp, sub), 0755); err != nil {
+			path := filepath.Join(baseDir, comp, sub)
+			mode := os.FileMode(0755)
+			if writableSubs[sub] {
+				mode = 0777
+			}
+			if err := os.MkdirAll(path, mode); err != nil {
 				return nil, fmt.Errorf("failed to create dir %s/%s: %w", comp, sub, err)
+			}
+			if writableSubs[sub] {
+				if err := os.Chmod(path, mode); err != nil {
+					return nil, fmt.Errorf("chmod %s/%s: %w", comp, sub, err)
+				}
 			}
 		}
 	}
@@ -358,10 +374,23 @@ func (og *OrdererGroup) SetGenesisBlock(genesisBlock []byte) error {
 func (og *OrdererGroup) ensureMaterials(cfg *nodetypes.FabricXOrdererGroupDeploymentConfig) error {
 	baseDir := og.baseDir()
 	components := []string{"router", "batcher", "consenter", "assembler"}
+	// Same UID-mismatch rationale as the create path above; restoring
+	// materials must produce 0777 on the writable subdirs too.
+	writableSubs := map[string]bool{"data": true, "store": true}
 	for _, comp := range components {
 		for _, sub := range []string{"config", "msp", "tls", "genesis", "data", "store"} {
-			if err := os.MkdirAll(filepath.Join(baseDir, comp, sub), 0755); err != nil {
+			path := filepath.Join(baseDir, comp, sub)
+			mode := os.FileMode(0755)
+			if writableSubs[sub] {
+				mode = 0777
+			}
+			if err := os.MkdirAll(path, mode); err != nil {
 				return fmt.Errorf("failed to create dir %s/%s: %w", comp, sub, err)
+			}
+			if writableSubs[sub] {
+				if err := os.Chmod(path, mode); err != nil {
+					return fmt.Errorf("chmod %s/%s: %w", comp, sub, err)
+				}
 			}
 		}
 	}

@@ -192,13 +192,36 @@ func (c *Committer) Init() (*nodetypes.FabricXCommitterDeploymentConfig, error) 
 		return nil, fmt.Errorf("failed to get TLS private key: %w", err)
 	}
 
-	// Create directory structure
+	// Create directory structure.
+	//
+	// The "data" and "ledger" subdirs are bind-mounted read-write into
+	// the committer container, which runs as UID 10001. On Linux that UID
+	// doesn't match chainlaunch's host UID, so a 0755 host dir owned by
+	// the host user is not writable from inside the container — committer
+	// boot panics with "mkdir /var/hyperledger/fabricx/ledger/index:
+	// permission denied". chmod those two to 0777 so any non-aligned
+	// container UID can create children. The other dirs are bind-mounted
+	// read-only and 0755 is sufficient for read access.
 	baseDir := c.baseDir()
 	components := []string{"sidecar", "coordinator", "validator", "verifier", "query-service"}
+	writableSubs := map[string]bool{"data": true, "ledger": true}
 	for _, comp := range components {
 		for _, sub := range []string{"config", "msp", "tls", "genesis", "data", "ledger"} {
-			if err := os.MkdirAll(filepath.Join(baseDir, comp, sub), 0755); err != nil {
+			path := filepath.Join(baseDir, comp, sub)
+			mode := os.FileMode(0755)
+			if writableSubs[sub] {
+				mode = 0777
+			}
+			if err := os.MkdirAll(path, mode); err != nil {
 				return nil, fmt.Errorf("failed to create dir %s/%s: %w", comp, sub, err)
+			}
+			// MkdirAll obeys the umask, so an explicit Chmod is required to
+			// guarantee 0777 lands in the bind-mount source (the runner's
+			// default umask 022 would otherwise leave it at 0755).
+			if writableSubs[sub] {
+				if err := os.Chmod(path, mode); err != nil {
+					return nil, fmt.Errorf("chmod %s/%s: %w", comp, sub, err)
+				}
 			}
 		}
 	}
@@ -418,10 +441,23 @@ func (c *Committer) SetGenesisBlock(genesisBlock []byte) error {
 func (c *Committer) ensureMaterials(cfg *nodetypes.FabricXCommitterDeploymentConfig) error {
 	baseDir := c.baseDir()
 	components := []string{"sidecar", "coordinator", "validator", "verifier", "query-service"}
+	// See PrepareCommitterStart for the rationale behind 0777 on the
+	// writable subdirs — same UID-mismatch issue applies here.
+	writableSubs := map[string]bool{"data": true, "ledger": true}
 	for _, comp := range components {
 		for _, sub := range []string{"config", "msp", "tls", "genesis", "data", "ledger"} {
-			if err := os.MkdirAll(filepath.Join(baseDir, comp, sub), 0755); err != nil {
+			path := filepath.Join(baseDir, comp, sub)
+			mode := os.FileMode(0755)
+			if writableSubs[sub] {
+				mode = 0777
+			}
+			if err := os.MkdirAll(path, mode); err != nil {
 				return fmt.Errorf("failed to create dir %s/%s: %w", comp, sub, err)
+			}
+			if writableSubs[sub] {
+				if err := os.Chmod(path, mode); err != nil {
+					return fmt.Errorf("chmod %s/%s: %w", comp, sub, err)
+				}
 			}
 		}
 	}

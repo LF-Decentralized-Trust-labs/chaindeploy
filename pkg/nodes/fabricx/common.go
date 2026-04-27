@@ -121,7 +121,17 @@ func writeMSP(mspDir, signCert, signKey, caCert, tlsCACert string) error {
 	return os.WriteFile(filepath.Join(mspDir, "config.yaml"), []byte(configYAML), 0644)
 }
 
-// writeTLS writes TLS cert and key
+// writeTLS writes TLS cert and key.
+//
+// On Linux with bind-mounted hostpaths, the FabricX container processes
+// run as UID 10001 (image default) while chainlaunch runs as the host
+// user (e.g. UID 1001 on a CI runner). Mode 0600 means only the host
+// user can read the key — and since UIDs don't match the container can't
+// load it (panics on "permission denied"). 0644 is the lowest mode that
+// lets a non-aligned container UID read the file. The keys are stored
+// inside the chainlaunch data directory which is already part of the
+// trust boundary; loosening the file mode here doesn't widen the
+// effective attack surface beyond what chainlaunch already assumes.
 func writeTLS(tlsDir, tlsCert, tlsKey, tlsCACert string) error {
 	if err := os.MkdirAll(tlsDir, 0755); err != nil {
 		return fmt.Errorf("failed to create TLS directory: %w", err)
@@ -132,7 +142,7 @@ func writeTLS(tlsDir, tlsCert, tlsKey, tlsCACert string) error {
 		filepath.Join(tlsDir, "ca.crt"):     tlsCACert,
 	}
 	for path, content := range files {
-		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 			return fmt.Errorf("failed to write %s: %w", path, err)
 		}
 	}
