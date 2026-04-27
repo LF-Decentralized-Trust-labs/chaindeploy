@@ -342,12 +342,14 @@ jobs:
                     timeout=$((timeout - 1))
                   done
             - name: Provision FabricX 4-party single-MSP network
-              # quickstart provisions the full 4-party Arma BFT network and
-              # finishes by creating a "quickstart" namespace as a health
-              # check (waits for committer finality). Non-zero exit on any
-              # phase failure, so this single command exercises org/key
-              # provisioning, postgres bring-up, orderer init + join, and
-              # committer init + join end-to-end.
+              # quickstart provisions the full 4-party Arma BFT network end
+              # to end (orgs, postgres, 4 orderer-groups + their child join,
+              # 1 committer + its 5-container start, post-join reconcile).
+              # Non-zero exit on any phase failure. The built-in namespace
+              # check is skipped here (--namespace "") because the committer
+              # sidecar takes a few extra seconds beyond container "Up" to
+              # become reachable on its gRPC port — covered by the next
+              # step's retry loop.
               run: |
                   ./chainlaunch fabricx quickstart \
                     --network-name e2e-fabricx \
@@ -355,9 +357,65 @@ jobs:
                     --base-port 17000 \
                     --postgres-port 15432 \
                     --external-ip 127.0.0.1 \
-                    --namespace e2etest \
-                    --namespace-timeout 90s \
+                    --namespace "" \
                     --http-timeout 4m
+            - name: Wait for committer sidecar gRPC to be reachable
+              # The committer sidecar (host port 17010) is started last and
+              # has to discover the four other committer subroles
+              # (coordinator, validator, verifier, query-service) over the
+              # internal docker network before it accepts gRPC. A simple
+              # nc port-probe confirms it's accepting TCP — the namespace
+              # POST below is the real gRPC liveness check.
+              run: |
+                  for i in $(seq 1 60); do
+                    if nc -z 127.0.0.1 17010 2>/dev/null; then
+                      echo "Committer sidecar reachable on :17010 after ${i}s"
+                      exit 0
+                    fi
+                    sleep 1
+                  done
+                  echo "Committer sidecar never came up on :17010"
+                  exit 1
+            - name: Create namespace via API and verify finality
+              # Dedicated namespace step with its own retry — the gRPC dial
+              # to the sidecar can still race the listener's acceptance of
+              # the first client even after the TCP probe succeeds. Mirrors
+              # the body the CLI's --namespace flag sends:
+              # {name, submitterOrgId, waitForFinality, finalityTimeoutSeconds}.
+              run: |
+                  net_id=$(curl -sf -u "$CHAINLAUNCH_USER:$CHAINLAUNCH_PASSWORD" \
+                    -H 'Accept: application/json' \
+                    "$CHAINLAUNCH_API_URL/networks/fabricx?limit=20" \
+                    | jq -r '.networks[] | select(.name=="e2e-fabricx") | .id')
+                  org_id=$(curl -sf -u "$CHAINLAUNCH_USER:$CHAINLAUNCH_PASSWORD" \
+                    -H 'Accept: application/json' \
+                    "$CHAINLAUNCH_API_URL/organizations?limit=200" \
+                    | jq -r '.items[] | select(.mspId=="E2eMSP") | .id' | head -1)
+                  if [ -z "$net_id" ] || [ -z "$org_id" ]; then
+                    echo "Failed to resolve net_id=$net_id or org_id=$org_id"
+                    exit 1
+                  fi
+                  echo "Creating namespace 'e2etest' on network #$net_id (submitter org #$org_id)"
+                  body=$(jq -n --argjson o "$org_id" \
+                    '{name:"e2etest",submitterOrgId:$o,waitForFinality:true,finalityTimeoutSeconds:90}')
+                  for i in $(seq 1 5); do
+                    code=$(curl -s -u "$CHAINLAUNCH_USER:$CHAINLAUNCH_PASSWORD" \
+                      -H 'Content-Type: application/json' \
+                      -o /tmp/ns-resp.json -w '%{http_code}' \
+                      -X POST "$CHAINLAUNCH_API_URL/networks/fabricx/$net_id/namespaces" \
+                      -d "$body" || echo "000")
+                    if [ "$code" = "200" ] || [ "$code" = "201" ]; then
+                      echo "Namespace 'e2etest' committed (attempt $i)"
+                      jq . /tmp/ns-resp.json 2>/dev/null || cat /tmp/ns-resp.json
+                      exit 0
+                    fi
+                    echo "Namespace create attempt $i returned HTTP $code:"
+                    cat /tmp/ns-resp.json || true
+                    echo
+                    sleep 10
+                  done
+                  echo "Namespace creation never succeeded after 5 retries"
+                  exit 1
             - name: Verify FabricX network is queryable via API
               run: |
                   net_id=$(curl -sf -u "$CHAINLAUNCH_USER:$CHAINLAUNCH_PASSWORD" \
