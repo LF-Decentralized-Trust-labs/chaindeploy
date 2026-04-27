@@ -96,12 +96,13 @@ func partyDatabaseSpec(partyID int) partyDB {
 }
 
 type partyResult struct {
-	partyID             int
-	mspID               string
-	organizationID      int64
-	ordererNodeGroupID  int64
-	ordererChildNodeIDs []int64 // router, batcher, consenter, assembler
-	committerNodeID     int64   // legacy monolithic committer node (5 internal containers)
+	partyID              int
+	mspID                string
+	organizationID       int64
+	ordererNodeGroupID   int64
+	ordererChildNodeIDs  []int64 // router, batcher, consenter, assembler
+	committerNodeGroupID int64   // per-party FABRICX_COMMITTER node-group
+	committerNodeID      int64   // legacy monolithic committer node (5 internal containers)
 }
 
 // apiClient is a local HTTP wrapper with per-request timeout. The shared
@@ -214,6 +215,8 @@ func newQuickstartCmd(log *logger.Logger) *cobra.Command {
 		namespaceName    string
 		namespaceTimeout time.Duration
 		dataPath         string
+		mode             string
+		singleMSPID      string
 	)
 
 	cmd := &cobra.Command{
@@ -270,6 +273,11 @@ Hardening:
 				namespaceName:    namespaceName,
 				namespaceTimeout: namespaceTimeout,
 				dataPath:         dataPath,
+				mode:             mode,
+				singleMSPID:      singleMSPID,
+			}
+			if cfg.mode != "single" && cfg.mode != "multi" {
+				return fmt.Errorf("--mode must be 'single' or 'multi' (got %q)", cfg.mode)
 			}
 
 			if clean {
@@ -297,6 +305,8 @@ Hardening:
 	cmd.Flags().StringVar(&namespaceName, "namespace", "quickstart", "Namespace created as a post-provisioning health check (empty to skip)")
 	cmd.Flags().DurationVar(&namespaceTimeout, "namespace-timeout", 60*time.Second, "Committer finality timeout for the health-check namespace")
 	cmd.Flags().StringVar(&dataPath, "data-path", "", "Server --data directory; when combined with --clean, purges fabricx-orderers/ and fabricx-committers/ bind-mounts so stale TLS certs don't survive a rerun")
+	cmd.Flags().StringVar(&mode, "mode", "single", "'single' = one MSP owns all parties (easiest for FSC sample apps — endorsements collapse to one signer); 'multi' = N distinct MSPs (production-shape Arma BFT)")
+	cmd.Flags().StringVar(&singleMSPID, "single-msp", "AcmeMSP", "MSPID used by --mode=single. All N parties carry this MSPID; ignored in --mode=multi.")
 
 	return cmd
 }
@@ -324,6 +334,16 @@ type quickstartConfig struct {
 	// avoid stale on-disk TLS certs surviving a rerun and colliding with
 	// the freshly-generated DB keys that go into the new genesis block.
 	dataPath string
+
+	// mode is "single" (one MSP owns all parties — easiest for FSC sample
+	// apps because endorsements collapse to one signer) or "multi" (N
+	// distinct MSPs, production-shape Arma BFT setup). Default "single".
+	mode string
+
+	// singleMSPID is the MSPID used in --mode=single. All N parties carry
+	// this MSPID; PartyIDs are 1..numParties to satisfy Arma's BFT
+	// committee. Default "AcmeMSP". Ignored in --mode=multi.
+	singleMSPID string
 }
 
 // runQuickstart is the orchestrator. Each phase prints a one-line status so the
@@ -335,19 +355,48 @@ func runQuickstart(ctx context.Context, c *apiClient, cfg quickstartConfig) erro
 	}
 
 	parties := make([]partyResult, cfg.numParties)
-	for i := range parties {
-		parties[i] = partyResult{partyID: i + 1, mspID: fmt.Sprintf("Party%dMSP", i+1)}
+	if cfg.mode == "single" {
+		// All parties share one MSPID and one chainlaunch organization,
+		// distinguished only by PartyID 1..N. PartiesConfig in the
+		// genesis SharedConfig still carries N party entries (Arma's
+		// BFT committee identifies parties by PartyID, not by MSPID),
+		// while configtxgen's ordererOrgs section is deduped by MSPID
+		// in pkg/nodes/fabricx/genesis.go so we don't trip the
+		// duplicate-org-name validator.
+		for i := range parties {
+			parties[i] = partyResult{partyID: i + 1, mspID: cfg.singleMSPID}
+		}
+	} else {
+		for i := range parties {
+			parties[i] = partyResult{partyID: i + 1, mspID: fmt.Sprintf("Party%dMSP", i+1)}
+		}
 	}
 
-	// Phase 1: orgs
-	for i := range parties {
-		status("Ensuring organization %s", parties[i].mspID)
-		orgID, err := findOrCreateOrg(ctx, c, parties[i].mspID)
+	// Phase 1: orgs. In single-MSP mode we only need one
+	// fabric_organizations row; in multi-MSP mode we need one per
+	// party. findOrCreateOrg is idempotent, so calling it for every
+	// party in single mode just resolves to the same orgID N times —
+	// but we skip the redundant calls to keep the log readable.
+	if cfg.mode == "single" {
+		status("Ensuring organization %s (single-MSP mode — shared by all %d parties)", cfg.singleMSPID, cfg.numParties)
+		orgID, err := findOrCreateOrg(ctx, c, cfg.singleMSPID)
 		if err != nil {
-			return fmt.Errorf("org %s: %w", parties[i].mspID, err)
+			return fmt.Errorf("org %s: %w", cfg.singleMSPID, err)
 		}
-		parties[i].organizationID = orgID
+		for i := range parties {
+			parties[i].organizationID = orgID
+		}
 		done("  → org #%d", orgID)
+	} else {
+		for i := range parties {
+			status("Ensuring organization %s", parties[i].mspID)
+			orgID, err := findOrCreateOrg(ctx, c, parties[i].mspID)
+			if err != nil {
+				return fmt.Errorf("org %s: %w", parties[i].mspID, err)
+			}
+			parties[i].organizationID = orgID
+			done("  → org #%d", orgID)
+		}
 	}
 
 	// Phase 2-4: shared postgres
@@ -384,30 +433,43 @@ func runQuickstart(ctx context.Context, c *apiClient, cfg quickstartConfig) erro
 		done("  → group #%d, children %v", groupID, childIDs)
 	}
 
-	// Phase 6: committers
-	// Phase 6a: shared committer node-group. One per network — every
-	// party's committer is a child of this group, each carrying its own
-	// MSP identity. The group is a thin organizational parent; it has no
-	// MSP/orgID/partyID of its own.
-	status("Creating shared committer node-group for network %s", cfg.networkName)
-	committerGroupID, err := createSharedCommitterGroup(ctx, c, cfg)
-	if err != nil {
-		return fmt.Errorf("create shared committer group: %w", err)
-	}
-	done("  → committer node-group #%d", committerGroupID)
-
-	// Phase 6b: per-party committer child nodes. Each is the legacy
-	// monolithic FABRICX_COMMITTER node (5 internal containers), but
-	// linked to the shared group via fabricXCommitter.nodeGroupId so
-	// /node-groups/{id}/children lists all 4 of them together.
-	for i := range parties {
-		status("Creating committer for %s (under group #%d)", parties[i].mspID, committerGroupID)
-		id, err := createCommitter(ctx, c, parties[i], cfg, committerGroupID)
+	// Phase 6: committers.
+	//   single-MSP: 1 committer node-group total (carries singleMSPID),
+	//     1 committer child node — sufficient for sample apps that only
+	//     need to read state from one node.
+	//   multi-MSP : N committer node-groups, one per MSP, each with one
+	//     child — the production-shape pattern where each party operates
+	//     its own committer.
+	if cfg.mode == "single" {
+		status("Creating shared committer node-group for %s", cfg.singleMSPID)
+		// Use the first party for ports/ordererAssemblerPort. In single
+		// mode all parties share an MSP, so the choice of which party's
+		// port slice to use for the committer is arbitrary — we pick
+		// party 1 by convention.
+		p := parties[0]
+		groupID, nodeID, err := createCommitterNodeGroup(ctx, c, p, cfg)
 		if err != nil {
-			return fmt.Errorf("committer %s: %w", parties[i].mspID, err)
+			return fmt.Errorf("committer %s: %w", p.mspID, err)
 		}
-		parties[i].committerNodeID = id
-		done("  → node #%d", id)
+		// Mirror onto every party so the existing Phase 8 join loop +
+		// Phase 4 network-create body keep working unchanged. They all
+		// point at the same committer.
+		for i := range parties {
+			parties[i].committerNodeGroupID = groupID
+			parties[i].committerNodeID = nodeID
+		}
+		done("  → group #%d, node #%d (shared by all %d parties)", groupID, nodeID, cfg.numParties)
+	} else {
+		for i := range parties {
+			status("Creating committer node-group for %s", parties[i].mspID)
+			groupID, nodeID, err := createCommitterNodeGroup(ctx, c, parties[i], cfg)
+			if err != nil {
+				return fmt.Errorf("committer %s: %w", parties[i].mspID, err)
+			}
+			parties[i].committerNodeGroupID = groupID
+			parties[i].committerNodeID = nodeID
+			done("  → group #%d, node #%d", groupID, nodeID)
+		}
 	}
 
 	// Phase 7: network (genesis)
@@ -440,11 +502,18 @@ func runQuickstart(ctx context.Context, c *apiClient, cfg quickstartConfig) erro
 			}
 		}
 	}
-	for i := range parties {
-		status("Joining %s committer", parties[i].mspID)
-		nid := parties[i].committerNodeID
+	// In single-MSP mode every party.committerNodeID points at the same
+	// shared committer, so we join it once. In multi-MSP mode each
+	// party has its own committer that needs joining.
+	committerJoinOrder := parties
+	if cfg.mode == "single" {
+		committerJoinOrder = parties[:1]
+	}
+	for i := range committerJoinOrder {
+		status("Joining %s committer", committerJoinOrder[i].mspID)
+		nid := committerJoinOrder[i].committerNodeID
 		if err := joinNodeWithRetry(ctx, c, networkID, nid, cfg); err != nil {
-			joinErrors = append(joinErrors, fmt.Sprintf("committer %s #%d: %v", parties[i].mspID, nid, err))
+			joinErrors = append(joinErrors, fmt.Sprintf("committer %s #%d: %v", committerJoinOrder[i].mspID, nid, err))
 			if !cfg.keepGoing {
 				return fmt.Errorf("join committer #%d: %w", nid, err)
 			}
@@ -452,7 +521,7 @@ func runQuickstart(ctx context.Context, c *apiClient, cfg quickstartConfig) erro
 			continue
 		}
 		if healthy, detail := verifyNodeJoined(ctx, c, nid); !healthy {
-			unhealthy = append(unhealthy, fmt.Sprintf("committer %s #%d: %s", parties[i].mspID, nid, detail))
+			unhealthy = append(unhealthy, fmt.Sprintf("committer %s #%d: %s", committerJoinOrder[i].mspID, nid, detail))
 			warn("  ⚠ committer #%d joined but %s", nid, detail)
 		} else {
 			done("  → committer #%d joined", nid)
@@ -469,7 +538,15 @@ func runQuickstart(ctx context.Context, c *apiClient, cfg quickstartConfig) erro
 	allNodeIDs := make([]int64, 0, cfg.numParties*5)
 	for i := range parties {
 		allNodeIDs = append(allNodeIDs, parties[i].ordererChildNodeIDs...)
-		allNodeIDs = append(allNodeIDs, parties[i].committerNodeID)
+	}
+	// In single-MSP mode all parties point at the same committer node;
+	// only reconcile it once. In multi-MSP mode each party has its own.
+	if cfg.mode == "single" {
+		allNodeIDs = append(allNodeIDs, parties[0].committerNodeID)
+	} else {
+		for i := range parties {
+			allNodeIDs = append(allNodeIDs, parties[i].committerNodeID)
+		}
 	}
 	var reconcileErrors []string
 	for _, nid := range allNodeIDs {
@@ -504,11 +581,10 @@ func runQuickstart(ctx context.Context, c *apiClient, cfg quickstartConfig) erro
 		networkID, cfg.networkName, cfg.numParties)
 	for _, p := range parties {
 		pp := portsForParty(cfg.basePort, cfg.slotSize, p.partyID-1)
-		fmt.Printf("  %s: orderer-group=#%d (ports %d-%d), committer=#%d (ports %d-%d)\n",
+		fmt.Printf("  %s: orderer-group=#%d (ports %d-%d), committer-group=#%d / committer=#%d (ports %d-%d)\n",
 			p.mspID, p.ordererNodeGroupID, pp.router, pp.assembler,
-			p.committerNodeID, pp.sidecar, pp.queryService)
+			p.committerNodeGroupID, p.committerNodeID, pp.sidecar, pp.queryService)
 	}
-	fmt.Printf("  Shared committer node-group: #%d\n", committerGroupID)
 	fmt.Printf("  Shared Postgres: host :%d (%d databases)\n", cfg.postgresPort, cfg.numParties)
 
 	if len(joinErrors) > 0 || len(unhealthy) > 0 {
@@ -716,7 +792,14 @@ func provisionPartyDatabases(ctx context.Context, c *apiClient, serviceID int64,
 
 func createOrdererNodeGroup(ctx context.Context, c *apiClient, p partyResult, cfg quickstartConfig) (int64, []int64, error) {
 	pp := portsForParty(cfg.basePort, cfg.slotSize, p.partyID-1)
+	// In single-MSP mode every orderer group shares the same MSPID, so
+	// we have to disambiguate the group name by PartyID. In multi-MSP
+	// mode the MSPID is already unique per party so we keep the
+	// historical "<msp>-orderer" name.
 	groupName := strings.ToLower(p.mspID) + "-orderer"
+	if cfg.mode == "single" {
+		groupName = fmt.Sprintf("%s-orderer-p%d", strings.ToLower(p.mspID), p.partyID)
+	}
 
 	createBody := map[string]any{
 		"name":           groupName,
@@ -804,47 +887,71 @@ func createOrdererNodeGroup(ctx context.Context, c *apiClient, p partyResult, cf
 	return groupID, childIDs, nil
 }
 
-// createSharedCommitterGroup creates the per-network FABRICX_COMMITTER
-// node-group. The group is a thin parent: it has no MSP/org/partyID of
-// its own. Each party's committer node hangs off it as a child, carrying
-// its own MSP identity. Returns the new group's ID.
-func createSharedCommitterGroup(ctx context.Context, c *apiClient, cfg quickstartConfig) (int64, error) {
-	groupName := cfg.networkName + "-committers"
-	body := map[string]any{
-		"name":      groupName,
-		"platform":  "FABRICX",
-		"groupType": "FABRICX_COMMITTER",
-		// No mspId / organizationId / partyId — those live on the children.
+// createCommitterNodeGroup creates one FABRICX_COMMITTER node-group per
+// party (carries Party<N>MSP identity), then immediately adds its single
+// monolithic committer node child. Returns the group ID + child node ID.
+//
+// Topology mirrors the orderer side: each party owns its own committer
+// group, and the group's MSP identity matches its single child. The
+// child is a legacy monolithic FABRICX_COMMITTER node that runs the
+// 5-container committer stack internally. Per-container logs are
+// reachable via /api/v1/nodes/{id}/logs?role=<role>.
+func createCommitterNodeGroup(ctx context.Context, c *apiClient, p partyResult, cfg quickstartConfig) (int64, int64, error) {
+	groupName := strings.ToLower(p.mspID) + "-committer"
+
+	// Stage 1: create the parent node-group, populated with the party's
+	// MSP identity so the Node Groups list view shows MSPID alongside the
+	// orderer rows. PartyID is omitted because committers don't take part
+	// in Arma consensus and thus carry no PartyID.
+	createBody := map[string]any{
+		"name":           groupName,
+		"platform":       "FABRICX",
+		"groupType":      "FABRICX_COMMITTER",
+		"organizationId": p.organizationID,
+		"mspId":          p.mspID,
+		"externalIp":     cfg.externalIP,
+		"domainNames":    []string{cfg.externalIP, "localhost"},
 	}
-	resp, err := c.post(ctx, "/node-groups", body)
+	resp, err := c.post(ctx, "/node-groups", createBody)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	if resp.StatusCode != http.StatusCreated {
 		defer resp.Body.Close()
-		return 0, fmt.Errorf("create committer node_group: %s", readErrorBody(resp))
+		return 0, 0, fmt.Errorf("create node_group %s: %s", groupName, readErrorBody(resp))
 	}
 	var created struct {
 		ID int64 `json:"id"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
 		resp.Body.Close()
-		return 0, fmt.Errorf("decode node_group: %w", err)
+		return 0, 0, fmt.Errorf("decode node_group: %w", err)
 	}
 	resp.Body.Close()
 	if created.ID == 0 {
-		return 0, fmt.Errorf("server returned no id for committer node_group")
+		return 0, 0, fmt.Errorf("server returned no id for node_group %s", groupName)
 	}
-	return created.ID, nil
+	groupID := created.ID
+
+	// Stage 2: add the single committer child node, parented to the
+	// group via fabricXCommitter.nodeGroupId.
+	childID, err := createCommitter(ctx, c, p, cfg, groupID)
+	if err != nil {
+		return 0, 0, err
+	}
+	return groupID, childID, nil
 }
 
-// createCommitter creates one FABRICX_COMMITTER node for a party, parented
-// to the shared committer node-group. The committer internally runs 5
+// createCommitter creates one FABRICX_COMMITTER node for a party,
+// parented to its committer node-group. The committer internally runs 5
 // containers (sidecar/coordinator/validator/verifier/query-service); the
 // per-container view is reachable via /api/v1/nodes/{id}/logs?role=<role>.
 func createCommitter(ctx context.Context, c *apiClient, p partyResult, cfg quickstartConfig, committerGroupID int64) (int64, error) {
 	pp := portsForParty(cfg.basePort, cfg.slotSize, p.partyID-1)
 	db := partyDatabaseSpec(p.partyID)
+	// In single-MSP mode the per-party committer name collides on the
+	// shared MSP. Single mode only creates one committer total (driven
+	// by Phase 6 above), so the name doesn't disambiguate by partyID.
 	nodeName := strings.ToLower(p.mspID) + "-committer"
 
 	body := map[string]any{
@@ -1196,7 +1303,13 @@ func cleanBundle(ctx context.Context, c *apiClient, cfg quickstartConfig) error 
 	// match the shared config and crash. See orderergroup.go ensureMaterials
 	// drift-detection for the matching backend-side fix.
 	if cfg.dataPath != "" {
-		for _, sub := range []string{"fabricx-orderers", "fabricx-committers"} {
+		// services/postgres/<container>/ holds the per-service Postgres
+		// PGDATA bind mount (added when committer state moved off the
+		// container's writable layer). On a rerun, leftover databases /
+		// roles trip provisionPartyDatabases' CREATE DATABASE / CREATE
+		// ROLE paths because they're not idempotent on the postgres
+		// side. Wipe so initdb runs fresh.
+		for _, sub := range []string{"fabricx-orderers", "fabricx-committers", "services/postgres"} {
 			dir := cfg.dataPath + "/" + sub
 			if _, err := os.Stat(dir); err == nil {
 				if err := os.RemoveAll(dir); err != nil {

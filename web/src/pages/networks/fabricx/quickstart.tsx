@@ -96,9 +96,12 @@ interface PartyResult {
 	ordererNodeGroupId: number
 	// Ordered: router, batcher, consenter, assembler (same order as InitOrdererGroup)
 	ordererChildNodeIds: number[]
-	// Single legacy monolithic FABRICX_COMMITTER node id per party. The
-	// committer internally runs 5 containers; per-container logs are
-	// reachable via /api/v1/nodes/{id}/logs?role=<role>.
+	// Per-party FABRICX_COMMITTER node-group (carries Party<N>MSP identity).
+	committerNodeGroupId: number
+	// Single legacy monolithic FABRICX_COMMITTER node id per party,
+	// parented to the committer node-group. The committer internally runs
+	// 5 containers; per-container logs are reachable via
+	// /api/v1/nodes/{id}/logs?role=<role>.
 	committerNodeId: number
 }
 
@@ -153,6 +156,11 @@ export default function FabricXQuickStartPage() {
 	const navigate = useNavigate()
 
 	const [networkName, setNetworkName] = useState('fabricx-quickstart')
+	// 'single' (default): one MSP owns all 4 parties — easiest for FSC
+	// sample apps because endorsements collapse to one signer. 'multi':
+	// 4 distinct MSPs (production-shape Arma BFT setup).
+	const [mode, setMode] = useState<'single' | 'multi'>('single')
+	const [singleMSPID, setSingleMSPID] = useState('AcmeMSP')
 	// Docker Desktop (macOS/Windows) cannot reach containers via the host's external IP,
 	// so rewrite addresses to host.docker.internal / 127.0.0.1. Default to true on
 	// platforms where Docker Desktop is typical.
@@ -235,7 +243,13 @@ export default function FabricXQuickStartPage() {
 	// assembler.
 	async function createOrdererNodeGroup(party: { partyId: number; mspId: string; orgId: number }): Promise<{ groupId: number; childIds: number[] }> {
 		const p = portsForParty(party.partyId - 1)
-		const groupName = `${party.mspId.toLowerCase()}-orderer`
+		// In single-MSP mode every orderer group shares the same MSPID,
+		// so disambiguate by PartyID. In multi-MSP mode the MSPID is
+		// already unique per party so the historical name stays.
+		const groupName =
+			mode === 'single'
+				? `${party.mspId.toLowerCase()}-orderer-p${party.partyId}`
+				: `${party.mspId.toLowerCase()}-orderer`
 
 		// Stage 1a: create empty node_group row
 		const createResp = await postNodeGroups({
@@ -281,31 +295,40 @@ export default function FabricXQuickStartPage() {
 		return { groupId, childIds }
 	}
 
-	// createSharedCommitterGroup creates the per-network FABRICX_COMMITTER
-	// node-group. The group is a thin parent: it has no MSP/org/partyID of
-	// its own. Each party's committer node hangs off it as a child, carrying
-	// its own MSP identity. Returns the new group's ID.
-	async function createSharedCommitterGroup(): Promise<number> {
-		const groupName = `${networkName}-committers`
+	// createCommitterNodeGroup creates one FABRICX_COMMITTER node-group
+	// per party (carries Party<N>MSP identity), then immediately adds
+	// its single monolithic committer node child. Mirrors the orderer
+	// pattern: each party owns its own committer group, the group's
+	// MSPID matches its child's, and the Node Groups list view shows
+	// MSPID alongside the orderer rows.
+	async function createCommitterNodeGroup(
+		party: { partyId: number; mspId: string; orgId: number; ordererAssemblerPort: number },
+	): Promise<{ groupId: number; nodeId: number }> {
+		const groupName = `${party.mspId.toLowerCase()}-committer`
 		const resp = await postNodeGroups({
 			body: {
 				name: groupName,
 				platform: 'FABRICX',
 				groupType: 'FABRICX_COMMITTER',
-				// No mspId/organizationId/partyId — those live on the children.
+				organizationId: party.orgId,
+				mspId: party.mspId,
+				externalIp: externalIp,
+				domainNames: [externalIp, 'localhost'],
 			},
 		})
 		const groupId = (resp.data as unknown as { id?: number } | undefined)?.id
 		if (!groupId) {
 			const serverErr = (resp as unknown as { error?: { error?: string } | string })?.error
 			const detail = typeof serverErr === 'string' ? serverErr : serverErr?.error || 'unknown error'
-			throw new Error(`committer node-group creation failed: ${detail}`)
+			throw new Error(`node_group creation failed for ${groupName}: ${detail}`)
 		}
-		return groupId
+
+		const nodeId = await createCommitter(party, groupId)
+		return { groupId, nodeId }
 	}
 
 	// createCommitter creates one FABRICX_COMMITTER node per party, parented
-	// to the shared committer node-group. The committer internally runs 5
+	// to its committer node-group. The committer internally runs 5
 	// containers (sidecar/coordinator/validator/verifier/query-service); the
 	// per-container view is reachable via /api/v1/nodes/{id}/logs?role=<role>.
 	async function createCommitter(party: { partyId: number; mspId: string; orgId: number; ordererAssemblerPort: number }, committerGroupId: number): Promise<number> {
@@ -396,20 +419,46 @@ export default function FabricXQuickStartPage() {
 		const parties: PartyResult[] = []
 
 		try {
-			// Phase 1: orgs
-			for (let i = 0; i < NUM_PARTIES; i++) {
-				const mspId = `Party${i + 1}MSP`
-				setStep(`org-${i}`, { status: 'running' })
-				const orgId = await findOrCreateOrg(mspId)
-				setStep(`org-${i}`, { status: 'done', detail: `org #${orgId}` })
-				parties.push({
-					partyId: i + 1,
-					mspId,
-					organizationId: orgId,
-					ordererNodeGroupId: 0,
-					ordererChildNodeIds: [],
-					committerNodeId: 0,
-				})
+			// Phase 1: orgs.
+			//   single-MSP mode: one fabric_organizations row reused by
+			//     all parties (distinguished only by PartyID 1..N).
+			//   multi-MSP mode: one row per party (Party1MSP..PartyNMSP).
+			if (mode === 'single') {
+				setStep('org-0', { status: 'running' })
+				const orgId = await findOrCreateOrg(singleMSPID)
+				setStep('org-0', { status: 'done', detail: `org #${orgId} (shared by all ${NUM_PARTIES} parties)` })
+				// Mark the other org steps as done with a note pointing at org #0
+				// so the progress timeline reads cleanly.
+				for (let i = 1; i < NUM_PARTIES; i++) {
+					setStep(`org-${i}`, { status: 'done', detail: `(reuses org #${orgId})` })
+				}
+				for (let i = 0; i < NUM_PARTIES; i++) {
+					parties.push({
+						partyId: i + 1,
+						mspId: singleMSPID,
+						organizationId: orgId,
+						ordererNodeGroupId: 0,
+						ordererChildNodeIds: [],
+						committerNodeGroupId: 0,
+						committerNodeId: 0,
+					})
+				}
+			} else {
+				for (let i = 0; i < NUM_PARTIES; i++) {
+					const mspId = `Party${i + 1}MSP`
+					setStep(`org-${i}`, { status: 'running' })
+					const orgId = await findOrCreateOrg(mspId)
+					setStep(`org-${i}`, { status: 'done', detail: `org #${orgId}` })
+					parties.push({
+						partyId: i + 1,
+						mspId,
+						organizationId: orgId,
+						ordererNodeGroupId: 0,
+						ordererChildNodeIds: [],
+						committerNodeGroupId: 0,
+						committerNodeId: 0,
+					})
+				}
 			}
 
 			// Phase 1.5: shared Postgres service — one container with per-party dbs.
@@ -436,30 +485,46 @@ export default function FabricXQuickStartPage() {
 				setStep(`orderer-${i}`, { status: 'done', detail: `group #${groupId}, children ${childIds.join(',')}` })
 			}
 
-			// Phase 3a: shared committer node-group (one per network).
-			// All party committers hang off this thin parent — each child
-			// owns its own MSP identity.
-			setStep('committer-group', { status: 'running' })
-			const committerGroupId = await createSharedCommitterGroup()
-			setStep('committer-group', { status: 'done', detail: `group #${committerGroupId}` })
-
-			// Phase 3b: per-party committer nodes (legacy monolithic
-			// FABRICX_COMMITTER, 5 internal containers each), parented to
-			// the shared committer group.
-			for (let i = 0; i < NUM_PARTIES; i++) {
-				setStep(`committer-${i}`, { status: 'running' })
-				const ports = portsForParty(parties[i].partyId - 1)
-				const id = await createCommitter(
-					{
+			// Phase 3: committers.
+			//   single-MSP: 1 committer node-group total (carries the
+			//     shared MSPID), 1 committer child node — sufficient for
+			//     sample apps that read state from one node.
+			//   multi-MSP : N committer node-groups, one per MSP, each
+			//     with one child — production-shape, each party operates
+			//     its own committer.
+			if (mode === 'single') {
+				setStep('committer-0', { status: 'running' })
+				const ports = portsForParty(parties[0].partyId - 1)
+				const { groupId, nodeId } = await createCommitterNodeGroup({
+					partyId: parties[0].partyId,
+					mspId: parties[0].mspId,
+					orgId: parties[0].organizationId,
+					ordererAssemblerPort: ports.assembler,
+				})
+				// Mirror onto every party so Phase 4 (network create) and
+				// Phase 5 (joins) keep their existing per-party loops.
+				for (let i = 0; i < NUM_PARTIES; i++) {
+					parties[i].committerNodeGroupId = groupId
+					parties[i].committerNodeId = nodeId
+				}
+				setStep('committer-0', { status: 'done', detail: `group #${groupId}, node #${nodeId} (shared by all ${NUM_PARTIES} parties)` })
+				for (let i = 1; i < NUM_PARTIES; i++) {
+					setStep(`committer-${i}`, { status: 'done', detail: `(reuses node #${nodeId})` })
+				}
+			} else {
+				for (let i = 0; i < NUM_PARTIES; i++) {
+					setStep(`committer-${i}`, { status: 'running' })
+					const ports = portsForParty(parties[i].partyId - 1)
+					const { groupId, nodeId } = await createCommitterNodeGroup({
 						partyId: parties[i].partyId,
 						mspId: parties[i].mspId,
 						orgId: parties[i].organizationId,
 						ordererAssemblerPort: ports.assembler,
-					},
-					committerGroupId,
-				)
-				parties[i].committerNodeId = id
-				setStep(`committer-${i}`, { status: 'done', detail: `node #${id}` })
+					})
+					parties[i].committerNodeGroupId = groupId
+					parties[i].committerNodeId = nodeId
+					setStep(`committer-${i}`, { status: 'done', detail: `group #${groupId}, node #${nodeId}` })
+				}
 			}
 
 			// Phase 4: create network (produces Arma genesis)
@@ -513,7 +578,12 @@ export default function FabricXQuickStartPage() {
 				}
 				setStep(`join-orderer-${i}`, { status: hadErr ? 'error' : 'done', detail: hadErr ? 'transient docker error — retry via node page' : undefined })
 			}
-			for (let i = 0; i < NUM_PARTIES; i++) {
+			// In single-MSP mode every party.committerNodeId points at
+			// the same shared committer; join it once. Marking the other
+			// step rows done with a "(reuses)" note so the timeline stays
+			// readable.
+			const committerJoinCount = mode === 'single' ? 1 : NUM_PARTIES
+			for (let i = 0; i < committerJoinCount; i++) {
 				setStep(`join-committer-${i}`, { status: 'running' })
 				try {
 					await joinMutation.mutationFn!({
@@ -523,6 +593,11 @@ export default function FabricXQuickStartPage() {
 				} catch (e) {
 					joinErrors.push(`committer party${i + 1}: ${formatError(e)}`)
 					setStep(`join-committer-${i}`, { status: 'error', detail: 'transient docker error — retry via node page' })
+				}
+			}
+			if (mode === 'single') {
+				for (let i = 1; i < NUM_PARTIES; i++) {
+					setStep(`join-committer-${i}`, { status: 'done', detail: '(shared committer already joined)' })
 				}
 			}
 			if (joinErrors.length > 0) {
@@ -564,6 +639,51 @@ export default function FabricXQuickStartPage() {
 						<div className="space-y-2">
 							<Label htmlFor="networkName">Network name</Label>
 							<Input id="networkName" value={networkName} onChange={(e) => setNetworkName(e.target.value)} />
+						</div>
+						<div className="space-y-2 rounded-md border p-3">
+							<Label>Topology</Label>
+							<div className="space-y-2">
+								<label className="flex cursor-pointer items-start gap-3">
+									<input
+										type="radio"
+										name="mode"
+										value="single"
+										checked={mode === 'single'}
+										onChange={() => setMode('single')}
+										className="mt-1"
+									/>
+									<div className="space-y-1 leading-none">
+										<span className="font-medium">Single MSP (recommended for evaluation)</span>
+										<p className="text-xs text-muted-foreground">
+											One organization owns all 4 Arma parties. Sample apps using fabric-smart-client
+											only need a single endorser, so this is the easiest shape for development.
+										</p>
+									</div>
+								</label>
+								<label className="flex cursor-pointer items-start gap-3">
+									<input
+										type="radio"
+										name="mode"
+										value="multi"
+										checked={mode === 'multi'}
+										onChange={() => setMode('multi')}
+										className="mt-1"
+									/>
+									<div className="space-y-1 leading-none">
+										<span className="font-medium">Multi-MSP (production-shape)</span>
+										<p className="text-xs text-muted-foreground">
+											4 distinct organizations form the Arma BFT committee. Each party operates its
+											own committer. Closer to a real deployment but harder to use with sample apps.
+										</p>
+									</div>
+								</label>
+							</div>
+							{mode === 'single' && (
+								<div className="space-y-2 pt-2">
+									<Label htmlFor="singleMSPID">MSP ID</Label>
+									<Input id="singleMSPID" value={singleMSPID} onChange={(e) => setSingleMSPID(e.target.value)} />
+								</div>
+							)}
 						</div>
 						<div className="flex flex-row items-start gap-3 rounded-md border p-3">
 							<Checkbox

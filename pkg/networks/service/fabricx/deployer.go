@@ -62,6 +62,28 @@ func (d *FabricXDeployer) CreateGenesisBlock(networkID int64, config interface{}
 
 	var genesisParties []fabricxpkg.GenesisParty
 
+	// network_nodes has UNIQUE(network_id, node_id). In single-MSP
+	// quickstarts the same committer is referenced by N party orgRefs,
+	// which would otherwise trip the constraint on the second insert.
+	// Track which node IDs we've already associated with the network so
+	// the loop is idempotent across duplicate orgRefs.
+	associatedNodes := make(map[int64]bool)
+	associateNodeOnce := func(nodeID int64, role string) error {
+		if associatedNodes[nodeID] {
+			return nil
+		}
+		if _, err := d.db.CreateNetworkNode(ctx, &db.CreateNetworkNodeParams{
+			NetworkID: networkID,
+			NodeID:    nodeID,
+			Status:    "pending",
+			Role:      role,
+		}); err != nil {
+			return err
+		}
+		associatedNodes[nodeID] = true
+		return nil
+	}
+
 	for i, orgRef := range fabricxConfig.Organizations {
 		// Get the organization
 		org, err := d.orgService.GetOrganization(ctx, orgRef.ID)
@@ -175,22 +197,12 @@ func (d *FabricXDeployer) CreateGenesisBlock(networkID int64, config interface{}
 				return nil, fmt.Errorf("orderer node_group %d has no children", orgRef.OrdererNodeGroupID)
 			}
 			for _, c := range children {
-				if _, err := d.db.CreateNetworkNode(ctx, &db.CreateNetworkNodeParams{
-					NetworkID: networkID,
-					NodeID:    c.ID,
-					Status:    "pending",
-					Role:      "orderer",
-				}); err != nil {
+				if err := associateNodeOnce(c.ID, "orderer"); err != nil {
 					return nil, fmt.Errorf("failed to associate orderer child node %d with network: %w", c.ID, err)
 				}
 			}
 		} else {
-			if _, err := d.db.CreateNetworkNode(ctx, &db.CreateNetworkNodeParams{
-				NetworkID: networkID,
-				NodeID:    orgRef.OrdererNodeID,
-				Status:    "pending",
-				Role:      "orderer",
-			}); err != nil {
+			if err := associateNodeOnce(orgRef.OrdererNodeID, "orderer"); err != nil {
 				return nil, fmt.Errorf("failed to associate orderer node with network: %w", err)
 			}
 		}
@@ -208,23 +220,12 @@ func (d *FabricXDeployer) CreateGenesisBlock(networkID int64, config interface{}
 				return nil, fmt.Errorf("committer node_group %d has no children", orgRef.CommitterNodeGroupID)
 			}
 			for _, c := range children {
-				if _, err := d.db.CreateNetworkNode(ctx, &db.CreateNetworkNodeParams{
-					NetworkID: networkID,
-					NodeID:    c.ID,
-					Status:    "pending",
-					Role:      "committer",
-				}); err != nil {
+				if err := associateNodeOnce(c.ID, "committer"); err != nil {
 					return nil, fmt.Errorf("failed to associate committer child node %d with network: %w", c.ID, err)
 				}
 			}
 		} else if orgRef.CommitterNodeID != 0 {
-			_, err = d.db.CreateNetworkNode(ctx, &db.CreateNetworkNodeParams{
-				NetworkID: networkID,
-				NodeID:    orgRef.CommitterNodeID,
-				Status:    "pending",
-				Role:      "committer",
-			})
-			if err != nil {
+			if err := associateNodeOnce(orgRef.CommitterNodeID, "committer"); err != nil {
 				return nil, fmt.Errorf("failed to associate committer node with network: %w", err)
 			}
 		}

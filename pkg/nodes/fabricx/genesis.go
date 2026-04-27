@@ -200,8 +200,28 @@ func GenerateGenesisBlock(cfg GenesisConfig) ([]byte, error) {
 		return nil, fmt.Errorf("failed to write shared config: %w", err)
 	}
 
+	// Dedupe orderer orgs by MSPID, merging OrdererEndpoints from each
+	// duplicate. This is what makes single-MSP/multi-party topologies
+	// work: a quickstart that gives one organization 4 parties (each
+	// with its own PartyID, RouterHost/Port, etc.) emits 4 entries here
+	// all keyed on the same MSPID. configtxgen rejects duplicate org
+	// names in a channel config; collapsing them into a single org with
+	// the union of OrdererEndpoints satisfies it. The PartiesConfig
+	// section in SharedConfig still carries one entry per PartyID (Arma
+	// addresses parties by PartyID, not MSPID) so consensus is unaffected.
+	dedupOrdererOrgsByID := map[string]*configtxgen.Organization{}
+	var dedupOrdererOrgs []*configtxgen.Organization
+	for _, org := range ordererOrgs {
+		if existing, ok := dedupOrdererOrgsByID[org.ID]; ok {
+			existing.OrdererEndpoints = append(existing.OrdererEndpoints, org.OrdererEndpoints...)
+			continue
+		}
+		dedupOrdererOrgsByID[org.ID] = org
+		dedupOrdererOrgs = append(dedupOrdererOrgs, org)
+	}
+
 	// Merge all orgs for application section
-	allOrgs := append(ordererOrgs, appOrgs...)
+	allOrgs := append(dedupOrdererOrgs, appOrgs...)
 	// Deduplicate by ID (orderer and app orgs share the same MSP)
 	seen := make(map[string]bool)
 	var dedupOrgs []*configtxgen.Organization
@@ -226,7 +246,7 @@ func GenerateGenesisBlock(cfg GenesisConfig) ([]byte, error) {
 				AbsoluteMaxBytes:  10 * 1024 * 1024,
 				PreferredMaxBytes: 2 * 1024 * 1024,
 			},
-			Organizations:    ordererOrgs,
+			Organizations:    dedupOrdererOrgs,
 			ConsenterMapping: consenterMapping,
 			Policies: map[string]*configtxgen.Policy{
 				"Readers":         {Type: "ImplicitMeta", Rule: "ANY Readers"},
