@@ -135,7 +135,11 @@ func setupTestService(t *testing.T) (*NodeService, *mockMonitoringService, *mock
 			node_type TEXT,
 			node_config TEXT,
 			deployment_config TEXT,
-			error_message TEXT
+			error_message TEXT,
+			-- Added by migration 0022_add_node_groups_and_services. The
+			-- nodes/service GetNode queries select this column, so the
+			-- in-memory schema has to mirror it.
+			node_group_id INTEGER
 		)
 	`)
 	require.NoError(t, err)
@@ -238,7 +242,11 @@ func TestDeleteNode_nil_monitoring_service_does_not_panic(t *testing.T) {
 			node_type TEXT,
 			node_config TEXT,
 			deployment_config TEXT,
-			error_message TEXT
+			error_message TEXT,
+			-- Added by migration 0022_add_node_groups_and_services. The
+			-- nodes/service GetNode queries select this column, so the
+			-- in-memory schema has to mirror it.
+			node_group_id INTEGER
 		)
 	`)
 	require.NoError(t, err)

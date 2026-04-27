@@ -133,16 +133,18 @@ func (h *NodeHandler) CreateNode(w http.ResponseWriter, r *http.Request) error {
 
 	if !isValidPlatform(types.BlockchainPlatform(strings.ToUpper(string(req.BlockchainPlatform)))) {
 		return errors.NewValidationError("invalid blockchain platform", map[string]interface{}{
-			"valid_platforms": []string{string(types.PlatformFabric), string(types.PlatformBesu)},
+			"valid_platforms": []string{string(types.PlatformFabric), string(types.PlatformBesu), string(types.PlatformFabricX)},
 		})
 	}
 
 	serviceReq := service.CreateNodeRequest{
-		Name:               req.Name,
-		BlockchainPlatform: types.BlockchainPlatform(strings.ToUpper(string(req.BlockchainPlatform))),
-		FabricPeer:         req.FabricPeer,
-		FabricOrderer:      req.FabricOrderer,
-		BesuNode:           req.BesuNode,
+		Name:                req.Name,
+		BlockchainPlatform:  types.BlockchainPlatform(strings.ToUpper(string(req.BlockchainPlatform))),
+		FabricPeer:          req.FabricPeer,
+		FabricOrderer:       req.FabricOrderer,
+		BesuNode:            req.BesuNode,
+		FabricXOrdererGroup: req.FabricXOrdererGroup,
+		FabricXCommitter:    req.FabricXCommitter,
 	}
 
 	node, err := h.service.CreateNode(r.Context(), serviceReq)
@@ -553,6 +555,11 @@ func (h *NodeHandler) TailLogs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Optional ?role= selects which of a multi-container node's internal
+	// processes to tail. Only FABRICX_COMMITTER nodes observe it; other
+	// node types reject non-empty role with 400.
+	role := r.URL.Query().Get("role")
+
 	// Set headers for streaming response
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -562,7 +569,7 @@ func (h *NodeHandler) TailLogs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// Create channel for logs
-	logChan, err := h.service.TailLogs(ctx, id, tail, follow)
+	logChan, err := h.service.TailLogs(ctx, id, tail, follow, role)
 	if err != nil {
 		if err == service.ErrNotFound {
 			http.Error(w, "Node not found", http.StatusNotFound)
@@ -728,16 +735,19 @@ func toNodeResponse(node *service.NodeResponse) NodeResponse {
 		Endpoint:           node.Endpoint,
 		CreatedAt:          node.CreatedAt,
 		UpdatedAt:          node.UpdatedAt,
-		FabricPeer:         node.FabricPeer,
-		FabricOrderer:      node.FabricOrderer,
-		BesuNode:           node.BesuNode,
+		FabricPeer:          node.FabricPeer,
+		FabricOrderer:       node.FabricOrderer,
+		BesuNode:            node.BesuNode,
+		FabricXOrdererGroup: node.FabricXOrdererGroup,
+		FabricXCommitter:    node.FabricXCommitter,
+		FabricXChild:        node.FabricXChild,
 	}
 }
 
 // Helper function to validate platform
 func isValidPlatform(platform types.BlockchainPlatform) bool {
 	switch platform {
-	case types.PlatformFabric, types.PlatformBesu:
+	case types.PlatformFabric, types.PlatformBesu, types.PlatformFabricX:
 		return true
 	}
 	return false
@@ -837,6 +847,32 @@ func (h *NodeHandler) UpdateNode(w http.ResponseWriter, r *http.Request) error {
 			return errors.NewValidationError("besuNode configuration is required for Besu nodes", nil)
 		}
 		return h.updateBesuNode(w, r, nodeID, req.BesuNode)
+	case types.NodeTypeFabricXOrdererGroup:
+		if req.FabricXOrdererGroup == nil {
+			return errors.NewValidationError("fabricXOrdererGroup configuration is required for Fabric-X orderer group nodes", nil)
+		}
+		return h.updateFabricXOrdererGroup(w, r, nodeID, req.FabricXOrdererGroup)
+	case types.NodeTypeFabricXCommitter:
+		if req.FabricXCommitter == nil {
+			return errors.NewValidationError("fabricXCommitter configuration is required for Fabric-X committer nodes", nil)
+		}
+		return h.updateFabricXCommitter(w, r, nodeID, req.FabricXCommitter)
+	case types.NodeTypeFabricXOrdererRouter,
+		types.NodeTypeFabricXOrdererBatcher,
+		types.NodeTypeFabricXOrdererConsenter,
+		types.NodeTypeFabricXOrdererAssembler,
+		types.NodeTypeFabricXCommitterSidecar,
+		types.NodeTypeFabricXCommitterCoordinator,
+		types.NodeTypeFabricXCommitterValidator,
+		types.NodeTypeFabricXCommitterVerifier,
+		types.NodeTypeFabricXCommitterQueryService:
+		// Per-role child rows share the parent node-group's image tag by
+		// design (one identity, one version per group). Reject the update
+		// here with a clear pointer to the parent so users don't get a
+		// silent partial-update.
+		return errors.NewValidationError("version is set on the parent Fabric-X node group, not on individual child roles", map[string]interface{}{
+			"nodeType": node.NodeType,
+		})
 	default:
 		return errors.NewValidationError("unsupported node type", map[string]interface{}{
 			"nodeType": node.NodeType,
@@ -957,6 +993,39 @@ func (h *NodeHandler) updateFabricOrderer(w http.ResponseWriter, r *http.Request
 		return errors.NewInternalError("failed to update orderer", err, nil)
 	}
 
+	return response.WriteJSON(w, http.StatusOK, toNodeResponse(updatedNode))
+}
+
+// updateFabricXOrdererGroup handles updating a Fabric-X orderer group node.
+// Today only the image-tag (Version) is mutable; the change is persisted to
+// the node row and the parent node_groups row, but the running containers
+// are NOT restarted automatically — matching Fabric peer/orderer behavior so
+// the operator picks the moment of downtime.
+func (h *NodeHandler) updateFabricXOrdererGroup(w http.ResponseWriter, r *http.Request, nodeID int64, req *UpdateFabricXOrdererGroupRequest) error {
+	opts := service.UpdateFabricXOrdererGroupOpts{NodeID: nodeID}
+	if req.Version != nil {
+		opts.Version = *req.Version
+	}
+
+	updatedNode, err := h.service.UpdateFabricXOrdererGroup(r.Context(), opts)
+	if err != nil {
+		return errors.NewInternalError("failed to update fabric-x orderer group", err, nil)
+	}
+	return response.WriteJSON(w, http.StatusOK, toNodeResponse(updatedNode))
+}
+
+// updateFabricXCommitter handles updating a Fabric-X committer node. Same
+// scope as updateFabricXOrdererGroup: Version-only, no auto-restart.
+func (h *NodeHandler) updateFabricXCommitter(w http.ResponseWriter, r *http.Request, nodeID int64, req *UpdateFabricXCommitterRequest) error {
+	opts := service.UpdateFabricXCommitterOpts{NodeID: nodeID}
+	if req.Version != nil {
+		opts.Version = *req.Version
+	}
+
+	updatedNode, err := h.service.UpdateFabricXCommitter(r.Context(), opts)
+	if err != nil {
+		return errors.NewInternalError("failed to update fabric-x committer", err, nil)
+	}
 	return response.WriteJSON(w, http.StatusOK, toNodeResponse(updatedNode))
 }
 

@@ -1,7 +1,15 @@
-import { deleteNetworksFabricByIdMutation, deleteNetworksBesuByIdMutation, getNetworksFabricOptions, getNetworksBesuOptions } from '@/api/client/@tanstack/react-query.gen'
+import {
+	deleteNetworksFabricByIdMutation,
+	deleteNetworksBesuByIdMutation,
+	deleteNetworksFabricxByIdMutation,
+	getNetworksFabricOptions,
+	getNetworksBesuOptions,
+	getNetworksFabricxOptions,
+} from '@/api/client/@tanstack/react-query.gen'
 import { HttpNetworkResponse } from '@/api/client'
 import { BesuIcon } from '@/components/icons/besu-icon'
 import { FabricIcon } from '@/components/icons/fabric-icon'
+import { PageHeader, PageShell } from '@/components/layout/page-shell'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -9,7 +17,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Skeleton } from '@/components/ui/skeleton'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { MoreVertical, Network, Trash, ChevronDown, Upload } from 'lucide-react'
+import { MoreVertical, Network, Trash, ChevronDown, Upload, Rocket } from 'lucide-react'
 import { useState, useMemo, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -33,20 +41,31 @@ export default function NetworksPage() {
 		...getNetworksBesuOptions(),
 	})
 
-	// Combine networks from both sources
+	const {
+		data: fabricxNetworks,
+		isLoading: isLoadingFabricx,
+		refetch: refetchFabricx,
+	} = useQuery({
+		...getNetworksFabricxOptions(),
+	})
+
+	// Combine networks from all platforms
 	const networks = useMemo(
 		() => ({
-			networks: [...(fabricNetworks?.networks || []), ...(besuNetworks?.networks || [])].sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime()),
+			networks: [...(fabricNetworks?.networks || []), ...(besuNetworks?.networks || []), ...(fabricxNetworks?.networks || [])].sort(
+				(a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime()
+			),
 		}),
-		[fabricNetworks?.networks, besuNetworks?.networks]
+		[fabricNetworks?.networks, besuNetworks?.networks, fabricxNetworks?.networks]
 	)
 
-	const isLoading = useMemo(() => isLoadingFabric || isLoadingBesu, [isLoadingFabric, isLoadingBesu])
+	const isLoading = useMemo(() => isLoadingFabric || isLoadingBesu || isLoadingFabricx, [isLoadingFabric, isLoadingBesu, isLoadingFabricx])
 
 	const refetch = useCallback(() => {
 		refetchFabric()
 		refetchBesu()
-	}, [refetchFabric, refetchBesu])
+		refetchFabricx()
+	}, [refetchFabric, refetchBesu, refetchFabricx])
 
 	const deleteFabricNetwork = useMutation({
 		...deleteNetworksFabricByIdMutation(),
@@ -76,15 +95,31 @@ export default function NetworksPage() {
 		},
 	})
 
+	const deleteFabricxNetwork = useMutation({
+		...deleteNetworksFabricxByIdMutation(),
+		onSuccess: () => {
+			toast.success('Network deleted successfully')
+			refetch()
+			setNetworkToDelete(null)
+		},
+		onError: (error: any) => {
+			toast.error('Failed to delete network', {
+				description: error.message,
+			})
+		},
+	})
+
 	const deleteNetwork = useCallback(
 		(network: HttpNetworkResponse) => {
 			if (network.platform === 'fabric') {
 				deleteFabricNetwork.mutate({ path: { id: network.id! } })
+			} else if (network.platform === 'fabricx') {
+				deleteFabricxNetwork.mutate({ path: { id: network.id! } })
 			} else {
 				deleteBesuNetwork.mutate({ path: { id: network.id! } })
 			}
 		},
-		[deleteFabricNetwork, deleteBesuNetwork]
+		[deleteFabricNetwork, deleteBesuNetwork, deleteFabricxNetwork]
 	)
 
 	const handleDelete = useCallback((network: HttpNetworkResponse) => {
@@ -208,90 +243,99 @@ export default function NetworksPage() {
 	}
 
 	return (
-		<div className="flex-1 p-8">
-			<div className="max-w-4xl mx-auto">
-				<div className="flex items-center justify-between mb-8">
-					<div>
-						<h1 className="text-2xl font-semibold">Networks</h1>
-						<p className="text-muted-foreground">Manage your blockchain networks</p>
-					</div>
-					<div className="flex gap-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button>
-									Create Network
-									<ChevronDown className="ml-2 h-4 w-4" />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end">
-								<DropdownMenuItem asChild>
-									<Link to="/networks/fabric/create">
-										<FabricIcon className="mr-2 h-4 w-4" />
-										Fabric Channel
-									</Link>
-								</DropdownMenuItem>
-								<DropdownMenuItem asChild>
-									<Link to="/networks/besu/create">
-										<BesuIcon className="mr-2 h-4 w-4" />
-										Besu Network
-									</Link>
-								</DropdownMenuItem>
-								<DropdownMenuItem asChild>
-									<Link to="/networks/besu/bulk-create">
-										<Upload className="mr-2 h-4 w-4" />
-										Besu Network (Bulk)
-									</Link>
-								</DropdownMenuItem>
-								<DropdownMenuItem asChild>
-									<Link to="/networks/import">
-										<Upload className="mr-2 h-4 w-4" />
-										Import Network
-									</Link>
-								</DropdownMenuItem>
-							</DropdownMenuContent>
-						</DropdownMenu>
-					</div>
-				</div>
+		<>
+		<PageShell maxWidth="dashboard">
+			<PageHeader title="Networks" description="Manage your blockchain networks">
+				<DropdownMenu>
+					<DropdownMenuTrigger asChild>
+						<Button>
+							Create Network
+							<ChevronDown className="ml-2 h-4 w-4" />
+						</Button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="end">
+						<DropdownMenuItem asChild>
+							<Link to="/networks/fabricx/quickstart">
+								<Rocket className="mr-2 h-4 w-4" />
+								FabricX Quick Start (4 parties)
+							</Link>
+						</DropdownMenuItem>
+						<DropdownMenuItem asChild>
+							<Link to="/networks/fabric/create">
+								<FabricIcon className="mr-2 h-4 w-4" />
+								Fabric Channel
+							</Link>
+						</DropdownMenuItem>
+						<DropdownMenuItem asChild>
+							<Link to="/networks/besu/create">
+								<BesuIcon className="mr-2 h-4 w-4" />
+								Besu Network
+							</Link>
+						</DropdownMenuItem>
+						<DropdownMenuItem asChild>
+							<Link to="/networks/besu/bulk-create">
+								<Upload className="mr-2 h-4 w-4" />
+								Besu Network (Bulk)
+							</Link>
+						</DropdownMenuItem>
+						<DropdownMenuItem asChild>
+							<Link to="/networks/fabricx/create">
+								<FabricIcon className="mr-2 h-4 w-4" />
+								FabricX Network (MVP)
+							</Link>
+						</DropdownMenuItem>
+						<DropdownMenuItem asChild>
+							<Link to="/networks/import">
+								<Upload className="mr-2 h-4 w-4" />
+								Import Network
+							</Link>
+						</DropdownMenuItem>
+					</DropdownMenuContent>
+				</DropdownMenu>
+			</PageHeader>
 
-				<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-					{networks?.networks?.map((network) => (
-						<Card key={network.id} className="p-6">
-							<div className="flex items-center justify-between">
-								<Link to={`/networks/${network.id}/${network.platform === 'fabric' ? 'fabric' : 'besu'}`} className="flex items-center gap-4 flex-1">
-									{network.platform === 'fabric' ? <FabricIcon className="h-8 w-8" /> : <BesuIcon className="h-8 w-8" />}
-									<div>
-										<h3 className="font-semibold">{network.name}</h3>
-										<p className="text-sm text-muted-foreground">
-											<TimeAgo date={network.createdAt!} />
-										</p>
-									</div>
-								</Link>
-								<DropdownMenu>
-									<DropdownMenuTrigger asChild>
-										<Button variant="ghost" size="icon">
-											<MoreVertical className="h-4 w-4" />
-										</Button>
-									</DropdownMenuTrigger>
-									<DropdownMenuContent align="end">
-										<DropdownMenuItem
-											className="text-destructive"
-											onClick={(e) => {
-												e.preventDefault()
-												handleDelete(network)
-											}}
-										>
-											<Trash className="h-4 w-4 mr-2" />
-											Delete
-										</DropdownMenuItem>
-									</DropdownMenuContent>
-								</DropdownMenu>
-							</div>
-						</Card>
-					))}
-				</div>
+			<div className="grid gap-4 sm:grid-cols-2">
+				{networks?.networks?.map((network) => (
+					<Card key={network.id} className="p-6">
+						<div className="flex items-center justify-between">
+							<Link
+								to={`/networks/${network.id}/${network.platform === 'fabric' ? 'fabric' : network.platform === 'fabricx' ? 'fabricx' : 'besu'}`}
+								className="flex flex-1 items-center gap-4"
+							>
+								{network.platform === 'besu' ? <BesuIcon className="h-8 w-8" /> : <FabricIcon className="h-8 w-8" />}
+								<div>
+									<h3 className="font-semibold">{network.name}</h3>
+									<p className="text-sm text-muted-foreground">
+										<TimeAgo date={network.createdAt!} />
+									</p>
+								</div>
+							</Link>
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
+									<Button variant="ghost" size="icon">
+										<MoreVertical className="h-4 w-4" />
+									</Button>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align="end">
+									<DropdownMenuItem
+										className="text-destructive"
+										onClick={(e) => {
+											e.preventDefault()
+											handleDelete(network)
+										}}
+									>
+										<Trash className="mr-2 h-4 w-4" />
+										Delete
+									</DropdownMenuItem>
+								</DropdownMenuContent>
+							</DropdownMenu>
+						</div>
+					</Card>
+				))}
 			</div>
+		</PageShell>
 
-			<AlertDialog open={!!networkToDelete} onOpenChange={(open) => !open && setNetworkToDelete(null)}>
+		<AlertDialog open={!!networkToDelete} onOpenChange={(open) => !open && setNetworkToDelete(null)}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
 						<AlertDialogTitle>Delete Network</AlertDialogTitle>
@@ -303,14 +347,14 @@ export default function NetworksPage() {
 						<AlertDialogCancel>Cancel</AlertDialogCancel>
 						<AlertDialogAction
 							onClick={() => networkToDelete && deleteNetwork(networkToDelete)}
-							disabled={deleteFabricNetwork.isPending || deleteBesuNetwork.isPending}
+							disabled={deleteFabricNetwork.isPending || deleteBesuNetwork.isPending || deleteFabricxNetwork.isPending}
 							className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 						>
-							{deleteFabricNetwork.isPending || deleteBesuNetwork.isPending ? 'Deleting...' : 'Delete'}
+							{deleteFabricNetwork.isPending || deleteBesuNetwork.isPending || deleteFabricxNetwork.isPending ? 'Deleting...' : 'Delete'}
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>
-		</div>
+		</>
 	)
 }

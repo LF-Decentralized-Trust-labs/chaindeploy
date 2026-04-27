@@ -162,6 +162,20 @@ type FabricRevokedCertificate struct {
 	UpdatedAt            time.Time     `json:"updatedAt"`
 }
 
+type FabricxNamespace struct {
+	ID             int64          `json:"id"`
+	NetworkID      int64          `json:"networkId"`
+	Name           string         `json:"name"`
+	Version        int64          `json:"version"`
+	SubmitterMspID string         `json:"submitterMspId"`
+	SubmitterOrgID sql.NullInt64  `json:"submitterOrgId"`
+	TxID           sql.NullString `json:"txId"`
+	Status         string         `json:"status"`
+	Error          sql.NullString `json:"error"`
+	CreatedAt      time.Time      `json:"createdAt"`
+	UpdatedAt      sql.NullTime   `json:"updatedAt"`
+}
+
 type Key struct {
 	ID                int64          `json:"id"`
 	Name              string         `json:"name"`
@@ -266,6 +280,7 @@ type Node struct {
 	NodeConfig           sql.NullString `json:"nodeConfig"`
 	DeploymentConfig     sql.NullString `json:"deploymentConfig"`
 	ErrorMessage         sql.NullString `json:"errorMessage"`
+	NodeGroupID          sql.NullInt64  `json:"nodeGroupId"`
 }
 
 type NodeEvent struct {
@@ -276,6 +291,32 @@ type NodeEvent struct {
 	Data        sql.NullString `json:"data"`
 	Status      string         `json:"status"`
 	CreatedAt   time.Time      `json:"createdAt"`
+}
+
+type NodeGroup struct {
+	ID                int64          `json:"id"`
+	Name              string         `json:"name"`
+	Platform          string         `json:"platform"`
+	GroupType         string         `json:"groupType"`
+	MspID             sql.NullString `json:"mspId"`
+	OrganizationID    sql.NullInt64  `json:"organizationId"`
+	PartyID           sql.NullInt64  `json:"partyId"`
+	Version           sql.NullString `json:"version"`
+	ExternalIp        sql.NullString `json:"externalIp"`
+	DomainNames       sql.NullString `json:"domainNames"`
+	SignKeyID         sql.NullInt64  `json:"signKeyId"`
+	TlsKeyID          sql.NullInt64  `json:"tlsKeyId"`
+	SignCert          sql.NullString `json:"signCert"`
+	TlsCert           sql.NullString `json:"tlsCert"`
+	CaCert            sql.NullString `json:"caCert"`
+	TlsCaCert         sql.NullString `json:"tlsCaCert"`
+	Config            sql.NullString `json:"config"`
+	DeploymentConfig  sql.NullString `json:"deploymentConfig"`
+	Status            string         `json:"status"`
+	ErrorMessage      sql.NullString `json:"errorMessage"`
+	CreatedAt         time.Time      `json:"createdAt"`
+	UpdatedAt         sql.NullTime   `json:"updatedAt"`
+	PostgresServiceID sql.NullInt64  `json:"postgresServiceId"`
 }
 
 type NodeKey struct {
@@ -352,6 +393,46 @@ type PrometheusConfig struct {
 	ServiceGroup        sql.NullString `json:"serviceGroup"`
 	BinaryPath          sql.NullString `json:"binaryPath"`
 	PrometheusVersion   sql.NullString `json:"prometheusVersion"`
+}
+
+type Service struct {
+	ID               int64          `json:"id"`
+	NodeGroupID      sql.NullInt64  `json:"nodeGroupId"`
+	Name             string         `json:"name"`
+	ServiceType      string         `json:"serviceType"`
+	Version          sql.NullString `json:"version"`
+	Status           string         `json:"status"`
+	Config           sql.NullString `json:"config"`
+	DeploymentConfig sql.NullString `json:"deploymentConfig"`
+	BackupTargetID   sql.NullInt64  `json:"backupTargetId"`
+	BackupConfig     sql.NullString `json:"backupConfig"`
+	ErrorMessage     sql.NullString `json:"errorMessage"`
+	CreatedAt        time.Time      `json:"createdAt"`
+	UpdatedAt        sql.NullTime   `json:"updatedAt"`
+}
+
+type ServiceBackup struct {
+	ID           int64          `json:"id"`
+	ServiceID    int64          `json:"serviceId"`
+	BackupType   string         `json:"backupType"`
+	S3Key        sql.NullString `json:"s3Key"`
+	SizeBytes    sql.NullInt64  `json:"sizeBytes"`
+	Lsn          sql.NullString `json:"lsn"`
+	Timeline     sql.NullInt64  `json:"timeline"`
+	Status       string         `json:"status"`
+	StartedAt    time.Time      `json:"startedAt"`
+	CompletedAt  sql.NullTime   `json:"completedAt"`
+	ErrorMessage sql.NullString `json:"errorMessage"`
+	Metadata     sql.NullString `json:"metadata"`
+}
+
+type ServiceEvent struct {
+	ID        int64          `json:"id"`
+	ServiceID int64          `json:"serviceId"`
+	Type      string         `json:"type"`
+	Status    string         `json:"status"`
+	Data      sql.NullString `json:"data"`
+	CreatedAt time.Time      `json:"createdAt"`
 }
 
 type Session struct {

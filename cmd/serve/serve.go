@@ -30,6 +30,11 @@ import (
 	"github.com/chainlaunch/chainlaunch/pkg/logger"
 	metricscommon "github.com/chainlaunch/chainlaunch/pkg/metrics/common"
 	"github.com/chainlaunch/chainlaunch/pkg/monitoring"
+	ngroupshttp "github.com/chainlaunch/chainlaunch/pkg/nodegroups/http"
+	ngroupsservice "github.com/chainlaunch/chainlaunch/pkg/nodegroups/service"
+	svchttp "github.com/chainlaunch/chainlaunch/pkg/services/http"
+	svcservice "github.com/chainlaunch/chainlaunch/pkg/services/service"
+	"github.com/chainlaunch/chainlaunch/pkg/nodes/fabricx"
 	nodeTypes "github.com/chainlaunch/chainlaunch/pkg/nodes/types"
 	"github.com/chainlaunch/chainlaunch/pkg/scai/ai"
 	"github.com/chainlaunch/chainlaunch/pkg/scai/boilerplates"
@@ -43,6 +48,7 @@ import (
 	"github.com/chainlaunch/chainlaunch/pkg/metrics"
 	networkshttp "github.com/chainlaunch/chainlaunch/pkg/networks/http"
 	networksservice "github.com/chainlaunch/chainlaunch/pkg/networks/service"
+	"github.com/chainlaunch/chainlaunch/pkg/networks/service/template"
 	nodeshttp "github.com/chainlaunch/chainlaunch/pkg/nodes/http"
 	nodesservice "github.com/chainlaunch/chainlaunch/pkg/nodes/service"
 	notificationhttp "github.com/chainlaunch/chainlaunch/pkg/notifications/http"
@@ -322,7 +328,7 @@ func (c *serveCmd) setupServer(queries *db.Queries, authService *auth.AuthServic
 	nodesService.SetMetricsService(metricsService)
 	metricsHandler := metrics.NewHandler(metricsService, logger)
 
-	networksService := networksservice.NewNetworkService(queries, nodesService, keyManagementService, logger, organizationService)
+	networksService := networksservice.NewNetworkService(queries, nodesService, keyManagementService, logger, organizationService, configService)
 	notificationService := notificationservice.NewNotificationService(queries, logger)
 
 	backupService := backupservice.NewBackupService(queries, logger, notificationService, dbPath, configService, encryptor)
@@ -506,10 +512,58 @@ func (c *serveCmd) setupServer(queries *db.Queries, authService *auth.AuthServic
 	keyManagementHandler := handler.NewKeyManagementHandler(keyManagementService)
 	organizationHandler := fabrichandler.NewOrganizationHandler(organizationService)
 	nodesHandler := nodeshttp.NewNodeHandler(nodesService, logger)
+
+	// Node-groups coordinator and handler. The factories bake the heavy
+	// deps (org service, key service, config service) into fabricx
+	// orchestrators so pkg/nodegroups/service only needs opts + db.
+	ordererFactory := func(q *db.Queries, nodeID int64, opts nodeTypes.FabricXOrdererGroupConfig) *fabricx.OrdererGroup {
+		return fabricx.NewOrdererGroup(q, organizationService, keyManagementService, configService, logger, nodeID, opts)
+	}
+	committerFactory := func(q *db.Queries, nodeID int64, opts nodeTypes.FabricXCommitterConfig) *fabricx.Committer {
+		return fabricx.NewCommitter(q, organizationService, keyManagementService, configService, logger, nodeID, opts)
+	}
+	nodeGroupsService := ngroupsservice.NewService(queries, nodesService, ordererFactory, committerFactory, logger).
+		WithDataPath(dataPath)
+	nodeGroupsHandler := ngroupshttp.NewHandler(nodeGroupsService)
+
+	// Standalone services coordinator (POSTGRES and future service types).
+	// Services are a first-class resource; node groups reference them via
+	// postgres_service_id. See ADR 0001.
+	// WithDataPath enables on-host bind mounts for managed postgres data
+	// dirs so backups capture PGDATA — without it, the container's
+	// writable layer holds all coordinator/queryservice tx state and
+	// gets lost on container removal.
+	servicesService := svcservice.NewService(queries, logger).
+		WithDataPath(dataPath)
+	servicesHandler := svchttp.NewHandler(servicesService)
 	networksHandler := networkshttp.NewHandler(
 		networksService,
 		nodesService,
 	)
+
+	// Initialize template service and handler
+	templateService := template.NewTemplateService(queries, nodesService, organizationService, keyManagementService, logger)
+	networkCreatorAdapter := networkshttp.NewNetworkServiceAdapter(func(ctx context.Context, name, description string, configData []byte) (interface{}, error) {
+		return networksService.CreateNetwork(ctx, name, description, configData)
+	})
+	chaincodeAdapter := networkshttp.NewChaincodeServiceAdapter(
+		func(ctx context.Context, name string, networkID int64) (int64, error) {
+			cc, err := chaincodeService.CreateChaincode(ctx, name, networkID)
+			if err != nil {
+				return 0, err
+			}
+			return cc.ID, nil
+		},
+		func(ctx context.Context, chaincodeID int64, version string, sequence int64, dockerImage string, endorsementPolicy string, chaincodeAddress string) (int64, error) {
+			def, err := chaincodeService.CreateChaincodeDefinition(ctx, chaincodeID, version, sequence, dockerImage, endorsementPolicy, chaincodeAddress)
+			if err != nil {
+				return 0, err
+			}
+			return def.ID, nil
+		},
+	)
+	templateHandler := networkshttp.NewTemplateHandler(templateService, networkCreatorAdapter, chaincodeAdapter)
+
 	backupHandler := backuphttp.NewHandler(backupService)
 	notificationHandler := notificationhttp.NewNotificationHandler(notificationService)
 	authHandler := auth.NewHandler(authService)
@@ -585,8 +639,14 @@ func (c *serveCmd) setupServer(queries *db.Queries, authService *auth.AuthServic
 			organizationHandler.RegisterRoutes(r)
 			// Mount nodes routes
 			nodesHandler.RegisterRoutes(r)
+			// Mount node-groups routes
+			nodeGroupsHandler.RegisterRoutes(r)
+
+			servicesHandler.RegisterRoutes(r)
 			// Mount networks routes
 			networksHandler.RegisterRoutes(r)
+			// Mount template routes
+			templateHandler.RegisterTemplateRoutes(r)
 			// Mount backups routes
 			backupHandler.RegisterRoutes(r)
 			// Mount notifications routes

@@ -7,6 +7,7 @@ import (
 	"github.com/chainlaunch/chainlaunch/cmd/backup"
 	"github.com/chainlaunch/chainlaunch/cmd/besu"
 	"github.com/chainlaunch/chainlaunch/cmd/fabric"
+	"github.com/chainlaunch/chainlaunch/cmd/fabricx"
 	"github.com/chainlaunch/chainlaunch/cmd/keymanagement"
 	"github.com/chainlaunch/chainlaunch/cmd/metrics"
 	"github.com/chainlaunch/chainlaunch/cmd/networks"
@@ -32,6 +33,7 @@ func NewRootCmd(configCMD config.ConfigCMD) *cobra.Command {
 
 	rootCmd.AddCommand(serve.Command(configCMD, logger))
 	rootCmd.AddCommand(fabric.NewFabricCmd(logger))
+	rootCmd.AddCommand(fabricx.NewFabricXCmd(logger))
 	rootCmd.AddCommand(version.NewVersionCmd())
 	rootCmd.AddCommand(backup.NewBackupCmd())
 	rootCmd.AddCommand(besu.NewBesuCmd(logger))

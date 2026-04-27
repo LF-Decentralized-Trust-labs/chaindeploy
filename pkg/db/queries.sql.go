@@ -165,6 +165,28 @@ func (q *Queries) CountNodeEvents(ctx context.Context, nodeID int64) (int64, err
 	return count, err
 }
 
+const CountNodeGroups = `-- name: CountNodeGroups :one
+SELECT COUNT(*) FROM node_groups
+`
+
+func (q *Queries) CountNodeGroups(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, CountNodeGroups)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const CountNodeGroupsByStatus = `-- name: CountNodeGroupsByStatus :one
+SELECT COUNT(*) FROM node_groups WHERE status = ?
+`
+
+func (q *Queries) CountNodeGroupsByStatus(ctx context.Context, status string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, CountNodeGroupsByStatus, status)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const CountNodes = `-- name: CountNodes :one
 SELECT COUNT(*) FROM nodes
 `
@@ -183,6 +205,39 @@ WHERE platform = ?
 
 func (q *Queries) CountNodesByPlatform(ctx context.Context, platform string) (int64, error) {
 	row := q.db.QueryRowContext(ctx, CountNodesByPlatform, platform)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const CountServiceBackupsByService = `-- name: CountServiceBackupsByService :one
+SELECT COUNT(*) FROM service_backups WHERE service_id = ?
+`
+
+func (q *Queries) CountServiceBackupsByService(ctx context.Context, serviceID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, CountServiceBackupsByService, serviceID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const CountServiceEventsByService = `-- name: CountServiceEventsByService :one
+SELECT COUNT(*) FROM service_events WHERE service_id = ?
+`
+
+func (q *Queries) CountServiceEventsByService(ctx context.Context, serviceID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, CountServiceEventsByService, serviceID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const CountServices = `-- name: CountServices :one
+SELECT COUNT(*) FROM services
+`
+
+func (q *Queries) CountServices(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, CountServices)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -592,6 +647,50 @@ func (q *Queries) CreateFabricOrganization(ctx context.Context, arg *CreateFabri
 	return &i, err
 }
 
+const CreateFabricXNamespace = `-- name: CreateFabricXNamespace :one
+INSERT INTO fabricx_namespaces (
+    network_id, name, version, submitter_msp_id, submitter_org_id, tx_id, status
+) VALUES (?, ?, ?, ?, ?, ?, ?)
+RETURNING id, network_id, name, version, submitter_msp_id, submitter_org_id, tx_id, status, error, created_at, updated_at
+`
+
+type CreateFabricXNamespaceParams struct {
+	NetworkID      int64          `json:"networkId"`
+	Name           string         `json:"name"`
+	Version        int64          `json:"version"`
+	SubmitterMspID string         `json:"submitterMspId"`
+	SubmitterOrgID sql.NullInt64  `json:"submitterOrgId"`
+	TxID           sql.NullString `json:"txId"`
+	Status         string         `json:"status"`
+}
+
+func (q *Queries) CreateFabricXNamespace(ctx context.Context, arg *CreateFabricXNamespaceParams) (*FabricxNamespace, error) {
+	row := q.db.QueryRowContext(ctx, CreateFabricXNamespace,
+		arg.NetworkID,
+		arg.Name,
+		arg.Version,
+		arg.SubmitterMspID,
+		arg.SubmitterOrgID,
+		arg.TxID,
+		arg.Status,
+	)
+	var i FabricxNamespace
+	err := row.Scan(
+		&i.ID,
+		&i.NetworkID,
+		&i.Name,
+		&i.Version,
+		&i.SubmitterMspID,
+		&i.SubmitterOrgID,
+		&i.TxID,
+		&i.Status,
+		&i.Error,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
 const CreateKey = `-- name: CreateKey :one
 INSERT INTO keys (
     name, description, algorithm, key_size, curve, format,
@@ -902,7 +1001,7 @@ INSERT INTO nodes (
     ?,
     CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP
-) RETURNING id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message
+) RETURNING id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message, node_group_id
 `
 
 type CreateNodeParams struct {
@@ -963,6 +1062,7 @@ func (q *Queries) CreateNode(ctx context.Context, arg *CreateNodeParams) (*Node,
 		&i.NodeConfig,
 		&i.DeploymentConfig,
 		&i.ErrorMessage,
+		&i.NodeGroupID,
 	)
 	return &i, err
 }
@@ -1005,6 +1105,103 @@ func (q *Queries) CreateNodeEvent(ctx context.Context, arg *CreateNodeEventParam
 		&i.Data,
 		&i.Status,
 		&i.CreatedAt,
+	)
+	return &i, err
+}
+
+const CreateNodeGroup = `-- name: CreateNodeGroup :one
+INSERT INTO node_groups (
+    name,
+    platform,
+    group_type,
+    msp_id,
+    organization_id,
+    party_id,
+    version,
+    external_ip,
+    domain_names,
+    sign_key_id,
+    tls_key_id,
+    sign_cert,
+    tls_cert,
+    ca_cert,
+    tls_ca_cert,
+    config,
+    deployment_config,
+    status
+) VALUES (
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+)
+RETURNING id, name, platform, group_type, msp_id, organization_id, party_id, version, external_ip, domain_names, sign_key_id, tls_key_id, sign_cert, tls_cert, ca_cert, tls_ca_cert, config, deployment_config, status, error_message, created_at, updated_at, postgres_service_id
+`
+
+type CreateNodeGroupParams struct {
+	Name             string         `json:"name"`
+	Platform         string         `json:"platform"`
+	GroupType        string         `json:"groupType"`
+	MspID            sql.NullString `json:"mspId"`
+	OrganizationID   sql.NullInt64  `json:"organizationId"`
+	PartyID          sql.NullInt64  `json:"partyId"`
+	Version          sql.NullString `json:"version"`
+	ExternalIp       sql.NullString `json:"externalIp"`
+	DomainNames      sql.NullString `json:"domainNames"`
+	SignKeyID        sql.NullInt64  `json:"signKeyId"`
+	TlsKeyID         sql.NullInt64  `json:"tlsKeyId"`
+	SignCert         sql.NullString `json:"signCert"`
+	TlsCert          sql.NullString `json:"tlsCert"`
+	CaCert           sql.NullString `json:"caCert"`
+	TlsCaCert        sql.NullString `json:"tlsCaCert"`
+	Config           sql.NullString `json:"config"`
+	DeploymentConfig sql.NullString `json:"deploymentConfig"`
+	Status           string         `json:"status"`
+}
+
+func (q *Queries) CreateNodeGroup(ctx context.Context, arg *CreateNodeGroupParams) (*NodeGroup, error) {
+	row := q.db.QueryRowContext(ctx, CreateNodeGroup,
+		arg.Name,
+		arg.Platform,
+		arg.GroupType,
+		arg.MspID,
+		arg.OrganizationID,
+		arg.PartyID,
+		arg.Version,
+		arg.ExternalIp,
+		arg.DomainNames,
+		arg.SignKeyID,
+		arg.TlsKeyID,
+		arg.SignCert,
+		arg.TlsCert,
+		arg.CaCert,
+		arg.TlsCaCert,
+		arg.Config,
+		arg.DeploymentConfig,
+		arg.Status,
+	)
+	var i NodeGroup
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Platform,
+		&i.GroupType,
+		&i.MspID,
+		&i.OrganizationID,
+		&i.PartyID,
+		&i.Version,
+		&i.ExternalIp,
+		&i.DomainNames,
+		&i.SignKeyID,
+		&i.TlsKeyID,
+		&i.SignCert,
+		&i.TlsCert,
+		&i.CaCert,
+		&i.TlsCaCert,
+		&i.Config,
+		&i.DeploymentConfig,
+		&i.Status,
+		&i.ErrorMessage,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PostgresServiceID,
 	)
 	return &i, err
 }
@@ -1218,6 +1415,160 @@ func (q *Queries) CreatePrometheusConfig(ctx context.Context, arg *CreatePrometh
 	return &i, err
 }
 
+const CreateService = `-- name: CreateService :one
+INSERT INTO services (
+    node_group_id,
+    name,
+    service_type,
+    version,
+    status,
+    config,
+    deployment_config,
+    backup_target_id,
+    backup_config
+) VALUES (
+    ?, ?, ?, ?, ?, ?, ?, ?, ?
+)
+RETURNING id, node_group_id, name, service_type, version, status, config, deployment_config, backup_target_id, backup_config, error_message, created_at, updated_at
+`
+
+type CreateServiceParams struct {
+	NodeGroupID      sql.NullInt64  `json:"nodeGroupId"`
+	Name             string         `json:"name"`
+	ServiceType      string         `json:"serviceType"`
+	Version          sql.NullString `json:"version"`
+	Status           string         `json:"status"`
+	Config           sql.NullString `json:"config"`
+	DeploymentConfig sql.NullString `json:"deploymentConfig"`
+	BackupTargetID   sql.NullInt64  `json:"backupTargetId"`
+	BackupConfig     sql.NullString `json:"backupConfig"`
+}
+
+func (q *Queries) CreateService(ctx context.Context, arg *CreateServiceParams) (*Service, error) {
+	row := q.db.QueryRowContext(ctx, CreateService,
+		arg.NodeGroupID,
+		arg.Name,
+		arg.ServiceType,
+		arg.Version,
+		arg.Status,
+		arg.Config,
+		arg.DeploymentConfig,
+		arg.BackupTargetID,
+		arg.BackupConfig,
+	)
+	var i Service
+	err := row.Scan(
+		&i.ID,
+		&i.NodeGroupID,
+		&i.Name,
+		&i.ServiceType,
+		&i.Version,
+		&i.Status,
+		&i.Config,
+		&i.DeploymentConfig,
+		&i.BackupTargetID,
+		&i.BackupConfig,
+		&i.ErrorMessage,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
+const CreateServiceBackup = `-- name: CreateServiceBackup :one
+INSERT INTO service_backups (
+    service_id,
+    backup_type,
+    s3_key,
+    size_bytes,
+    lsn,
+    timeline,
+    status,
+    metadata
+) VALUES (
+    ?, ?, ?, ?, ?, ?, ?, ?
+)
+RETURNING id, service_id, backup_type, s3_key, size_bytes, lsn, timeline, status, started_at, completed_at, error_message, metadata
+`
+
+type CreateServiceBackupParams struct {
+	ServiceID  int64          `json:"serviceId"`
+	BackupType string         `json:"backupType"`
+	S3Key      sql.NullString `json:"s3Key"`
+	SizeBytes  sql.NullInt64  `json:"sizeBytes"`
+	Lsn        sql.NullString `json:"lsn"`
+	Timeline   sql.NullInt64  `json:"timeline"`
+	Status     string         `json:"status"`
+	Metadata   sql.NullString `json:"metadata"`
+}
+
+func (q *Queries) CreateServiceBackup(ctx context.Context, arg *CreateServiceBackupParams) (*ServiceBackup, error) {
+	row := q.db.QueryRowContext(ctx, CreateServiceBackup,
+		arg.ServiceID,
+		arg.BackupType,
+		arg.S3Key,
+		arg.SizeBytes,
+		arg.Lsn,
+		arg.Timeline,
+		arg.Status,
+		arg.Metadata,
+	)
+	var i ServiceBackup
+	err := row.Scan(
+		&i.ID,
+		&i.ServiceID,
+		&i.BackupType,
+		&i.S3Key,
+		&i.SizeBytes,
+		&i.Lsn,
+		&i.Timeline,
+		&i.Status,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.ErrorMessage,
+		&i.Metadata,
+	)
+	return &i, err
+}
+
+const CreateServiceEvent = `-- name: CreateServiceEvent :one
+INSERT INTO service_events (
+    service_id,
+    type,
+    status,
+    data
+) VALUES (
+    ?, ?, ?, ?
+)
+RETURNING id, service_id, type, status, data, created_at
+`
+
+type CreateServiceEventParams struct {
+	ServiceID int64          `json:"serviceId"`
+	Type      string         `json:"type"`
+	Status    string         `json:"status"`
+	Data      sql.NullString `json:"data"`
+}
+
+func (q *Queries) CreateServiceEvent(ctx context.Context, arg *CreateServiceEventParams) (*ServiceEvent, error) {
+	row := q.db.QueryRowContext(ctx, CreateServiceEvent,
+		arg.ServiceID,
+		arg.Type,
+		arg.Status,
+		arg.Data,
+	)
+	var i ServiceEvent
+	err := row.Scan(
+		&i.ID,
+		&i.ServiceID,
+		&i.Type,
+		&i.Status,
+		&i.Data,
+		&i.CreatedAt,
+	)
+	return &i, err
+}
+
 const CreateSession = `-- name: CreateSession :one
 INSERT INTO sessions (
   token,
@@ -1408,6 +1759,15 @@ func (q *Queries) DeleteFabricOrganization(ctx context.Context, id int64) error 
 	return err
 }
 
+const DeleteFabricXNamespace = `-- name: DeleteFabricXNamespace :exec
+DELETE FROM fabricx_namespaces WHERE id = ?
+`
+
+func (q *Queries) DeleteFabricXNamespace(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, DeleteFabricXNamespace, id)
+	return err
+}
+
 const DeleteKey = `-- name: DeleteKey :exec
 DELETE FROM keys WHERE id = ?
 `
@@ -1460,6 +1820,15 @@ func (q *Queries) DeleteNode(ctx context.Context, id int64) error {
 	return err
 }
 
+const DeleteNodeGroup = `-- name: DeleteNodeGroup :exec
+DELETE FROM node_groups WHERE id = ?
+`
+
+func (q *Queries) DeleteNodeGroup(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, DeleteNodeGroup, id)
+	return err
+}
+
 const DeleteNotificationProvider = `-- name: DeleteNotificationProvider :exec
 DELETE FROM notification_providers
 WHERE id = ?
@@ -1507,6 +1876,33 @@ type DeleteRevokedCertificateParams struct {
 
 func (q *Queries) DeleteRevokedCertificate(ctx context.Context, arg *DeleteRevokedCertificateParams) error {
 	_, err := q.db.ExecContext(ctx, DeleteRevokedCertificate, arg.FabricOrganizationID, arg.SerialNumber)
+	return err
+}
+
+const DeleteService = `-- name: DeleteService :exec
+DELETE FROM services WHERE id = ?
+`
+
+func (q *Queries) DeleteService(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, DeleteService, id)
+	return err
+}
+
+const DeleteServiceBackupsOlderThan = `-- name: DeleteServiceBackupsOlderThan :exec
+DELETE FROM service_backups
+WHERE service_id = ?
+  AND backup_type = ?
+  AND started_at < ?
+`
+
+type DeleteServiceBackupsOlderThanParams struct {
+	ServiceID  int64     `json:"serviceId"`
+	BackupType string    `json:"backupType"`
+	StartedAt  time.Time `json:"startedAt"`
+}
+
+func (q *Queries) DeleteServiceBackupsOlderThan(ctx context.Context, arg *DeleteServiceBackupsOlderThanParams) error {
+	_, err := q.db.ExecContext(ctx, DeleteServiceBackupsOlderThan, arg.ServiceID, arg.BackupType, arg.StartedAt)
 	return err
 }
 
@@ -1690,7 +2086,7 @@ func (q *Queries) GetAllKeys(ctx context.Context, arg *GetAllKeysParams) ([]*Get
 }
 
 const GetAllNodes = `-- name: GetAllNodes :many
-SELECT id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message FROM nodes
+SELECT id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message, node_group_id FROM nodes
 `
 
 func (q *Queries) GetAllNodes(ctx context.Context) ([]*Node, error) {
@@ -1723,6 +2119,7 @@ func (q *Queries) GetAllNodes(ctx context.Context) ([]*Node, error) {
 			&i.NodeConfig,
 			&i.DeploymentConfig,
 			&i.ErrorMessage,
+			&i.NodeGroupID,
 		); err != nil {
 			return nil, err
 		}
@@ -2374,6 +2771,57 @@ func (q *Queries) GetFabricOrganizationWithKeys(ctx context.Context, id int64) (
 	return &i, err
 }
 
+const GetFabricXNamespace = `-- name: GetFabricXNamespace :one
+SELECT id, network_id, name, version, submitter_msp_id, submitter_org_id, tx_id, status, error, created_at, updated_at FROM fabricx_namespaces WHERE id = ?
+`
+
+func (q *Queries) GetFabricXNamespace(ctx context.Context, id int64) (*FabricxNamespace, error) {
+	row := q.db.QueryRowContext(ctx, GetFabricXNamespace, id)
+	var i FabricxNamespace
+	err := row.Scan(
+		&i.ID,
+		&i.NetworkID,
+		&i.Name,
+		&i.Version,
+		&i.SubmitterMspID,
+		&i.SubmitterOrgID,
+		&i.TxID,
+		&i.Status,
+		&i.Error,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
+const GetFabricXNamespaceByName = `-- name: GetFabricXNamespaceByName :one
+SELECT id, network_id, name, version, submitter_msp_id, submitter_org_id, tx_id, status, error, created_at, updated_at FROM fabricx_namespaces WHERE network_id = ? AND name = ?
+`
+
+type GetFabricXNamespaceByNameParams struct {
+	NetworkID int64  `json:"networkId"`
+	Name      string `json:"name"`
+}
+
+func (q *Queries) GetFabricXNamespaceByName(ctx context.Context, arg *GetFabricXNamespaceByNameParams) (*FabricxNamespace, error) {
+	row := q.db.QueryRowContext(ctx, GetFabricXNamespaceByName, arg.NetworkID, arg.Name)
+	var i FabricxNamespace
+	err := row.Scan(
+		&i.ID,
+		&i.NetworkID,
+		&i.Name,
+		&i.Version,
+		&i.SubmitterMspID,
+		&i.SubmitterOrgID,
+		&i.TxID,
+		&i.Status,
+		&i.Error,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
 const GetKey = `-- name: GetKey :one
 SELECT k.id, k.name, k.description, k.algorithm, k.key_size, k.curve, k.format, k.public_key, k.private_key, k.certificate, k.status, k.created_at, k.updated_at, k.expires_at, k.last_rotated_at, k.signing_key_id, k.sha256_fingerprint, k.sha1_fingerprint, k.provider_id, k.user_id, k.is_ca, k.ethereum_address, kp.name as provider_name, kp.type as provider_type
 FROM keys k
@@ -2905,7 +3353,7 @@ func (q *Queries) GetNetworkNode(ctx context.Context, arg *GetNetworkNodeParams)
 }
 
 const GetNetworkNodes = `-- name: GetNetworkNodes :many
-SELECT nn.id, nn.network_id, nn.node_id, nn.role, nn.status, nn.config, nn.created_at, nn.updated_at, n.id, n.name, n.slug, n.platform, n.status, n.description, n.network_id, n.config, n.resources, n.endpoint, n.public_endpoint, n.p2p_address, n.created_at, n.created_by, n.updated_at, n.fabric_organization_id, n.node_type, n.node_config, n.deployment_config, n.error_message 
+SELECT nn.id, nn.network_id, nn.node_id, nn.role, nn.status, nn.config, nn.created_at, nn.updated_at, n.id, n.name, n.slug, n.platform, n.status, n.description, n.network_id, n.config, n.resources, n.endpoint, n.public_endpoint, n.p2p_address, n.created_at, n.created_by, n.updated_at, n.fabric_organization_id, n.node_type, n.node_config, n.deployment_config, n.error_message, n.node_group_id 
 FROM network_nodes nn
 JOIN nodes n ON nn.node_id = n.id
 WHERE nn.network_id = ? 
@@ -2941,6 +3389,7 @@ type GetNetworkNodesRow struct {
 	NodeConfig           sql.NullString `json:"nodeConfig"`
 	DeploymentConfig     sql.NullString `json:"deploymentConfig"`
 	ErrorMessage         sql.NullString `json:"errorMessage"`
+	NodeGroupID          sql.NullInt64  `json:"nodeGroupId"`
 }
 
 func (q *Queries) GetNetworkNodes(ctx context.Context, networkID int64) ([]*GetNetworkNodesRow, error) {
@@ -2981,6 +3430,7 @@ func (q *Queries) GetNetworkNodes(ctx context.Context, networkID int64) ([]*GetN
 			&i.NodeConfig,
 			&i.DeploymentConfig,
 			&i.ErrorMessage,
+			&i.NodeGroupID,
 		); err != nil {
 			return nil, err
 		}
@@ -2996,7 +3446,7 @@ func (q *Queries) GetNetworkNodes(ctx context.Context, networkID int64) ([]*GetN
 }
 
 const GetNode = `-- name: GetNode :one
-SELECT id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message FROM nodes
+SELECT id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message, node_group_id FROM nodes
 WHERE id = ? LIMIT 1
 `
 
@@ -3024,12 +3474,13 @@ func (q *Queries) GetNode(ctx context.Context, id int64) (*Node, error) {
 		&i.NodeConfig,
 		&i.DeploymentConfig,
 		&i.ErrorMessage,
+		&i.NodeGroupID,
 	)
 	return &i, err
 }
 
 const GetNodeBySlug = `-- name: GetNodeBySlug :one
-SELECT id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message FROM nodes WHERE slug = ?
+SELECT id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message, node_group_id FROM nodes WHERE slug = ?
 `
 
 func (q *Queries) GetNodeBySlug(ctx context.Context, slug string) (*Node, error) {
@@ -3056,6 +3507,7 @@ func (q *Queries) GetNodeBySlug(ctx context.Context, slug string) (*Node, error)
 		&i.NodeConfig,
 		&i.DeploymentConfig,
 		&i.ErrorMessage,
+		&i.NodeGroupID,
 	)
 	return &i, err
 }
@@ -3078,6 +3530,87 @@ func (q *Queries) GetNodeEvent(ctx context.Context, id int64) (*NodeEvent, error
 		&i.CreatedAt,
 	)
 	return &i, err
+}
+
+const GetNodeGroup = `-- name: GetNodeGroup :one
+SELECT id, name, platform, group_type, msp_id, organization_id, party_id, version, external_ip, domain_names, sign_key_id, tls_key_id, sign_cert, tls_cert, ca_cert, tls_ca_cert, config, deployment_config, status, error_message, created_at, updated_at, postgres_service_id FROM node_groups WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetNodeGroup(ctx context.Context, id int64) (*NodeGroup, error) {
+	row := q.db.QueryRowContext(ctx, GetNodeGroup, id)
+	var i NodeGroup
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Platform,
+		&i.GroupType,
+		&i.MspID,
+		&i.OrganizationID,
+		&i.PartyID,
+		&i.Version,
+		&i.ExternalIp,
+		&i.DomainNames,
+		&i.SignKeyID,
+		&i.TlsKeyID,
+		&i.SignCert,
+		&i.TlsCert,
+		&i.CaCert,
+		&i.TlsCaCert,
+		&i.Config,
+		&i.DeploymentConfig,
+		&i.Status,
+		&i.ErrorMessage,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PostgresServiceID,
+	)
+	return &i, err
+}
+
+const GetNodeGroupByName = `-- name: GetNodeGroupByName :one
+SELECT id, name, platform, group_type, msp_id, organization_id, party_id, version, external_ip, domain_names, sign_key_id, tls_key_id, sign_cert, tls_cert, ca_cert, tls_ca_cert, config, deployment_config, status, error_message, created_at, updated_at, postgres_service_id FROM node_groups WHERE name = ? LIMIT 1
+`
+
+func (q *Queries) GetNodeGroupByName(ctx context.Context, name string) (*NodeGroup, error) {
+	row := q.db.QueryRowContext(ctx, GetNodeGroupByName, name)
+	var i NodeGroup
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Platform,
+		&i.GroupType,
+		&i.MspID,
+		&i.OrganizationID,
+		&i.PartyID,
+		&i.Version,
+		&i.ExternalIp,
+		&i.DomainNames,
+		&i.SignKeyID,
+		&i.TlsKeyID,
+		&i.SignCert,
+		&i.TlsCert,
+		&i.CaCert,
+		&i.TlsCaCert,
+		&i.Config,
+		&i.DeploymentConfig,
+		&i.Status,
+		&i.ErrorMessage,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PostgresServiceID,
+	)
+	return &i, err
+}
+
+const GetNodeGroupPostgresServiceID = `-- name: GetNodeGroupPostgresServiceID :one
+SELECT postgres_service_id FROM node_groups WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetNodeGroupPostgresServiceID(ctx context.Context, id int64) (sql.NullInt64, error) {
+	row := q.db.QueryRowContext(ctx, GetNodeGroupPostgresServiceID, id)
+	var postgres_service_id sql.NullInt64
+	err := row.Scan(&postgres_service_id)
+	return postgres_service_id, err
 }
 
 const GetNotificationProvider = `-- name: GetNotificationProvider :one
@@ -3495,6 +4028,80 @@ func (q *Queries) GetRevokedCertificates(ctx context.Context, fabricOrganization
 		return nil, err
 	}
 	return items, nil
+}
+
+const GetService = `-- name: GetService :one
+SELECT id, node_group_id, name, service_type, version, status, config, deployment_config, backup_target_id, backup_config, error_message, created_at, updated_at FROM services WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetService(ctx context.Context, id int64) (*Service, error) {
+	row := q.db.QueryRowContext(ctx, GetService, id)
+	var i Service
+	err := row.Scan(
+		&i.ID,
+		&i.NodeGroupID,
+		&i.Name,
+		&i.ServiceType,
+		&i.Version,
+		&i.Status,
+		&i.Config,
+		&i.DeploymentConfig,
+		&i.BackupTargetID,
+		&i.BackupConfig,
+		&i.ErrorMessage,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
+const GetServiceBackup = `-- name: GetServiceBackup :one
+SELECT id, service_id, backup_type, s3_key, size_bytes, lsn, timeline, status, started_at, completed_at, error_message, metadata FROM service_backups WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetServiceBackup(ctx context.Context, id int64) (*ServiceBackup, error) {
+	row := q.db.QueryRowContext(ctx, GetServiceBackup, id)
+	var i ServiceBackup
+	err := row.Scan(
+		&i.ID,
+		&i.ServiceID,
+		&i.BackupType,
+		&i.S3Key,
+		&i.SizeBytes,
+		&i.Lsn,
+		&i.Timeline,
+		&i.Status,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.ErrorMessage,
+		&i.Metadata,
+	)
+	return &i, err
+}
+
+const GetServiceByName = `-- name: GetServiceByName :one
+SELECT id, node_group_id, name, service_type, version, status, config, deployment_config, backup_target_id, backup_config, error_message, created_at, updated_at FROM services WHERE name = ? LIMIT 1
+`
+
+func (q *Queries) GetServiceByName(ctx context.Context, name string) (*Service, error) {
+	row := q.db.QueryRowContext(ctx, GetServiceByName, name)
+	var i Service
+	err := row.Scan(
+		&i.ID,
+		&i.NodeGroupID,
+		&i.Name,
+		&i.ServiceType,
+		&i.Version,
+		&i.Status,
+		&i.Config,
+		&i.DeploymentConfig,
+		&i.BackupTargetID,
+		&i.BackupConfig,
+		&i.ErrorMessage,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
 }
 
 const GetSession = `-- name: GetSession :one
@@ -4179,6 +4786,45 @@ func (q *Queries) ListFabricOrganizationsWithKeys(ctx context.Context, arg *List
 	return items, nil
 }
 
+const ListFabricXNamespacesByNetwork = `-- name: ListFabricXNamespacesByNetwork :many
+SELECT id, network_id, name, version, submitter_msp_id, submitter_org_id, tx_id, status, error, created_at, updated_at FROM fabricx_namespaces WHERE network_id = ? ORDER BY created_at DESC
+`
+
+func (q *Queries) ListFabricXNamespacesByNetwork(ctx context.Context, networkID int64) ([]*FabricxNamespace, error) {
+	rows, err := q.db.QueryContext(ctx, ListFabricXNamespacesByNetwork, networkID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*FabricxNamespace{}
+	for rows.Next() {
+		var i FabricxNamespace
+		if err := rows.Scan(
+			&i.ID,
+			&i.NetworkID,
+			&i.Name,
+			&i.Version,
+			&i.SubmitterMspID,
+			&i.SubmitterOrgID,
+			&i.TxID,
+			&i.Status,
+			&i.Error,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const ListKeyProviders = `-- name: ListKeyProviders :many
 SELECT id, name, type, is_default, config, created_at, updated_at FROM key_providers
 `
@@ -4568,8 +5214,179 @@ func (q *Queries) ListNodeEventsByType(ctx context.Context, arg *ListNodeEventsB
 	return items, nil
 }
 
+const ListNodeGroups = `-- name: ListNodeGroups :many
+SELECT id, name, platform, group_type, msp_id, organization_id, party_id, version, external_ip, domain_names, sign_key_id, tls_key_id, sign_cert, tls_cert, ca_cert, tls_ca_cert, config, deployment_config, status, error_message, created_at, updated_at, postgres_service_id FROM node_groups
+ORDER BY created_at DESC
+LIMIT ? OFFSET ?
+`
+
+type ListNodeGroupsParams struct {
+	Limit  int64 `json:"limit"`
+	Offset int64 `json:"offset"`
+}
+
+func (q *Queries) ListNodeGroups(ctx context.Context, arg *ListNodeGroupsParams) ([]*NodeGroup, error) {
+	rows, err := q.db.QueryContext(ctx, ListNodeGroups, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*NodeGroup{}
+	for rows.Next() {
+		var i NodeGroup
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Platform,
+			&i.GroupType,
+			&i.MspID,
+			&i.OrganizationID,
+			&i.PartyID,
+			&i.Version,
+			&i.ExternalIp,
+			&i.DomainNames,
+			&i.SignKeyID,
+			&i.TlsKeyID,
+			&i.SignCert,
+			&i.TlsCert,
+			&i.CaCert,
+			&i.TlsCaCert,
+			&i.Config,
+			&i.DeploymentConfig,
+			&i.Status,
+			&i.ErrorMessage,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.PostgresServiceID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const ListNodeGroupsByPlatform = `-- name: ListNodeGroupsByPlatform :many
+SELECT id, name, platform, group_type, msp_id, organization_id, party_id, version, external_ip, domain_names, sign_key_id, tls_key_id, sign_cert, tls_cert, ca_cert, tls_ca_cert, config, deployment_config, status, error_message, created_at, updated_at, postgres_service_id FROM node_groups
+WHERE platform = ?
+ORDER BY created_at DESC
+LIMIT ? OFFSET ?
+`
+
+type ListNodeGroupsByPlatformParams struct {
+	Platform string `json:"platform"`
+	Limit    int64  `json:"limit"`
+	Offset   int64  `json:"offset"`
+}
+
+func (q *Queries) ListNodeGroupsByPlatform(ctx context.Context, arg *ListNodeGroupsByPlatformParams) ([]*NodeGroup, error) {
+	rows, err := q.db.QueryContext(ctx, ListNodeGroupsByPlatform, arg.Platform, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*NodeGroup{}
+	for rows.Next() {
+		var i NodeGroup
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Platform,
+			&i.GroupType,
+			&i.MspID,
+			&i.OrganizationID,
+			&i.PartyID,
+			&i.Version,
+			&i.ExternalIp,
+			&i.DomainNames,
+			&i.SignKeyID,
+			&i.TlsKeyID,
+			&i.SignCert,
+			&i.TlsCert,
+			&i.CaCert,
+			&i.TlsCaCert,
+			&i.Config,
+			&i.DeploymentConfig,
+			&i.Status,
+			&i.ErrorMessage,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.PostgresServiceID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const ListNodeGroupsByPostgresServiceID = `-- name: ListNodeGroupsByPostgresServiceID :many
+SELECT id, name, platform, group_type, msp_id, organization_id, party_id, version, external_ip, domain_names, sign_key_id, tls_key_id, sign_cert, tls_cert, ca_cert, tls_ca_cert, config, deployment_config, status, error_message, created_at, updated_at, postgres_service_id FROM node_groups
+WHERE postgres_service_id = ?
+ORDER BY id ASC
+`
+
+func (q *Queries) ListNodeGroupsByPostgresServiceID(ctx context.Context, postgresServiceID sql.NullInt64) ([]*NodeGroup, error) {
+	rows, err := q.db.QueryContext(ctx, ListNodeGroupsByPostgresServiceID, postgresServiceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*NodeGroup{}
+	for rows.Next() {
+		var i NodeGroup
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Platform,
+			&i.GroupType,
+			&i.MspID,
+			&i.OrganizationID,
+			&i.PartyID,
+			&i.Version,
+			&i.ExternalIp,
+			&i.DomainNames,
+			&i.SignKeyID,
+			&i.TlsKeyID,
+			&i.SignCert,
+			&i.TlsCert,
+			&i.CaCert,
+			&i.TlsCaCert,
+			&i.Config,
+			&i.DeploymentConfig,
+			&i.Status,
+			&i.ErrorMessage,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.PostgresServiceID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const ListNodes = `-- name: ListNodes :many
-SELECT id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message FROM nodes
+SELECT id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message, node_group_id FROM nodes
 ORDER BY created_at DESC
 LIMIT ? OFFSET ?
 `
@@ -4609,6 +5426,58 @@ func (q *Queries) ListNodes(ctx context.Context, arg *ListNodesParams) ([]*Node,
 			&i.NodeConfig,
 			&i.DeploymentConfig,
 			&i.ErrorMessage,
+			&i.NodeGroupID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const ListNodesByGroup = `-- name: ListNodesByGroup :many
+SELECT id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message, node_group_id FROM nodes
+WHERE node_group_id = ?
+ORDER BY created_at ASC
+`
+
+func (q *Queries) ListNodesByGroup(ctx context.Context, nodeGroupID sql.NullInt64) ([]*Node, error) {
+	rows, err := q.db.QueryContext(ctx, ListNodesByGroup, nodeGroupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*Node{}
+	for rows.Next() {
+		var i Node
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Platform,
+			&i.Status,
+			&i.Description,
+			&i.NetworkID,
+			&i.Config,
+			&i.Resources,
+			&i.Endpoint,
+			&i.PublicEndpoint,
+			&i.P2pAddress,
+			&i.CreatedAt,
+			&i.CreatedBy,
+			&i.UpdatedAt,
+			&i.FabricOrganizationID,
+			&i.NodeType,
+			&i.NodeConfig,
+			&i.DeploymentConfig,
+			&i.ErrorMessage,
+			&i.NodeGroupID,
 		); err != nil {
 			return nil, err
 		}
@@ -4624,7 +5493,7 @@ func (q *Queries) ListNodes(ctx context.Context, arg *ListNodesParams) ([]*Node,
 }
 
 const ListNodesByNetwork = `-- name: ListNodesByNetwork :many
-SELECT id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message FROM nodes
+SELECT id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message, node_group_id FROM nodes
 WHERE network_id = ?
 ORDER BY created_at DESC
 LIMIT ? OFFSET ?
@@ -4666,6 +5535,7 @@ func (q *Queries) ListNodesByNetwork(ctx context.Context, arg *ListNodesByNetwor
 			&i.NodeConfig,
 			&i.DeploymentConfig,
 			&i.ErrorMessage,
+			&i.NodeGroupID,
 		); err != nil {
 			return nil, err
 		}
@@ -4681,7 +5551,7 @@ func (q *Queries) ListNodesByNetwork(ctx context.Context, arg *ListNodesByNetwor
 }
 
 const ListNodesByPlatform = `-- name: ListNodesByPlatform :many
-SELECT id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message FROM nodes
+SELECT id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message, node_group_id FROM nodes
 WHERE platform = ?
 ORDER BY created_at DESC
 LIMIT ? OFFSET ?
@@ -4723,6 +5593,7 @@ func (q *Queries) ListNodesByPlatform(ctx context.Context, arg *ListNodesByPlatf
 			&i.NodeConfig,
 			&i.DeploymentConfig,
 			&i.ErrorMessage,
+			&i.NodeGroupID,
 		); err != nil {
 			return nil, err
 		}
@@ -4838,6 +5709,232 @@ func (q *Queries) ListPlugins(ctx context.Context) ([]*Plugin, error) {
 			&i.UpdatedAt,
 			&i.DeploymentMetadata,
 			&i.DeploymentStatus,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const ListServiceBackupsByService = `-- name: ListServiceBackupsByService :many
+SELECT id, service_id, backup_type, s3_key, size_bytes, lsn, timeline, status, started_at, completed_at, error_message, metadata FROM service_backups
+WHERE service_id = ?
+ORDER BY started_at DESC
+LIMIT ? OFFSET ?
+`
+
+type ListServiceBackupsByServiceParams struct {
+	ServiceID int64 `json:"serviceId"`
+	Limit     int64 `json:"limit"`
+	Offset    int64 `json:"offset"`
+}
+
+func (q *Queries) ListServiceBackupsByService(ctx context.Context, arg *ListServiceBackupsByServiceParams) ([]*ServiceBackup, error) {
+	rows, err := q.db.QueryContext(ctx, ListServiceBackupsByService, arg.ServiceID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*ServiceBackup{}
+	for rows.Next() {
+		var i ServiceBackup
+		if err := rows.Scan(
+			&i.ID,
+			&i.ServiceID,
+			&i.BackupType,
+			&i.S3Key,
+			&i.SizeBytes,
+			&i.Lsn,
+			&i.Timeline,
+			&i.Status,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.ErrorMessage,
+			&i.Metadata,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const ListServiceEventsByService = `-- name: ListServiceEventsByService :many
+SELECT id, service_id, type, status, data, created_at FROM service_events
+WHERE service_id = ?
+ORDER BY created_at DESC
+LIMIT ? OFFSET ?
+`
+
+type ListServiceEventsByServiceParams struct {
+	ServiceID int64 `json:"serviceId"`
+	Limit     int64 `json:"limit"`
+	Offset    int64 `json:"offset"`
+}
+
+func (q *Queries) ListServiceEventsByService(ctx context.Context, arg *ListServiceEventsByServiceParams) ([]*ServiceEvent, error) {
+	rows, err := q.db.QueryContext(ctx, ListServiceEventsByService, arg.ServiceID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*ServiceEvent{}
+	for rows.Next() {
+		var i ServiceEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.ServiceID,
+			&i.Type,
+			&i.Status,
+			&i.Data,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const ListServices = `-- name: ListServices :many
+SELECT id, node_group_id, name, service_type, version, status, config, deployment_config, backup_target_id, backup_config, error_message, created_at, updated_at FROM services
+ORDER BY created_at DESC
+LIMIT ? OFFSET ?
+`
+
+type ListServicesParams struct {
+	Limit  int64 `json:"limit"`
+	Offset int64 `json:"offset"`
+}
+
+func (q *Queries) ListServices(ctx context.Context, arg *ListServicesParams) ([]*Service, error) {
+	rows, err := q.db.QueryContext(ctx, ListServices, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*Service{}
+	for rows.Next() {
+		var i Service
+		if err := rows.Scan(
+			&i.ID,
+			&i.NodeGroupID,
+			&i.Name,
+			&i.ServiceType,
+			&i.Version,
+			&i.Status,
+			&i.Config,
+			&i.DeploymentConfig,
+			&i.BackupTargetID,
+			&i.BackupConfig,
+			&i.ErrorMessage,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const ListServicesByNodeGroup = `-- name: ListServicesByNodeGroup :many
+SELECT id, node_group_id, name, service_type, version, status, config, deployment_config, backup_target_id, backup_config, error_message, created_at, updated_at FROM services
+WHERE node_group_id = ?
+ORDER BY created_at ASC
+`
+
+func (q *Queries) ListServicesByNodeGroup(ctx context.Context, nodeGroupID sql.NullInt64) ([]*Service, error) {
+	rows, err := q.db.QueryContext(ctx, ListServicesByNodeGroup, nodeGroupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*Service{}
+	for rows.Next() {
+		var i Service
+		if err := rows.Scan(
+			&i.ID,
+			&i.NodeGroupID,
+			&i.Name,
+			&i.ServiceType,
+			&i.Version,
+			&i.Status,
+			&i.Config,
+			&i.DeploymentConfig,
+			&i.BackupTargetID,
+			&i.BackupConfig,
+			&i.ErrorMessage,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const ListServicesByType = `-- name: ListServicesByType :many
+SELECT id, node_group_id, name, service_type, version, status, config, deployment_config, backup_target_id, backup_config, error_message, created_at, updated_at FROM services
+WHERE service_type = ?
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListServicesByType(ctx context.Context, serviceType string) ([]*Service, error) {
+	rows, err := q.db.QueryContext(ctx, ListServicesByType, serviceType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*Service{}
+	for rows.Next() {
+		var i Service
+		if err := rows.Scan(
+			&i.ID,
+			&i.NodeGroupID,
+			&i.Name,
+			&i.ServiceType,
+			&i.Version,
+			&i.Status,
+			&i.Config,
+			&i.DeploymentConfig,
+			&i.BackupTargetID,
+			&i.BackupConfig,
+			&i.ErrorMessage,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -5379,7 +6476,7 @@ UPDATE nodes
 SET deployment_config = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
-RETURNING id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message
+RETURNING id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message, node_group_id
 `
 
 type UpdateDeploymentConfigParams struct {
@@ -5411,6 +6508,7 @@ func (q *Queries) UpdateDeploymentConfig(ctx context.Context, arg *UpdateDeploym
 		&i.NodeConfig,
 		&i.DeploymentConfig,
 		&i.ErrorMessage,
+		&i.NodeGroupID,
 	)
 	return &i, err
 }
@@ -5495,6 +6593,44 @@ func (q *Queries) UpdateFabricOrganization(ctx context.Context, arg *UpdateFabri
 		&i.UpdatedAt,
 		&i.CrlKeyID,
 		&i.CrlLastUpdate,
+	)
+	return &i, err
+}
+
+const UpdateFabricXNamespaceStatus = `-- name: UpdateFabricXNamespaceStatus :one
+UPDATE fabricx_namespaces
+SET status = ?, tx_id = ?, error = ?, updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING id, network_id, name, version, submitter_msp_id, submitter_org_id, tx_id, status, error, created_at, updated_at
+`
+
+type UpdateFabricXNamespaceStatusParams struct {
+	Status string         `json:"status"`
+	TxID   sql.NullString `json:"txId"`
+	Error  sql.NullString `json:"error"`
+	ID     int64          `json:"id"`
+}
+
+func (q *Queries) UpdateFabricXNamespaceStatus(ctx context.Context, arg *UpdateFabricXNamespaceStatusParams) (*FabricxNamespace, error) {
+	row := q.db.QueryRowContext(ctx, UpdateFabricXNamespaceStatus,
+		arg.Status,
+		arg.TxID,
+		arg.Error,
+		arg.ID,
+	)
+	var i FabricxNamespace
+	err := row.Scan(
+		&i.ID,
+		&i.NetworkID,
+		&i.Name,
+		&i.Version,
+		&i.SubmitterMspID,
+		&i.SubmitterOrgID,
+		&i.TxID,
+		&i.Status,
+		&i.Error,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return &i, err
 }
@@ -5820,7 +6956,7 @@ UPDATE nodes
 SET node_config = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
-RETURNING id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message
+RETURNING id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message, node_group_id
 `
 
 type UpdateNodeConfigParams struct {
@@ -5852,6 +6988,7 @@ func (q *Queries) UpdateNodeConfig(ctx context.Context, arg *UpdateNodeConfigPar
 		&i.NodeConfig,
 		&i.DeploymentConfig,
 		&i.ErrorMessage,
+		&i.NodeGroupID,
 	)
 	return &i, err
 }
@@ -5861,7 +6998,7 @@ UPDATE nodes
 SET deployment_config = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
-RETURNING id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message
+RETURNING id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message, node_group_id
 `
 
 type UpdateNodeDeploymentConfigParams struct {
@@ -5893,6 +7030,7 @@ func (q *Queries) UpdateNodeDeploymentConfig(ctx context.Context, arg *UpdateNod
 		&i.NodeConfig,
 		&i.DeploymentConfig,
 		&i.ErrorMessage,
+		&i.NodeGroupID,
 	)
 	return &i, err
 }
@@ -5902,7 +7040,7 @@ UPDATE nodes
 SET endpoint = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
-RETURNING id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message
+RETURNING id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message, node_group_id
 `
 
 type UpdateNodeEndpointParams struct {
@@ -5934,6 +7072,248 @@ func (q *Queries) UpdateNodeEndpoint(ctx context.Context, arg *UpdateNodeEndpoin
 		&i.NodeConfig,
 		&i.DeploymentConfig,
 		&i.ErrorMessage,
+		&i.NodeGroupID,
+	)
+	return &i, err
+}
+
+const UpdateNodeGroup = `-- name: UpdateNodeGroup :one
+UPDATE node_groups
+SET name = ?,
+    msp_id = ?,
+    organization_id = ?,
+    party_id = ?,
+    version = ?,
+    external_ip = ?,
+    domain_names = ?,
+    sign_key_id = ?,
+    tls_key_id = ?,
+    sign_cert = ?,
+    tls_cert = ?,
+    ca_cert = ?,
+    tls_ca_cert = ?,
+    config = ?,
+    deployment_config = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING id, name, platform, group_type, msp_id, organization_id, party_id, version, external_ip, domain_names, sign_key_id, tls_key_id, sign_cert, tls_cert, ca_cert, tls_ca_cert, config, deployment_config, status, error_message, created_at, updated_at, postgres_service_id
+`
+
+type UpdateNodeGroupParams struct {
+	Name             string         `json:"name"`
+	MspID            sql.NullString `json:"mspId"`
+	OrganizationID   sql.NullInt64  `json:"organizationId"`
+	PartyID          sql.NullInt64  `json:"partyId"`
+	Version          sql.NullString `json:"version"`
+	ExternalIp       sql.NullString `json:"externalIp"`
+	DomainNames      sql.NullString `json:"domainNames"`
+	SignKeyID        sql.NullInt64  `json:"signKeyId"`
+	TlsKeyID         sql.NullInt64  `json:"tlsKeyId"`
+	SignCert         sql.NullString `json:"signCert"`
+	TlsCert          sql.NullString `json:"tlsCert"`
+	CaCert           sql.NullString `json:"caCert"`
+	TlsCaCert        sql.NullString `json:"tlsCaCert"`
+	Config           sql.NullString `json:"config"`
+	DeploymentConfig sql.NullString `json:"deploymentConfig"`
+	ID               int64          `json:"id"`
+}
+
+func (q *Queries) UpdateNodeGroup(ctx context.Context, arg *UpdateNodeGroupParams) (*NodeGroup, error) {
+	row := q.db.QueryRowContext(ctx, UpdateNodeGroup,
+		arg.Name,
+		arg.MspID,
+		arg.OrganizationID,
+		arg.PartyID,
+		arg.Version,
+		arg.ExternalIp,
+		arg.DomainNames,
+		arg.SignKeyID,
+		arg.TlsKeyID,
+		arg.SignCert,
+		arg.TlsCert,
+		arg.CaCert,
+		arg.TlsCaCert,
+		arg.Config,
+		arg.DeploymentConfig,
+		arg.ID,
+	)
+	var i NodeGroup
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Platform,
+		&i.GroupType,
+		&i.MspID,
+		&i.OrganizationID,
+		&i.PartyID,
+		&i.Version,
+		&i.ExternalIp,
+		&i.DomainNames,
+		&i.SignKeyID,
+		&i.TlsKeyID,
+		&i.SignCert,
+		&i.TlsCert,
+		&i.CaCert,
+		&i.TlsCaCert,
+		&i.Config,
+		&i.DeploymentConfig,
+		&i.Status,
+		&i.ErrorMessage,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PostgresServiceID,
+	)
+	return &i, err
+}
+
+const UpdateNodeGroupID = `-- name: UpdateNodeGroupID :exec
+UPDATE nodes
+SET node_group_id = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+`
+
+type UpdateNodeGroupIDParams struct {
+	NodeGroupID sql.NullInt64 `json:"nodeGroupId"`
+	ID          int64         `json:"id"`
+}
+
+func (q *Queries) UpdateNodeGroupID(ctx context.Context, arg *UpdateNodeGroupIDParams) error {
+	_, err := q.db.ExecContext(ctx, UpdateNodeGroupID, arg.NodeGroupID, arg.ID)
+	return err
+}
+
+const UpdateNodeGroupPostgresServiceID = `-- name: UpdateNodeGroupPostgresServiceID :one
+UPDATE node_groups
+SET postgres_service_id = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING id, name, platform, group_type, msp_id, organization_id, party_id, version, external_ip, domain_names, sign_key_id, tls_key_id, sign_cert, tls_cert, ca_cert, tls_ca_cert, config, deployment_config, status, error_message, created_at, updated_at, postgres_service_id
+`
+
+type UpdateNodeGroupPostgresServiceIDParams struct {
+	PostgresServiceID sql.NullInt64 `json:"postgresServiceId"`
+	ID                int64         `json:"id"`
+}
+
+func (q *Queries) UpdateNodeGroupPostgresServiceID(ctx context.Context, arg *UpdateNodeGroupPostgresServiceIDParams) (*NodeGroup, error) {
+	row := q.db.QueryRowContext(ctx, UpdateNodeGroupPostgresServiceID, arg.PostgresServiceID, arg.ID)
+	var i NodeGroup
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Platform,
+		&i.GroupType,
+		&i.MspID,
+		&i.OrganizationID,
+		&i.PartyID,
+		&i.Version,
+		&i.ExternalIp,
+		&i.DomainNames,
+		&i.SignKeyID,
+		&i.TlsKeyID,
+		&i.SignCert,
+		&i.TlsCert,
+		&i.CaCert,
+		&i.TlsCaCert,
+		&i.Config,
+		&i.DeploymentConfig,
+		&i.Status,
+		&i.ErrorMessage,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PostgresServiceID,
+	)
+	return &i, err
+}
+
+const UpdateNodeGroupStatus = `-- name: UpdateNodeGroupStatus :one
+UPDATE node_groups
+SET status = ?,
+    error_message = NULL,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING id, name, platform, group_type, msp_id, organization_id, party_id, version, external_ip, domain_names, sign_key_id, tls_key_id, sign_cert, tls_cert, ca_cert, tls_ca_cert, config, deployment_config, status, error_message, created_at, updated_at, postgres_service_id
+`
+
+type UpdateNodeGroupStatusParams struct {
+	Status string `json:"status"`
+	ID     int64  `json:"id"`
+}
+
+func (q *Queries) UpdateNodeGroupStatus(ctx context.Context, arg *UpdateNodeGroupStatusParams) (*NodeGroup, error) {
+	row := q.db.QueryRowContext(ctx, UpdateNodeGroupStatus, arg.Status, arg.ID)
+	var i NodeGroup
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Platform,
+		&i.GroupType,
+		&i.MspID,
+		&i.OrganizationID,
+		&i.PartyID,
+		&i.Version,
+		&i.ExternalIp,
+		&i.DomainNames,
+		&i.SignKeyID,
+		&i.TlsKeyID,
+		&i.SignCert,
+		&i.TlsCert,
+		&i.CaCert,
+		&i.TlsCaCert,
+		&i.Config,
+		&i.DeploymentConfig,
+		&i.Status,
+		&i.ErrorMessage,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PostgresServiceID,
+	)
+	return &i, err
+}
+
+const UpdateNodeGroupStatusWithError = `-- name: UpdateNodeGroupStatusWithError :one
+UPDATE node_groups
+SET status = ?,
+    error_message = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING id, name, platform, group_type, msp_id, organization_id, party_id, version, external_ip, domain_names, sign_key_id, tls_key_id, sign_cert, tls_cert, ca_cert, tls_ca_cert, config, deployment_config, status, error_message, created_at, updated_at, postgres_service_id
+`
+
+type UpdateNodeGroupStatusWithErrorParams struct {
+	Status       string         `json:"status"`
+	ErrorMessage sql.NullString `json:"errorMessage"`
+	ID           int64          `json:"id"`
+}
+
+func (q *Queries) UpdateNodeGroupStatusWithError(ctx context.Context, arg *UpdateNodeGroupStatusWithErrorParams) (*NodeGroup, error) {
+	row := q.db.QueryRowContext(ctx, UpdateNodeGroupStatusWithError, arg.Status, arg.ErrorMessage, arg.ID)
+	var i NodeGroup
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Platform,
+		&i.GroupType,
+		&i.MspID,
+		&i.OrganizationID,
+		&i.PartyID,
+		&i.Version,
+		&i.ExternalIp,
+		&i.DomainNames,
+		&i.SignKeyID,
+		&i.TlsKeyID,
+		&i.SignCert,
+		&i.TlsCert,
+		&i.CaCert,
+		&i.TlsCaCert,
+		&i.Config,
+		&i.DeploymentConfig,
+		&i.Status,
+		&i.ErrorMessage,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PostgresServiceID,
 	)
 	return &i, err
 }
@@ -5943,7 +7323,7 @@ UPDATE nodes
 SET public_endpoint = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
-RETURNING id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message
+RETURNING id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message, node_group_id
 `
 
 type UpdateNodePublicEndpointParams struct {
@@ -5975,6 +7355,7 @@ func (q *Queries) UpdateNodePublicEndpoint(ctx context.Context, arg *UpdateNodeP
 		&i.NodeConfig,
 		&i.DeploymentConfig,
 		&i.ErrorMessage,
+		&i.NodeGroupID,
 	)
 	return &i, err
 }
@@ -5985,7 +7366,7 @@ SET status = ?,
     error_message = NULL,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
-RETURNING id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message
+RETURNING id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message, node_group_id
 `
 
 type UpdateNodeStatusParams struct {
@@ -6017,6 +7398,7 @@ func (q *Queries) UpdateNodeStatus(ctx context.Context, arg *UpdateNodeStatusPar
 		&i.NodeConfig,
 		&i.DeploymentConfig,
 		&i.ErrorMessage,
+		&i.NodeGroupID,
 	)
 	return &i, err
 }
@@ -6027,7 +7409,7 @@ SET status = ?,
     error_message = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
-RETURNING id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message
+RETURNING id, name, slug, platform, status, description, network_id, config, resources, endpoint, public_endpoint, p2p_address, created_at, created_by, updated_at, fabric_organization_id, node_type, node_config, deployment_config, error_message, node_group_id
 `
 
 type UpdateNodeStatusWithErrorParams struct {
@@ -6060,6 +7442,7 @@ func (q *Queries) UpdateNodeStatusWithError(ctx context.Context, arg *UpdateNode
 		&i.NodeConfig,
 		&i.DeploymentConfig,
 		&i.ErrorMessage,
+		&i.NodeGroupID,
 	)
 	return &i, err
 }
@@ -6313,6 +7696,219 @@ func (q *Queries) UpdateProviderTestResults(ctx context.Context, arg *UpdateProv
 		&i.LastTestStatus,
 		&i.LastTestMessage,
 		&i.NotifyDiskSpaceWarning,
+	)
+	return &i, err
+}
+
+const UpdateService = `-- name: UpdateService :one
+UPDATE services
+SET name = ?,
+    version = ?,
+    config = ?,
+    deployment_config = ?,
+    backup_target_id = ?,
+    backup_config = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING id, node_group_id, name, service_type, version, status, config, deployment_config, backup_target_id, backup_config, error_message, created_at, updated_at
+`
+
+type UpdateServiceParams struct {
+	Name             string         `json:"name"`
+	Version          sql.NullString `json:"version"`
+	Config           sql.NullString `json:"config"`
+	DeploymentConfig sql.NullString `json:"deploymentConfig"`
+	BackupTargetID   sql.NullInt64  `json:"backupTargetId"`
+	BackupConfig     sql.NullString `json:"backupConfig"`
+	ID               int64          `json:"id"`
+}
+
+func (q *Queries) UpdateService(ctx context.Context, arg *UpdateServiceParams) (*Service, error) {
+	row := q.db.QueryRowContext(ctx, UpdateService,
+		arg.Name,
+		arg.Version,
+		arg.Config,
+		arg.DeploymentConfig,
+		arg.BackupTargetID,
+		arg.BackupConfig,
+		arg.ID,
+	)
+	var i Service
+	err := row.Scan(
+		&i.ID,
+		&i.NodeGroupID,
+		&i.Name,
+		&i.ServiceType,
+		&i.Version,
+		&i.Status,
+		&i.Config,
+		&i.DeploymentConfig,
+		&i.BackupTargetID,
+		&i.BackupConfig,
+		&i.ErrorMessage,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
+const UpdateServiceBackupStatus = `-- name: UpdateServiceBackupStatus :one
+UPDATE service_backups
+SET status = ?,
+    completed_at = ?,
+    size_bytes = ?,
+    s3_key = ?,
+    lsn = ?,
+    timeline = ?,
+    error_message = ?,
+    metadata = ?
+WHERE id = ?
+RETURNING id, service_id, backup_type, s3_key, size_bytes, lsn, timeline, status, started_at, completed_at, error_message, metadata
+`
+
+type UpdateServiceBackupStatusParams struct {
+	Status       string         `json:"status"`
+	CompletedAt  sql.NullTime   `json:"completedAt"`
+	SizeBytes    sql.NullInt64  `json:"sizeBytes"`
+	S3Key        sql.NullString `json:"s3Key"`
+	Lsn          sql.NullString `json:"lsn"`
+	Timeline     sql.NullInt64  `json:"timeline"`
+	ErrorMessage sql.NullString `json:"errorMessage"`
+	Metadata     sql.NullString `json:"metadata"`
+	ID           int64          `json:"id"`
+}
+
+func (q *Queries) UpdateServiceBackupStatus(ctx context.Context, arg *UpdateServiceBackupStatusParams) (*ServiceBackup, error) {
+	row := q.db.QueryRowContext(ctx, UpdateServiceBackupStatus,
+		arg.Status,
+		arg.CompletedAt,
+		arg.SizeBytes,
+		arg.S3Key,
+		arg.Lsn,
+		arg.Timeline,
+		arg.ErrorMessage,
+		arg.Metadata,
+		arg.ID,
+	)
+	var i ServiceBackup
+	err := row.Scan(
+		&i.ID,
+		&i.ServiceID,
+		&i.BackupType,
+		&i.S3Key,
+		&i.SizeBytes,
+		&i.Lsn,
+		&i.Timeline,
+		&i.Status,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.ErrorMessage,
+		&i.Metadata,
+	)
+	return &i, err
+}
+
+const UpdateServiceDeploymentConfig = `-- name: UpdateServiceDeploymentConfig :one
+UPDATE services
+SET deployment_config = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING id, node_group_id, name, service_type, version, status, config, deployment_config, backup_target_id, backup_config, error_message, created_at, updated_at
+`
+
+type UpdateServiceDeploymentConfigParams struct {
+	DeploymentConfig sql.NullString `json:"deploymentConfig"`
+	ID               int64          `json:"id"`
+}
+
+func (q *Queries) UpdateServiceDeploymentConfig(ctx context.Context, arg *UpdateServiceDeploymentConfigParams) (*Service, error) {
+	row := q.db.QueryRowContext(ctx, UpdateServiceDeploymentConfig, arg.DeploymentConfig, arg.ID)
+	var i Service
+	err := row.Scan(
+		&i.ID,
+		&i.NodeGroupID,
+		&i.Name,
+		&i.ServiceType,
+		&i.Version,
+		&i.Status,
+		&i.Config,
+		&i.DeploymentConfig,
+		&i.BackupTargetID,
+		&i.BackupConfig,
+		&i.ErrorMessage,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
+const UpdateServiceStatus = `-- name: UpdateServiceStatus :one
+UPDATE services
+SET status = ?,
+    error_message = NULL,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING id, node_group_id, name, service_type, version, status, config, deployment_config, backup_target_id, backup_config, error_message, created_at, updated_at
+`
+
+type UpdateServiceStatusParams struct {
+	Status string `json:"status"`
+	ID     int64  `json:"id"`
+}
+
+func (q *Queries) UpdateServiceStatus(ctx context.Context, arg *UpdateServiceStatusParams) (*Service, error) {
+	row := q.db.QueryRowContext(ctx, UpdateServiceStatus, arg.Status, arg.ID)
+	var i Service
+	err := row.Scan(
+		&i.ID,
+		&i.NodeGroupID,
+		&i.Name,
+		&i.ServiceType,
+		&i.Version,
+		&i.Status,
+		&i.Config,
+		&i.DeploymentConfig,
+		&i.BackupTargetID,
+		&i.BackupConfig,
+		&i.ErrorMessage,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
+const UpdateServiceStatusWithError = `-- name: UpdateServiceStatusWithError :one
+UPDATE services
+SET status = ?,
+    error_message = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING id, node_group_id, name, service_type, version, status, config, deployment_config, backup_target_id, backup_config, error_message, created_at, updated_at
+`
+
+type UpdateServiceStatusWithErrorParams struct {
+	Status       string         `json:"status"`
+	ErrorMessage sql.NullString `json:"errorMessage"`
+	ID           int64          `json:"id"`
+}
+
+func (q *Queries) UpdateServiceStatusWithError(ctx context.Context, arg *UpdateServiceStatusWithErrorParams) (*Service, error) {
+	row := q.db.QueryRowContext(ctx, UpdateServiceStatusWithError, arg.Status, arg.ErrorMessage, arg.ID)
+	var i Service
+	err := row.Scan(
+		&i.ID,
+		&i.NodeGroupID,
+		&i.Name,
+		&i.ServiceType,
+		&i.Version,
+		&i.Status,
+		&i.Config,
+		&i.DeploymentConfig,
+		&i.BackupTargetID,
+		&i.BackupConfig,
+		&i.ErrorMessage,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return &i, err
 }

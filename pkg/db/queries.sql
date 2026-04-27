@@ -1259,3 +1259,285 @@ SET prometheus_port = 9090,
     binary_path = '/usr/local/bin/prometheus',
     updated_at = CURRENT_TIMESTAMP
 RETURNING *;
+
+-- name: CreateFabricXNamespace :one
+INSERT INTO fabricx_namespaces (
+    network_id, name, version, submitter_msp_id, submitter_org_id, tx_id, status
+) VALUES (?, ?, ?, ?, ?, ?, ?)
+RETURNING *;
+
+-- name: GetFabricXNamespace :one
+SELECT * FROM fabricx_namespaces WHERE id = ?;
+
+-- name: GetFabricXNamespaceByName :one
+SELECT * FROM fabricx_namespaces WHERE network_id = ? AND name = ?;
+
+-- name: ListFabricXNamespacesByNetwork :many
+SELECT * FROM fabricx_namespaces WHERE network_id = ? ORDER BY created_at DESC;
+
+-- name: UpdateFabricXNamespaceStatus :one
+UPDATE fabricx_namespaces
+SET status = ?, tx_id = ?, error = ?, updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING *;
+
+-- name: DeleteFabricXNamespace :exec
+DELETE FROM fabricx_namespaces WHERE id = ?;
+
+-- name: CreateNodeGroup :one
+INSERT INTO node_groups (
+    name,
+    platform,
+    group_type,
+    msp_id,
+    organization_id,
+    party_id,
+    version,
+    external_ip,
+    domain_names,
+    sign_key_id,
+    tls_key_id,
+    sign_cert,
+    tls_cert,
+    ca_cert,
+    tls_ca_cert,
+    config,
+    deployment_config,
+    status
+) VALUES (
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+)
+RETURNING *;
+
+-- name: GetNodeGroup :one
+SELECT * FROM node_groups WHERE id = ? LIMIT 1;
+
+-- name: GetNodeGroupByName :one
+SELECT * FROM node_groups WHERE name = ? LIMIT 1;
+
+-- name: ListNodeGroups :many
+SELECT * FROM node_groups
+ORDER BY created_at DESC
+LIMIT ? OFFSET ?;
+
+-- name: CountNodeGroups :one
+SELECT COUNT(*) FROM node_groups;
+
+-- name: ListNodeGroupsByPlatform :many
+SELECT * FROM node_groups
+WHERE platform = ?
+ORDER BY created_at DESC
+LIMIT ? OFFSET ?;
+
+-- name: CountNodeGroupsByStatus :one
+SELECT COUNT(*) FROM node_groups WHERE status = ?;
+
+-- name: UpdateNodeGroupStatus :one
+UPDATE node_groups
+SET status = ?,
+    error_message = NULL,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING *;
+
+-- name: UpdateNodeGroupStatusWithError :one
+UPDATE node_groups
+SET status = ?,
+    error_message = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING *;
+
+-- name: UpdateNodeGroup :one
+UPDATE node_groups
+SET name = ?,
+    msp_id = ?,
+    organization_id = ?,
+    party_id = ?,
+    version = ?,
+    external_ip = ?,
+    domain_names = ?,
+    sign_key_id = ?,
+    tls_key_id = ?,
+    sign_cert = ?,
+    tls_cert = ?,
+    ca_cert = ?,
+    tls_ca_cert = ?,
+    config = ?,
+    deployment_config = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING *;
+
+-- name: DeleteNodeGroup :exec
+DELETE FROM node_groups WHERE id = ?;
+
+-- name: UpdateNodeGroupPostgresServiceID :one
+UPDATE node_groups
+SET postgres_service_id = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING *;
+
+-- name: GetNodeGroupPostgresServiceID :one
+SELECT postgres_service_id FROM node_groups WHERE id = ? LIMIT 1;
+
+-- name: ListNodeGroupsByPostgresServiceID :many
+SELECT * FROM node_groups
+WHERE postgres_service_id = ?
+ORDER BY id ASC;
+
+-- name: ListNodesByGroup :many
+SELECT * FROM nodes
+WHERE node_group_id = ?
+ORDER BY created_at ASC;
+
+-- name: UpdateNodeGroupID :exec
+UPDATE nodes
+SET node_group_id = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?;
+
+-- name: CreateService :one
+INSERT INTO services (
+    node_group_id,
+    name,
+    service_type,
+    version,
+    status,
+    config,
+    deployment_config,
+    backup_target_id,
+    backup_config
+) VALUES (
+    ?, ?, ?, ?, ?, ?, ?, ?, ?
+)
+RETURNING *;
+
+-- name: GetService :one
+SELECT * FROM services WHERE id = ? LIMIT 1;
+
+-- name: GetServiceByName :one
+SELECT * FROM services WHERE name = ? LIMIT 1;
+
+-- name: ListServices :many
+SELECT * FROM services
+ORDER BY created_at DESC
+LIMIT ? OFFSET ?;
+
+-- name: CountServices :one
+SELECT COUNT(*) FROM services;
+
+-- name: ListServicesByNodeGroup :many
+SELECT * FROM services
+WHERE node_group_id = ?
+ORDER BY created_at ASC;
+
+-- name: ListServicesByType :many
+SELECT * FROM services
+WHERE service_type = ?
+ORDER BY created_at DESC;
+
+-- name: UpdateServiceStatus :one
+UPDATE services
+SET status = ?,
+    error_message = NULL,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING *;
+
+-- name: UpdateServiceStatusWithError :one
+UPDATE services
+SET status = ?,
+    error_message = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING *;
+
+-- name: UpdateService :one
+UPDATE services
+SET name = ?,
+    version = ?,
+    config = ?,
+    deployment_config = ?,
+    backup_target_id = ?,
+    backup_config = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING *;
+
+-- name: UpdateServiceDeploymentConfig :one
+UPDATE services
+SET deployment_config = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING *;
+
+-- name: DeleteService :exec
+DELETE FROM services WHERE id = ?;
+
+-- name: CreateServiceBackup :one
+INSERT INTO service_backups (
+    service_id,
+    backup_type,
+    s3_key,
+    size_bytes,
+    lsn,
+    timeline,
+    status,
+    metadata
+) VALUES (
+    ?, ?, ?, ?, ?, ?, ?, ?
+)
+RETURNING *;
+
+-- name: GetServiceBackup :one
+SELECT * FROM service_backups WHERE id = ? LIMIT 1;
+
+-- name: ListServiceBackupsByService :many
+SELECT * FROM service_backups
+WHERE service_id = ?
+ORDER BY started_at DESC
+LIMIT ? OFFSET ?;
+
+-- name: CountServiceBackupsByService :one
+SELECT COUNT(*) FROM service_backups WHERE service_id = ?;
+
+-- name: UpdateServiceBackupStatus :one
+UPDATE service_backups
+SET status = ?,
+    completed_at = ?,
+    size_bytes = ?,
+    s3_key = ?,
+    lsn = ?,
+    timeline = ?,
+    error_message = ?,
+    metadata = ?
+WHERE id = ?
+RETURNING *;
+
+-- name: DeleteServiceBackupsOlderThan :exec
+DELETE FROM service_backups
+WHERE service_id = ?
+  AND backup_type = ?
+  AND started_at < ?;
+
+-- name: CreateServiceEvent :one
+INSERT INTO service_events (
+    service_id,
+    type,
+    status,
+    data
+) VALUES (
+    ?, ?, ?, ?
+)
+RETURNING *;
+
+-- name: ListServiceEventsByService :many
+SELECT * FROM service_events
+WHERE service_id = ?
+ORDER BY created_at DESC
+LIMIT ? OFFSET ?;
+
+-- name: CountServiceEventsByService :one
+SELECT COUNT(*) FROM service_events WHERE service_id = ?;

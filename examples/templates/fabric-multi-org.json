@@ -1,0 +1,142 @@
+{
+  "version": "2.0.0",
+  "exportedAt": "2026-03-20T00:00:00Z",
+  "network": {
+    "name": "multi-org-consortium",
+    "description": "A multi-organization Hyperledger Fabric network with 2 peer orgs, 1 orderer org, and SmartBFT consensus",
+    "platform": "fabric",
+    "fabric": {
+      "channelName": "consortium-channel",
+      "consensusType": "smartbft",
+      "batchSize": {
+        "maxMessageCount": 10,
+        "absoluteMaxBytes": 98304,
+        "preferredMaxBytes": 524288
+      },
+      "batchTimeout": "2s",
+      "smartBFTOptions": {
+        "requestBatchMaxCount": 100,
+        "requestBatchMaxBytes": 10485760,
+        "requestBatchMaxInterval": "50ms",
+        "incomingMessageBufferSize": 200,
+        "requestPoolSize": 400,
+        "requestForwardTimeout": "2s",
+        "requestComplainTimeout": "20s",
+        "requestAutoRemoveTimeout": "3m",
+        "requestMaxBytes": 0,
+        "viewChangeResendInterval": "5s",
+        "viewChangeTimeout": "20s",
+        "leaderHeartbeatTimeout": "1m",
+        "leaderHeartbeatCount": 10,
+        "collectTimeout": "1s",
+        "syncOnStart": true,
+        "speedUpViewChange": false,
+        "leaderRotation": "0",
+        "decisionsPerLeader": 3
+      },
+      "channelCapabilities": ["V3_0"],
+      "applicationCapabilities": ["V2_0"],
+      "ordererCapabilities": ["V2_0"],
+      "applicationPolicies": {
+        "Readers": { "type": "ImplicitMeta", "rule": "ANY Readers" },
+        "Writers": { "type": "ImplicitMeta", "rule": "ANY Writers" },
+        "Admins": { "type": "ImplicitMeta", "rule": "MAJORITY Admins" },
+        "LifecycleEndorsement": { "type": "Signature", "rule": "OR('${peerOrg1.mspId}.member', '${peerOrg2.mspId}.member')" },
+        "Endorsement": { "type": "Signature", "rule": "OR('${peerOrg1.mspId}.member', '${peerOrg2.mspId}.member')" }
+      },
+      "ordererPolicies": {
+        "Readers": { "type": "ImplicitMeta", "rule": "ANY Readers" },
+        "Writers": { "type": "ImplicitMeta", "rule": "ANY Writers" },
+        "Admins": { "type": "ImplicitMeta", "rule": "MAJORITY Admins" },
+        "BlockValidation": { "type": "ImplicitMeta", "rule": "ANY Writers" }
+      },
+      "channelPolicies": {
+        "Readers": { "type": "ImplicitMeta", "rule": "ANY Readers" },
+        "Writers": { "type": "ImplicitMeta", "rule": "ANY Writers" },
+        "Admins": { "type": "ImplicitMeta", "rule": "MAJORITY Admins" }
+      },
+      "peerOrgRefs": [
+        {
+          "variableRef": "peerOrg1",
+          "nodeRefs": [
+            { "variableRef": "peerOrg1_peer1" },
+            { "variableRef": "peerOrg1_peer2" }
+          ]
+        },
+        {
+          "variableRef": "peerOrg2",
+          "nodeRefs": [
+            { "variableRef": "peerOrg2_peer1" }
+          ]
+        }
+      ],
+      "ordererOrgRefs": [
+        {
+          "variableRef": "ordererOrg1",
+          "nodeRefs": [
+            { "variableRef": "ordererOrg1_orderer1" },
+            { "variableRef": "ordererOrg1_orderer2" },
+            { "variableRef": "ordererOrg1_orderer3" }
+          ]
+        }
+      ]
+    }
+  },
+  "variables": [
+    {
+      "name": "peerOrg1",
+      "type": "organization",
+      "description": "First peer organization",
+      "required": true,
+      "scope": "organization",
+      "platform": ["fabric"],
+      "properties": [{ "name": "mspId", "type": "mspId", "required": true }]
+    },
+    { "name": "peerOrg1_peer1", "type": "node", "description": "Peer 1 of Org1", "required": false, "scope": "node", "platform": ["fabric"] },
+    { "name": "peerOrg1_peer2", "type": "node", "description": "Peer 2 of Org1", "required": false, "scope": "node", "platform": ["fabric"] },
+    {
+      "name": "peerOrg2",
+      "type": "organization",
+      "description": "Second peer organization",
+      "required": true,
+      "scope": "organization",
+      "platform": ["fabric"],
+      "properties": [{ "name": "mspId", "type": "mspId", "required": true }]
+    },
+    { "name": "peerOrg2_peer1", "type": "node", "description": "Peer 1 of Org2", "required": false, "scope": "node", "platform": ["fabric"] },
+    {
+      "name": "ordererOrg1",
+      "type": "organization",
+      "description": "Orderer organization",
+      "required": true,
+      "scope": "organization",
+      "platform": ["fabric"],
+      "properties": [{ "name": "mspId", "type": "mspId", "required": true }]
+    },
+    { "name": "ordererOrg1_orderer1", "type": "node", "description": "Orderer 1", "required": true, "scope": "node", "platform": ["fabric"] },
+    { "name": "ordererOrg1_orderer2", "type": "node", "description": "Orderer 2", "required": true, "scope": "node", "platform": ["fabric"] },
+    { "name": "ordererOrg1_orderer3", "type": "node", "description": "Orderer 3", "required": true, "scope": "node", "platform": ["fabric"] }
+  ],
+  "chaincodes": [
+    {
+      "name": "asset-transfer",
+      "platform": "fabric",
+      "fabric": {
+        "version": "1.0",
+        "sequence": 1,
+        "dockerImage": "ghcr.io/hyperledger/fabric-samples/asset-transfer:latest",
+        "endorsementPolicy": "OR('${peerOrg1.mspId}.member', '${peerOrg2.mspId}.member')"
+      }
+    },
+    {
+      "name": "identity-registry",
+      "platform": "fabric",
+      "fabric": {
+        "version": "1.0",
+        "sequence": 1,
+        "dockerImage": "ghcr.io/chainlaunch/identity-registry-cc:latest",
+        "endorsementPolicy": "AND('${peerOrg1.mspId}.member', '${peerOrg2.mspId}.member')"
+      }
+    }
+  ]
+}

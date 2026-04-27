@@ -21,6 +21,7 @@ import (
 	keymanagement "github.com/chainlaunch/chainlaunch/pkg/keymanagement/service"
 	"github.com/chainlaunch/chainlaunch/pkg/logger"
 	metricscommon "github.com/chainlaunch/chainlaunch/pkg/metrics/common"
+	"github.com/chainlaunch/chainlaunch/pkg/nodes/fabricx"
 	"github.com/chainlaunch/chainlaunch/pkg/nodes/types"
 	"github.com/chainlaunch/chainlaunch/pkg/nodes/utils"
 	settingsservice "github.com/chainlaunch/chainlaunch/pkg/settings/service"
@@ -55,6 +56,8 @@ type CreateNodeRequest struct {
 	FabricPeer         *types.FabricPeerConfig
 	FabricOrderer      *types.FabricOrdererConfig
 	BesuNode           *types.BesuNodeConfig
+	FabricXOrdererGroup *types.FabricXOrdererGroupConfig
+	FabricXCommitter    *types.FabricXCommitterConfig
 }
 
 // NewNodeService creates a new NodeService instance
@@ -123,6 +126,37 @@ func (s *NodeService) validateCreateNodeRequest(req CreateNodeRequest) error {
 			validationErrors.Add("besuNode", "besu configuration is required")
 		} else if err := s.validateBesuNodeConfig(req.BesuNode); err != nil {
 			validationErrors.Add("besuNode", fmt.Sprintf("invalid besu configuration: %v", err))
+		}
+	case types.PlatformFabricX:
+		// FabricX nodes split into two flows:
+		//   * orderer-group: deprecated as a /nodes path. Use POST
+		//     /node-groups + /init to spawn 4 per-role child rows.
+		//     Kept here only because legacy callers still post an
+		//     orderer-group via /nodes; new clients should not.
+		//   * committer: created via /nodes with fabricXCommitter
+		//     and (required) nodeGroupId pointing at a pre-created
+		//     FABRICX_COMMITTER node-group. Each committer child
+		//     owns its own MSP identity and runs the 5-container
+		//     committer stack internally.
+		if req.FabricXOrdererGroup == nil && req.FabricXCommitter == nil {
+			validationErrors.Add("fabricXOrdererGroup/fabricXCommitter", "fabricx configuration is required (either orderer group or committer)")
+		}
+		if req.FabricXOrdererGroup != nil && req.FabricXCommitter != nil {
+			validationErrors.Add("fabricXOrdererGroup/fabricXCommitter", "cannot specify both orderer group and committer configurations")
+		}
+		if req.FabricXOrdererGroup != nil {
+			if err := req.FabricXOrdererGroup.Validate(); err != nil {
+				validationErrors.Add("fabricXOrdererGroup", fmt.Sprintf("invalid fabricx orderer group configuration: %v", err))
+			}
+		}
+		if req.FabricXCommitter != nil {
+			if err := req.FabricXCommitter.Validate(); err != nil {
+				validationErrors.Add("fabricXCommitter", fmt.Sprintf("invalid fabricx committer configuration: %v", err))
+			}
+			if req.FabricXCommitter.NodeGroupID == 0 {
+				validationErrors.Add("fabricXCommitter.nodeGroupId",
+					"committer nodes must be created under a FABRICX_COMMITTER node-group; create the group first via POST /node-groups, then pass its id here")
+			}
 		}
 	case "":
 		validationErrors.Add("blockchainPlatform", "blockchain platform is required")
@@ -414,6 +448,11 @@ func (s *NodeService) determineNodeType(req CreateNodeRequest) types.NodeType {
 		return types.NodeTypeFabricOrderer
 	case types.PlatformBesu:
 		return types.NodeTypeBesuFullnode
+	case types.PlatformFabricX:
+		if req.FabricXCommitter != nil {
+			return types.NodeTypeFabricXCommitter
+		}
+		return types.NodeTypeFabricXOrdererGroup
 	}
 	return ""
 }
@@ -534,6 +573,16 @@ func (s *NodeService) CreateNode(ctx context.Context, req CreateNodeRequest) (*N
 			String: fmt.Sprintf("%s:%d", nodeConfig.ExternalIP, nodeConfig.P2PPort), // Use ExternalIP instead of P2PHost
 			Valid:  true,
 		}
+	case *types.FabricXOrdererGroupConfig:
+		endpoint = sql.NullString{
+			String: fmt.Sprintf("%s:%d", nodeConfig.ExternalIP, nodeConfig.RouterPort),
+			Valid:  nodeConfig.ExternalIP != "",
+		}
+	case *types.FabricXCommitterConfig:
+		endpoint = sql.NullString{
+			String: fmt.Sprintf("%s:%d", nodeConfig.ExternalIP, nodeConfig.QueryServicePort),
+			Valid:  nodeConfig.ExternalIP != "",
+		}
 	}
 
 	// Create node in database
@@ -575,6 +624,38 @@ func (s *NodeService) CreateNode(ctx context.Context, req CreateNodeRequest) (*N
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to update node deployment config: %w", err)
+	}
+
+	// FabricX committer nodes hang off a parent FABRICX_COMMITTER node-group.
+	// Link the row's node_group_id so the network deployer + node-group
+	// children listing find this committer under its group.
+	if req.FabricXCommitter != nil && req.FabricXCommitter.NodeGroupID != 0 {
+		if err := s.db.UpdateNodeGroupID(ctx, &db.UpdateNodeGroupIDParams{
+			ID:          node.ID,
+			NodeGroupID: sql.NullInt64{Int64: req.FabricXCommitter.NodeGroupID, Valid: true},
+		}); err != nil {
+			return nil, fmt.Errorf("failed to link committer node %d to node-group %d: %w", node.ID, req.FabricXCommitter.NodeGroupID, err)
+		}
+	}
+
+	// FabricX nodes follow a two-stage lifecycle: stage 1 (this CreateNode call)
+	// only generates certs/config/genesis-input. Containers are not started until
+	// the node is joined to a network in stage 2 (POST /networks/fabricx/{id}/nodes/{nodeId}/join),
+	// because the orderer/committer containers need the network's genesis block
+	// mounted before they can boot. Skip start/connectivity-validation here.
+	if nodeType == types.NodeTypeFabricXOrdererGroup ||
+		nodeType == types.NodeTypeFabricXCommitter {
+		// Mark as stopped (initialized but not running) so the join step can pick it up.
+		if err := s.updateNodeStatus(ctx, node.ID, types.NodeStatusStopped); err != nil {
+			s.logger.Warn("Failed to set FabricX node status to stopped", "node_id", node.ID, "error", err)
+		}
+		node, err = s.db.GetNode(ctx, node.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get node: %w", err)
+		}
+		_, nodeResponse := s.mapDBNodeToServiceNode(node)
+		s.metricsService.Reload(ctx)
+		return nodeResponse, nil
 	}
 
 	// Start the node
@@ -688,6 +769,12 @@ func (s *NodeService) createNodeConfig(req CreateNodeRequest) (types.NodeConfig,
 				MetricsProtocol: "PROMETHEUS",
 			}, nil
 		}
+	case types.PlatformFabricX:
+		if req.FabricXOrdererGroup != nil {
+			return req.FabricXOrdererGroup, nil
+		} else if req.FabricXCommitter != nil {
+			return req.FabricXCommitter, nil
+		}
 	}
 	return nil, fmt.Errorf("invalid node configuration")
 }
@@ -714,6 +801,20 @@ func (s *NodeService) initializeNode(ctx context.Context, dbNode *db.Node, req C
 			config, err := s.initializeBesuNode(ctx, dbNode, req.BesuNode)
 			if err != nil {
 				return nil, fmt.Errorf("failed to initialize besu node: %w", err)
+			}
+			return config, nil
+		}
+	case types.PlatformFabricX:
+		if req.FabricXOrdererGroup != nil {
+			config, err := s.initializeFabricXOrdererGroup(ctx, dbNode, req.FabricXOrdererGroup)
+			if err != nil {
+				return nil, fmt.Errorf("failed to initialize fabricx orderer group: %w", err)
+			}
+			return config, nil
+		} else if req.FabricXCommitter != nil {
+			config, err := s.initializeFabricXCommitter(ctx, dbNode, req.FabricXCommitter)
+			if err != nil {
+				return nil, fmt.Errorf("failed to initialize fabricx committer: %w", err)
 			}
 			return config, nil
 		}
@@ -835,7 +936,7 @@ func (s *NodeService) mapDBNodeToServiceNode(dbNode *db.Node) (*Node, *NodeRespo
 	// Load node config
 	if dbNode.NodeConfig.Valid {
 		var err error
-		nodeConfig, err = utils.LoadNodeConfig([]byte(dbNode.NodeConfig.String))
+		nodeConfig, err = utils.LoadNodeConfigWithHint([]byte(dbNode.NodeConfig.String), dbNode.NodeType.String)
 		if err != nil {
 			s.logger.Error("failed to load node config", "error", err)
 		}
@@ -1034,6 +1135,187 @@ func (s *NodeService) mapDBNodeToServiceNode(dbNode *db.Node) (*Node, *NodeRespo
 				nodeResponse.BesuNode.MetricsPort = uint(deployConfig.MetricsPort)
 				nodeResponse.BesuNode.MetricsProtocol = deployConfig.MetricsProtocol
 			}
+		case *types.FabricXOrdererGroupConfig:
+			node.MSPID = config.MSPID
+			nodeResponse.FabricXOrdererGroup = &FabricXOrdererGroupProperties{
+				MSPID:                   config.MSPID,
+				OrganizationID:          config.OrganizationID,
+				PartyID:                 config.PartyID,
+				ExternalIP:              config.ExternalIP,
+				RouterPort:              config.RouterPort,
+				BatcherPort:             config.BatcherPort,
+				ConsenterPort:           config.ConsenterPort,
+				AssemblerPort:           config.AssemblerPort,
+				RouterMonitoringPort:    config.RouterMonitoringPort,
+				BatcherMonitoringPort:   config.BatcherMonitoringPort,
+				ConsenterMonitoringPort: config.ConsenterMonitoringPort,
+				AssemblerMonitoringPort: config.AssemblerMonitoringPort,
+				Version:                 config.Version,
+			}
+			// The canonical partyId/version live on the node_group row; the
+			// per-node config may be stale or predate the node_group refactor.
+			if dbNode.NodeGroupID.Valid {
+				if group, err := s.db.GetNodeGroup(ctx, dbNode.NodeGroupID.Int64); err == nil {
+					if group.PartyID.Valid {
+						nodeResponse.FabricXOrdererGroup.PartyID = int(group.PartyID.Int64)
+					}
+					if group.Version.String != "" {
+						nodeResponse.FabricXOrdererGroup.Version = group.Version.String
+					}
+				}
+			}
+			if ogDeployConfig, ok := deploymentConfig.(*types.FabricXOrdererGroupDeploymentConfig); ok {
+				nodeResponse.FabricXOrdererGroup.SignCert = ogDeployConfig.SignCert
+				nodeResponse.FabricXOrdererGroup.TLSCert = ogDeployConfig.TLSCert
+				nodeResponse.FabricXOrdererGroup.CACert = ogDeployConfig.CACert
+				nodeResponse.FabricXOrdererGroup.TLSCACert = ogDeployConfig.TLSCACert
+				// deployment_config holds the canonical allocated monitoring
+				// ports; the user-input config above may be zero when the
+				// caller didn't pre-pin them.
+				if ogDeployConfig.RouterMonitoringPort != 0 {
+					nodeResponse.FabricXOrdererGroup.RouterMonitoringPort = ogDeployConfig.RouterMonitoringPort
+				}
+				if ogDeployConfig.BatcherMonitoringPort != 0 {
+					nodeResponse.FabricXOrdererGroup.BatcherMonitoringPort = ogDeployConfig.BatcherMonitoringPort
+				}
+				if ogDeployConfig.ConsenterMonitoringPort != 0 {
+					nodeResponse.FabricXOrdererGroup.ConsenterMonitoringPort = ogDeployConfig.ConsenterMonitoringPort
+				}
+				if ogDeployConfig.AssemblerMonitoringPort != 0 {
+					nodeResponse.FabricXOrdererGroup.AssemblerMonitoringPort = ogDeployConfig.AssemblerMonitoringPort
+				}
+			}
+			fillOrdererMetricsUrls(nodeResponse.FabricXOrdererGroup)
+		case *types.FabricXCommitterConfig:
+			node.MSPID = config.MSPID
+			nodeResponse.FabricXCommitter = &FabricXCommitterProperties{
+				MSPID:                      config.MSPID,
+				OrganizationID:             config.OrganizationID,
+				ExternalIP:                 config.ExternalIP,
+				SidecarPort:                config.SidecarPort,
+				CoordinatorPort:            config.CoordinatorPort,
+				ValidatorPort:              config.ValidatorPort,
+				VerifierPort:               config.VerifierPort,
+				QueryServicePort:           config.QueryServicePort,
+				SidecarMonitoringPort:      config.SidecarMonitoringPort,
+				CoordinatorMonitoringPort:  config.CoordinatorMonitoringPort,
+				ValidatorMonitoringPort:    config.ValidatorMonitoringPort,
+				VerifierMonitoringPort:     config.VerifierMonitoringPort,
+				QueryServiceMonitoringPort: config.QueryServiceMonitoringPort,
+				Version:                    config.Version,
+			}
+			// The node_config's Version can be empty when the user didn't
+			// pass one on create; the authoritative resolved image tag lives
+			// on the deployment_config (defaulted to DefaultCommitterVersion).
+			if cDeployConfig, ok := deploymentConfig.(*types.FabricXCommitterDeploymentConfig); ok {
+				if nodeResponse.FabricXCommitter.Version == "" && cDeployConfig.Version != "" {
+					nodeResponse.FabricXCommitter.Version = cDeployConfig.Version
+				}
+				if cDeployConfig.SidecarMonitoringPort != 0 {
+					nodeResponse.FabricXCommitter.SidecarMonitoringPort = cDeployConfig.SidecarMonitoringPort
+				}
+				if cDeployConfig.CoordinatorMonitoringPort != 0 {
+					nodeResponse.FabricXCommitter.CoordinatorMonitoringPort = cDeployConfig.CoordinatorMonitoringPort
+				}
+				if cDeployConfig.ValidatorMonitoringPort != 0 {
+					nodeResponse.FabricXCommitter.ValidatorMonitoringPort = cDeployConfig.ValidatorMonitoringPort
+				}
+				if cDeployConfig.VerifierMonitoringPort != 0 {
+					nodeResponse.FabricXCommitter.VerifierMonitoringPort = cDeployConfig.VerifierMonitoringPort
+				}
+				if cDeployConfig.QueryServiceMonitoringPort != 0 {
+					nodeResponse.FabricXCommitter.QueryServiceMonitoringPort = cDeployConfig.QueryServiceMonitoringPort
+				}
+			}
+			fillCommitterMetricsUrls(nodeResponse.FabricXCommitter)
+		case *types.FabricXChildConfig:
+			// Leaf FabricX child rows (router/batcher/consenter/assembler or
+			// committer sidecar/coordinator/validator/verifier/query-service)
+			// carry no MSP/version of their own — those live on the owning
+			// node_group. Enrich the response by reading the parent group so
+			// the UI can show MSP ID / org / version on the /nodes list.
+			if config.NodeGroupID > 0 {
+				if group, err := s.db.GetNodeGroup(ctx, config.NodeGroupID); err == nil {
+					node.MSPID = group.MspID.String
+					nodeType := types.NodeType(dbNode.NodeType.String)
+					switch nodeType {
+					case types.NodeTypeFabricXOrdererRouter,
+						types.NodeTypeFabricXOrdererBatcher,
+						types.NodeTypeFabricXOrdererConsenter,
+						types.NodeTypeFabricXOrdererAssembler:
+						props := &FabricXOrdererGroupProperties{
+							MSPID:          group.MspID.String,
+							OrganizationID: group.OrganizationID.Int64,
+							PartyID:        int(group.PartyID.Int64),
+							ExternalIP:     group.ExternalIp.String,
+							Version:        group.Version.String,
+						}
+						// The parent group's deployment_config holds the
+						// per-role monitoring ports. Pull them out so the
+						// UI can render a metrics URL on every child row.
+						if group.DeploymentConfig.Valid {
+							var depCfg types.FabricXOrdererGroupDeploymentConfig
+							if err := json.Unmarshal([]byte(group.DeploymentConfig.String), &depCfg); err == nil {
+								props.RouterPort = depCfg.RouterPort
+								props.BatcherPort = depCfg.BatcherPort
+								props.ConsenterPort = depCfg.ConsenterPort
+								props.AssemblerPort = depCfg.AssemblerPort
+								props.RouterMonitoringPort = depCfg.RouterMonitoringPort
+								props.BatcherMonitoringPort = depCfg.BatcherMonitoringPort
+								props.ConsenterMonitoringPort = depCfg.ConsenterMonitoringPort
+								props.AssemblerMonitoringPort = depCfg.AssemblerMonitoringPort
+							}
+						}
+						fillOrdererMetricsUrls(props)
+						nodeResponse.FabricXOrdererGroup = props
+					case types.NodeTypeFabricXCommitterSidecar,
+						types.NodeTypeFabricXCommitterCoordinator,
+						types.NodeTypeFabricXCommitterValidator,
+						types.NodeTypeFabricXCommitterVerifier,
+						types.NodeTypeFabricXCommitterQueryService:
+						props := &FabricXCommitterProperties{
+							MSPID:          group.MspID.String,
+							OrganizationID: group.OrganizationID.Int64,
+							ExternalIP:     group.ExternalIp.String,
+							Version:        group.Version.String,
+						}
+						if group.DeploymentConfig.Valid {
+							var depCfg types.FabricXCommitterDeploymentConfig
+							if err := json.Unmarshal([]byte(group.DeploymentConfig.String), &depCfg); err == nil {
+								props.SidecarPort = depCfg.SidecarPort
+								props.CoordinatorPort = depCfg.CoordinatorPort
+								props.ValidatorPort = depCfg.ValidatorPort
+								props.VerifierPort = depCfg.VerifierPort
+								props.QueryServicePort = depCfg.QueryServicePort
+								props.SidecarMonitoringPort = depCfg.SidecarMonitoringPort
+								props.CoordinatorMonitoringPort = depCfg.CoordinatorMonitoringPort
+								props.ValidatorMonitoringPort = depCfg.ValidatorMonitoringPort
+								props.VerifierMonitoringPort = depCfg.VerifierMonitoringPort
+								props.QueryServiceMonitoringPort = depCfg.QueryServiceMonitoringPort
+							}
+						}
+						fillCommitterMetricsUrls(props)
+						nodeResponse.FabricXCommitter = props
+					}
+
+					// Always populate the per-child summary so the UI can
+					// render a single metrics URL directly off the leaf
+					// row regardless of which group properties branch fired.
+					if childDep, ok := deploymentConfig.(*types.FabricXChildDeploymentConfig); ok {
+						nodeResponse.FabricXChild = &FabricXChildProperties{
+							Role:           string(childDep.Role),
+							ContainerName:  childDep.ContainerName,
+							HostPort:       childDep.HostPort,
+							MonitoringPort: childDep.MonitoringPort,
+						}
+						if group.ExternalIp.String != "" && childDep.MonitoringPort > 0 {
+							nodeResponse.FabricXChild.MetricsUrl = fabricxMetricsURL(group.ExternalIp.String, childDep.MonitoringPort)
+						}
+					}
+				} else {
+					s.logger.Warn("failed to load parent node_group for FabricX child", "nodeID", dbNode.ID, "nodeGroupID", config.NodeGroupID, "error", err)
+				}
+			}
 		}
 	}
 
@@ -1083,6 +1365,20 @@ func (s *NodeService) StopNode(ctx context.Context, id int64) (*NodeResponse, er
 		stopErr = s.stopFabricOrderer(ctx, node)
 	case types.NodeTypeBesuFullnode:
 		stopErr = s.stopBesuNode(ctx, node)
+	case types.NodeTypeFabricXOrdererGroup:
+		stopErr = s.stopFabricXOrdererGroup(ctx, node)
+	case types.NodeTypeFabricXCommitter:
+		stopErr = s.stopFabricXCommitter(ctx, node)
+	case types.NodeTypeFabricXOrdererRouter,
+		types.NodeTypeFabricXOrdererBatcher,
+		types.NodeTypeFabricXOrdererConsenter,
+		types.NodeTypeFabricXOrdererAssembler,
+		types.NodeTypeFabricXCommitterSidecar,
+		types.NodeTypeFabricXCommitterCoordinator,
+		types.NodeTypeFabricXCommitterValidator,
+		types.NodeTypeFabricXCommitterVerifier,
+		types.NodeTypeFabricXCommitterQueryService:
+		stopErr = s.stopFabricXChild(ctx, node)
 	default:
 		stopErr = fmt.Errorf("unsupported node type: %s", node.NodeType.String)
 	}
@@ -1144,6 +1440,20 @@ func (s *NodeService) startNode(ctx context.Context, dbNode *db.Node) error {
 		startErr = s.startFabricOrderer(ctx, dbNode)
 	case types.NodeTypeBesuFullnode:
 		startErr = s.startBesuNode(ctx, dbNode)
+	case types.NodeTypeFabricXOrdererGroup:
+		startErr = s.startFabricXOrdererGroup(ctx, dbNode)
+	case types.NodeTypeFabricXCommitter:
+		startErr = s.startFabricXCommitter(ctx, dbNode)
+	case types.NodeTypeFabricXOrdererRouter,
+		types.NodeTypeFabricXOrdererBatcher,
+		types.NodeTypeFabricXOrdererConsenter,
+		types.NodeTypeFabricXOrdererAssembler,
+		types.NodeTypeFabricXCommitterSidecar,
+		types.NodeTypeFabricXCommitterCoordinator,
+		types.NodeTypeFabricXCommitterValidator,
+		types.NodeTypeFabricXCommitterVerifier,
+		types.NodeTypeFabricXCommitterQueryService:
+		startErr = s.startFabricXChild(ctx, dbNode)
 	default:
 		startErr = fmt.Errorf("unsupported node type: %s", dbNode.NodeType.String)
 	}
@@ -1194,6 +1504,20 @@ func (s *NodeService) restartNode(ctx context.Context, dbNode *db.Node) error {
 		stopErr = s.stopFabricOrderer(ctx, dbNode)
 	case types.NodeTypeBesuFullnode:
 		stopErr = s.stopBesuNode(ctx, dbNode)
+	case types.NodeTypeFabricXOrdererGroup:
+		stopErr = s.stopFabricXOrdererGroup(ctx, dbNode)
+	case types.NodeTypeFabricXCommitter:
+		stopErr = s.stopFabricXCommitter(ctx, dbNode)
+	case types.NodeTypeFabricXOrdererRouter,
+		types.NodeTypeFabricXOrdererBatcher,
+		types.NodeTypeFabricXOrdererConsenter,
+		types.NodeTypeFabricXOrdererAssembler,
+		types.NodeTypeFabricXCommitterSidecar,
+		types.NodeTypeFabricXCommitterCoordinator,
+		types.NodeTypeFabricXCommitterValidator,
+		types.NodeTypeFabricXCommitterVerifier,
+		types.NodeTypeFabricXCommitterQueryService:
+		stopErr = s.stopFabricXChild(ctx, dbNode)
 	default:
 		return fmt.Errorf("unsupported node type for restart: %s", dbNode.NodeType.String)
 	}
@@ -1313,6 +1637,14 @@ func (s *NodeService) cleanupNodeResources(ctx context.Context, node *db.Node) e
 		if err := s.cleanupBesuResources(ctx, node); err != nil {
 			s.logger.Warn("Failed to cleanup besu resources", "error", err)
 		}
+	case types.NodeTypeFabricXOrdererGroup:
+		if err := s.stopFabricXOrdererGroup(ctx, node); err != nil {
+			s.logger.Warn("Failed to cleanup fabricx orderer group", "error", err)
+		}
+	case types.NodeTypeFabricXCommitter:
+		if err := s.stopFabricXCommitter(ctx, node); err != nil {
+			s.logger.Warn("Failed to cleanup fabricx committer", "error", err)
+		}
 	default:
 		s.logger.Warn("Unknown node type for cleanup", "type", node.NodeType.String)
 	}
@@ -1395,8 +1727,39 @@ func (s *NodeService) GetNodeLogPath(ctx context.Context, node *NodeResponse) (s
 	}
 }
 
-// TailLogs returns a channel that receives log lines from the specified node
-func (s *NodeService) TailLogs(ctx context.Context, nodeID int64, tail int, follow bool) (<-chan string, error) {
+// committerContainerByRole resolves the docker container name for one of the
+// 5 fabric-x-committer roles. Empty role defaults to sidecar — the public-
+// facing component whose logs surface the most useful operational signal
+// (block deliveries, hash mismatches, commit errors). Returns an error for
+// any role value outside the known set so the caller can round-trip a 400
+// back to the client.
+func committerContainerByRole(cfg *types.FabricXCommitterDeploymentConfig, role string) (string, error) {
+	if role == "" {
+		role = "sidecar"
+	}
+	switch role {
+	case "sidecar":
+		return cfg.SidecarContainer, nil
+	case "coordinator":
+		return cfg.CoordinatorContainer, nil
+	case "validator":
+		return cfg.ValidatorContainer, nil
+	case "verifier":
+		return cfg.VerifierContainer, nil
+	case "query-service":
+		return cfg.QueryServiceContainer, nil
+	default:
+		return "", fmt.Errorf("invalid committer role %q; expected sidecar|coordinator|validator|verifier|query-service", role)
+	}
+}
+
+// TailLogs returns a channel that receives log lines from the specified node.
+// The role parameter is ignored except for FABRICX_COMMITTER nodes, where it
+// selects which of the 5 internal containers (sidecar, coordinator, validator,
+// verifier, query-service) to stream. Empty role on a FABRICX_COMMITTER
+// defaults to "sidecar" — the most useful log source. Non-empty role on any
+// other node type returns an error.
+func (s *NodeService) TailLogs(ctx context.Context, nodeID int64, tail int, follow bool, role string) (<-chan string, error) {
 	// Get the node first to verify it exists
 	dbNode, err := s.db.GetNode(ctx, nodeID)
 	if err != nil {
@@ -1467,6 +1830,53 @@ func (s *NodeService) TailLogs(ctx context.Context, nodeID int64, tail int, foll
 			return nil, fmt.Errorf("failed to get besu from config: %w", err)
 		}
 		return localBesu.TailLogs(ctx, tail, follow)
+	case types.NodeTypeFabricXOrdererRouter,
+		types.NodeTypeFabricXOrdererBatcher,
+		types.NodeTypeFabricXOrdererConsenter,
+		types.NodeTypeFabricXOrdererAssembler,
+		types.NodeTypeFabricXCommitterSidecar,
+		types.NodeTypeFabricXCommitterCoordinator,
+		types.NodeTypeFabricXCommitterValidator,
+		types.NodeTypeFabricXCommitterVerifier,
+		types.NodeTypeFabricXCommitterQueryService:
+		// FabricX child nodes (orderer roles) persist their running container
+		// name in the deployment config. Stream stdout/stderr from there.
+		// Role is meaningless here — children are single-container nodes.
+		if role != "" {
+			return nil, fmt.Errorf("node %d (%s) is a single-container node; ?role= not supported", nodeID, dbNode.NodeType.String)
+		}
+		childCfg, ok := deploymentConfig.(*types.FabricXChildDeploymentConfig)
+		if !ok {
+			return nil, fmt.Errorf("expected FabricXChildDeploymentConfig for node %d, got %T", nodeID, deploymentConfig)
+		}
+		if childCfg.ContainerName == "" {
+			return nil, fmt.Errorf("node %d has no container name recorded — was it started?", nodeID)
+		}
+		return fabricx.TailContainerLogs(ctx, s.logger, childCfg.ContainerName, tail, follow)
+
+	case types.NodeTypeFabricXCommitter:
+		// A committer is a single logical node that runs 5 containers
+		// internally (sidecar, coordinator, validator, verifier, query-service).
+		// ?role= picks which container to stream. Omitted defaults to sidecar —
+		// the most operationally useful log source.
+		committerCfg, ok := deploymentConfig.(*types.FabricXCommitterDeploymentConfig)
+		if !ok {
+			return nil, fmt.Errorf("expected FabricXCommitterDeploymentConfig for node %d, got %T", nodeID, deploymentConfig)
+		}
+		containerName, err := committerContainerByRole(committerCfg, role)
+		if err != nil {
+			return nil, err
+		}
+		if containerName == "" {
+			return nil, fmt.Errorf("committer %d has no container name for role %q — was it started?", nodeID, role)
+		}
+		return fabricx.TailContainerLogs(ctx, s.logger, containerName, tail, follow)
+
+	case types.NodeTypeFabricXOrdererGroup:
+		// Legacy monolithic orderer-group node row (pre node_groups). Retained
+		// for back-compat with rows predating migration 0022. New deploys
+		// materialize 4 per-role child rows instead.
+		return nil, fmt.Errorf("node %d is a legacy %s parent row; create per-role children via node_groups to view logs", nodeID, dbNode.NodeType.String)
 	default:
 		return nil, fmt.Errorf("unsupported node type for log tailing: %s", dbNode.NodeType.String)
 	}
@@ -1612,6 +2022,24 @@ func (s *NodeService) RenewCertificates(ctx context.Context, id int64) (*NodeRes
 		renewErr = s.renewPeerCertificates(ctx, node, deploymentConfig)
 	case types.NodeTypeFabricOrderer:
 		renewErr = s.renewOrdererCertificates(ctx, node, deploymentConfig)
+	case types.NodeTypeFabricXOrdererGroup,
+		types.NodeTypeFabricXCommitter:
+		// Legacy monolithic FabricX node rows: renew the parent group's
+		// keys directly off this row's deployment_config.
+		renewErr = s.renewFabricXNodeCertificates(ctx, node, deploymentConfig)
+	case types.NodeTypeFabricXOrdererRouter,
+		types.NodeTypeFabricXOrdererBatcher,
+		types.NodeTypeFabricXOrdererConsenter,
+		types.NodeTypeFabricXOrdererAssembler,
+		types.NodeTypeFabricXCommitterSidecar,
+		types.NodeTypeFabricXCommitterCoordinator,
+		types.NodeTypeFabricXCommitterValidator,
+		types.NodeTypeFabricXCommitterVerifier,
+		types.NodeTypeFabricXCommitterQueryService:
+		// Per-role child rows: identity lives on the parent node_group, so
+		// renewal renews the group's keys once and rewrites every child's
+		// on-disk msp/tls. All children share one identity by design.
+		renewErr = s.renewFabricXChildCertificates(ctx, node)
 	default:
 		renewErr = fmt.Errorf("certificate renewal not supported for node type: %s", node.NodeType.String)
 	}
@@ -1842,6 +2270,10 @@ func (s *NodeService) validateNodeConnectivity(ctx context.Context, node *db.Nod
 		return s.validateFabricOrdererConnectivity(ctx, node, nodeConfig, deploymentConfig)
 	case types.NodeTypeBesuFullnode:
 		return s.validateBesuNodeConnectivity(ctx, node, nodeConfig, deploymentConfig)
+	case types.NodeTypeFabricXOrdererGroup, types.NodeTypeFabricXCommitter:
+		// FabricX nodes consist of multiple sub-containers; skip single-endpoint validation
+		s.logger.Info("Skipping connectivity validation for FabricX node (multi-container)", "node_id", node.ID)
+		return nil
 	default:
 		return fmt.Errorf("unsupported node type for connectivity validation: %s", node.NodeType.String)
 	}
