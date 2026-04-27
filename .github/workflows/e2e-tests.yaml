@@ -325,6 +325,20 @@ jobs:
                   docker pull ghcr.io/hyperledger/fabric-x-orderer:1.0.0-alpha
                   docker pull ghcr.io/hyperledger/fabric-x-committer:1.0.0-alpha
                   docker pull postgres:16-alpine
+            - name: Map host.docker.internal on the runner host
+              # The FabricX runtime rewrites postgres host (and inter-container
+              # endpoints) to host.docker.internal in local-dev mode and
+              # adds <ExternalIP>:host-gateway as a docker extra-host. With
+              # --external-ip host.docker.internal everything inside the
+              # docker network resolves correctly via the host-gateway map.
+              # But the chainlaunch *server* runs on the host, not in a
+              # container, and Linux Docker doesn't auto-publish that name
+              # on the host like Docker Desktop does on macOS. Add a
+              # /etc/hosts entry so the server's namespace-create dial can
+              # also reach host.docker.internal.
+              run: |
+                  echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts
+                  getent hosts host.docker.internal
             - name: Start the application and verify API is available
               run: |
                   echo "CHAINLAUNCH_DATA: $CHAINLAUNCH_DATA"
@@ -356,7 +370,7 @@ jobs:
                     --single-msp E2eMSP \
                     --base-port 17000 \
                     --postgres-port 15432 \
-                    --external-ip 127.0.0.1 \
+                    --external-ip host.docker.internal \
                     --namespace "" \
                     --http-timeout 4m
             - name: Wait for committer sidecar gRPC to be reachable
