@@ -1,6 +1,7 @@
 import { getNodesOptions, getNetworksFabricOptions, getNetworksBesuOptions, getNetworksFabricxOptions } from '@/api/client/@tanstack/react-query.gen'
 import { BesuIcon } from '@/components/icons/besu-icon'
 import { FabricIcon } from '@/components/icons/fabric-icon'
+import { FabricXIcon } from '@/components/icons/fabricx-icon'
 import { PageHeader, PageShell } from '@/components/layout/page-shell'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -258,7 +259,7 @@ export default function DashboardPage() {
 									<span className="text-2xl font-semibold tabular-nums">{stats.besuNodes}</span>
 								</div>
 								<div className="flex items-center gap-2">
-									<FabricIcon className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+									<FabricXIcon className="h-5 w-5" />
 									<span className="text-2xl font-semibold tabular-nums">{stats.fabricxNodes}</span>
 								</div>
 							</div>
@@ -284,7 +285,7 @@ export default function DashboardPage() {
 								Besu
 							</TabsTrigger>
 							<TabsTrigger value="fabricx" className="flex flex-1 items-center gap-2 sm:flex-initial">
-								<FabricIcon className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+								<FabricXIcon className="h-4 w-4" />
 								FabricX
 							</TabsTrigger>
 						</TabsList>

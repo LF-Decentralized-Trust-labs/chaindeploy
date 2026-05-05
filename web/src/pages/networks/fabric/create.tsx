@@ -68,7 +68,7 @@ const channelFormSchema = z
 		smartBFTOptions: z
 			.object({
 				requestBatchMaxCount: z.number().min(1).default(500),
-				requestBatchMaxBytes: z.number().min(1).default(1048576),
+				requestBatchMaxBytes: z.number().min(1).default(10485760),
 				requestBatchMaxInterval: z.string().default('50ms'),
 				requestMaxBytes: z.number().min(1).default(1048576),
 				incomingMessageBufferSize: z.number().min(1).default(200),
@@ -199,7 +199,7 @@ export default function FabricCreateChannel() {
 			},
 			smartBFTOptions: {
 				requestBatchMaxCount: 500,
-				requestBatchMaxBytes: 1048576,
+				requestBatchMaxBytes: 10485760,
 				requestBatchMaxInterval: '50ms',
 				requestMaxBytes: 1048576,
 				incomingMessageBufferSize: 200,
