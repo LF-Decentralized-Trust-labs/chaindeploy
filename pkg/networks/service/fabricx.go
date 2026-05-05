@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"time"
 
 	"github.com/chainlaunch/chainlaunch/pkg/db"
 	"github.com/chainlaunch/chainlaunch/pkg/networks/service/fabricx"
@@ -47,7 +48,56 @@ func (s *NetworkService) JoinFabricXNodeToNetwork(ctx context.Context, networkID
 	if err := deployer.JoinNode(networkID, genesisBlock, nodeID); err != nil {
 		return fmt.Errorf("failed to join FabricX node %d to network %d: %w", nodeID, networkID, err)
 	}
+
+	// Once every network_node row for this network is in the "joined"
+	// state, kick off the verification smoke test. This is best-effort —
+	// the join itself is what the caller is waiting for; verification
+	// updates the network status asynchronously and surfaces errors via
+	// the structured logs (and via /networks/{id} status).
+	if allJoined, err := s.allFabricXNodesJoined(ctx, networkID); err == nil && allJoined {
+		go func() {
+			verifyCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+			if vErr := s.deployerFactory.GetFabricXDeployer().VerifyNetwork(verifyCtx, networkID); vErr != nil {
+				// Already logged inside VerifyNetwork; nothing to do
+				// here besides not propagating to the join caller.
+				_ = vErr
+			}
+		}()
+	}
 	return nil
+}
+
+// allFabricXNodesJoined returns true if every network_node row for the
+// given network is in a state that means the underlying node has the
+// genesis block on disk. We treat anything other than the literal
+// "pending" status as "joined" — the JoinNode path flips rows to
+// "joined" before container start, and a transient docker-mount error
+// during start does not invalidate that.
+func (s *NetworkService) allFabricXNodesJoined(ctx context.Context, networkID int64) (bool, error) {
+	rows, err := s.db.GetNetworkNodes(ctx, networkID)
+	if err != nil {
+		return false, err
+	}
+	if len(rows) == 0 {
+		return false, nil
+	}
+	for _, r := range rows {
+		if r.Status == "pending" {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// VerifyFabricXNetwork is the operator-facing entry point for the
+// post-provisioning smoke test. It is also called automatically by
+// JoinFabricXNodeToNetwork once every node has joined; the explicit
+// endpoint exists so the operator can re-run verification after fixing
+// a problem (e.g. a flaky orderer) without having to recreate any
+// nodes.
+func (s *NetworkService) VerifyFabricXNetwork(ctx context.Context, networkID int64) error {
+	return s.deployerFactory.GetFabricXDeployer().VerifyNetwork(ctx, networkID)
 }
 
 // CreateFabricXNamespace broadcasts a namespace-creation tx to the network's

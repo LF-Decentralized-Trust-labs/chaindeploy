@@ -86,6 +86,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Delete("/{id}", h.FabricXNetworkDelete)
 		r.Get("/{id}/nodes", h.FabricXNetworkGetNodes)
 		r.Post("/{id}/nodes/{nodeId}/join", h.FabricXNetworkJoinNode)
+		r.Post("/{id}/verify", h.FabricXNetworkVerify)
 
 		r.Get("/{id}/namespaces", h.FabricXNamespaceList)
 		r.Post("/{id}/namespaces", h.FabricXNamespaceCreate)

@@ -283,6 +283,36 @@ func (h *Handler) FabricXNetworkJoinNode(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+// FabricXVerifyResponse is the body returned by the verification endpoint.
+type FabricXVerifyResponse struct {
+	NetworkID int64  `json:"networkId"`
+	Status    string `json:"status"` // "running" on success, "verification_failed" on error
+}
+
+// FabricXNetworkVerify godoc
+// @Summary Verify a FabricX network end-to-end
+// @Description Runs the post-provisioning smoke test for the network: dials the orderer router with TLS and creates a permanent healthcheck namespace named __chainlaunch_healthcheck__. On success the network is flipped to "running"; on failure to "verification_failed" with the reason in server logs. Idempotent — if the healthcheck namespace already exists, the network is marked running without sending a new transaction.
+// @Tags FabricX Networks
+// @Param id path int true "Network ID"
+// @Success 200 {object} FabricXVerifyResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /networks/fabricx/{id}/verify [post]
+func (h *Handler) FabricXNetworkVerify(w http.ResponseWriter, r *http.Request) {
+	networkID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_network_id", "Invalid network ID")
+		return
+	}
+	if err := h.networkService.VerifyFabricXNetwork(r.Context(), networkID); err != nil {
+		writeError(w, http.StatusInternalServerError, "network_verification_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, FabricXVerifyResponse{
+		NetworkID: networkID,
+		Status:    "running",
+	})
+}
+
 func mapFabricXNetworkToResponse(n service.Network) FabricXNetworkResponse {
 	var channelName string
 	if n.Config != nil {
