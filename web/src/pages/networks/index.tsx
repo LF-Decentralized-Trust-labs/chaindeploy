@@ -9,6 +9,7 @@ import {
 import { HttpNetworkResponse } from '@/api/client'
 import { BesuIcon } from '@/components/icons/besu-icon'
 import { FabricIcon } from '@/components/icons/fabric-icon'
+import { FabricXIcon } from '@/components/icons/fabricx-icon'
 import { PageHeader, PageShell } from '@/components/layout/page-shell'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
@@ -17,7 +18,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Skeleton } from '@/components/ui/skeleton'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { MoreVertical, Network, Trash, ChevronDown, Upload, Rocket } from 'lucide-react'
+import { MoreVertical, Network, Trash, ChevronDown, Upload } from 'lucide-react'
 import { useState, useMemo, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -256,7 +257,7 @@ export default function NetworksPage() {
 					<DropdownMenuContent align="end">
 						<DropdownMenuItem asChild>
 							<Link to="/networks/fabricx/quickstart">
-								<Rocket className="mr-2 h-4 w-4" />
+								<FabricXIcon className="mr-2 h-4 w-4" />
 								FabricX Quick Start (4 parties)
 							</Link>
 						</DropdownMenuItem>
@@ -280,7 +281,7 @@ export default function NetworksPage() {
 						</DropdownMenuItem>
 						<DropdownMenuItem asChild>
 							<Link to="/networks/fabricx/create">
-								<FabricIcon className="mr-2 h-4 w-4" />
+								<FabricXIcon className="mr-2 h-4 w-4" />
 								FabricX Network (MVP)
 							</Link>
 						</DropdownMenuItem>
@@ -302,7 +303,13 @@ export default function NetworksPage() {
 								to={`/networks/${network.id}/${network.platform === 'fabric' ? 'fabric' : network.platform === 'fabricx' ? 'fabricx' : 'besu'}`}
 								className="flex flex-1 items-center gap-4"
 							>
-								{network.platform === 'besu' ? <BesuIcon className="h-8 w-8" /> : <FabricIcon className="h-8 w-8" />}
+								{network.platform === 'besu' ? (
+									<BesuIcon className="h-8 w-8" />
+								) : network.platform === 'fabricx' ? (
+									<FabricXIcon className="h-8 w-8" />
+								) : (
+									<FabricIcon className="h-8 w-8" />
+								)}
 								<div>
 									<h3 className="font-semibold">{network.name}</h3>
 									<p className="text-sm text-muted-foreground">

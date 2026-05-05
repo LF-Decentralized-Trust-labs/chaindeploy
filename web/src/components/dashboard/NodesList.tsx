@@ -1,6 +1,7 @@
 import { HttpNodeResponse } from '@/api/client'
 import { BesuIcon } from '@/components/icons/besu-icon'
 import { FabricIcon } from '@/components/icons/fabric-icon'
+import { FabricXIcon } from '@/components/icons/fabricx-icon'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -68,11 +69,12 @@ export default function NodesList({ nodes = [], limit }: NodesListProps) {
 					<Card className="p-4 hover:shadow-md transition-shadow cursor-pointer group">
 						<div className="flex items-start justify-between mb-2">
 							<div className="flex items-center gap-2 flex-1 min-w-0">
-								{node.platform?.toUpperCase() === 'FABRIC' ? (
-									<FabricIcon className="h-5 w-5 shrink-0" />
-								) : (
-									<BesuIcon className="h-5 w-5 shrink-0" />
-								)}
+								{(() => {
+									const p = node.platform?.toUpperCase()
+									if (p === 'FABRICX') return <FabricXIcon className="h-5 w-5 shrink-0" />
+									if (p === 'FABRIC') return <FabricIcon className="h-5 w-5 shrink-0" />
+									return <BesuIcon className="h-5 w-5 shrink-0" />
+								})()}
 								<h3 className="font-medium truncate">{node.name}</h3>
 							</div>
 							<ArrowUpRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />

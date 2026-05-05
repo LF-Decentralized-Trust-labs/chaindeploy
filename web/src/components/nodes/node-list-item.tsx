@@ -1,6 +1,7 @@
 import { HttpNodeResponse } from '@/api/client'
 import { BesuIcon } from '@/components/icons/besu-icon'
 import { FabricIcon } from '@/components/icons/fabric-icon'
+import { FabricXIcon } from '@/components/icons/fabricx-icon'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Activity, Network } from 'lucide-react'
@@ -51,7 +52,7 @@ export function NodeListItem({ node, isSelected, onSelectionChange, disabled = f
 						{isFabricNode(node) ? (
 							<FabricIcon className="h-5 w-5 text-primary" />
 						) : isFabricXNode(node) ? (
-							<span className="text-xs font-semibold tracking-tight text-primary">FX</span>
+							<FabricXIcon className="h-5 w-5" />
 						) : (
 							<BesuIcon className="h-5 w-5 text-primary" />
 						)}

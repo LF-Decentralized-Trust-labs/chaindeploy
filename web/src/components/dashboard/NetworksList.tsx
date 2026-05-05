@@ -1,6 +1,7 @@
 import { HttpNetworkResponse } from '@/api/client'
 import { BesuIcon } from '@/components/icons/besu-icon'
 import { FabricIcon } from '@/components/icons/fabric-icon'
+import { FabricXIcon } from '@/components/icons/fabricx-icon'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { TimeAgo } from '@/components/ui/time-ago'
@@ -28,7 +29,7 @@ function detailPath(network: HttpNetworkResponse): string {
 
 function PlatformIcon({ platform }: { platform?: string }) {
 	if (platform === 'besu') return <BesuIcon className="h-5 w-5" />
-	if (platform === 'fabricx') return <FabricIcon className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+	if (platform === 'fabricx') return <FabricXIcon className="h-5 w-5" />
 	return <FabricIcon className="h-5 w-5" />
 }
 

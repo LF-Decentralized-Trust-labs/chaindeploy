@@ -1042,7 +1042,8 @@ export default function FabricNetworkWizard() {
 													<SelectValue />
 												</SelectTrigger>
 												<SelectContent>
-													<SelectItem value="3.1.3">3.1.3 (latest)</SelectItem>
+													<SelectItem value="3.1.4">3.1.4 (latest)</SelectItem>
+													<SelectItem value="3.1.3">3.1.3</SelectItem>
 													<SelectItem value="3.1.2">3.1.2</SelectItem>
 													<SelectItem value="3.1.0">3.1.0</SelectItem>
 													<SelectItem value="3.0.0">3.0.0</SelectItem>
