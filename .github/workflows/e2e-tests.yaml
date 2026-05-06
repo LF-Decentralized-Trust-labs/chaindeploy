@@ -431,6 +431,15 @@ jobs:
                   echo "Namespace creation never succeeded after 5 retries"
                   exit 1
             - name: Verify FabricX network is queryable via API
+              # Once every node joins, the deployer kicks off a background
+              # verification (see VerifyNetwork). It can race the orderer
+              # router becoming reachable in CI, so the network may already
+              # be in "verification_failed" by the time we inspect it — even
+              # though the prior namespace-create step proved the network
+              # works. Re-run verification synchronously to settle the state,
+              # then accept any of: genesis_block_created (auto-verify never
+              # fired), running (verify succeeded), or genesis_block_created
+              # again after a successful re-verify.
               run: |
                   net_id=$(curl -sf -u "$CHAINLAUNCH_USER:$CHAINLAUNCH_PASSWORD" \
                     -H 'Accept: application/json' \
@@ -445,11 +454,30 @@ jobs:
                     -H 'Accept: application/json' \
                     "$CHAINLAUNCH_API_URL/networks/fabricx/$net_id" \
                     | jq -r '.status')
-                  echo "FabricX network status: $status"
-                  if [ "$status" != "genesis_block_created" ]; then
-                    echo "Expected status genesis_block_created, got $status"
-                    exit 1
+                  echo "FabricX network status (initial): $status"
+                  if [ "$status" = "verification_failed" ]; then
+                    echo "Re-running verification synchronously after the namespace test proved the network works"
+                    code=$(curl -s -u "$CHAINLAUNCH_USER:$CHAINLAUNCH_PASSWORD" \
+                      -H 'Accept: application/json' \
+                      -o /tmp/verify-resp.json -w '%{http_code}' \
+                      -X POST "$CHAINLAUNCH_API_URL/networks/fabricx/$net_id/verify")
+                    echo "Re-verify HTTP $code:"
+                    cat /tmp/verify-resp.json 2>/dev/null || true
+                    echo
+                    status=$(curl -sf -u "$CHAINLAUNCH_USER:$CHAINLAUNCH_PASSWORD" \
+                      -H 'Accept: application/json' \
+                      "$CHAINLAUNCH_API_URL/networks/fabricx/$net_id" \
+                      | jq -r '.status')
+                    echo "FabricX network status (after re-verify): $status"
                   fi
+                  case "$status" in
+                    running|genesis_block_created)
+                      ;;
+                    *)
+                      echo "Expected status running or genesis_block_created, got $status"
+                      exit 1
+                      ;;
+                  esac
             - name: Verify all FabricX nodes are RUNNING
               # 17 nodes/network in single-MSP mode (4 orderer-groups × 4
               # children + 1 committer). Anything not RUNNING means the
