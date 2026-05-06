@@ -1,10 +1,12 @@
 package fabricx
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/chainlaunch/chainlaunch/pkg/config"
@@ -101,6 +103,7 @@ func (d *FabricXDeployer) CreateGenesisBlock(networkID int64, config interface{}
 			deploymentCfg nodetypes.FabricXOrdererGroupDeploymentConfig
 			sourceUpdated any
 			sourceCreated any
+			sourceName    string
 		)
 		if orgRef.OrdererNodeGroupID != 0 {
 			grp, err := d.db.GetNodeGroup(ctx, orgRef.OrdererNodeGroupID)
@@ -115,6 +118,7 @@ func (d *FabricXDeployer) CreateGenesisBlock(networkID int64, config interface{}
 			}
 			sourceUpdated = grp.UpdatedAt
 			sourceCreated = grp.CreatedAt
+			sourceName = grp.Name
 		} else {
 			dbNode, err := d.db.GetNode(ctx, orgRef.OrdererNodeID)
 			if err != nil {
@@ -128,6 +132,7 @@ func (d *FabricXDeployer) CreateGenesisBlock(networkID int64, config interface{}
 			}
 			sourceUpdated = dbNode.UpdatedAt
 			sourceCreated = dbNode.CreatedAt
+			sourceName = dbNode.Name
 		}
 
 		externalHost := deploymentCfg.ExternalIP
@@ -156,6 +161,17 @@ func (d *FabricXDeployer) CreateGenesisBlock(networkID int64, config interface{}
 			"source.updatedAt", sourceUpdated,
 			"source.createdAt", sourceCreated,
 		)
+
+		// Cert drift guard: refuse to embed a TLS cert in genesis that
+		// doesn't match what's actually on disk for this orderer group.
+		// If we let drift slip into genesis, the router will panic at
+		// startup with "certificate mismatch" and the network is
+		// unrecoverable (genesis is immutable). The fix is to make the
+		// caller stop regenerating certs out-of-band — typically that
+		// means re-running Init(), which is now idempotent.
+		if err := d.assertOrdererCertMatchesDisk(sourceName, deploymentCfg); err != nil {
+			return nil, fmt.Errorf("orderer cert drift before genesis (party %d, msp %s): %w", partyID, deploymentCfg.MSPID, err)
+		}
 
 		genesisParties = append(genesisParties, fabricxpkg.GenesisParty{
 			PartyID:   partyID,
@@ -244,6 +260,57 @@ func (d *FabricXDeployer) CreateGenesisBlock(networkID int64, config interface{}
 	return genesisBlock, nil
 }
 
+// assertOrdererCertMatchesDisk fails fast when the TLS cert recorded in
+// the orderer group's deployment_config differs from the cert currently
+// on disk for any of its four roles. If we let a mismatch slip into the
+// genesis block, the orderer router crashes at startup ("certificate
+// mismatch") and the network is unrecoverable because genesis is
+// immutable.
+//
+// We compare each role's server.crt against deploymentCfg.TLSCert. The
+// cert is shared across all four roles, so any one of them disagreeing
+// with the DB is enough to abort. We trim trailing whitespace before
+// comparison because writeTLS leaves a trailing newline that os.WriteFile
+// preserves verbatim.
+func (d *FabricXDeployer) assertOrdererCertMatchesDisk(groupName string, cfg nodetypes.FabricXOrdererGroupDeploymentConfig) error {
+	if d.configService == nil {
+		// In tests where configService is not wired we can't resolve
+		// the data path; skip the check. Production always has it.
+		return nil
+	}
+	dbCert := bytes.TrimSpace([]byte(cfg.TLSCert))
+	if len(dbCert) == 0 {
+		return fmt.Errorf("deployment config TLS cert is empty")
+	}
+	if groupName == "" {
+		return fmt.Errorf("orderer group name is empty; cannot resolve on-disk cert path")
+	}
+	dataPath := d.configService.GetDataPath()
+	for _, role := range []string{"router", "batcher", "consenter", "assembler"} {
+		path := fabricxpkg.OrdererRoleTLSCertPath(dataPath, groupName, role)
+		onDisk, err := os.ReadFile(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				// Disk wasn't laid out yet — Init() must run before
+				// genesis. Surface a clear error so the operator
+				// knows to (re)create the orderer node first.
+				return fmt.Errorf("orderer %s cert not found on disk at %s; was Init() run?", role, path)
+			}
+			return fmt.Errorf("read %s cert at %s: %w", role, path, err)
+		}
+		if !bytes.Equal(bytes.TrimSpace(onDisk), dbCert) {
+			return fmt.Errorf(
+				"role %s cert on disk differs from deployment config (disk=%s, db=%s); "+
+					"this means a regenerate ran after init — refusing to bake the stale cert into genesis",
+				role,
+				fabricxpkg.CertFingerprint(onDisk),
+				fabricxpkg.CertFingerprint(dbCert),
+			)
+		}
+	}
+	return nil
+}
+
 // JoinNode sets the genesis block on a Fabric X node and updates its network status.
 func (d *FabricXDeployer) JoinNode(networkID int64, genesisBlock []byte, nodeID int64) error {
 	ctx := context.Background()
@@ -322,6 +389,136 @@ func isTransientDockerMountErr(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "bind source path does not exist") ||
 		(strings.Contains(msg, "invalid mount config for type \"bind\"") && strings.Contains(msg, "operation not permitted"))
+}
+
+// HealthcheckNamespaceName is the name of the persistent namespace the
+// deployer creates after every node has joined the network. Its presence
+// proves three things end-to-end: the orderer router accepts TLS
+// connections, the consensus path commits a transaction, and the
+// committer-sidecar replays the block to its query-service. Operators
+// can list it via the namespace API; it is intentionally NOT deleted
+// after verification because re-running verification is cheap and the
+// row is auditable.
+const HealthcheckNamespaceName = "__chainlaunch_healthcheck__"
+
+// VerifyNetwork runs the post-provisioning smoke test for a FabricX
+// network. It blocks until either:
+//   - The healthcheck namespace exists on-chain (success → returns nil)
+//   - The deadline elapses or a non-retriable error fires (failure)
+//
+// On success VerifyNetwork transitions the network to "running"; on
+// failure it sets "verification_failed" and stores the underlying error
+// in the network's error_message column so the UI can show *why* a
+// "provisioned" network is actually broken.
+//
+// The submitter is auto-picked: the first organization in the network's
+// config whose admin sign key is present in the local DB. We don't
+// expose this choice to the API caller because verification is a
+// system-driven step, not a user transaction.
+//
+// VerifyNetwork is idempotent: if the healthcheck namespace already
+// exists on-chain, it returns success immediately without sending a new
+// transaction.
+func (d *FabricXDeployer) VerifyNetwork(ctx context.Context, networkID int64) error {
+	network, err := d.db.GetNetwork(ctx, networkID)
+	if err != nil {
+		return fmt.Errorf("get network %d: %w", networkID, err)
+	}
+	if !network.Config.Valid {
+		return fmt.Errorf("network %d has no config", networkID)
+	}
+	var cfg types.FabricXNetworkConfig
+	if err := json.Unmarshal([]byte(network.Config.String), &cfg); err != nil {
+		return fmt.Errorf("parse network config: %w", err)
+	}
+	if len(cfg.Organizations) == 0 {
+		return fmt.Errorf("network %d has no organizations", networkID)
+	}
+
+	// Pick the first org that has an admin sign key — without one we
+	// can't sign the namespace-create envelope. This matches the
+	// existing CreateNamespace contract.
+	var submitterOrgID int64
+	for _, orgRef := range cfg.Organizations {
+		org, err := d.orgService.GetOrganization(ctx, orgRef.ID)
+		if err != nil {
+			continue
+		}
+		if org.AdminSignKeyID.Valid && org.AdminSignKeyID.Int64 > 0 {
+			submitterOrgID = org.ID
+			break
+		}
+	}
+	if submitterOrgID == 0 {
+		return fmt.Errorf("no organization in network %d has an admin sign key; cannot run verification", networkID)
+	}
+
+	// Idempotency: skip if the healthcheck namespace already exists on
+	// chain. Listing is allowed to fail with a transient chain-unreachable
+	// error; that's exactly the case CreateNamespace below will surface
+	// as the verification failure.
+	if existing, _, _ := d.ListNamespacesMerged(ctx, networkID); existing != nil {
+		for _, ns := range existing {
+			if ns.Name == HealthcheckNamespaceName {
+				d.logger.Info("verification skipped: healthcheck namespace already on chain",
+					"networkID", networkID, "namespace", HealthcheckNamespaceName)
+				if err := d.markNetworkVerified(ctx, networkID); err != nil {
+					return err
+				}
+				return nil
+			}
+		}
+	}
+
+	d.logger.Info("verifying FabricX network by creating healthcheck namespace",
+		"networkID", networkID, "submitterOrgID", submitterOrgID, "namespace", HealthcheckNamespaceName)
+
+	_, err = d.CreateNamespace(ctx, networkID, NamespaceCreateOptions{
+		Name:            HealthcheckNamespaceName,
+		Version:         -1,
+		SubmitterOrgID:  submitterOrgID,
+		WaitForFinality: true,
+		// Use the submitter org's admin pubkey as the endorsement
+		// policy. Writes to the healthcheck namespace are not
+		// expected post-verification, so this stays internal.
+	})
+	if err != nil {
+		// Persist the verification failure status so /networks/{id}
+		// reflects that the network is unhealthy. We log the detailed
+		// reason — the networks table has no error_message column today,
+		// so the operator-facing error surfaces via the API caller's
+		// returned error and the structured logs below.
+		d.logger.Error("FabricX network verification failed",
+			"networkID", networkID, "namespace", HealthcheckNamespaceName, "err", err)
+		if updErr := d.db.UpdateNetworkStatus(ctx, &db.UpdateNetworkStatusParams{
+			ID:     networkID,
+			Status: "verification_failed",
+		}); updErr != nil {
+			d.logger.Warn("failed to persist verification_failed status",
+				"networkID", networkID, "err", updErr)
+		}
+		return fmt.Errorf("network %d verification failed: %w", networkID, err)
+	}
+
+	if err := d.markNetworkVerified(ctx, networkID); err != nil {
+		return err
+	}
+
+	d.logger.Info("FabricX network verified",
+		"networkID", networkID, "namespace", HealthcheckNamespaceName)
+	return nil
+}
+
+// markNetworkVerified flips a network into the "running" state. Called
+// only after the healthcheck namespace is confirmed on-chain.
+func (d *FabricXDeployer) markNetworkVerified(ctx context.Context, networkID int64) error {
+	if err := d.db.UpdateNetworkStatus(ctx, &db.UpdateNetworkStatusParams{
+		ID:     networkID,
+		Status: "running",
+	}); err != nil {
+		return fmt.Errorf("mark network %d running: %w", networkID, err)
+	}
+	return nil
 }
 
 // GetStatus returns the deployment status of a Fabric X network

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/x509"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -67,9 +68,30 @@ func (c *Committer) prefix() string {
 	return containerNamePrefix(c.mspID, c.opts.Name)
 }
 
-// Init generates certificates, writes configs, returns deployment config
+// Init generates certificates, writes configs, returns deployment config.
+//
+// Init is idempotent: if the committer's row already has a complete
+// deployment config (sign cert + TLS cert + key IDs), Init reuses that
+// config rather than minting new keys. This prevents the "certificate
+// mismatch" panic that occurs when a re-run of Init regenerates the
+// committer's identity after the network's genesis block already embeds
+// the original cert. Cert rotation must go through RenewCertificates,
+// which preserves the public-key identity that's locked into genesis.
 func (c *Committer) Init() (*nodetypes.FabricXCommitterDeploymentConfig, error) {
 	ctx := context.Background()
+
+	if existing, ok := c.loadExistingDeployment(ctx); ok {
+		c.logger.Info("Reusing existing FabricX committer deployment config (skipping cert regen)",
+			"name", c.opts.Name,
+			"signKeyId", existing.SignKeyID,
+			"tlsKeyId", existing.TLSKeyID,
+			"tlsCertFingerprint", CertFingerprint([]byte(existing.TLSCert)),
+		)
+		if err := c.ensureMaterials(existing); err != nil {
+			return nil, fmt.Errorf("ensure materials for reused committer: %w", err)
+		}
+		return existing, nil
+	}
 
 	org, err := c.orgService.GetOrganization(ctx, c.organizationID)
 	if err != nil {
@@ -389,6 +411,39 @@ func (c *Committer) Init() (*nodetypes.FabricXCommitterDeploymentConfig, error) 
 // TLS-only orderers reject with "error reading server preface: EOF". The
 // upstream sidecar does not yet load root CAs from the genesis block itself
 // (sidecar/config.go still has a "TODO: Fetch Root CAs."), so we do it here.
+// loadExistingDeployment returns the persisted deployment config for this
+// committer if one exists, alongside ok=true. Used by Init() to short-circuit
+// cert regeneration. A "complete" config has both key IDs and both
+// certificate PEMs populated; partial configs are rejected so the caller
+// rebuilds them from scratch.
+func (c *Committer) loadExistingDeployment(ctx context.Context) (*nodetypes.FabricXCommitterDeploymentConfig, bool) {
+	if c.db == nil || c.nodeID <= 0 {
+		return nil, false
+	}
+	node, err := c.db.GetNode(ctx, c.nodeID)
+	if err != nil || !node.DeploymentConfig.Valid {
+		return nil, false
+	}
+	return decodeCommitterDeployment(node.DeploymentConfig.String)
+}
+
+func decodeCommitterDeployment(raw string) (*nodetypes.FabricXCommitterDeploymentConfig, bool) {
+	var cfg nodetypes.FabricXCommitterDeploymentConfig
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		return nil, false
+	}
+	if cfg.Type != "fabricx-committer" {
+		return nil, false
+	}
+	if cfg.SignKeyID == 0 || cfg.TLSKeyID == 0 {
+		return nil, false
+	}
+	if cfg.SignCert == "" || cfg.TLSCert == "" {
+		return nil, false
+	}
+	return &cfg, true
+}
+
 func (c *Committer) SetGenesisBlock(genesisBlock []byte) error {
 	dir := filepath.Join(c.baseDir(), "sidecar", "genesis")
 	if err := os.MkdirAll(dir, 0755); err != nil {

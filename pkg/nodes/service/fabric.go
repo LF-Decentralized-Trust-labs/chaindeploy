@@ -582,10 +582,15 @@ func (s *NodeService) UpdateFabricPeer(ctx context.Context, opts UpdateFabricPee
 		deployPeerConfig.Mode = opts.Mode
 	}
 
-	// Update configuration fields if provided
+	// Track which fields changed so we know whether to refresh nodes.endpoint
+	// and re-register with monitoring. SynchronizePeerConfig already bounces
+	// the running peer so it picks up address-bearing changes from core.yaml.
+	endpointChanged := false
+
 	if opts.ExternalEndpoint != "" && opts.ExternalEndpoint != peerConfig.ExternalEndpoint {
 		peerConfig.ExternalEndpoint = opts.ExternalEndpoint
 		deployPeerConfig.ExternalEndpoint = opts.ExternalEndpoint
+		endpointChanged = true
 	}
 	if opts.ListenAddress != "" && opts.ListenAddress != peerConfig.ListenAddress {
 		if err := s.validateAddressFormat(opts.ListenAddress); err != nil {
@@ -695,6 +700,36 @@ func (s *NodeService) UpdateFabricPeer(ctx context.Context, opts UpdateFabricPee
 		}
 	}
 
+	// When the externally-advertised endpoint changes, refresh the
+	// nodes.endpoint column (used by list views and consenter dropdowns) and
+	// re-register with monitoring so health checks dial the new address.
+	if endpointChanged {
+		updated, err := s.db.UpdateNodeEndpoint(ctx, &db.UpdateNodeEndpointParams{
+			ID: opts.NodeID,
+			Endpoint: sql.NullString{
+				String: peerConfig.ExternalEndpoint,
+				Valid:  true,
+			},
+		})
+		if err != nil {
+			s.logger.Warn("failed to update nodes.endpoint", "nodeID", opts.NodeID, "endpoint", peerConfig.ExternalEndpoint, "error", err)
+		} else {
+			node = updated
+		}
+		if s.monitoringService != nil {
+			if err := s.monitoringService.AddNodeToMonitor(
+				node.ID,
+				node.Name,
+				peerConfig.ExternalEndpoint,
+				string(types.PlatformFabric),
+				string(types.NodeTypeFabricPeer),
+				nil,
+			); err != nil {
+				s.logger.Warn("failed to refresh monitoring with new endpoint", "nodeID", opts.NodeID, "error", err)
+			}
+		}
+	}
+
 	// Return updated node response
 	_, nodeResponse := s.mapDBNodeToServiceNode(node)
 	return nodeResponse, nil
@@ -750,10 +785,19 @@ func (s *NodeService) UpdateFabricOrderer(ctx context.Context, opts UpdateFabric
 		deployOrdererConfig.Mode = opts.Mode
 	}
 
-	// Update configuration fields if provided
+	// Track which fields changed so we can refresh nodes.endpoint, monitoring,
+	// and bounce the running orderer when address-bearing fields move. Mode
+	// changes already restart below; this catches IP/port edits that
+	// orderer.yaml renders, where the running container otherwise keeps the
+	// old binding until something else triggers a restart.
+	endpointChanged := false
+	addressesChanged := false
+
 	if opts.ExternalEndpoint != "" && opts.ExternalEndpoint != ordererConfig.ExternalEndpoint {
 		ordererConfig.ExternalEndpoint = opts.ExternalEndpoint
 		deployOrdererConfig.ExternalEndpoint = opts.ExternalEndpoint
+		endpointChanged = true
+		addressesChanged = true
 	}
 	if opts.ListenAddress != "" && opts.ListenAddress != ordererConfig.ListenAddress {
 		if err := s.validateAddressFormat(opts.ListenAddress); err != nil {
@@ -761,6 +805,7 @@ func (s *NodeService) UpdateFabricOrderer(ctx context.Context, opts UpdateFabric
 		}
 		ordererConfig.ListenAddress = opts.ListenAddress
 		deployOrdererConfig.ListenAddress = opts.ListenAddress
+		addressesChanged = true
 	}
 	if opts.AdminAddress != "" && opts.AdminAddress != ordererConfig.AdminAddress {
 		if err := s.validateAddressFormat(opts.AdminAddress); err != nil {
@@ -768,6 +813,7 @@ func (s *NodeService) UpdateFabricOrderer(ctx context.Context, opts UpdateFabric
 		}
 		ordererConfig.AdminAddress = opts.AdminAddress
 		deployOrdererConfig.AdminAddress = opts.AdminAddress
+		addressesChanged = true
 	}
 	if opts.OperationsListenAddress != "" && opts.OperationsListenAddress != ordererConfig.OperationsListenAddress {
 		if err := s.validateAddressFormat(opts.OperationsListenAddress); err != nil {
@@ -775,6 +821,7 @@ func (s *NodeService) UpdateFabricOrderer(ctx context.Context, opts UpdateFabric
 		}
 		ordererConfig.OperationsListenAddress = opts.OperationsListenAddress
 		deployOrdererConfig.OperationsListenAddress = opts.OperationsListenAddress
+		addressesChanged = true
 	}
 	if opts.DomainNames != nil {
 		ordererConfig.DomainNames = opts.DomainNames
@@ -838,6 +885,48 @@ func (s *NodeService) UpdateFabricOrderer(ctx context.Context, opts UpdateFabric
 
 		if err := s.startFabricOrderer(ctx, node); err != nil {
 			return nil, fmt.Errorf("failed to start orderer with new mode: %w", err)
+		}
+	}
+
+	// If addresses changed but mode didn't, the running orderer is still
+	// bound to the old IP/port — bounce it so writeConfigFiles regenerates
+	// orderer.yaml and the listener picks up the new binding. Skipped when
+	// the orderer isn't running or when we already restarted via modeChanged.
+	if addressesChanged && !modeChanged && types.NodeStatus(node.Status) == types.NodeStatusRunning {
+		if err := s.stopFabricOrderer(ctx, node); err != nil {
+			s.logger.Warn("failed to stop orderer before regenerating config", "nodeID", opts.NodeID, "error", err)
+		}
+		if err := s.startFabricOrderer(ctx, node); err != nil {
+			return nil, fmt.Errorf("failed to restart orderer after address change: %w", err)
+		}
+	}
+
+	// Refresh nodes.endpoint and the monitoring registration so views and
+	// health checks see the new public address.
+	if endpointChanged {
+		updated, err := s.db.UpdateNodeEndpoint(ctx, &db.UpdateNodeEndpointParams{
+			ID: opts.NodeID,
+			Endpoint: sql.NullString{
+				String: ordererConfig.ExternalEndpoint,
+				Valid:  true,
+			},
+		})
+		if err != nil {
+			s.logger.Warn("failed to update nodes.endpoint", "nodeID", opts.NodeID, "endpoint", ordererConfig.ExternalEndpoint, "error", err)
+		} else {
+			node = updated
+		}
+		if s.monitoringService != nil {
+			if err := s.monitoringService.AddNodeToMonitor(
+				node.ID,
+				node.Name,
+				ordererConfig.ExternalEndpoint,
+				string(types.PlatformFabric),
+				string(types.NodeTypeFabricOrderer),
+				nil,
+			); err != nil {
+				s.logger.Warn("failed to refresh monitoring with new endpoint", "nodeID", opts.NodeID, "error", err)
+			}
 		}
 	}
 

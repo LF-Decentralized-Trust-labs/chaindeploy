@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/x509"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -20,6 +22,15 @@ import (
 	"github.com/chainlaunch/chainlaunch/pkg/logger"
 	nodetypes "github.com/chainlaunch/chainlaunch/pkg/nodes/types"
 )
+
+// ErrTLSCertImmutableAfterGenesis is returned when an attempt is made to
+// regenerate a FabricX orderer-group TLS certificate after the certificate
+// has already been embedded in a network's genesis block. The genesis block
+// is immutable, so re-issuing the cert would cause a "certificate mismatch"
+// panic at router startup. To rotate the cert, use RenewCertificates with
+// the same key pair (which preserves the existing cert in the genesis path)
+// or recreate the network from scratch.
+var ErrTLSCertImmutableAfterGenesis = errors.New("fabricx: orderer TLS cert is locked into genesis and cannot be regenerated; use RenewCertificates or recreate the network")
 
 // OrdererGroup manages the 4 sub-containers of a Fabric X orderer group:
 // router, batcher, consenter, assembler
@@ -66,9 +77,42 @@ func (og *OrdererGroup) prefix() string {
 	return containerNamePrefix(og.mspID, og.opts.Name)
 }
 
-// Init generates certificates, writes config files, and returns the deployment config
+// Init generates certificates, writes config files, and returns the deployment config.
+//
+// Init is idempotent: if the orderer group's row already has a complete
+// deployment config (sign cert + TLS cert + key IDs), Init reuses that
+// existing config rather than regenerating new keys. This is the critical
+// invariant that prevents the "certificate mismatch" panic — once a TLS
+// cert has been embedded in a network's genesis block, regenerating that
+// cert (with possibly different SANs) will cause the orderer router to
+// crash at startup. If the caller really needs a fresh cert, they must
+// either rotate via RenewCertificates (which preserves the public-key
+// identity) or recreate the network.
 func (og *OrdererGroup) Init() (*nodetypes.FabricXOrdererGroupDeploymentConfig, error) {
 	ctx := context.Background()
+
+	// Idempotency guard: if this orderer group already has a complete
+	// deployment config persisted, reuse it instead of minting a new key
+	// pair. We look up by node-group id (preferred, ADR-0001 path) or by
+	// the parent node row id. A "complete" config is one that has both
+	// sign-key + TLS-key IDs and both certificates — anything less and
+	// we treat it as a half-finished init that must restart.
+	if existing, ok := og.loadExistingDeployment(ctx); ok {
+		og.logger.Info("Reusing existing FabricX orderer-group deployment config (skipping cert regen)",
+			"name", og.opts.Name,
+			"signKeyId", existing.SignKeyID,
+			"tlsKeyId", existing.TLSKeyID,
+			"tlsCertFingerprint", CertFingerprint([]byte(existing.TLSCert)),
+		)
+		// Make sure on-disk MSP/TLS dirs reflect what's in the DB. If
+		// disk was wiped between runs ensureMaterials will recreate
+		// them from the persisted keys; if disk and DB already agree
+		// it's a no-op.
+		if err := og.ensureMaterials(existing); err != nil {
+			return nil, fmt.Errorf("ensure materials for reused orderer group: %w", err)
+		}
+		return existing, nil
+	}
 
 	// Get organization
 	org, err := og.orgService.GetOrganization(ctx, og.organizationID)
@@ -341,6 +385,47 @@ func (og *OrdererGroup) Init() (*nodetypes.FabricXOrdererGroupDeploymentConfig, 
 	)
 
 	return cfg, nil
+}
+
+// loadExistingDeployment returns the persisted deployment config for this
+// orderer group if one exists, alongside ok=true. It is used by Init() to
+// short-circuit cert regeneration once the group has been initialized.
+//
+// The lookup reads the node row via og.nodeID. A returned config must have
+// both key IDs and both certificate PEMs populated to count as "complete"
+// — anything less is treated as a partial init that should redo the work
+// from scratch.
+func (og *OrdererGroup) loadExistingDeployment(ctx context.Context) (*nodetypes.FabricXOrdererGroupDeploymentConfig, bool) {
+	if og.db == nil || og.nodeID <= 0 {
+		return nil, false
+	}
+	node, err := og.db.GetNode(ctx, og.nodeID)
+	if err != nil || !node.DeploymentConfig.Valid {
+		return nil, false
+	}
+	return decodeOrdererDeployment(node.DeploymentConfig.String)
+}
+
+// decodeOrdererDeployment parses a deployment_config JSON blob into an
+// orderer-group deployment config and returns ok=true only if the result
+// is "complete" — both key IDs set and both certificate PEMs present.
+// Partial configs (e.g. a half-finished init) are rejected so the caller
+// rebuilds them from scratch.
+func decodeOrdererDeployment(raw string) (*nodetypes.FabricXOrdererGroupDeploymentConfig, bool) {
+	var cfg nodetypes.FabricXOrdererGroupDeploymentConfig
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		return nil, false
+	}
+	if cfg.Type != "fabricx-orderer-group" {
+		return nil, false
+	}
+	if cfg.SignKeyID == 0 || cfg.TLSKeyID == 0 {
+		return nil, false
+	}
+	if cfg.SignCert == "" || cfg.TLSCert == "" {
+		return nil, false
+	}
+	return &cfg, true
 }
 
 // SetGenesisBlock writes the genesis block to the orderer group's genesis directories

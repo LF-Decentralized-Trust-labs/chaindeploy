@@ -64,6 +64,21 @@ const (
 // Empty or all-junk input falls back to "node" so the caller still
 // gets a usable, predictable directory name instead of an empty string
 // (which would resolve baseDir to the parent and overwrite siblings).
+// Slugify is the exported wrapper around slugify. It exists so callers
+// outside the fabricx package (e.g. the network deployer) can compute the
+// same on-disk paths Init() uses when it lays out an orderer group's
+// directories.
+func Slugify(name string) string { return slugify(name) }
+
+// OrdererRoleTLSCertPath returns the absolute path of the on-disk TLS
+// certificate for a given orderer group role under the data directory.
+// The role argument should match a directory written by Init() (one of
+// "router", "batcher", "consenter", "assembler"). The path is computed
+// from dataPath and groupName the same way Init() lays out the group.
+func OrdererRoleTLSCertPath(dataPath, groupName, role string) string {
+	return filepath.Join(dataPath, "fabricx-orderers", slugify(groupName), role, "tls", "server.crt")
+}
+
 func slugify(name string) string {
 	lower := strings.ToLower(name)
 	var b strings.Builder
