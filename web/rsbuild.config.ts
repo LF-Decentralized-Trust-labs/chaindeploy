@@ -6,7 +6,7 @@ export default defineConfig({
 	plugins: [pluginReact(), pluginSvgr()],
 	html: {
 		title: 'ChainLaunch',
-		favicon: './public/favicon.png',
+		favicon: './public/favicon.svg',
 	},
 	performance: {
 		bundleAnalyze: {
