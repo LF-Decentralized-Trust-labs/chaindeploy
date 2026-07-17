@@ -222,8 +222,8 @@ export default function AppSidebar() {
 				<SidebarMenu>
 					<SidebarMenuItem>
 						<div className="flex items-center gap-2">
-							<div className="flex aspect-square size-8 items-center justify-center rounded-lg  dark:text-sidebar-primary-foreground bg-black dark:bg-transparent">
-								<img src={logo} alt="logo" className="size-full" />
+							<div className="aspect-square size-8">
+								<img src={logo} alt="ChainLaunch" className="size-full" />
 							</div>
 							<div className="grid flex-1 text-left text-sm leading-tight">
 								<span className="truncate font-semibold">ChainLaunch</span>

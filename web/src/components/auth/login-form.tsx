@@ -34,8 +34,8 @@ export function LoginForm({ onSubmit, isLoading }: LoginFormProps) {
 		<div className="w-full max-w-sm space-y-8">
 			<div className="space-y-2 text-center">
 				<div className="flex items-center justify-center gap-2 mb-4">
-					<div className="flex aspect-square size-8 items-center justify-center rounded-lg dark:text-sidebar-primary-foreground bg-black dark:bg-transparent">
-						<img src={logo} alt="logo" className="size-full" />
+					<div className="aspect-square size-8">
+						<img src={logo} alt="ChainLaunch" className="size-full" />
 					</div>
 					<h1 className="text-xl font-semibold">ChainLaunch</h1>
 				</div>
